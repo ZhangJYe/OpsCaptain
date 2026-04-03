@@ -57,8 +57,7 @@ func (c *Client) SendToClient(eventType, data string) bool {
 		"id: %d\nevent: %s\ndata: %s\n\n",
 		time.Now().UnixNano(), eventType, data,
 	)
-	// 尝试发送消息，如果缓冲区满则跳过
-	c.Request.Response.Writefln(msg)
+	c.Request.Response.Write(msg)
 	c.Request.Response.Flush()
 	return true
 }

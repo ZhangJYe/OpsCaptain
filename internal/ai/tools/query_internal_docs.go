@@ -4,7 +4,7 @@ import (
 	"SuperBizAgent/internal/ai/retriever"
 	"context"
 	"encoding/json"
-	"log"
+	"fmt"
 
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/components/tool/utils"
@@ -21,18 +21,20 @@ func NewQueryInternalDocsTool() tool.InvokableTool {
 		func(ctx context.Context, input *QueryInternalDocsInput, opts ...tool.Option) (output string, err error) {
 			rr, err := retriever.NewMilvusRetriever(ctx)
 			if err != nil {
-				log.Fatal(err)
+				return "", fmt.Errorf("failed to create retriever: %w", err)
 			}
 			resp, err := rr.Retrieve(ctx, input.Query)
 			if err != nil {
-				log.Fatal(err)
+				return "", fmt.Errorf("failed to retrieve documents: %w", err)
 			}
-			respBytes, _ := json.Marshal(resp)
-			output = string(respBytes)
-			return output, nil
+			respBytes, err := json.Marshal(resp)
+			if err != nil {
+				return "", fmt.Errorf("failed to marshal response: %w", err)
+			}
+			return string(respBytes), nil
 		})
 	if err != nil {
-		log.Fatal(err)
+		panic(fmt.Sprintf("failed to create query_internal_docs tool: %v", err))
 	}
 	return t
 }

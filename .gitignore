@@ -24,3 +24,8 @@ Thumbs.db
 # Env / secrets
 .env
 .env.*
+
+# Config files with secrets
+manifest/config/config.yaml
+hack/config.yaml
+internal/ai/cmd/knowledge_cmd/config/config.yaml

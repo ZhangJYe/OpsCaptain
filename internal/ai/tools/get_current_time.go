@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"time"
 
@@ -64,7 +65,7 @@ func NewGetCurrentTimeTool() tool.InvokableTool {
 		})
 
 	if err != nil {
-		log.Fatal(err)
+		panic(fmt.Sprintf("failed to create get_current_time tool: %v", err))
 	}
 
 	return t

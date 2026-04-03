@@ -66,7 +66,9 @@ func (c *ControllerV1) FileUpload(ctx context.Context, req *v1.FileUploadReq) (r
 
 func buildIntoIndex(ctx context.Context, path string) error {
 	r, err := knowledge_index_pipeline.BuildKnowledgeIndexing(ctx)
-	// 删除biz数据metadata中_source一样的数据
+	if err != nil {
+		return fmt.Errorf("build knowledge indexing failed: %w", err)
+	}
 	loader, err := loader2.NewFileLoader(ctx)
 	if err != nil {
 		return err

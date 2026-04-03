@@ -2,9 +2,11 @@ package tools
 
 import (
 	"context"
+	"fmt"
 
 	e_mcp "github.com/cloudwego/eino-ext/components/tool/mcp"
 	"github.com/cloudwego/eino/components/tool"
+	"github.com/gogf/gf/v2/frame/g"
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
 )
@@ -19,32 +21,35 @@ https://www.cloudwego.io/zh/docs/eino/ecosystem_integration/tool/tool_mcp/
 https://mcp-go.dev/clients
 */
 func GetLogMcpTool() ([]tool.BaseTool, error) {
-	// https://mcp-api.tencent-cloud.com/sse/XXXX
-	mcp_url := "填在这里"
-	if mcp_url == "" {
-		panic("要使用GetLogMcpTool，请先按照教程申请mcp url")
-	}
 	ctx := context.Background()
-	cli, err := client.NewSSEMCPClient(mcp_url)
+	mcpURLVal, err := g.Cfg().Get(ctx, "mcp.log_url")
 	if err != nil {
-		return []tool.BaseTool{}, err
+		return nil, fmt.Errorf("failed to read mcp.log_url from config: %w", err)
+	}
+	mcpURL := mcpURLVal.String()
+	if mcpURL == "" {
+		return nil, fmt.Errorf("mcp.log_url is not configured, please set it in config.yaml")
+	}
+	cli, err := client.NewSSEMCPClient(mcpURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create MCP SSE client: %w", err)
 	}
 	err = cli.Start(ctx)
 	if err != nil {
-		return []tool.BaseTool{}, err
+		return nil, fmt.Errorf("failed to start MCP client: %w", err)
 	}
 	initRequest := mcp.InitializeRequest{}
 	initRequest.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
 	initRequest.Params.ClientInfo = mcp.Implementation{
-		Name:    "example-client",
+		Name:    "superbizagent-client",
 		Version: "1.0.0",
 	}
 	if _, err = cli.Initialize(ctx, initRequest); err != nil {
-		return []tool.BaseTool{}, err
+		return nil, fmt.Errorf("failed to initialize MCP client: %w", err)
 	}
 	mcpTools, err := e_mcp.GetTools(ctx, &e_mcp.Config{Cli: cli})
 	if err != nil {
-		return []tool.BaseTool{}, err
+		return nil, fmt.Errorf("failed to get MCP tools: %w", err)
 	}
 	return mcpTools, nil
 }

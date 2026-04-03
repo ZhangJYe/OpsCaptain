@@ -32,6 +32,10 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 	}
 
 	runner, err := chat_pipeline.BuildChatAgent(ctx)
+	if err != nil {
+		client.SendToClient("error", err.Error())
+		return nil, err
+	}
 	sr, err := runner.Stream(ctx, userMessage, compose.WithCallbacks(log_call_back.LogCallback(nil)))
 	if err != nil {
 		client.SendToClient("error", err.Error())
