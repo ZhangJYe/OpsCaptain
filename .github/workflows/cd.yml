@@ -70,8 +70,9 @@ jobs:
       - name: Prepare SSH client
         run: |
           mkdir -p ~/.ssh
-          printf '%s' "${ECS_SSH_PRIVATE_KEY}" > ~/.ssh/id_rsa
+          printf '%s' "${ECS_SSH_PRIVATE_KEY}" | tr -d '\r' > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
+          ssh-keygen -y -f ~/.ssh/id_rsa > /dev/null
           ssh-keyscan -p "${ECS_SSH_PORT}" "${ECS_HOST}" >> ~/.ssh/known_hosts
 
       - name: Prepare deployment bundle
