@@ -1,18 +1,16 @@
 package tools
 
 import (
+	"SuperBizAgent/internal/ai/rag"
 	ragretriever "SuperBizAgent/internal/ai/retriever"
-	"SuperBizAgent/utility/common"
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync"
 	"time"
 
 	retrieverapi "github.com/cloudwego/eino/components/retriever"
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/components/tool/utils"
-	"github.com/gogf/gf/v2/frame/g"
 )
 
 type QueryInternalDocsInput struct {
@@ -23,14 +21,14 @@ const defaultInternalDocsQueryTimeout = 5 * time.Second
 const defaultInternalDocsInitFailureTTL = 15 * time.Second
 
 var (
-	newMilvusRetriever         = ragretriever.NewMilvusRetriever
-	internalDocsRetrieverMu    sync.Mutex
-	internalDocsRetrieverCache struct {
-		key      string
-		rr       retrieverapi.Retriever
-		lastErr  error
-		failedAt time.Time
-	}
+	newMilvusRetriever        = ragretriever.NewMilvusRetriever
+	internalDocsRetrieverPool = rag.NewRetrieverPool(
+		func(ctx context.Context) (retrieverapi.Retriever, error) {
+			return newMilvusRetriever(ctx)
+		},
+		rag.DefaultRetrieverCacheKey,
+		internalDocsInitFailureTTL,
+	)
 )
 
 func NewQueryInternalDocsTool() tool.InvokableTool {
@@ -62,64 +60,18 @@ func NewQueryInternalDocsTool() tool.InvokableTool {
 }
 
 func internalDocsQueryTimeout(ctx context.Context) time.Duration {
-	v, err := g.Cfg().Get(ctx, "multi_agent.knowledge_query_timeout_ms")
-	if err == nil && v.Int64() > 0 {
-		return time.Duration(v.Int64()) * time.Millisecond
-	}
-	return defaultInternalDocsQueryTimeout
+	return rag.DurationFromConfig(ctx, defaultInternalDocsQueryTimeout, "multi_agent.knowledge_query_timeout_ms")
 }
 
 func getOrCreateInternalDocsRetriever(ctx context.Context) (retrieverapi.Retriever, error) {
-	cacheKey := internalDocsRetrieverCacheKey(ctx)
-
-	internalDocsRetrieverMu.Lock()
-	defer internalDocsRetrieverMu.Unlock()
-
-	if internalDocsRetrieverCache.rr != nil && internalDocsRetrieverCache.key == cacheKey {
-		return internalDocsRetrieverCache.rr, nil
-	}
-	if internalDocsRetrieverCache.key == cacheKey &&
-		internalDocsRetrieverCache.lastErr != nil &&
-		time.Since(internalDocsRetrieverCache.failedAt) < internalDocsInitFailureTTL(ctx) {
-		return nil, internalDocsRetrieverCache.lastErr
-	}
-
-	rr, err := newMilvusRetriever(ctx)
-	if err != nil {
-		internalDocsRetrieverCache.key = cacheKey
-		internalDocsRetrieverCache.rr = nil
-		internalDocsRetrieverCache.lastErr = err
-		internalDocsRetrieverCache.failedAt = time.Now()
-		return nil, err
-	}
-	internalDocsRetrieverCache.key = cacheKey
-	internalDocsRetrieverCache.rr = rr
-	internalDocsRetrieverCache.lastErr = nil
-	internalDocsRetrieverCache.failedAt = time.Time{}
-	return rr, nil
+	rr, _, err := internalDocsRetrieverPool.GetOrCreate(ctx)
+	return rr, err
 }
 
 func resetInternalDocsRetrieverCache() {
-	internalDocsRetrieverMu.Lock()
-	defer internalDocsRetrieverMu.Unlock()
-	internalDocsRetrieverCache.key = ""
-	internalDocsRetrieverCache.rr = nil
-	internalDocsRetrieverCache.lastErr = nil
-	internalDocsRetrieverCache.failedAt = time.Time{}
-}
-
-func internalDocsRetrieverCacheKey(ctx context.Context) string {
-	topK := 3
-	if v, err := g.Cfg().Get(ctx, "retriever.top_k"); err == nil && v.Int() > 0 {
-		topK = v.Int()
-	}
-	return fmt.Sprintf("%s|%d", common.GetMilvusAddr(ctx), topK)
+	internalDocsRetrieverPool.Reset()
 }
 
 func internalDocsInitFailureTTL(ctx context.Context) time.Duration {
-	v, err := g.Cfg().Get(ctx, "multi_agent.knowledge_init_failure_ttl_ms")
-	if err == nil && v.Int64() > 0 {
-		return time.Duration(v.Int64()) * time.Millisecond
-	}
-	return defaultInternalDocsInitFailureTTL
+	return rag.DurationFromConfig(ctx, defaultInternalDocsInitFailureTTL, "multi_agent.knowledge_init_failure_ttl_ms")
 }

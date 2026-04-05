@@ -36,3 +36,8 @@ StartFromZero/
 
 # Coverage
 coverage.out
+
+# Local Go build scratch
+.gocache/
+.gotmp*/
+*.go.[0-9]*

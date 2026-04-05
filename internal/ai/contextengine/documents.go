@@ -1,99 +1,48 @@
 package contextengine
 
 import (
+	"SuperBizAgent/internal/ai/rag"
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	ragretriever "SuperBizAgent/internal/ai/retriever"
-	"SuperBizAgent/utility/common"
 	"SuperBizAgent/utility/mem"
 
 	retrieverapi "github.com/cloudwego/eino/components/retriever"
 	"github.com/cloudwego/eino/schema"
-	"github.com/gogf/gf/v2/frame/g"
 )
 
 const defaultContextDocsQueryTimeout = 5 * time.Second
 const defaultContextDocsInitFailureTTL = 15 * time.Second
 
 var (
-	newContextRetriever   = ragretriever.NewMilvusRetriever
-	contextRetrieverMu    sync.Mutex
-	contextRetrieverCache cachedContextRetriever
+	newContextRetriever  = ragretriever.NewMilvusRetriever
+	contextRetrieverPool = rag.NewRetrieverPool(
+		func(ctx context.Context) (retrieverapi.Retriever, error) {
+			return newContextRetriever(ctx)
+		},
+		rag.DefaultRetrieverCacheKey,
+		contextDocsInitFailureTTL,
+	)
 )
 
-type cachedContextRetriever struct {
-	key      string
-	rr       retrieverapi.Retriever
-	lastErr  error
-	failedAt time.Time
-}
-
 func getOrCreateContextRetriever(ctx context.Context) (retrieverapi.Retriever, error) {
-	cacheKey := contextRetrieverCacheKey(ctx)
-
-	contextRetrieverMu.Lock()
-	defer contextRetrieverMu.Unlock()
-
-	if contextRetrieverCache.rr != nil && contextRetrieverCache.key == cacheKey {
-		return contextRetrieverCache.rr, nil
-	}
-	if contextRetrieverCache.key == cacheKey &&
-		contextRetrieverCache.lastErr != nil &&
-		time.Since(contextRetrieverCache.failedAt) < contextDocsInitFailureTTL(ctx) {
-		return nil, contextRetrieverCache.lastErr
-	}
-
-	rr, err := newContextRetriever(ctx)
-	if err != nil {
-		contextRetrieverCache.key = cacheKey
-		contextRetrieverCache.rr = nil
-		contextRetrieverCache.lastErr = err
-		contextRetrieverCache.failedAt = time.Now()
-		return nil, err
-	}
-	contextRetrieverCache.key = cacheKey
-	contextRetrieverCache.rr = rr
-	contextRetrieverCache.lastErr = nil
-	contextRetrieverCache.failedAt = time.Time{}
-	return rr, nil
+	rr, _, err := contextRetrieverPool.GetOrCreate(ctx)
+	return rr, err
 }
 
 func resetContextRetrieverCache() {
-	contextRetrieverMu.Lock()
-	defer contextRetrieverMu.Unlock()
-	contextRetrieverCache = cachedContextRetriever{}
-}
-
-func contextRetrieverCacheKey(ctx context.Context) string {
-	topK := 3
-	if v, err := g.Cfg().Get(ctx, "retriever.top_k"); err == nil && v.Int() > 0 {
-		topK = v.Int()
-	}
-	return fmt.Sprintf("%s|%d", common.GetMilvusAddr(ctx), topK)
+	contextRetrieverPool.Reset()
 }
 
 func contextDocsQueryTimeout(ctx context.Context) time.Duration {
-	if v, err := g.Cfg().Get(ctx, "context.docs_query_timeout_ms"); err == nil && v.Int64() > 0 {
-		return time.Duration(v.Int64()) * time.Millisecond
-	}
-	if v, err := g.Cfg().Get(ctx, "multi_agent.knowledge_query_timeout_ms"); err == nil && v.Int64() > 0 {
-		return time.Duration(v.Int64()) * time.Millisecond
-	}
-	return defaultContextDocsQueryTimeout
+	return rag.DurationFromConfig(ctx, defaultContextDocsQueryTimeout, "context.docs_query_timeout_ms", "multi_agent.knowledge_query_timeout_ms")
 }
 
 func contextDocsInitFailureTTL(ctx context.Context) time.Duration {
-	if v, err := g.Cfg().Get(ctx, "context.docs_init_failure_ttl_ms"); err == nil && v.Int64() > 0 {
-		return time.Duration(v.Int64()) * time.Millisecond
-	}
-	if v, err := g.Cfg().Get(ctx, "multi_agent.knowledge_init_failure_ttl_ms"); err == nil && v.Int64() > 0 {
-		return time.Duration(v.Int64()) * time.Millisecond
-	}
-	return defaultContextDocsInitFailureTTL
+	return rag.DurationFromConfig(ctx, defaultContextDocsInitFailureTTL, "context.docs_init_failure_ttl_ms", "multi_agent.knowledge_init_failure_ttl_ms")
 }
 
 func selectDocuments(ctx context.Context, query string, profile ContextProfile) ([]ContextItem, []ContextItem, int, []string) {
