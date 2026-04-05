@@ -1,39 +1,107 @@
 package chat
 
 import (
-	"SuperBizAgent/api/chat/v1"
+	v1 "SuperBizAgent/api/chat/v1"
 	"SuperBizAgent/internal/ai/agent/chat_pipeline"
+	"SuperBizAgent/internal/ai/contextengine"
+	aiservice "SuperBizAgent/internal/ai/service"
+	"SuperBizAgent/internal/consts"
 	"SuperBizAgent/utility/log_call_back"
 	"SuperBizAgent/utility/mem"
 	"context"
+	"fmt"
+	"sync"
 
 	"github.com/cloudwego/eino/compose"
-	"github.com/cloudwego/eino/schema"
+	"github.com/gogf/gf/v2/frame/g"
+	"github.com/gogf/gf/v2/util/guid"
 )
+
+var sessionLocks sync.Map
+var (
+	buildChatAgent             = chat_pipeline.BuildChatAgent
+	runChatMultiAgent          = aiservice.RunChatMultiAgent
+	shouldUseMultiAgentForChat = aiservice.ShouldUseMultiAgentForChat
+)
+
+func acquireSessionLock(id string) *sync.Mutex {
+	val, _ := sessionLocks.LoadOrStore(id, &sync.Mutex{})
+	mu := val.(*sync.Mutex)
+	mu.Lock()
+	return mu
+}
+
+func releaseSessionLock(id string, mu *sync.Mutex) {
+	mu.Unlock()
+}
 
 func (c *ControllerV1) Chat(ctx context.Context, req *v1.ChatReq) (res *v1.ChatRes, err error) {
 	id := req.Id
 	msg := req.Question
-	userMessage := &chat_pipeline.UserMessage{
-		ID:      id,
-		Query:   msg,
-		History: mem.GetSimpleMemory(id).GetMessages(),
+
+	if err := mem.ValidateSessionID(id); err != nil {
+		return nil, fmt.Errorf("invalid session ID: %w", err)
 	}
 
-	runner, err := chat_pipeline.BuildChatAgent(ctx)
+	requestID := guid.S()
+	ctx = context.WithValue(ctx, consts.CtxKeySessionID, id)
+	ctx = context.WithValue(ctx, consts.CtxKeyRequestID, requestID)
+
+	g.Log().Infof(ctx, "[session:%s][req:%s] Chat request received, question length: %d", id, requestID, len(msg))
+
+	mu := acquireSessionLock(id)
+	defer releaseSessionLock(id, mu)
+
+	sessionMem := mem.GetSimpleMemory(id)
+	if shouldUseMultiAgentForChat(ctx, msg) {
+		answer, detail, traceID, err := runChatMultiAgent(ctx, id, msg)
+		if err != nil {
+			g.Log().Errorf(ctx, "[session:%s][req:%s] Chat multi-agent failed: %v", id, requestID, err)
+			return nil, err
+		}
+
+		g.Log().Infof(ctx, "[session:%s][req:%s] Chat multi-agent completed, answer length: %d, turns: %d, trace: %s",
+			id, requestID, len(answer), sessionMem.TurnCount(), traceID)
+
+		return &v1.ChatRes{
+			Answer:  answer,
+			TraceID: traceID,
+			Detail:  detail,
+			Mode:    "multi_agent",
+		}, nil
+	}
+
+	memorySvc := aiservice.NewMemoryService()
+	contextPkg, contextDetail := memorySvc.BuildChatPackage(ctx, id, msg, sessionMem.GetContextMessages())
+
+	userMessage := &chat_pipeline.UserMessage{
+		ID:        id,
+		Query:     msg,
+		Documents: contextengine.DocumentsContent(contextPkg),
+		History:   contextPkg.HistoryMessages,
+	}
+
+	runner, err := buildChatAgent(ctx)
 	if err != nil {
+		g.Log().Errorf(ctx, "[session:%s][req:%s] BuildChatAgent failed: %v", id, requestID, err)
 		return nil, err
 	}
 
 	out, err := runner.Invoke(ctx, userMessage, compose.WithCallbacks(log_call_back.LogCallback(nil)))
 	if err != nil {
+		g.Log().Errorf(ctx, "[session:%s][req:%s] Agent invoke failed: %v", id, requestID, err)
 		return nil, err
 	}
+
+	memorySvc.PersistOutcome(ctx, id, msg, out.Content)
+
+	g.Log().Infof(ctx, "[session:%s][req:%s] Chat completed, answer length: %d, turns: %d",
+		id, requestID, len(out.Content), sessionMem.TurnCount())
+
 	res = &v1.ChatRes{
 		Answer: out.Content,
+		Detail: contextDetail,
+		Mode:   "legacy",
 	}
-	mem.GetSimpleMemory(id).SetMessages(schema.UserMessage(msg))
-	mem.GetSimpleMemory(id).SetMessages(schema.SystemMessage(out.Content))
-
 	return res, nil
 }

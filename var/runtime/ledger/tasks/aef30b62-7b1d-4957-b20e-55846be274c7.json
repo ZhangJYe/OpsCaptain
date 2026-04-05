@@ -1,0 +1,18 @@
+{
+  "task_id": "aef30b62-7b1d-4957-b20e-55846be274c7",
+  "parent_task_id": "2ff361cb-7b07-4e76-8f3a-d4f328cf723c",
+  "session_id": "1b4a9fd51771a4002a179cc5df2d3bdd",
+  "trace_id": "58b5b09b-d0be-4db7-b8ed-827ed266b130",
+  "goal": "请分析当前 Prometheus 告警并结合日志排查",
+  "assignee": "metrics",
+  "creator": "supervisor",
+  "status": "succeeded",
+  "input": {
+    "intent": "alert_analysis",
+    "memory_context": "",
+    "query": "请分析当前 Prometheus 告警并结合日志排查",
+    "raw_query": "请分析当前 Prometheus 告警并结合日志排查"
+  },
+  "created_at": 1775377698783,
+  "updated_at": 1775377698790
+}

@@ -1,0 +1,12 @@
+{
+  "task_id": "5d2c2caf-8985-41c2-82c8-179546611719",
+  "agent": "knowledge",
+  "status": "degraded",
+  "summary": "知识库检索超时，已跳过该步骤。",
+  "confidence": 0.25,
+  "metadata": {
+    "error": "[LocalFunc] failed to invoke tool, toolName=query_internal_docs, err=failed to create retriever: failed to connect to default database: context deadline exceeded"
+  },
+  "started_at": 1775377698783,
+  "finished_at": 1775377703785
+}

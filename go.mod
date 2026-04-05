@@ -5,9 +5,8 @@ go 1.24.0
 toolchain go1.24.4
 
 require (
-	github.com/cloudwego/eino v0.6.0
-	github.com/cloudwego/eino-examples v0.0.0-20250929123132-bbbae0931948
-	github.com/cloudwego/eino-ext/components/embedding/dashscope v0.0.0-20260109062358-b9080dbc7bed
+	github.com/cloudwego/eino v0.7.13
+	github.com/cloudwego/eino-ext/components/embedding/openai v0.0.0-20260331071634-4f359694d2d9
 	github.com/cloudwego/eino-ext/components/indexer/milvus v0.0.0-20251011073417-75b93b87b8a9
 	github.com/cloudwego/eino-ext/components/model/openai v0.1.1
 	github.com/cloudwego/eino-ext/components/retriever/milvus v0.0.0-20251011073417-75b93b87b8a9
@@ -21,11 +20,14 @@ require (
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
+	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/go-sql-driver/mysql v1.8.1 // indirect
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
+	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
+	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 )
 
@@ -43,13 +45,13 @@ require (
 	github.com/cloudwego/eino-ext/components/document/loader/file v0.0.0-20251022075257-f53d64495d2f
 	github.com/cloudwego/eino-ext/components/document/transformer/splitter/markdown v0.0.0-20251022075257-f53d64495d2f
 	github.com/cloudwego/eino-ext/components/tool/duckduckgo/v2 v2.0.0-20250826125654-37d4a5029810
-	github.com/cloudwego/eino-ext/libs/acl/openai v0.1.2 // indirect
+	github.com/cloudwego/eino-ext/libs/acl/openai v0.1.15 // indirect
 	github.com/cockroachdb/errors v1.9.1 // indirect
 	github.com/cockroachdb/logtags v0.0.0-20211118104740-dabe8e521a4f // indirect
 	github.com/cockroachdb/redact v1.1.3 // indirect
 	github.com/corpix/uarand v0.2.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/eino-contrib/jsonschema v1.0.2 // indirect
+	github.com/eino-contrib/jsonschema v1.0.3 // indirect
 	github.com/evanphx/json-patch v0.5.2 // indirect
 	github.com/fatih/color v1.16.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
@@ -72,7 +74,7 @@ require (
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.9 // indirect
-	github.com/meguminnnnnnnnn/go-openai v0.1.0 // indirect
+	github.com/meguminnnnnnnnn/go-openai v0.1.2 // indirect
 	github.com/milvus-io/milvus-proto/go-api/v2 v2.4.10-0.20240819025435-512e3b98866a // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
@@ -83,7 +85,6 @@ require (
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/slongfield/pyfmt v0.0.0-20220222012616-ea85ff4c361f // indirect
-	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/tidwall/gjson v1.14.4 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect

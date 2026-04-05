@@ -1,0 +1,16 @@
+{
+  "task_id": "fdcacda1-aa86-408c-a4da-f4347ef68013",
+  "agent": "triage",
+  "status": "succeeded",
+  "summary": "已识别为知识检索任务，优先查询内部文档。",
+  "confidence": 0.76,
+  "metadata": {
+    "domains": [
+      "knowledge"
+    ],
+    "intent": "kb_qa",
+    "priority": "medium"
+  },
+  "started_at": 1775377399242,
+  "finished_at": 1775377399242
+}

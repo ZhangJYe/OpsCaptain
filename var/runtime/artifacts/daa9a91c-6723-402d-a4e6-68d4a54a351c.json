@@ -1,0 +1,12 @@
+{
+  "ref": {
+    "id": "daa9a91c-6723-402d-a4e6-68d4a54a351c",
+    "type": "task_result"
+  },
+  "content": "{\"agent\":\"metrics\",\"confidence\":0.35,\"evidence\":null,\"status\":\"degraded\",\"summary\":\"Failed to query Prometheus alerts. The service may not be configured or is unreachable.\"}",
+  "metadata": {
+    "agent": "metrics",
+    "task": "aef30b62-7b1d-4957-b20e-55846be274c7"
+  },
+  "created_at": 1775377698790
+}

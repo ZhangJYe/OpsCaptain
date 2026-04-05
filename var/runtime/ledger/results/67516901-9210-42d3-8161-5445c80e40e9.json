@@ -1,0 +1,12 @@
+{
+  "task_id": "67516901-9210-42d3-8161-5445c80e40e9",
+  "agent": "supervisor",
+  "status": "succeeded",
+  "summary": "# 告警分析报告\n\n## 用户目标\n请查询知识库中的 SOP 文档\n\n## 任务类型\nkb_qa\n\n## 执行摘要\n\n### Knowledge\n[LocalFunc] failed to invoke tool, toolName=query_internal_docs, err=failed to create retriever: failed to connect to default database: context canceled\n\n## 结论\n\n- knowledge: [LocalFunc] failed to invoke tool, toolName=query_internal_docs, err=failed to create retriever: failed to connect to default database: context canceled",
+  "confidence": 0,
+  "metadata": {
+    "intent": "kb_qa"
+  },
+  "started_at": 1775357083036,
+  "finished_at": 1775357123036
+}

@@ -29,3 +29,10 @@ Thumbs.db
 manifest/config/config.yaml
 hack/config.yaml
 internal/ai/cmd/knowledge_cmd/config/config.yaml
+
+# Review materials
+.review/
+StartFromZero/
+
+# Coverage
+coverage.out

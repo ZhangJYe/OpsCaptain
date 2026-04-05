@@ -1,0 +1,12 @@
+{
+  "task_id": "25cddc50-09ea-432f-aa86-ec7784291daa",
+  "agent": "knowledge",
+  "status": "degraded",
+  "summary": "知识库检索失败: [LocalFunc] failed to invoke tool, toolName=query_internal_docs, err=failed to create retriever: failed to connect to default database: context deadline exceeded",
+  "confidence": 0.25,
+  "metadata": {
+    "error": "[LocalFunc] failed to invoke tool, toolName=query_internal_docs, err=failed to create retriever: failed to connect to default database: context deadline exceeded"
+  },
+  "started_at": 1775379430216,
+  "finished_at": 1775379434831
+}

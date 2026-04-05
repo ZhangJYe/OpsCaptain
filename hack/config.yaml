@@ -1,6 +1,4 @@
 
-# CLI tool, only in development environment.
-# https://goframe.org/docs/cli
 gfcli:
   gen:
     dao:
@@ -11,3 +9,43 @@ gfcli:
     build: "-a amd64 -s linux -p temp -ew"
     tagPrefixes:
       - my.image.pub/my-app
+
+server:
+  address: ":8000"
+  openapiPath: "/api.json"
+  swaggerPath: "/swagger"
+
+logger:
+  level: "all"
+  stdout: true
+
+ds_think_chat_model:
+  api_key: ""
+  base_url: "https://ark.cn-beijing.volces.com/api/v3"
+  model: "deepseek-v3-1-terminus"
+
+ds_quick_chat_model:
+  api_key: ""
+  base_url: "https://ark.cn-beijing.volces.com/api/v3"
+  model: "deepseek-v3-1-terminus"
+
+doubao_embedding_model:
+  api_key: ""
+  base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+  model: "text-embedding-v4"
+  dimension: 2048
+
+file_dir: "/你的路径/SuperBizAgent/internal/ai/cmd/knowledge_cmd/docs"
+
+milvus:
+  address: "localhost:19530"
+
+log_topic:
+  region: ""
+  id: ""
+
+mcp:
+  log_url: ""
+
+mysql:
+  dsn: ""

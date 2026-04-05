@@ -1,0 +1,12 @@
+{
+  "task_id": "1544c8bd-16a1-4374-a3dd-0146ceeafb81",
+  "agent": "supervisor",
+  "status": "succeeded",
+  "summary": "我结合当前可用的多智能体结果做了分析：\n\n问题：请分析当前 Prometheus 告警\n\n- Logs：日志查询能力未配置，已跳过该步骤。（降级）\n- Metrics：Failed to query Prometheus alerts. The service may not be configured or is unreachable.（降级）\n- Knowledge：知识库检索超时，已跳过该步骤。（降级）",
+  "confidence": 0.29333333333333333,
+  "metadata": {
+    "intent": "alert_analysis"
+  },
+  "started_at": 1775379429818,
+  "finished_at": 1775379434834
+}

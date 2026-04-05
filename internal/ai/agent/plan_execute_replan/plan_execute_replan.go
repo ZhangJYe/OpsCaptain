@@ -3,13 +3,17 @@ package plan_execute_replan
 import (
 	"context"
 	"fmt"
+	"time"
 
-	"github.com/cloudwego/eino-examples/adk/common/prints"
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/adk/prebuilt/planexecute"
+	"github.com/gogf/gf/v2/frame/g"
 )
 
 func BuildPlanAgent(ctx context.Context, query string) (string, []string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+	defer cancel()
+
 	planAgent, err := NewPlanner(ctx)
 	if err != nil {
 		return "", []string{}, err
@@ -26,7 +30,7 @@ func BuildPlanAgent(ctx context.Context, query string) (string, []string, error)
 		Planner:       planAgent,
 		Executor:      executeAgent,
 		Replanner:     replanAgent,
-		MaxIterations: 20,
+		MaxIterations: 5,
 	})
 	if err != nil {
 		return "", []string{}, fmt.Errorf("build PlanExecuteAgent Error: %v", err)
@@ -42,10 +46,9 @@ func BuildPlanAgent(ctx context.Context, query string) (string, []string, error)
 		if !ok {
 			break
 		}
-		fmt.Println("------------- Event -------------")
-		prints.Event(event)
 		if event.Output != nil {
 			lastMessage, _, err = adk.GetMessage(event)
+			g.Log().Debugf(ctx, "[AIOps] step: %s", lastMessage.String())
 			detail = append(detail, lastMessage.String())
 		}
 	}

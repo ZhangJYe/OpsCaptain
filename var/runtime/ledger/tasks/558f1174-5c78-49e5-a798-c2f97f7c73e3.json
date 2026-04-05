@@ -1,0 +1,37 @@
+{
+  "task_id": "558f1174-5c78-49e5-a798-c2f97f7c73e3",
+  "parent_task_id": "4b88cb79-0c7d-4c74-8a24-dfc95945c7c7",
+  "session_id": "5c9242288e3a9d15866fcccf2f03f697",
+  "trace_id": "236b2dab-d2db-417e-951a-b7fa85424895",
+  "goal": "请查询知识库中的 SOP 文档",
+  "assignee": "reporter",
+  "creator": "supervisor",
+  "status": "succeeded",
+  "input": {
+    "intent": "kb_qa",
+    "query": "请查询知识库中的 SOP 文档",
+    "results": [
+      {
+        "task_id": "7f3960e9-1555-42e4-8bf1-7ecd0d9b8e36",
+        "agent": "knowledge",
+        "status": "degraded",
+        "summary": "知识库检索超时，已跳过该步骤。",
+        "confidence": 0.25,
+        "artifact_refs": [
+          {
+            "id": "3423e6a3-002f-4940-8529-529290cc29b5",
+            "type": "task_result",
+            "uri": "var/runtime/artifacts/3423e6a3-002f-4940-8529-529290cc29b5.json"
+          }
+        ],
+        "metadata": {
+          "error": "[LocalFunc] failed to invoke tool, toolName=query_internal_docs, err=failed to create retriever: failed to connect to default database: context deadline exceeded"
+        },
+        "started_at": 1775377625088,
+        "finished_at": 1775377630089
+      }
+    ]
+  },
+  "created_at": 1775377630091,
+  "updated_at": 1775377630094
+}

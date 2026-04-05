@@ -1,6 +1,7 @@
 package models
 
 import (
+	"SuperBizAgent/utility/common"
 	"context"
 
 	"github.com/cloudwego/eino-ext/components/model/openai"
@@ -22,9 +23,9 @@ func OpenAIForDeepSeekV31Think(ctx context.Context) (cm model.ToolCallingChatMod
 		return nil, err
 	}
 	config := &openai.ChatModelConfig{
-		Model:   model.String(),
-		APIKey:  api_key.String(),
-		BaseURL: base_url.String(),
+		Model:   common.ResolveEnv(model.String()),
+		APIKey:  common.ResolveEnv(api_key.String()),
+		BaseURL: common.ResolveEnv(base_url.String()),
 	}
 	cm, err = openai.NewChatModel(ctx, config)
 	if err != nil {
@@ -47,9 +48,9 @@ func OpenAIForDeepSeekV3Quick(ctx context.Context) (cm model.ToolCallingChatMode
 		return nil, err
 	}
 	config := &openai.ChatModelConfig{
-		Model:   model.String(),
-		APIKey:  api_key.String(),
-		BaseURL: base_url.String(),
+		Model:   common.ResolveEnv(model.String()),
+		APIKey:  common.ResolveEnv(api_key.String()),
+		BaseURL: common.ResolveEnv(base_url.String()),
 	}
 	cm, err = openai.NewChatModel(ctx, config)
 	if err != nil {

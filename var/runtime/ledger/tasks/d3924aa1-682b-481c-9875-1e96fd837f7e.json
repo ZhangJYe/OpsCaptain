@@ -1,0 +1,19 @@
+{
+  "task_id": "d3924aa1-682b-481c-9875-1e96fd837f7e",
+  "parent_task_id": "1544c8bd-16a1-4374-a3dd-0146ceeafb81",
+  "session_id": "session_chat_eval_stream_1",
+  "trace_id": "55696653-a913-44c0-88ba-e3d0db287b7f",
+  "goal": "请分析当前 Prometheus 告警",
+  "assignee": "metrics",
+  "creator": "supervisor",
+  "status": "succeeded",
+  "input": {
+    "intent": "alert_analysis",
+    "memory_context": "",
+    "query": "请分析当前 Prometheus 告警",
+    "raw_query": "请分析当前 Prometheus 告警",
+    "response_mode": "chat"
+  },
+  "created_at": 1775379429820,
+  "updated_at": 1775379429829
+}

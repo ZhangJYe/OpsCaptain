@@ -1,0 +1,37 @@
+{
+  "task_id": "7d1facf5-e944-41c9-b1cb-287835fa3f50",
+  "parent_task_id": "67516901-9210-42d3-8161-5445c80e40e9",
+  "session_id": "26be6fed539ef83a076112fa0432b6f2",
+  "trace_id": "917bb39f-da96-436c-bf98-16009755643e",
+  "goal": "请查询知识库中的 SOP 文档",
+  "assignee": "reporter",
+  "creator": "supervisor",
+  "status": "succeeded",
+  "input": {
+    "intent": "kb_qa",
+    "query": "请查询知识库中的 SOP 文档",
+    "results": [
+      {
+        "task_id": "1e57326c-1448-402d-9e84-36fd3b1a2c0c",
+        "agent": "knowledge",
+        "status": "failed",
+        "summary": "[LocalFunc] failed to invoke tool, toolName=query_internal_docs, err=failed to create retriever: failed to connect to default database: context canceled",
+        "confidence": 0,
+        "artifact_refs": [
+          {
+            "id": "af2d7c81-4d4a-4082-8303-a9fcf876ddaa",
+            "type": "task_result",
+            "uri": "var/runtime/artifacts/af2d7c81-4d4a-4082-8303-a9fcf876ddaa.json"
+          }
+        ],
+        "error": {
+          "message": "[LocalFunc] failed to invoke tool, toolName=query_internal_docs, err=failed to create retriever: failed to connect to default database: context canceled"
+        },
+        "started_at": 1775357083039,
+        "finished_at": 1775357123033
+      }
+    ]
+  },
+  "created_at": 1775357123035,
+  "updated_at": 1775357123036
+}

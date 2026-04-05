@@ -1,0 +1,15 @@
+{
+  "task_id": "8065d514-b829-40b7-897d-58d77628afbb",
+  "parent_task_id": "67516901-9210-42d3-8161-5445c80e40e9",
+  "session_id": "26be6fed539ef83a076112fa0432b6f2",
+  "trace_id": "917bb39f-da96-436c-bf98-16009755643e",
+  "goal": "请查询知识库中的 SOP 文档",
+  "assignee": "triage",
+  "creator": "supervisor",
+  "status": "succeeded",
+  "input": {
+    "query": "请查询知识库中的 SOP 文档"
+  },
+  "created_at": 1775357083037,
+  "updated_at": 1775357083038
+}

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"SuperBizAgent/utility/middleware"
+
 	"github.com/gogf/gf/v2/container/gmap"
 	"github.com/gogf/gf/v2/net/ghttp"
 	"github.com/gogf/gf/v2/util/guid"
@@ -35,7 +37,10 @@ func (s *Service) Create(ctx context.Context, r *ghttp.Request) (*Client, error)
 	r.Response.Header().Set("Content-Type", "text/event-stream")
 	r.Response.Header().Set("Cache-Control", "no-cache")
 	r.Response.Header().Set("Connection", "keep-alive")
-	r.Response.Header().Set("Access-Control-Allow-Origin", "*")
+	if origin, ok := middleware.ResolveAllowedOrigin(ctx, r.GetHeader("Origin")); ok {
+		r.Response.Header().Set("Access-Control-Allow-Origin", origin)
+		r.Response.Header().Set("Vary", "Origin")
+	}
 	// 创建新客户端
 	clientId := r.Get("client_id", guid.S()).String()
 	client := &Client{

@@ -42,22 +42,25 @@ func initMysqlDB(ctx context.Context) (*gorm.DB, error) {
 func NewMysqlCrudTool() tool.InvokableTool {
 	t, err := utils.InferOptionableTool(
 		"mysql_crud",
-		"Execute read-only SQL SELECT queries against the MySQL database and return results in JSON format. Only SELECT statements are allowed. Use this tool when you need to query data from the database.",
+		"Execute read-only SQL SELECT queries against the MySQL database and return results in JSON format. Only single SELECT statements are allowed. Use this tool when you need to query data from the database.",
 		func(ctx context.Context, input *MysqlCrudInput, opts ...tool.Option) (output string, err error) {
 			sqlUpper := strings.TrimSpace(strings.ToUpper(input.SQL))
 			if !strings.HasPrefix(sqlUpper, "SELECT") {
-				return "", fmt.Errorf("only SELECT queries are allowed, got: %s", strings.Split(sqlUpper, " ")[0])
+				return `{"success":false,"error":"only SELECT queries are allowed"}`, nil
+			}
+			if strings.Contains(input.SQL, ";") {
+				return `{"success":false,"error":"multiple statements are not allowed"}`, nil
 			}
 
 			db, err := initMysqlDB(ctx)
 			if err != nil {
-				return "", err
+				return fmt.Sprintf(`{"success":false,"error":"MySQL is not available: %s"}`, err.Error()), nil
 			}
 
 			var results []map[string]interface{}
 			err = db.Raw(input.SQL).Scan(&results).Error
 			if err != nil {
-				return "", fmt.Errorf("failed to execute query: %w", err)
+				return fmt.Sprintf(`{"success":false,"error":"query failed: %s"}`, err.Error()), nil
 			}
 
 			resBytes, err := json.Marshal(results)

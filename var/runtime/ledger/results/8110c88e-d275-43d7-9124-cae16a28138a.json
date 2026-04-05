@@ -1,0 +1,12 @@
+{
+  "task_id": "8110c88e-d275-43d7-9124-cae16a28138a",
+  "agent": "supervisor",
+  "status": "succeeded",
+  "summary": "# 告警分析报告\n\n## 用户目标\n请查询知识库中的 SOP 文档\n\n## 任务类型\nkb_qa\n\n## 执行摘要\n\n### Knowledge\n知识库检索超时，已跳过该步骤。\n\n## 结论\n\n- knowledge: 知识库检索超时，已跳过该步骤。（降级）",
+  "confidence": 0.25,
+  "metadata": {
+    "intent": "kb_qa"
+  },
+  "started_at": 1775357803162,
+  "finished_at": 1775357808168
+}

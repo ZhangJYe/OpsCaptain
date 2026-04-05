@@ -34,6 +34,6 @@ func NewExecutor(ctx context.Context) (adk.Agent, error) {
 				Tools: toolList,
 			},
 		},
-		MaxIterations: 999999,
+		MaxIterations: 10,
 	})
 }

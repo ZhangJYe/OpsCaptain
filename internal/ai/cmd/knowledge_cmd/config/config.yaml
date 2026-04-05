@@ -23,8 +23,16 @@ doubao_embedding_model:
   api_key: ""
   base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
   model: "text-embedding-v4"
+  dimension: 2048
 
 file_dir: "/你的路径/SuperBizAgent/internal/ai/cmd/knowledge_cmd/docs"
+
+milvus:
+  address: "localhost:19530"
+
+log_topic:
+  region: ""
+  id: ""
 
 mcp:
   log_url: ""

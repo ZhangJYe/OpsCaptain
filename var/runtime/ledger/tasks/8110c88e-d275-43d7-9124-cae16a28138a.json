@@ -1,0 +1,11 @@
+{
+  "task_id": "8110c88e-d275-43d7-9124-cae16a28138a",
+  "session_id": "f8c4b31c2b093a3669937647f2596f4e",
+  "trace_id": "5c3af336-cfe9-42ea-b9ea-41ff19e3683e",
+  "goal": "请查询知识库中的 SOP 文档",
+  "assignee": "supervisor",
+  "creator": "controller",
+  "status": "succeeded",
+  "created_at": 1775357803161,
+  "updated_at": 1775357808168
+}

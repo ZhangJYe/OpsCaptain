@@ -1,0 +1,12 @@
+{
+  "ref": {
+    "id": "cc4a7ad6-dd7b-4a2e-8cdf-9b23dd3ae8c6",
+    "type": "task_result"
+  },
+  "content": "{\"agent\":\"knowledge\",\"confidence\":0,\"evidence\":null,\"status\":\"failed\",\"summary\":\"[LocalFunc] failed to invoke tool, toolName=query_internal_docs, err=failed to create retriever: failed to connect to default database: context canceled\"}",
+  "metadata": {
+    "agent": "knowledge",
+    "task": "71205f33-bd92-46ce-9bc6-dd407426fbe8"
+  },
+  "created_at": 1775356929972
+}

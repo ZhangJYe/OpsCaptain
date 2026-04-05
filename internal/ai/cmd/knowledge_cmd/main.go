@@ -14,6 +14,7 @@ import (
 
 	"github.com/cloudwego/eino/components/document"
 	"github.com/cloudwego/eino/compose"
+	"github.com/gogf/gf/v2/frame/g"
 )
 
 func main() {
@@ -31,12 +32,11 @@ func main() {
 		}
 
 		if !strings.HasSuffix(path, ".md") {
-			fmt.Printf("[skip] not a markdown file: %s\n", path)
+			g.Log().Infof(ctx, "skip not a markdown file: %s", path)
 			return nil
 		}
 
-		fmt.Printf("[start] indexing file: %s\n", path)
-		// 删除biz数据metadata中_source一样的数据
+		g.Log().Infof(ctx, "start indexing file: %s", path)
 		loader, err := loader2.NewFileLoader(ctx)
 		if err != nil {
 			return err
@@ -49,13 +49,11 @@ func main() {
 		if err != nil {
 			return err
 		}
-		// 查询所有metadata中_source一样的数据并删除
 		expr := fmt.Sprintf(`metadata["_source"] == "%s"`, docs[0].MetaData["_source"])
 		queryResult, err := cli.Query(ctx, common.MilvusCollectionName, []string{}, expr, []string{"id"})
 		if err != nil {
 			return err
 		} else if len(queryResult) > 0 {
-			// 提取所有需要删除的id
 			var idsToDelete []string
 			for _, column := range queryResult {
 				if column.Name() == "id" {
@@ -67,23 +65,24 @@ func main() {
 					}
 				}
 			}
-			// 删除这些数据
 			if len(idsToDelete) > 0 {
 				deleteExpr := fmt.Sprintf(`id in ["%s"]`, strings.Join(idsToDelete, `","`))
 				err = cli.Delete(ctx, common.MilvusCollectionName, "", deleteExpr)
 				if err != nil {
-					fmt.Printf("[warn] delete existing data failed: %v\n", err)
+					g.Log().Warningf(ctx, "delete existing data failed: %v", err)
 				} else {
-					fmt.Printf("[info] deleted %d existing records with _source: %s\n", len(idsToDelete), docs[0].MetaData["_source"])
+					g.Log().Infof(ctx, "deleted %d existing records with _source: %s", len(idsToDelete), docs[0].MetaData["_source"])
 				}
 			}
 		}
-		// 重新构建
 		ids, err := r.Invoke(ctx, document.Source{URI: path}, compose.WithCallbacks(log_call_back.LogCallback(nil)))
 		if err != nil {
 			return fmt.Errorf("invoke index graph failed: %w", err)
 		}
-		fmt.Printf("[done] indexing file: %s, len of parts: %d，%s\n", path, len(ids), ids)
+		g.Log().Infof(ctx, "done indexing file: %s, len of parts: %d, %s", path, len(ids), ids)
 		return nil
 	})
+	if err != nil {
+		g.Log().Errorf(ctx, "walk dir error: %v", err)
+	}
 }

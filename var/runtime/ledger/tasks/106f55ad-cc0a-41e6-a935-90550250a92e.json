@@ -1,0 +1,76 @@
+{
+  "task_id": "106f55ad-cc0a-41e6-a935-90550250a92e",
+  "parent_task_id": "424e0e38-0f77-4b95-adfb-c70f353c3d82",
+  "session_id": "86ab75fcc07ea4ba4a7e12c7ee984d03",
+  "trace_id": "f0a3ffce-ed35-40a3-9e7f-191a8f6ed4b5",
+  "goal": "请分析当前 Prometheus 告警并结合日志排查",
+  "assignee": "reporter",
+  "creator": "supervisor",
+  "status": "succeeded",
+  "input": {
+    "intent": "alert_analysis",
+    "query": "请分析当前 Prometheus 告警并结合日志排查",
+    "results": [
+      {
+        "task_id": "5cbd7e70-800b-429c-8bba-17ca3ff79e84",
+        "agent": "logs",
+        "status": "degraded",
+        "summary": "日志查询能力未配置，已跳过该步骤。",
+        "confidence": 0.28,
+        "artifact_refs": [
+          {
+            "id": "5db2fdb7-ee5a-4707-941f-0d68aef31632",
+            "type": "task_result",
+            "uri": "var/runtime/artifacts/5db2fdb7-ee5a-4707-941f-0d68aef31632.json"
+          }
+        ],
+        "metadata": {
+          "tool_errors": null,
+          "tool_names": null
+        },
+        "started_at": 1775357082465,
+        "finished_at": 1775357082465
+      },
+      {
+        "task_id": "4aecadfc-3f7b-4a2e-91ab-07582e1408f0",
+        "agent": "metrics",
+        "status": "degraded",
+        "summary": "Failed to query Prometheus alerts. The service may not be configured or is unreachable.",
+        "confidence": 0.35,
+        "artifact_refs": [
+          {
+            "id": "27426b47-8600-438c-8ee7-395dd982345d",
+            "type": "task_result",
+            "uri": "var/runtime/artifacts/27426b47-8600-438c-8ee7-395dd982345d.json"
+          }
+        ],
+        "metadata": {
+          "error": "prometheus.address is not configured"
+        },
+        "started_at": 1775357082465,
+        "finished_at": 1775357082466
+      },
+      {
+        "task_id": "0e814825-64b0-4878-8765-43fb42930bd6",
+        "agent": "knowledge",
+        "status": "failed",
+        "summary": "[LocalFunc] failed to invoke tool, toolName=query_internal_docs, err=failed to create retriever: failed to connect to default database: context canceled",
+        "confidence": 0,
+        "artifact_refs": [
+          {
+            "id": "41b0f838-34ab-4bbb-92f1-67c8f69132ba",
+            "type": "task_result",
+            "uri": "var/runtime/artifacts/41b0f838-34ab-4bbb-92f1-67c8f69132ba.json"
+          }
+        ],
+        "error": {
+          "message": "[LocalFunc] failed to invoke tool, toolName=query_internal_docs, err=failed to create retriever: failed to connect to default database: context canceled"
+        },
+        "started_at": 1775357082465,
+        "finished_at": 1775357122468
+      }
+    ]
+  },
+  "created_at": 1775357122471,
+  "updated_at": 1775357122473
+}

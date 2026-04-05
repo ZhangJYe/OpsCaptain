@@ -1,0 +1,9 @@
+{
+  "task_id": "71e415c3-ccdc-4b62-9464-e7ab3a67c31b",
+  "agent": "reporter",
+  "status": "succeeded",
+  "summary": "# 告警分析报告\n\n## 用户目标\n请查询知识库中的 SOP 文档\n\n## 任务类型\nkb_qa\n\n## 执行摘要\n\n### Knowledge\n知识库检索超时，已跳过该步骤。\n\n## 结论\n\n- knowledge: 知识库检索超时，已跳过该步骤。（降级）",
+  "confidence": 0.25,
+  "started_at": 1775377404250,
+  "finished_at": 1775377404251
+}

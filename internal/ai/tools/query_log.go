@@ -28,7 +28,8 @@ func GetLogMcpTool() ([]tool.BaseTool, error) {
 	}
 	mcpURL := mcpURLVal.String()
 	if mcpURL == "" {
-		return nil, fmt.Errorf("mcp.log_url is not configured, please set it in config.yaml")
+		g.Log().Warning(ctx, "mcp.log_url is not configured, log query tool will be disabled")
+		return nil, nil
 	}
 	cli, err := client.NewSSEMCPClient(mcpURL)
 	if err != nil {

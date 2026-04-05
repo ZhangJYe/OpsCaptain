@@ -1,0 +1,12 @@
+{
+  "ref": {
+    "id": "7727779b-33bb-4112-8386-532ea8dfabaf",
+    "type": "task_result"
+  },
+  "content": "{\"agent\":\"knowledge\",\"confidence\":0.25,\"evidence\":null,\"status\":\"degraded\",\"summary\":\"知识库检索失败: [LocalFunc] failed to invoke tool, toolName=query_internal_docs, err=failed to create retriever: failed to connect to default database: context deadline exceeded\"}",
+  "metadata": {
+    "agent": "knowledge",
+    "task": "25cddc50-09ea-432f-aa86-ec7784291daa"
+  },
+  "created_at": 1775379434831
+}

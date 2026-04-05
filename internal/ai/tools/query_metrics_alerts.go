@@ -5,15 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"time"
 
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/components/tool/utils"
+	"github.com/gogf/gf/v2/frame/g"
 )
 
-// PrometheusAlert 告警信息结构
+const defaultPrometheusQueryTimeout = 5 * time.Second
+
 type PrometheusAlert struct {
 	Labels      map[string]string `json:"labels"`
 	Annotations map[string]string `json:"annotations"`
@@ -22,7 +23,6 @@ type PrometheusAlert struct {
 	Value       string            `json:"value"`
 }
 
-// PrometheusAlertsResult 告警查询结果
 type PrometheusAlertsResult struct {
 	Status string `json:"status"`
 	Data   struct {
@@ -32,7 +32,6 @@ type PrometheusAlertsResult struct {
 	ErrorType string `json:"errorType,omitempty"`
 }
 
-// SimplifiedAlert 简化的告警信息
 type SimplifiedAlert struct {
 	AlertName   string `json:"alert_name" jsonschema:"description=告警名称，从 Prometheus 告警的 labels.alertname 字段提取"`
 	Description string `json:"description" jsonschema:"description=告警描述信息，从 Prometheus 告警的 annotations.description 字段提取"`
@@ -41,7 +40,6 @@ type SimplifiedAlert struct {
 	Duration    string `json:"duration" jsonschema:"description=告警持续时间，从激活时间到当前时间的时长，格式如 '2h30m15s'、'30m15s' 或 '15s'"`
 }
 
-// PrometheusAlertsOutput 告警查询输出
 type PrometheusAlertsOutput struct {
 	Success bool              `json:"success" jsonschema:"description=查询是否成功"`
 	Alerts  []SimplifiedAlert `json:"alerts,omitempty" jsonschema:"description=活动告警列表，每个告警包含名称、描述、状态、激活时间和持续时间。相同 alertname 的告警只保留第一个"`
@@ -49,33 +47,40 @@ type PrometheusAlertsOutput struct {
 	Error   string            `json:"error,omitempty" jsonschema:"description=如果查询失败，包含错误信息"`
 }
 
-// queryPrometheusAlerts 查询Prometheus告警
-func queryPrometheusAlerts() (PrometheusAlertsResult, error) {
-	baseURL := "http://127.0.0.1:9090"
-	apiURL := fmt.Sprintf("%s/api/v1/alerts", baseURL)
-
-	log.Printf("Querying Prometheus alerts: %s", apiURL)
-
-	// 创建HTTP客户端
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
+func queryPrometheusAlerts(ctx context.Context) (PrometheusAlertsResult, error) {
+	baseURLVal, err := g.Cfg().Get(ctx, "prometheus.address")
 	var result PrometheusAlertsResult
+	if err != nil || baseURLVal.String() == "" {
+		return result, fmt.Errorf("prometheus.address is not configured")
+	}
+	apiURL := fmt.Sprintf("%s/api/v1/alerts", baseURLVal.String())
 
-	// 发送请求
-	resp, err := client.Get(apiURL)
+	g.Log().Debugf(ctx, "querying Prometheus alerts: %s", apiURL)
+
+	timeout := prometheusQueryTimeout(ctx)
+	reqCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	client := &http.Client{
+		Timeout: timeout,
+	}
+
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, apiURL, nil)
+	if err != nil {
+		return result, fmt.Errorf("failed to build prometheus request: %v", err)
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return result, fmt.Errorf("failed to query Prometheus alerts: %v", err)
 	}
 	defer resp.Body.Close()
 
-	// 读取响应
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return result, fmt.Errorf("failed to read response: %v", err)
 	}
 
-	// 解析JSON响应
 	if err = json.Unmarshal(body, &result); err != nil {
 		return result, fmt.Errorf("failed to parse response: %v", err)
 	}
@@ -83,18 +88,22 @@ func queryPrometheusAlerts() (PrometheusAlertsResult, error) {
 	return result, nil
 }
 
-// calculateDuration 计算从 activeAt 到现在的持续时间
+func prometheusQueryTimeout(ctx context.Context) time.Duration {
+	v, err := g.Cfg().Get(ctx, "multi_agent.metrics_query_timeout_ms")
+	if err == nil && v.Int64() > 0 {
+		return time.Duration(v.Int64()) * time.Millisecond
+	}
+	return defaultPrometheusQueryTimeout
+}
+
 func calculateDuration(activeAtStr string) string {
-	// 解析 RFC3339 格式的时间
 	activeAt, err := time.Parse(time.RFC3339Nano, activeAtStr)
 	if err != nil {
 		return "unknown"
 	}
 
-	// 计算持续时间
 	duration := time.Since(activeAt)
 
-	// 格式化持续时间
 	hours := int(duration.Hours())
 	minutes := int(duration.Minutes()) % 60
 	seconds := int(duration.Seconds()) % 60
@@ -108,38 +117,33 @@ func calculateDuration(activeAtStr string) string {
 	}
 }
 
-// NewPrometheusAlertsQueryTool 创建Prometheus告警查询工具
 func NewPrometheusAlertsQueryTool() tool.InvokableTool {
 	t, err := utils.InferOptionableTool(
 		"query_prometheus_alerts",
 		"Query active alerts from Prometheus alerting system. This tool retrieves all currently active/firing alerts including their labels, annotations, state, and values. Use this tool when you need to check what alerts are currently firing, investigate alert conditions, or monitor alert status.",
 		func(ctx context.Context, input *struct{}, opts ...tool.Option) (output string, err error) {
-			log.Printf("Querying Prometheus active alerts")
+			g.Log().Infof(ctx, "querying Prometheus active alerts")
 
-			// 调用Prometheus Alerts API
-			result, err := queryPrometheusAlerts()
+			result, err := queryPrometheusAlerts(ctx)
 			if err != nil {
 				alertsOut := PrometheusAlertsOutput{
 					Success: false,
 					Error:   err.Error(),
-					Message: "Failed to query Prometheus alerts",
+					Message: "Failed to query Prometheus alerts. The service may not be configured or is unreachable.",
 				}
 				jsonBytes, _ := json.MarshalIndent(alertsOut, "", "  ")
-				return string(jsonBytes), err
+				return string(jsonBytes), nil
 			}
 
-			// 转换为简化格式，对于相同的 alertname，只保留第一个
 			seenAlertNames := make(map[string]bool)
 			simplifiedAlerts := make([]SimplifiedAlert, 0)
 			for _, alert := range result.Data.Alerts {
 				alertName := alert.Labels["alertname"]
 
-				// 如果这个 alertname 已经存在，跳过
 				if seenAlertNames[alertName] {
 					continue
 				}
 
-				// 标记为已见过
 				seenAlertNames[alertName] = true
 
 				simplified := SimplifiedAlert{
@@ -152,21 +156,19 @@ func NewPrometheusAlertsQueryTool() tool.InvokableTool {
 				simplifiedAlerts = append(simplifiedAlerts, simplified)
 			}
 
-			// 构建成功响应
 			alertsOut := PrometheusAlertsOutput{
 				Success: true,
 				Alerts:  simplifiedAlerts,
 				Message: fmt.Sprintf("Successfully retrieved %d active alerts", len(simplifiedAlerts)),
 			}
 
-			// 转换为JSON
 			jsonBytes, err := json.MarshalIndent(alertsOut, "", "  ")
 			if err != nil {
-				log.Printf("Error marshaling alerts result to JSON: %v", err)
+				g.Log().Errorf(ctx, "error marshaling alerts result to JSON: %v", err)
 				return "", err
 			}
 
-			log.Printf("Prometheus alerts query completed: %d alerts found", len(simplifiedAlerts))
+			g.Log().Infof(ctx, "Prometheus alerts query completed: %d alerts found", len(simplifiedAlerts))
 			return string(jsonBytes), nil
 		})
 	if err != nil {

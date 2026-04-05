@@ -1,0 +1,12 @@
+{
+  "task_id": "6fa43950-131f-485b-9967-e18e0320dbb4",
+  "agent": "supervisor",
+  "status": "succeeded",
+  "summary": "# 告警分析报告\n\n## 用户目标\n请分析当前 Prometheus 告警并结合日志排查\n\n## 任务类型\nalert_analysis\n\n## 执行摘要\n\n### Logs\n日志查询能力未配置，已跳过该步骤。\n\n### Metrics\nFailed to query Prometheus alerts. The service may not be configured or is unreachable.\n\n### Knowledge\n知识库检索超时，已跳过该步骤。\n\n## 结论\n\n- logs: 日志查询能力未配置，已跳过该步骤。（降级）\n- metrics: Failed to query Prometheus alerts. The service may not be configured or is unreachable.（降级）\n- knowledge: 知识库检索超时，已跳过该步骤。（降级）",
+  "confidence": 0.29333333333333333,
+  "metadata": {
+    "intent": "alert_analysis"
+  },
+  "started_at": 1775377398624,
+  "finished_at": 1775377403638
+}

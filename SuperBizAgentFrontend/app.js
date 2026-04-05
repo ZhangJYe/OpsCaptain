@@ -1,13 +1,17 @@
 // SuperBizAgent 前端应用
 class SuperBizAgentApp {
     constructor() {
-        this.apiBaseUrl = 'http://localhost:6872/api';
+        this.apiBaseUrl = 'http://localhost:8000/api';
         this.currentMode = 'quick'; // 'quick' 或 'stream'
         this.sessionId = this.generateSessionId();
         this.isStreaming = false;
         this.currentChatHistory = []; // 当前对话的消息历史
         this.chatHistories = this.loadChatHistories(); // 所有历史对话
         this.isCurrentChatFromHistory = false; // 标记当前对话是否是从历史记录加载的
+        this.allowedUploadExtensions = ['.md', '.txt', '.pdf', '.doc', '.docx', '.csv', '.json', '.yaml', '.yml'];
+        this.maxUploadSizeMB = 20;
+        this.historySearchTerm = '';
+        this.abortController = null;
         
         this.initializeElements();
         this.bindEvents();
@@ -62,7 +66,6 @@ class SuperBizAgentApp {
     renderMarkdown(content) {
         if (!content) return '';
         
-        // 检查 marked 是否可用
         if (typeof marked === 'undefined') {
             console.warn('marked 库未加载，使用纯文本显示');
             return this.escapeHtml(content);
@@ -70,6 +73,9 @@ class SuperBizAgentApp {
         
         try {
             const html = marked.parse(content);
+            if (typeof DOMPurify !== 'undefined') {
+                return DOMPurify.sanitize(html);
+            }
             return html;
         } catch (e) {
             console.error('Markdown 渲染失败:', e);
@@ -98,6 +104,11 @@ class SuperBizAgentApp {
         this.sidebar = document.querySelector('.sidebar');
         this.newChatBtn = document.getElementById('newChatBtn');
         this.aiOpsSidebarBtn = document.getElementById('aiOpsSidebarBtn');
+        this.sidebarToggleBtn = document.getElementById('sidebarToggleBtn');
+        this.sidebarCloseBtn = document.getElementById('sidebarCloseBtn');
+        this.sidebarBackdrop = document.getElementById('sidebarBackdrop');
+        this.promptCards = document.querySelectorAll('.prompt-card');
+        this.historySearchInput = document.getElementById('historySearchInput');
         
         // 输入区域元素
         this.messageInput = document.getElementById('messageInput');
@@ -106,6 +117,7 @@ class SuperBizAgentApp {
         this.toolsMenu = document.getElementById('toolsMenu');
         this.uploadFileItem = document.getElementById('uploadFileItem');
         this.modeSelectorBtn = document.getElementById('modeSelectorBtn');
+        this.modeSelectorCurrent = document.getElementById('modeSelectorCurrent');
         this.modeDropdown = document.getElementById('modeDropdown');
         this.currentModeText = document.getElementById('currentModeText');
         this.fileInput = document.getElementById('fileInput');
@@ -116,6 +128,10 @@ class SuperBizAgentApp {
         this.chatContainer = document.querySelector('.chat-container');
         this.welcomeGreeting = document.getElementById('welcomeGreeting');
         this.chatHistoryList = document.getElementById('chatHistoryList');
+
+        if (this.fileInput) {
+            this.fileInput.setAttribute('accept', this.allowedUploadExtensions.join(','));
+        }
         
         // 初始化时检查是否需要居中
         this.checkAndSetCentered();
@@ -131,6 +147,34 @@ class SuperBizAgentApp {
         // AI Ops按钮
         if (this.aiOpsSidebarBtn) {
             this.aiOpsSidebarBtn.addEventListener('click', () => this.triggerAIOps());
+        }
+
+        if (this.sidebarToggleBtn) {
+            this.sidebarToggleBtn.addEventListener('click', () => this.toggleSidebar());
+        }
+
+        if (this.sidebarCloseBtn) {
+            this.sidebarCloseBtn.addEventListener('click', () => this.closeSidebar());
+        }
+
+        if (this.sidebarBackdrop) {
+            this.sidebarBackdrop.addEventListener('click', () => this.closeSidebar());
+        }
+
+        if (this.promptCards) {
+            this.promptCards.forEach((card) => {
+                card.addEventListener('click', () => {
+                    const prompt = card.getAttribute('data-prompt') || '';
+                    this.applyPrompt(prompt);
+                });
+            });
+        }
+
+        if (this.historySearchInput) {
+            this.historySearchInput.addEventListener('input', (e) => {
+                this.historySearchTerm = e.target.value.trim().toLowerCase();
+                this.renderChatHistory();
+            });
         }
         
         // 模式选择下拉菜单
@@ -161,16 +205,23 @@ class SuperBizAgentApp {
         
         // 发送消息
         if (this.sendButton) {
-            this.sendButton.addEventListener('click', () => this.sendMessage());
+            this.sendButton.addEventListener('click', () => {
+                if (this.isStreaming) {
+                    this.stopCurrentRequest();
+                    return;
+                }
+                this.sendMessage();
+            });
         }
         
         if (this.messageInput) {
-            this.messageInput.addEventListener('keypress', (e) => {
+            this.messageInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
                     this.sendMessage();
                 }
             });
+            this.messageInput.addEventListener('input', () => this.autoResizeInput());
         }
         
         // 工具按钮和菜单
@@ -203,6 +254,110 @@ class SuperBizAgentApp {
         if (this.fileInput) {
             this.fileInput.addEventListener('change', (e) => this.handleFileSelect(e));
         }
+    }
+
+    toggleSidebar(forceOpen) {
+        const nextState = typeof forceOpen === 'boolean' ? forceOpen : !document.body.classList.contains('sidebar-open');
+        document.body.classList.toggle('sidebar-open', nextState);
+    }
+
+    closeSidebar() {
+        this.toggleSidebar(false);
+    }
+
+    applyPrompt(prompt) {
+        if (!prompt || !this.messageInput) {
+            return;
+        }
+        this.messageInput.value = prompt;
+        this.autoResizeInput();
+        this.closeSidebar();
+        this.messageInput.focus();
+        this.sendMessage();
+    }
+
+    autoResizeInput() {
+        if (!this.messageInput || this.messageInput.tagName !== 'TEXTAREA') {
+            return;
+        }
+        this.messageInput.style.height = 'auto';
+        this.messageInput.style.height = `${Math.min(this.messageInput.scrollHeight, 180)}px`;
+    }
+
+    stopCurrentRequest() {
+        if (!this.abortController) {
+            return;
+        }
+        this.abortController.abort();
+        this.abortController = null;
+        this.isStreaming = false;
+        this.updateUI();
+        this.showNotification('已停止当前生成', 'info');
+    }
+
+    createAbortController() {
+        this.abortController = new AbortController();
+        return this.abortController;
+    }
+
+    clearAbortController() {
+        this.abortController = null;
+    }
+
+    isAbortError(error) {
+        return error && (error.name === 'AbortError' || String(error.message || '').toLowerCase().includes('abort'));
+    }
+
+    async copyToClipboard(text) {
+        if (!text) {
+            return;
+        }
+        try {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                await navigator.clipboard.writeText(text);
+            } else {
+                const textarea = document.createElement('textarea');
+                textarea.value = text;
+                textarea.style.position = 'fixed';
+                textarea.style.opacity = '0';
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+            }
+            this.showNotification('内容已复制', 'success');
+        } catch (error) {
+            this.showNotification('复制失败，请手动复制', 'error');
+        }
+    }
+
+    appendMessageActions(messageContentWrapper, type, content) {
+        if (!messageContentWrapper || type !== 'assistant' || !content) {
+            return;
+        }
+
+        const existingActions = messageContentWrapper.querySelector('.message-actions');
+        if (existingActions) {
+            existingActions.remove();
+        }
+
+        const actions = document.createElement('div');
+        actions.className = 'message-actions';
+
+        const copyButton = document.createElement('button');
+        copyButton.type = 'button';
+        copyButton.className = 'message-action-btn';
+        copyButton.innerHTML = `
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="9" y="9" width="10" height="10" rx="2" stroke="currentColor" stroke-width="2"/>
+                <path d="M5 15V7C5 5.89543 5.89543 5 7 5H15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            <span>复制</span>
+        `;
+        copyButton.addEventListener('click', () => this.copyToClipboard(content));
+
+        actions.appendChild(copyButton);
+        messageContentWrapper.appendChild(actions);
     }
 
     // 切换工具菜单显示/隐藏
@@ -280,6 +435,7 @@ class SuperBizAgentApp {
         
         // 更新历史对话列表
         this.renderChatHistory();
+        this.closeSidebar();
     }
     
     // 保存当前对话到历史记录（新建）
@@ -381,13 +537,31 @@ class SuperBizAgentApp {
         
         this.chatHistoryList.innerHTML = '';
         
-        if (this.chatHistories.length === 0) {
+        const filteredHistories = this.chatHistories.filter((history) => {
+            if (!this.historySearchTerm) {
+                return true;
+            }
+            const searchableText = [
+                history.title,
+                ...(history.messages || []).map((message) => message.content || '')
+            ].join(' ').toLowerCase();
+            return searchableText.includes(this.historySearchTerm);
+        });
+
+        if (filteredHistories.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'history-empty';
+            empty.textContent = this.historySearchTerm ? '没有匹配的历史会话' : '还没有保存的会话';
+            this.chatHistoryList.appendChild(empty);
             return;
         }
         
-        this.chatHistories.forEach((history, index) => {
+        filteredHistories.forEach((history, index) => {
             const historyItem = document.createElement('div');
             historyItem.className = 'history-item';
+            if (history.id === this.sessionId) {
+                historyItem.classList.add('active');
+            }
             historyItem.dataset.historyId = history.id;
             
             historyItem.innerHTML = `
@@ -446,13 +620,18 @@ class SuperBizAgentApp {
         if (this.chatMessages) {
             this.chatMessages.innerHTML = '';
             history.messages.forEach(msg => {
-                this.addMessage(msg.type, msg.content, false, false); // false表示不是流式，false表示不保存到历史（因为已经存在）
+                if (msg.type === 'assistant' && msg.meta && msg.meta.mode) {
+                    this.addAssistantMessageWithMeta(msg.content, msg.meta, false);
+                } else {
+                    this.addMessage(msg.type, msg.content, false, false); // false表示不是流式，false表示不保存到历史（因为已经存在）
+                }
             });
         }
         
         // 更新UI
         this.checkAndSetCentered();
         this.renderChatHistory();
+        this.closeSidebar();
     }
     
     // 删除历史对话
@@ -520,6 +699,14 @@ class SuperBizAgentApp {
             };
             this.currentModeText.textContent = modeNames[this.currentMode] || '快速';
         }
+
+        if (this.modeSelectorCurrent) {
+            const selectorNames = {
+                'quick': '快速回答',
+                'stream': '流式回答'
+            };
+            this.modeSelectorCurrent.textContent = selectorNames[this.currentMode] || '快速回答';
+        }
         
         // 更新下拉菜单选中状态
         const dropdownItems = document.querySelectorAll('.dropdown-item');
@@ -534,13 +721,26 @@ class SuperBizAgentApp {
         
         // 更新发送按钮状态
         if (this.sendButton) {
-            this.sendButton.disabled = this.isStreaming;
+            this.sendButton.disabled = false;
+            this.sendButton.classList.toggle('stop-mode', this.isStreaming);
+            this.sendButton.title = this.isStreaming ? '停止生成' : '发送';
+            this.sendButton.innerHTML = this.isStreaming ? `
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="7" y="7" width="10" height="10" rx="2" fill="currentColor"/>
+                </svg>
+            ` : `
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M22 2L11 13M22 2L15 22L11 13M22 2L2 9L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            `;
         }
         
         // 更新输入框状态
         if (this.messageInput) {
             this.messageInput.disabled = this.isStreaming;
-            this.messageInput.placeholder = '问问智能OnCall助手';
+            this.messageInput.placeholder = this.currentMode === 'stream'
+                ? '继续提问，实时查看生成过程'
+                : '有问题，尽管问';
         }
     }
 
@@ -572,10 +772,12 @@ class SuperBizAgentApp {
         // 清空输入框
         if (this.messageInput) {
             this.messageInput.value = '';
+            this.autoResizeInput();
         }
 
         // 设置发送状态
         this.isStreaming = true;
+        this.createAbortController();
         this.updateUI();
 
         try {
@@ -585,10 +787,13 @@ class SuperBizAgentApp {
                 await this.sendStreamMessage(message);
             }
         } catch (error) {
-            console.error('发送消息失败:', error);
-            this.addMessage('assistant', '抱歉，发送消息时出现错误：' + error.message);
+            if (!this.isAbortError(error)) {
+                console.error('发送消息失败:', error);
+                this.addMessage('assistant', '抱歉，发送消息时出现错误：' + error.message);
+            }
         } finally {
             this.isStreaming = false;
+            this.clearAbortController();
             this.updateUI();
             
             // 如果当前对话是从历史记录加载的，更新历史记录
@@ -607,6 +812,7 @@ class SuperBizAgentApp {
                 headers: {
                     'Content-Type': 'application/json',
                 },
+                signal: this.abortController ? this.abortController.signal : undefined,
                 body: JSON.stringify({
                     Id: this.sessionId,
                     Question: message
@@ -620,7 +826,11 @@ class SuperBizAgentApp {
             const data = await response.json();
             
             if (data.message === 'OK' && data.data && data.data.answer) {
-                this.addMessage('assistant', data.data.answer);
+                this.addAssistantMessageWithMeta(data.data.answer, {
+                    mode: data.data.mode || 'legacy',
+                    traceId: data.data.trace_id || '',
+                    details: data.data.detail || []
+                });
             } else {
                 throw new Error(data.message || '未知错误');
             }
@@ -637,6 +847,7 @@ class SuperBizAgentApp {
                 headers: {
                     'Content-Type': 'application/json',
                 },
+                signal: this.abortController ? this.abortController.signal : undefined,
                 body: JSON.stringify({
                     Id: this.sessionId,
                     Question: message
@@ -647,11 +858,42 @@ class SuperBizAgentApp {
                 throw new Error(`HTTP错误: ${response.status}`);
             }
             
-            // 创建助手消息元素
             const assistantMessageElement = this.addMessage('assistant', '', true);
             let fullResponse = '';
+            let isFinalized = false;
+            let responseMeta = { mode: '', traceId: '', details: [] };
 
-            // 处理流式响应
+            const finalizeStream = () => {
+                if (isFinalized) {
+                    return;
+                }
+                isFinalized = true;
+                if (assistantMessageElement) {
+                    assistantMessageElement.classList.remove('streaming');
+                    const messageContent = assistantMessageElement.querySelector('.message-content');
+                    const messageContentWrapper = assistantMessageElement.querySelector('.message-content-wrapper');
+                    if (messageContent) {
+                        messageContent.innerHTML = this.renderMarkdown(fullResponse);
+                        this.highlightCodeBlocks(messageContent);
+                        this.renderAssistantMeta(assistantMessageElement, messageContentWrapper, responseMeta);
+                        this.renderAssistantDetails(
+                            assistantMessageElement,
+                            messageContentWrapper,
+                            responseMeta.details || [],
+                            responseMeta.mode === 'aiops' ? '查看详细步骤' : '查看执行步骤'
+                        );
+                        this.appendMessageActions(messageContentWrapper, 'assistant', fullResponse);
+                    }
+                }
+                if (fullResponse) {
+                    this.persistAssistantHistory(fullResponse, responseMeta);
+                    if (this.isCurrentChatFromHistory) {
+                        this.updateCurrentChatHistory();
+                        this.renderChatHistory();
+                    }
+                }
+            };
+
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '';
@@ -662,44 +904,18 @@ class SuperBizAgentApp {
                     const { done, value } = await reader.read();
                     
                     if (done) {
-                        // 流结束，将内容转换为Markdown渲染
-                        if (assistantMessageElement) {
-                            assistantMessageElement.classList.remove('streaming');
-                            const messageContent = assistantMessageElement.querySelector('.message-content');
-                            if (messageContent) {
-                                messageContent.innerHTML = this.renderMarkdown(fullResponse);
-                                // 高亮代码块
-                                this.highlightCodeBlocks(messageContent);
-                            }
-                        }
-                        // 保存流式消息到历史记录
-                        if (fullResponse) {
-                            this.currentChatHistory.push({
-                                type: 'assistant',
-                                content: fullResponse,
-                                timestamp: new Date().toISOString()
-                            });
-                            // 如果当前对话是从历史记录加载的，更新历史记录
-                            if (this.isCurrentChatFromHistory) {
-                                this.updateCurrentChatHistory();
-                                this.renderChatHistory();
-                            }
-                        }
+                        finalizeStream();
                         break;
                     }
 
-                    // 解码数据并添加到缓冲区
                     buffer += decoder.decode(value, { stream: true });
                     
-                    // 按行分割处理
                     const lines = buffer.split('\n');
-                    // 保留最后一行（可能不完整）
                     buffer = lines.pop() || '';
                     
                     for (const line of lines) {
                         if (line.trim() === '') continue;
                         
-                        // 解析SSE格式
                         if (line.startsWith('id: ')) {
                             continue;
                         } else if (line.startsWith('event: ')) {
@@ -707,64 +923,25 @@ class SuperBizAgentApp {
                             if (currentEvent === 'connected') {
                                 console.log('流式连接确认');
                             } else if (currentEvent === 'done') {
-                                // 流结束，将内容转换为Markdown渲染
-                                if (assistantMessageElement) {
-                                    assistantMessageElement.classList.remove('streaming');
-                                    const messageContent = assistantMessageElement.querySelector('.message-content');
-                                    if (messageContent) {
-                                        messageContent.innerHTML = this.renderMarkdown(fullResponse);
-                                        // 高亮代码块
-                                        this.highlightCodeBlocks(messageContent);
-                                    }
-                                }
-                                // 保存流式消息到历史记录
-                                if (fullResponse) {
-                                    this.currentChatHistory.push({
-                                        type: 'assistant',
-                                        content: fullResponse,
-                                        timestamp: new Date().toISOString()
-                                    });
-                                    // 如果当前对话是从历史记录加载的，更新历史记录
-                                    if (this.isCurrentChatFromHistory) {
-                                        this.updateCurrentChatHistory();
-                                        this.renderChatHistory();
-                                    }
-                                }
+                                finalizeStream();
                                 return;
                             }
                             continue;
                         } else if (line.startsWith('data: ')) {
                             const data = line.substring(6);
                             if (data === '[DONE]') {
-                                // 流结束标记，将内容转换为Markdown渲染
-                                if (assistantMessageElement) {
-                                    assistantMessageElement.classList.remove('streaming');
-                                    const messageContent = assistantMessageElement.querySelector('.message-content');
-                                    if (messageContent) {
-                                        messageContent.innerHTML = this.renderMarkdown(fullResponse);
-                                        // 高亮代码块
-                                        this.highlightCodeBlocks(messageContent);
-                                    }
-                                }
-                                // 保存流式消息到历史记录
-                                if (fullResponse) {
-                                    this.currentChatHistory.push({
-                                        type: 'assistant',
-                                        content: fullResponse,
-                                        timestamp: new Date().toISOString()
-                                    });
-                                    // 如果当前对话是从历史记录加载的，更新历史记录
-                                    if (this.isCurrentChatFromHistory) {
-                                        this.updateCurrentChatHistory();
-                                        this.renderChatHistory();
-                                    }
-                                }
+                                finalizeStream();
                                 return;
                             }
                             
-                            // 只处理message事件的数据
-                            if (currentEvent === 'message') {
-                                // 如果 data 为空字符串，认为是换行
+                            if (currentEvent === 'meta') {
+                                try {
+                                    const parsed = JSON.parse(data);
+                                    responseMeta = this.normalizeAssistantMeta(parsed);
+                                } catch (error) {
+                                    console.warn('解析stream meta失败:', error);
+                                }
+                            } else if (currentEvent === 'message') {
                                 if (data === '') {
                                     fullResponse += '\n';
                                 } else {
@@ -773,7 +950,6 @@ class SuperBizAgentApp {
                                 
                                 if (assistantMessageElement) {
                                     const messageContent = assistantMessageElement.querySelector('.message-content');
-                                    // 流式消息暂时使用纯文本显示
                                     messageContent.textContent = fullResponse;
                                     this.scrollToBottom();
                                 }
@@ -781,6 +957,12 @@ class SuperBizAgentApp {
                         }
                     }
                 }
+            } catch (error) {
+                if (this.isAbortError(error)) {
+                    finalizeStream();
+                    return;
+                }
+                throw error;
             } finally {
                 reader.releaseLock();
             }
@@ -836,6 +1018,7 @@ class SuperBizAgentApp {
         }
 
         messageContentWrapper.appendChild(messageContent);
+        this.appendMessageActions(messageContentWrapper, type, content);
         messageDiv.appendChild(messageContentWrapper);
 
         if (this.chatMessages) {
@@ -848,6 +1031,273 @@ class SuperBizAgentApp {
                 this.chatContainer.style.transition = 'all 0.5s ease';
             }
             
+            this.scrollToBottom();
+        }
+
+        return messageDiv;
+    }
+
+    normalizeAssistantMeta(meta = {}) {
+        const details = meta.details || meta.detail || [];
+        return {
+            mode: meta.mode || '',
+            traceId: meta.traceId || meta.trace_id || '',
+            details: Array.isArray(details) ? details : []
+        };
+    }
+
+    assistantModeLabel(mode) {
+        const labels = {
+            aiops: 'AI Ops',
+            multi_agent: 'Multi-Agent',
+            legacy: 'Legacy'
+        };
+        return labels[mode] || '';
+    }
+
+    persistAssistantHistory(content, meta = {}) {
+        const normalizedMeta = this.normalizeAssistantMeta(meta);
+        const historyItem = {
+            type: 'assistant',
+            content: content,
+            timestamp: new Date().toISOString()
+        };
+        if (normalizedMeta.mode || normalizedMeta.traceId || normalizedMeta.details.length > 0) {
+            historyItem.meta = normalizedMeta;
+        }
+        this.currentChatHistory.push(historyItem);
+    }
+
+    renderAssistantMeta(messageElement, messageContentWrapper, meta = {}) {
+        const normalizedMeta = this.normalizeAssistantMeta(meta);
+        const modeLabel = this.assistantModeLabel(normalizedMeta.mode);
+        const traceId = normalizedMeta.traceId;
+
+        let metaContainer = messageElement.querySelector('.aiops-meta');
+        let traceContainer = messageElement.querySelector('.aiops-trace');
+        const messageContent = messageContentWrapper.querySelector('.message-content');
+
+        if (!modeLabel && !traceId) {
+            if (metaContainer) {
+                metaContainer.remove();
+            }
+            if (traceContainer) {
+                traceContainer.remove();
+            }
+            return;
+        }
+
+        if (!metaContainer) {
+            metaContainer = document.createElement('div');
+            metaContainer.className = 'aiops-meta';
+            messageContentWrapper.insertBefore(metaContainer, messageContentWrapper.firstChild);
+        }
+
+        metaContainer.innerHTML = '';
+
+        if (modeLabel) {
+            const modePill = document.createElement('div');
+            modePill.className = `assistant-mode-pill assistant-mode-${this.escapeHtml(normalizedMeta.mode || 'default')}`;
+            modePill.textContent = modeLabel;
+            metaContainer.appendChild(modePill);
+        }
+
+        if (!traceId) {
+            if (traceContainer) {
+                traceContainer.remove();
+            }
+            return;
+        }
+
+        if (!traceContainer) {
+            traceContainer = document.createElement('div');
+            traceContainer.className = 'aiops-trace';
+            if (messageContent) {
+                messageContentWrapper.insertBefore(traceContainer, messageContent);
+            } else {
+                messageContentWrapper.appendChild(traceContainer);
+            }
+        }
+
+        const tracePill = document.createElement('div');
+        tracePill.className = 'aiops-trace-pill';
+        tracePill.innerHTML = `
+            <span class="aiops-meta-label">Trace ID</span>
+            <code>${this.escapeHtml(traceId)}</code>
+        `;
+
+        const traceButton = document.createElement('button');
+        traceButton.type = 'button';
+        traceButton.className = 'aiops-trace-btn';
+        traceButton.textContent = '查看 Trace';
+
+        let traceToggle = traceContainer.querySelector('.details-toggle');
+        let traceContent = traceContainer.querySelector('.details-content');
+        if (!traceToggle) {
+            traceToggle = document.createElement('div');
+            traceToggle.className = 'details-toggle trace-toggle';
+            traceToggle.innerHTML = `
+                <svg class="toggle-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span>查看 Trace</span>
+            `;
+
+            traceContent = document.createElement('div');
+            traceContent.className = 'details-content trace-content';
+
+            traceToggle.addEventListener('click', async () => {
+                const expanded = traceContent.classList.contains('expanded');
+                if (expanded) {
+                    traceContent.classList.remove('expanded');
+                    traceToggle.classList.remove('expanded');
+                    traceButton.classList.remove('expanded');
+                    traceButton.textContent = '查看 Trace';
+                    return;
+                }
+
+                traceContent.classList.add('expanded');
+                traceToggle.classList.add('expanded');
+                traceButton.classList.add('expanded');
+                traceButton.textContent = '收起 Trace';
+
+                if (traceContent.dataset.loaded === 'true') {
+                    return;
+                }
+
+                traceContent.innerHTML = '<div class="detail-item">正在加载 Trace...</div>';
+                try {
+                    const traceData = await this.fetchAIOpsTrace(traceId);
+                    const events = Array.isArray(traceData.events) ? traceData.events : [];
+                    traceContent.innerHTML = '';
+
+                    if (events.length === 0) {
+                        traceContent.innerHTML = '<div class="detail-item">当前没有可显示的 Trace 事件。</div>';
+                    } else {
+                        events.forEach((event, index) => {
+                            const eventItem = document.createElement('div');
+                            eventItem.className = 'detail-item trace-item';
+                            const agent = this.escapeHtml(event.agent || 'unknown');
+                            const type = this.escapeHtml(event.type || 'task_info');
+                            const message = this.escapeHtml(event.message || '无消息');
+                            const createdAt = this.formatAIOpsTraceTime(event.created_at);
+                            eventItem.innerHTML = `
+                                <div class="trace-item-head">
+                                    <span class="trace-agent">${agent}</span>
+                                    <span class="trace-type">${type}</span>
+                                    <span class="trace-time">${createdAt}</span>
+                                </div>
+                                <div class="trace-item-body"><strong>事件 ${index + 1}:</strong> ${message}</div>
+                            `;
+                            traceContent.appendChild(eventItem);
+                        });
+                    }
+                    traceContent.dataset.loaded = 'true';
+                } catch (error) {
+                    traceContent.innerHTML = `<div class="detail-item">Trace 加载失败：${this.escapeHtml(error.message || '未知错误')}</div>`;
+                    this.showNotification('Trace 加载失败: ' + (error.message || '未知错误'), 'error');
+                }
+            });
+
+            traceContainer.appendChild(traceToggle);
+            traceContainer.appendChild(traceContent);
+        } else {
+            if (traceContent) {
+                traceContent.dataset.loaded = 'false';
+            }
+        }
+
+        traceButton.addEventListener('click', () => traceToggle.click());
+        metaContainer.appendChild(tracePill);
+        metaContainer.appendChild(traceButton);
+    }
+
+    renderAssistantDetails(messageElement, messageContentWrapper, details = [], title = '查看执行步骤') {
+        let detailsContainer = messageElement.querySelector('.aiops-details');
+        const messageContent = messageContentWrapper.querySelector('.message-content');
+
+        if (!details || details.length === 0) {
+            if (detailsContainer) {
+                detailsContainer.remove();
+            }
+            return;
+        }
+
+        if (!detailsContainer) {
+            detailsContainer = document.createElement('div');
+            detailsContainer.className = 'aiops-details';
+            messageContentWrapper.insertBefore(detailsContainer, messageContent);
+        } else {
+            detailsContainer.innerHTML = '';
+        }
+
+        const detailsToggle = document.createElement('div');
+        detailsToggle.className = 'details-toggle';
+        detailsToggle.innerHTML = `
+            <svg class="toggle-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span>${this.escapeHtml(title)} (${details.length}条)</span>
+        `;
+
+        const detailsContent = document.createElement('div');
+        detailsContent.className = 'details-content';
+
+        details.forEach((detail, index) => {
+            const detailItem = document.createElement('div');
+            detailItem.className = 'detail-item';
+            detailItem.innerHTML = `<strong>步骤 ${index + 1}:</strong> ${this.escapeHtml(detail)}`;
+            detailsContent.appendChild(detailItem);
+        });
+
+        detailsToggle.addEventListener('click', () => {
+            detailsContent.classList.toggle('expanded');
+            detailsToggle.classList.toggle('expanded');
+        });
+
+        detailsContainer.appendChild(detailsToggle);
+        detailsContainer.appendChild(detailsContent);
+    }
+
+    addAssistantMessageWithMeta(response, meta = {}, saveToHistory = true) {
+        const normalizedMeta = this.normalizeAssistantMeta(meta);
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message assistant${normalizedMeta.mode === 'aiops' ? ' aiops-message' : ''}`;
+
+        const messageAvatar = document.createElement('div');
+        messageAvatar.className = 'message-avatar';
+        messageAvatar.innerHTML = `
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" fill="white"/>
+            </svg>
+        `;
+        messageDiv.appendChild(messageAvatar);
+
+        const messageContentWrapper = document.createElement('div');
+        messageContentWrapper.className = 'message-content-wrapper';
+
+        const messageContent = document.createElement('div');
+        messageContent.className = 'message-content';
+        messageContent.innerHTML = this.renderMarkdown(response);
+        this.highlightCodeBlocks(messageContent);
+
+        messageContentWrapper.appendChild(messageContent);
+        this.renderAssistantMeta(messageDiv, messageContentWrapper, normalizedMeta);
+        this.renderAssistantDetails(
+            messageDiv,
+            messageContentWrapper,
+            normalizedMeta.details,
+            normalizedMeta.mode === 'aiops' ? '查看详细步骤' : '查看执行步骤'
+        );
+        this.appendMessageActions(messageContentWrapper, 'assistant', response);
+        messageDiv.appendChild(messageContentWrapper);
+
+        if (saveToHistory) {
+            this.persistAssistantHistory(response, normalizedMeta);
+        }
+
+        if (this.chatMessages) {
+            this.chatMessages.appendChild(messageDiv);
             this.scrollToBottom();
         }
 
@@ -978,7 +1428,7 @@ class SuperBizAgentApp {
         if (file) {
             // 验证文件格式
             if (!this.validateFileType(file)) {
-                this.showNotification('只支持上传 TXT 或 Markdown (.md) 格式的文件', 'error');
+                this.showNotification(`仅支持 ${this.allowedUploadExtensions.join(', ')} 文件`, 'error');
                 this.fileInput.value = '';
                 return;
             }
@@ -989,27 +1439,27 @@ class SuperBizAgentApp {
     // 验证文件类型
     validateFileType(file) {
         const fileName = file.name.toLowerCase();
-        const allowedExtensions = ['.txt', '.md', '.markdown'];
-        return allowedExtensions.some(ext => fileName.endsWith(ext));
+        return this.allowedUploadExtensions.some(ext => fileName.endsWith(ext));
     }
 
     // 上传文件到知识库
     async uploadFile(file) {
         // 再次验证文件类型（双重保险）
         if (!this.validateFileType(file)) {
-            this.showNotification('只支持上传 TXT 或 Markdown (.md) 格式的文件', 'error');
+            this.showNotification(`仅支持 ${this.allowedUploadExtensions.join(', ')} 文件`, 'error');
             return;
         }
 
-        // 验证文件大小（限制为50MB）
-        const maxSize = 50 * 1024 * 1024;
+        // 验证文件大小（与后端保持一致）
+        const maxSize = this.maxUploadSizeMB * 1024 * 1024;
         if (file.size > maxSize) {
-            this.showNotification('文件大小不能超过50MB', 'error');
+            this.showNotification(`文件大小不能超过 ${this.maxUploadSizeMB}MB`, 'error');
             return;
         }
 
         // 锁定前端并显示上传遮罩层
         this.isStreaming = true;
+        this.createAbortController();
         this.updateUI();
         this.showUploadOverlay(true, file.name);
 
@@ -1021,6 +1471,7 @@ class SuperBizAgentApp {
             // 发送上传请求
             const response = await fetch(`${this.apiBaseUrl}/upload`, {
                 method: 'POST',
+                signal: this.abortController ? this.abortController.signal : undefined,
                 body: formData
             });
 
@@ -1038,8 +1489,10 @@ class SuperBizAgentApp {
                 throw new Error(data.message || '上传失败');
             }
         } catch (error) {
-            console.error('文件上传失败:', error);
-            this.showNotification('文件上传失败: ' + error.message, 'error');
+            if (!this.isAbortError(error)) {
+                console.error('文件上传失败:', error);
+                this.showNotification('文件上传失败: ' + error.message, 'error');
+            }
         } finally {
             // 清空文件输入
             if (this.fileInput) {
@@ -1047,6 +1500,7 @@ class SuperBizAgentApp {
             }
             // 解锁前端
             this.isStreaming = false;
+            this.clearAbortController();
             this.showUploadOverlay(false);
             this.updateUI();
         }
@@ -1068,7 +1522,8 @@ class SuperBizAgentApp {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                }
+                },
+                signal: this.abortController ? this.abortController.signal : undefined
             });
 
             if (!response.ok) {
@@ -1089,20 +1544,57 @@ class SuperBizAgentApp {
                 }
                 
                 // 更新消息内容
-                this.updateAIOpsMessage(loadingMessageElement, responseText, data.data.detail || []);
+                this.updateAIOpsMessage(
+                    loadingMessageElement,
+                    responseText,
+                    data.data.detail || [],
+                    data.data.trace_id || ''
+                );
             } else {
                 throw new Error(data.message || '未知错误');
             }
         } catch (error) {
+            if (this.isAbortError(error)) {
+                return;
+            }
             throw error;
         }
     }
 
+    async fetchAIOpsTrace(traceId) {
+        const response = await fetch(`${this.apiBaseUrl}/ai_ops_trace?trace_id=${encodeURIComponent(traceId)}`);
+        if (!response.ok) {
+            throw new Error(`HTTP错误: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (data.message === 'OK' && data.data) {
+            return data.data;
+        }
+        throw new Error(data.message || 'Trace查询失败');
+    }
+
+    formatAIOpsTraceTime(timestamp) {
+        if (!timestamp) {
+            return '--:--:--';
+        }
+        try {
+            return new Date(timestamp).toLocaleTimeString('zh-CN', {
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        } catch (error) {
+            return String(timestamp);
+        }
+    }
+
     // 更新智能运维消息（带折叠详情）
-    updateAIOpsMessage(messageElement, response, details) {
+    updateAIOpsMessage(messageElement, response, details, traceId = '') {
         if (!messageElement) {
             // 如果没有传入消息元素，则创建新消息
-            return this.addAIOpsMessage(response, details);
+            return this.addAIOpsMessage(response, details, traceId);
         }
 
         // 添加aiops-message类
@@ -1113,6 +1605,12 @@ class SuperBizAgentApp {
         if (!messageContentWrapper) {
             return;
         }
+
+        this.renderAssistantMeta(messageElement, messageContentWrapper, {
+            mode: 'aiops',
+            traceId: traceId,
+            details: details || []
+        });
 
         // 清空现有内容（保留消息内容容器）
         const messageContent = messageContentWrapper.querySelector('.message-content');
@@ -1131,57 +1629,19 @@ class SuperBizAgentApp {
         }
 
         // 详情部分（可折叠）- 先显示
-        if (details && details.length > 0) {
-            // 检查是否已存在详情容器
-            let detailsContainer = messageElement.querySelector('.aiops-details');
-            if (!detailsContainer) {
-                detailsContainer = document.createElement('div');
-                detailsContainer.className = 'aiops-details';
-                messageContentWrapper.insertBefore(detailsContainer, messageContent);
-            } else {
-                // 清空现有详情
-                detailsContainer.innerHTML = '';
-            }
-
-            const detailsToggle = document.createElement('div');
-            detailsToggle.className = 'details-toggle';
-            detailsToggle.innerHTML = `
-                <svg class="toggle-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-                <span>查看详细步骤 (${details.length}条)</span>
-            `;
-
-            const detailsContent = document.createElement('div');
-            detailsContent.className = 'details-content';
-            
-            details.forEach((detail, index) => {
-                const detailItem = document.createElement('div');
-                detailItem.className = 'detail-item';
-                detailItem.innerHTML = `<strong>步骤 ${index + 1}:</strong> ${this.escapeHtml(detail)}`;
-                detailsContent.appendChild(detailItem);
-            });
-
-            // 点击切换折叠状态
-            detailsToggle.addEventListener('click', () => {
-                detailsContent.classList.toggle('expanded');
-                detailsToggle.classList.toggle('expanded');
-            });
-
-            detailsContainer.appendChild(detailsToggle);
-            detailsContainer.appendChild(detailsContent);
-        }
+        this.renderAssistantDetails(messageElement, messageContentWrapper, details || [], '查看详细步骤');
 
         // 更新主要响应内容（使用Markdown渲染）
         messageContent.innerHTML = this.renderMarkdown(response);
         // 高亮代码块
         this.highlightCodeBlocks(messageContent);
+        this.appendMessageActions(messageContentWrapper, 'assistant', response);
         
         // 保存到历史记录
-        this.currentChatHistory.push({
-            type: 'assistant',
-            content: response,
-            timestamp: new Date().toISOString()
+        this.persistAssistantHistory(response, {
+            mode: 'aiops',
+            traceId: traceId,
+            details: details || []
         });
         
         this.scrollToBottom();
@@ -1189,74 +1649,12 @@ class SuperBizAgentApp {
     }
 
     // 添加智能运维消息（带折叠详情）- 保留用于兼容性
-    addAIOpsMessage(response, details) {
-        const messageDiv = document.createElement('div');
-        messageDiv.className = 'message assistant aiops-message';
-
-        // 添加头像图标
-        const messageAvatar = document.createElement('div');
-        messageAvatar.className = 'message-avatar';
-        messageAvatar.innerHTML = `
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" fill="white"/>
-            </svg>
-        `;
-        messageDiv.appendChild(messageAvatar);
-
-        // 创建消息内容包装器
-        const messageContentWrapper = document.createElement('div');
-        messageContentWrapper.className = 'message-content-wrapper';
-
-        // 详情部分（可折叠）- 先显示
-        if (details && details.length > 0) {
-            const detailsContainer = document.createElement('div');
-            detailsContainer.className = 'aiops-details';
-
-            const detailsToggle = document.createElement('div');
-            detailsToggle.className = 'details-toggle';
-            detailsToggle.innerHTML = `
-                <svg class="toggle-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-                <span>查看详细步骤 (${details.length}条)</span>
-            `;
-
-            const detailsContent = document.createElement('div');
-            detailsContent.className = 'details-content';
-            
-            details.forEach((detail, index) => {
-                const detailItem = document.createElement('div');
-                detailItem.className = 'detail-item';
-                detailItem.innerHTML = `<strong>步骤 ${index + 1}:</strong> ${this.escapeHtml(detail)}`;
-                detailsContent.appendChild(detailItem);
-            });
-
-            // 点击切换折叠状态
-            detailsToggle.addEventListener('click', () => {
-                detailsContent.classList.toggle('expanded');
-                detailsToggle.classList.toggle('expanded');
-            });
-
-            detailsContainer.appendChild(detailsToggle);
-            detailsContainer.appendChild(detailsContent);
-            messageContentWrapper.appendChild(detailsContainer);
-        }
-
-        // 主要响应内容 - 后显示（使用Markdown渲染）
-        const messageContent = document.createElement('div');
-        messageContent.className = 'message-content';
-        messageContent.innerHTML = this.renderMarkdown(response);
-        // 高亮代码块
-        this.highlightCodeBlocks(messageContent);
-        messageContentWrapper.appendChild(messageContent);
-        messageDiv.appendChild(messageContentWrapper);
-        
-        if (this.chatMessages) {
-            this.chatMessages.appendChild(messageDiv);
-            this.scrollToBottom();
-        }
-
-        return messageDiv;
+    addAIOpsMessage(response, details, traceId = '') {
+        return this.addAssistantMessageWithMeta(response, {
+            mode: 'aiops',
+            traceId: traceId,
+            details: details || []
+        });
     }
 
     // HTML转义
@@ -1282,22 +1680,26 @@ class SuperBizAgentApp {
         
         // 设置发送状态
         this.isStreaming = true;
+        this.createAbortController();
         this.updateUI();
 
         try {
             await this.sendAIOpsRequest(loadingMessage);
         } catch (error) {
-            console.error('智能运维分析失败:', error);
-            // 更新消息为错误信息
-            if (loadingMessage) {
-                const messageContent = loadingMessage.querySelector('.message-content');
-                if (messageContent) {
-                    messageContent.textContent = '抱歉，智能运维分析时出现错误：' + error.message;
+            if (!this.isAbortError(error)) {
+                console.error('智能运维分析失败:', error);
+                // 更新消息为错误信息
+                if (loadingMessage) {
+                    const messageContent = loadingMessage.querySelector('.message-content');
+                    if (messageContent) {
+                        messageContent.textContent = '抱歉，智能运维分析时出现错误：' + error.message;
+                    }
                 }
             }
         } finally {
             this.isStreaming = false;
             this.currentAIOpsMessage = null;
+            this.clearAbortController();
             this.updateUI();
         }
     }

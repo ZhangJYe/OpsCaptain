@@ -1,30 +1,72 @@
-# https://goframe.org/docs/web/server-config-file-template
 server:
   address: ":8000"
-  openapiPath: "/api.json"
-  swaggerPath: "/swagger"
 
-# https://goframe.org/docs/core/glog-config
-logger:
-  level: "all"
-  stdout: true
+auth:
+  enabled: false
+  jwt_secret: "${AUTH_JWT_SECRET}"
+  token_expiry_hours: 24
+  rate_limit_per_minute: 20
+  rate_limit_burst: 30
+
+file_dir: "./docs/"
+
+upload:
+  max_size_mb: 20
+
+cors:
+  allowed_origins:
+    - "*"
+
+milvus:
+  address: "localhost:19530"
 
 ds_think_chat_model:
-  api_key: ""
-  base_url: "https://ark.cn-beijing.volces.com/api/v3"
-  model: "deepseek-v3-1-terminus"
+  model: "GLM-4.5-AIR"
+  api_key: "${GLM_API_KEY}"
+  base_url: "https://open.bigmodel.cn/api/paas/v4"
 
 ds_quick_chat_model:
-  api_key: ""
-  base_url: "https://ark.cn-beijing.volces.com/api/v3"
-  model: "deepseek-v3-1-terminus"
+  model: "GLM-4.5-AIR"
+  api_key: "${GLM_API_KEY}"
+  base_url: "https://open.bigmodel.cn/api/paas/v4"
 
 doubao_embedding_model:
-  api_key: ""
-  base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
-  model: "text-embedding-v4"
+  model: "BAAI/bge-m3"
+  api_key: "${SILICONFLOW_API_KEY}"
+  base_url: "https://api.siliconflow.cn/v1"
+  dimension: 1024
 
-file_dir: "/你的路径/SuperBizAgent/internal/ai/cmd/knowledge_cmd/docs"
+memory:
+  max_window_size: 20
+  max_context_tokens: 4096
+  extract_timeout_ms: 1500
+  long_term_max_entries: 1000
+  long_term_max_entries_per_session: 100
+
+context:
+  chat_max_history_messages: 10
+  chat_max_memory_items: 5
+  aiops_max_memory_items: 5
+  reporter_max_tool_items: 8
+  docs_query_timeout_ms: 5000
+  docs_init_failure_ttl_ms: 15000
+
+retriever:
+  top_k: 5
+
+multi_agent:
+  data_dir: "./var/runtime"
+  chat_route_enabled: true
+  metrics_query_timeout_ms: 5000
+  knowledge_query_timeout_ms: 5000
+  knowledge_init_failure_ttl_ms: 15000
+  knowledge_evidence_limit: 5
+  log_query_timeout_ms: 3000
+  log_evidence_limit: 3
+
+log_topic:
+  region: ""
+  id: ""
 
 mcp:
   log_url: ""
@@ -32,4 +74,5 @@ mcp:
 mysql:
   dsn: ""
 
-
+prometheus:
+  address: ""

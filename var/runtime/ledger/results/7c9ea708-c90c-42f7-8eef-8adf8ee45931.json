@@ -1,0 +1,13 @@
+{
+  "task_id": "7c9ea708-c90c-42f7-8eef-8adf8ee45931",
+  "agent": "logs",
+  "status": "degraded",
+  "summary": "日志查询能力未配置，已跳过该步骤。",
+  "confidence": 0.28,
+  "metadata": {
+    "tool_errors": null,
+    "tool_names": null
+  },
+  "started_at": 1775377398629,
+  "finished_at": 1775377398630
+}

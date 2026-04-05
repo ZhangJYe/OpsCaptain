@@ -1,0 +1,12 @@
+{
+  "ref": {
+    "id": "a27f5a9e-7415-4988-a143-6573fe7806e4",
+    "type": "task_result"
+  },
+  "content": "{\"agent\":\"knowledge\",\"confidence\":0.25,\"evidence\":null,\"status\":\"degraded\",\"summary\":\"知识库检索超时，已跳过该步骤。\"}",
+  "metadata": {
+    "agent": "knowledge",
+    "task": "ec2623de-b290-4e1b-b1d1-77a618c16f21"
+  },
+  "created_at": 1775377403636
+}

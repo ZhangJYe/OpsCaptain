@@ -1,0 +1,18 @@
+{
+  "task_id": "350d4973-0a2f-4a42-9260-0d1b074671dd",
+  "agent": "triage",
+  "status": "succeeded",
+  "summary": "已识别为告警分析任务，优先查询告警、日志和知识库。",
+  "confidence": 0.76,
+  "metadata": {
+    "domains": [
+      "metrics",
+      "logs",
+      "knowledge"
+    ],
+    "intent": "alert_analysis",
+    "priority": "high"
+  },
+  "started_at": 1775379430211,
+  "finished_at": 1775379430211
+}

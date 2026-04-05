@@ -1,0 +1,11 @@
+{
+  "task_id": "dcaf0868-29e5-4b70-84ca-3d9a88f8c900",
+  "session_id": "f6a9b1b5d28722de4d9d469116ebead1",
+  "trace_id": "e6234abb-ba13-46bd-99fe-d1a81f4250e9",
+  "goal": "请分析当前 Prometheus 告警并结合日志排查",
+  "assignee": "supervisor",
+  "creator": "controller",
+  "status": "succeeded",
+  "created_at": 1775357170379,
+  "updated_at": 1775357230390
+}

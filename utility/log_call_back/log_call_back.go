@@ -3,40 +3,30 @@ package log_call_back
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/cloudwego/eino/callbacks"
+	"github.com/cloudwego/eino/compose"
+	"github.com/gogf/gf/v2/frame/g"
 )
 
-type LogCallbackConfig struct {
-	Detail bool
-	Debug  bool
+func LogCallback(handler *callbacks.HandlerBuilder) callbacks.Handler {
+	if handler == nil {
+		handler = &callbacks.HandlerBuilder{}
+	}
+	handler.OnStartFn(func(ctx context.Context, info *callbacks.RunInfo, input callbacks.CallbackInput) context.Context {
+		g.Log().Debugf(ctx, "[view start]:[%s:%s:%s]", info.Component, info.Type, info.Name)
+		return ctx
+	})
+	handler.OnEndFn(func(ctx context.Context, info *callbacks.RunInfo, output callbacks.CallbackOutput) context.Context {
+		if b, err := json.MarshalIndent(output, "", "  "); err == nil {
+			g.Log().Debugf(ctx, "%s", string(b))
+		}
+		g.Log().Debugf(ctx, "[view end]:[%s:%s:%s]", info.Component, info.Type, info.Name)
+		return ctx
+	})
+	return handler.Build()
 }
 
-func LogCallback(config *LogCallbackConfig) callbacks.Handler {
-	if config == nil {
-		config = &LogCallbackConfig{
-			Detail: true,
-		}
-	}
-
-	builder := callbacks.NewHandlerBuilder()
-	builder.OnStartFn(func(ctx context.Context, info *callbacks.RunInfo, input callbacks.CallbackInput) context.Context {
-		fmt.Printf("[view start]:[%s:%s:%s]\n", info.Component, info.Type, info.Name)
-		if config.Detail {
-			var b []byte
-			if config.Debug {
-				b, _ = json.MarshalIndent(input, "", "  ")
-			} else {
-				b, _ = json.Marshal(input)
-			}
-			fmt.Printf("%s\n", string(b))
-		}
-		return ctx
-	})
-	builder.OnEndFn(func(ctx context.Context, info *callbacks.RunInfo, output callbacks.CallbackOutput) context.Context {
-		fmt.Printf("[view end]:[%s:%s:%s]\n", info.Component, info.Type, info.Name)
-		return ctx
-	})
-	return builder.Build()
+func LogCallbackHandler() compose.Option {
+	return compose.WithCallbacks(LogCallback(nil))
 }

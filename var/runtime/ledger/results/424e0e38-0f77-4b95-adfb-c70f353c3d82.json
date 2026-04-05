@@ -1,0 +1,12 @@
+{
+  "task_id": "424e0e38-0f77-4b95-adfb-c70f353c3d82",
+  "agent": "supervisor",
+  "status": "succeeded",
+  "summary": "# 告警分析报告\n\n## 用户目标\n请分析当前 Prometheus 告警并结合日志排查\n\n## 任务类型\nalert_analysis\n\n## 执行摘要\n\n### Logs\n日志查询能力未配置，已跳过该步骤。\n\n### Metrics\nFailed to query Prometheus alerts. The service may not be configured or is unreachable.\n\n### Knowledge\n[LocalFunc] failed to invoke tool, toolName=query_internal_docs, err=failed to create retriever: failed to connect to default database: context canceled\n\n## 结论\n\n- logs: 日志查询能力未配置，已跳过该步骤。（降级）\n- metrics: Failed to query Prometheus alerts. The service may not be configured or is unreachable.（降级）\n- knowledge: [LocalFunc] failed to invoke tool, toolName=query_internal_docs, err=failed to create retriever: failed to connect to default database: context canceled",
+  "confidence": 0.21,
+  "metadata": {
+    "intent": "alert_analysis"
+  },
+  "started_at": 1775357082463,
+  "finished_at": 1775357122474
+}

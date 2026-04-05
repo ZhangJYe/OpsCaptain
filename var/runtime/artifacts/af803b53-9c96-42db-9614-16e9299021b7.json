@@ -1,0 +1,12 @@
+{
+  "ref": {
+    "id": "af803b53-9c96-42db-9614-16e9299021b7",
+    "type": "task_result"
+  },
+  "content": "{\"agent\":\"knowledge\",\"confidence\":0.25,\"evidence\":null,\"status\":\"degraded\",\"summary\":\"知识库检索超时，已跳过该步骤。\"}",
+  "metadata": {
+    "agent": "knowledge",
+    "task": "2ddcb668-0965-48d4-9dbb-ea85aab0b4ea"
+  },
+  "created_at": 1775377608249
+}

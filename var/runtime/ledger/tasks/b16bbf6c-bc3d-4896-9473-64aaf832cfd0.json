@@ -1,0 +1,76 @@
+{
+  "task_id": "b16bbf6c-bc3d-4896-9473-64aaf832cfd0",
+  "parent_task_id": "2ff361cb-7b07-4e76-8f3a-d4f328cf723c",
+  "session_id": "1b4a9fd51771a4002a179cc5df2d3bdd",
+  "trace_id": "58b5b09b-d0be-4db7-b8ed-827ed266b130",
+  "goal": "请分析当前 Prometheus 告警并结合日志排查",
+  "assignee": "reporter",
+  "creator": "supervisor",
+  "status": "succeeded",
+  "input": {
+    "intent": "alert_analysis",
+    "query": "请分析当前 Prometheus 告警并结合日志排查",
+    "results": [
+      {
+        "task_id": "1ee206bc-eb03-4255-b5c7-6b0b4c991850",
+        "agent": "logs",
+        "status": "degraded",
+        "summary": "日志查询能力未配置，已跳过该步骤。",
+        "confidence": 0.28,
+        "artifact_refs": [
+          {
+            "id": "53e114b8-9390-4022-a498-b88b3850e22f",
+            "type": "task_result",
+            "uri": "var/runtime/artifacts/53e114b8-9390-4022-a498-b88b3850e22f.json"
+          }
+        ],
+        "metadata": {
+          "tool_errors": null,
+          "tool_names": null
+        },
+        "started_at": 1775377698783,
+        "finished_at": 1775377698784
+      },
+      {
+        "task_id": "aef30b62-7b1d-4957-b20e-55846be274c7",
+        "agent": "metrics",
+        "status": "degraded",
+        "summary": "Failed to query Prometheus alerts. The service may not be configured or is unreachable.",
+        "confidence": 0.35,
+        "artifact_refs": [
+          {
+            "id": "daa9a91c-6723-402d-a4e6-68d4a54a351c",
+            "type": "task_result",
+            "uri": "var/runtime/artifacts/daa9a91c-6723-402d-a4e6-68d4a54a351c.json"
+          }
+        ],
+        "metadata": {
+          "error": "prometheus.address is not configured"
+        },
+        "started_at": 1775377698784,
+        "finished_at": 1775377698790
+      },
+      {
+        "task_id": "5d2c2caf-8985-41c2-82c8-179546611719",
+        "agent": "knowledge",
+        "status": "degraded",
+        "summary": "知识库检索超时，已跳过该步骤。",
+        "confidence": 0.25,
+        "artifact_refs": [
+          {
+            "id": "5f3a4273-1911-444a-92cb-7438f12a8f6a",
+            "type": "task_result",
+            "uri": "var/runtime/artifacts/5f3a4273-1911-444a-92cb-7438f12a8f6a.json"
+          }
+        ],
+        "metadata": {
+          "error": "[LocalFunc] failed to invoke tool, toolName=query_internal_docs, err=failed to create retriever: failed to connect to default database: context deadline exceeded"
+        },
+        "started_at": 1775377698783,
+        "finished_at": 1775377703785
+      }
+    ]
+  },
+  "created_at": 1775377703787,
+  "updated_at": 1775377703788
+}

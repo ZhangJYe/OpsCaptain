@@ -1,0 +1,12 @@
+{
+  "task_id": "0e814825-64b0-4878-8765-43fb42930bd6",
+  "agent": "knowledge",
+  "status": "failed",
+  "summary": "[LocalFunc] failed to invoke tool, toolName=query_internal_docs, err=failed to create retriever: failed to connect to default database: context canceled",
+  "confidence": 0,
+  "error": {
+    "message": "[LocalFunc] failed to invoke tool, toolName=query_internal_docs, err=failed to create retriever: failed to connect to default database: context canceled"
+  },
+  "started_at": 1775357082465,
+  "finished_at": 1775357122468
+}

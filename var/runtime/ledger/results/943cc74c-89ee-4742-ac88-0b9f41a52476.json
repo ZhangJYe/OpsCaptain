@@ -1,0 +1,12 @@
+{
+  "task_id": "943cc74c-89ee-4742-ac88-0b9f41a52476",
+  "agent": "metrics",
+  "status": "degraded",
+  "summary": "Failed to query Prometheus alerts. The service may not be configured or is unreachable.",
+  "confidence": 0.35,
+  "metadata": {
+    "error": "prometheus.address is not configured"
+  },
+  "started_at": 1775379430215,
+  "finished_at": 1775379430217
+}

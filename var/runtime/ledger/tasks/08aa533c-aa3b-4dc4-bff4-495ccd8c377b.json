@@ -1,0 +1,15 @@
+{
+  "task_id": "08aa533c-aa3b-4dc4-bff4-495ccd8c377b",
+  "parent_task_id": "1544c8bd-16a1-4374-a3dd-0146ceeafb81",
+  "session_id": "session_chat_eval_stream_1",
+  "trace_id": "55696653-a913-44c0-88ba-e3d0db287b7f",
+  "goal": "请分析当前 Prometheus 告警",
+  "assignee": "triage",
+  "creator": "supervisor",
+  "status": "succeeded",
+  "input": {
+    "query": "请分析当前 Prometheus 告警"
+  },
+  "created_at": 1775379429818,
+  "updated_at": 1775379429819
+}

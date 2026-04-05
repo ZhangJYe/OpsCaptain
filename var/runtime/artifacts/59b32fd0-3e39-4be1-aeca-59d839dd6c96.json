@@ -1,0 +1,12 @@
+{
+  "ref": {
+    "id": "59b32fd0-3e39-4be1-aeca-59d839dd6c96",
+    "type": "task_result"
+  },
+  "content": "{\"agent\":\"logs\",\"confidence\":0.28,\"evidence\":null,\"status\":\"degraded\",\"summary\":\"日志查询能力未配置，已跳过该步骤。\"}",
+  "metadata": {
+    "agent": "logs",
+    "task": "7c9ea708-c90c-42f7-8eef-8adf8ee45931"
+  },
+  "created_at": 1775377398631
+}
