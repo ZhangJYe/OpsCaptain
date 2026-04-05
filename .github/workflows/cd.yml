@@ -12,9 +12,16 @@ permissions:
 env:
   REGISTRY: ${{ secrets.ACR_REGISTRY }}
   NAMESPACE: ${{ secrets.ACR_NAMESPACE }}
+  ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+  ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
   BACKEND_IMAGE: ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/opscaptain-backend
   FRONTEND_IMAGE: ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/opscaptain-frontend
+  ECS_HOST: ${{ secrets.ECS_HOST }}
+  ECS_USER: ${{ secrets.ECS_USER }}
+  ECS_SSH_PORT: ${{ secrets.ECS_SSH_PORT }}
+  ECS_SSH_PRIVATE_KEY: ${{ secrets.ECS_SSH_PRIVATE_KEY }}
   REMOTE_APP_DIR: ${{ secrets.ECS_APP_DIR }}
+  PROD_ENV_FILE: ${{ secrets.PROD_ENV_FILE }}
 
 jobs:
   deploy:
@@ -25,8 +32,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Validate deployment secrets
+        run: |
+          missing=0
+          for name in REGISTRY NAMESPACE ACR_USERNAME ACR_PASSWORD ECS_HOST ECS_USER ECS_SSH_PORT ECS_SSH_PRIVATE_KEY REMOTE_APP_DIR PROD_ENV_FILE; do
+            if [ -z "$(printenv "$name")" ]; then
+              echo "::error::$name is empty. Check the matching GitHub Actions secret."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
       - name: Log in to Alibaba Cloud Container Registry
-        run: echo "${{ secrets.ACR_PASSWORD }}" | docker login "${REGISTRY}" -u "${{ secrets.ACR_USERNAME }}" --password-stdin
+        run: echo "${ACR_PASSWORD}" | docker login "${REGISTRY}" -u "${ACR_USERNAME}" --password-stdin
 
       - name: Build and push backend image
         run: |
@@ -50,9 +70,9 @@ jobs:
       - name: Prepare SSH client
         run: |
           mkdir -p ~/.ssh
-          printf '%s' "${{ secrets.ECS_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          printf '%s' "${ECS_SSH_PRIVATE_KEY}" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -p "${{ secrets.ECS_SSH_PORT }}" "${{ secrets.ECS_HOST }}" >> ~/.ssh/known_hosts
+          ssh-keyscan -p "${ECS_SSH_PORT}" "${ECS_HOST}" >> ~/.ssh/known_hosts
 
       - name: Prepare deployment bundle
         run: |
@@ -60,31 +80,31 @@ jobs:
           cp deploy/docker-compose.prod.yml dist-deploy/docker-compose.prod.yml
           cp deploy/config.prod.yaml dist-deploy/config.prod.yaml
           cp deploy/remote-deploy.sh dist-deploy/remote-deploy.sh
-          printf '%s' "${{ secrets.PROD_ENV_FILE }}" > dist-deploy/.env.production
-          printf '%s' "${{ secrets.ACR_PASSWORD }}" > dist-deploy/.acr-password
+          printf '%s' "${PROD_ENV_FILE}" > dist-deploy/.env.production
+          printf '%s' "${ACR_PASSWORD}" > dist-deploy/.acr-password
           cat <<EOF > dist-deploy/release.env
           BACKEND_IMAGE=${BACKEND_IMAGE}:${GITHUB_SHA}
           FRONTEND_IMAGE=${FRONTEND_IMAGE}:${GITHUB_SHA}
           ACR_REGISTRY=${REGISTRY}
-          ACR_USERNAME=${{ secrets.ACR_USERNAME }}
+          ACR_USERNAME=${ACR_USERNAME}
           ACR_PASSWORD_FILE=.acr-password
           EOF
 
       - name: Create remote directory
-        run: ssh -p "${{ secrets.ECS_SSH_PORT }}" "${{ secrets.ECS_USER }}@${{ secrets.ECS_HOST }}" "mkdir -p '${REMOTE_APP_DIR}'"
+        run: ssh -p "${ECS_SSH_PORT}" "${ECS_USER}@${ECS_HOST}" "mkdir -p '${REMOTE_APP_DIR}'"
 
       - name: Upload deployment files
         run: |
-          scp -P "${{ secrets.ECS_SSH_PORT }}" dist-deploy/docker-compose.prod.yml "${{ secrets.ECS_USER }}@${{ secrets.ECS_HOST }}:${REMOTE_APP_DIR}/docker-compose.prod.yml"
-          scp -P "${{ secrets.ECS_SSH_PORT }}" dist-deploy/config.prod.yaml "${{ secrets.ECS_USER }}@${{ secrets.ECS_HOST }}:${REMOTE_APP_DIR}/config.prod.yaml"
-          scp -P "${{ secrets.ECS_SSH_PORT }}" dist-deploy/remote-deploy.sh "${{ secrets.ECS_USER }}@${{ secrets.ECS_HOST }}:${REMOTE_APP_DIR}/remote-deploy.sh"
-          scp -P "${{ secrets.ECS_SSH_PORT }}" dist-deploy/.env.production "${{ secrets.ECS_USER }}@${{ secrets.ECS_HOST }}:${REMOTE_APP_DIR}/.env.production"
-          scp -P "${{ secrets.ECS_SSH_PORT }}" dist-deploy/.acr-password "${{ secrets.ECS_USER }}@${{ secrets.ECS_HOST }}:${REMOTE_APP_DIR}/.acr-password"
-          scp -P "${{ secrets.ECS_SSH_PORT }}" dist-deploy/release.env "${{ secrets.ECS_USER }}@${{ secrets.ECS_HOST }}:${REMOTE_APP_DIR}/release.env"
+          scp -P "${ECS_SSH_PORT}" dist-deploy/docker-compose.prod.yml "${ECS_USER}@${ECS_HOST}:${REMOTE_APP_DIR}/docker-compose.prod.yml"
+          scp -P "${ECS_SSH_PORT}" dist-deploy/config.prod.yaml "${ECS_USER}@${ECS_HOST}:${REMOTE_APP_DIR}/config.prod.yaml"
+          scp -P "${ECS_SSH_PORT}" dist-deploy/remote-deploy.sh "${ECS_USER}@${ECS_HOST}:${REMOTE_APP_DIR}/remote-deploy.sh"
+          scp -P "${ECS_SSH_PORT}" dist-deploy/.env.production "${ECS_USER}@${ECS_HOST}:${REMOTE_APP_DIR}/.env.production"
+          scp -P "${ECS_SSH_PORT}" dist-deploy/.acr-password "${ECS_USER}@${ECS_HOST}:${REMOTE_APP_DIR}/.acr-password"
+          scp -P "${ECS_SSH_PORT}" dist-deploy/release.env "${ECS_USER}@${ECS_HOST}:${REMOTE_APP_DIR}/release.env"
 
       - name: Deploy on ECS
         run: |
-          ssh -p "${{ secrets.ECS_SSH_PORT }}" "${{ secrets.ECS_USER }}@${{ secrets.ECS_HOST }}" "\
+          ssh -p "${ECS_SSH_PORT}" "${ECS_USER}@${ECS_HOST}" "\
             cd '${REMOTE_APP_DIR}' && \
             chmod +x ./remote-deploy.sh && \
             APP_DIR='${REMOTE_APP_DIR}' ./remote-deploy.sh"
