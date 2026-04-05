@@ -78,17 +78,18 @@ func (a *Assembler) Assemble(ctx context.Context, req ContextRequest, history []
 	}
 
 	if profile.AllowDocs {
-		selectedDocs, droppedDocs, usedDocs, docNotes := selectDocuments(ctx, req.Query, profile)
-		pkg.DocumentItems = selectedDocs
-		trace.SourcesConsidered += len(selectedDocs) + len(droppedDocs)
-		trace.SourcesSelected += len(selectedDocs)
-		trace.DroppedItems = append(trace.DroppedItems, droppedDocs...)
-		trace.BudgetAfter.DocumentTokens = usedDocs
+		docResult := selectDocuments(ctx, req.Query, profile)
+		pkg.DocumentItems = docResult.selected
+		trace.SourcesConsidered += len(docResult.selected) + len(docResult.dropped)
+		trace.SourcesSelected += len(docResult.selected)
+		trace.DroppedItems = append(trace.DroppedItems, docResult.dropped...)
+		trace.BudgetAfter.DocumentTokens = docResult.used
 		trace.Stages = append(trace.Stages, StageTrace{
 			Name:          "documents",
-			SelectedCount: len(selectedDocs),
-			DroppedCount:  len(droppedDocs),
-			Notes:         docNotes,
+			SelectedCount: len(docResult.selected),
+			DroppedCount:  len(docResult.dropped),
+			Notes:         docResult.notes,
+			Retrieval:     docResult.metrics,
 		})
 	}
 
@@ -181,6 +182,16 @@ func TraceDetails(trace ContextAssemblyTrace) []string {
 		line := fmt.Sprintf("%s selected=%d dropped=%d", stage.Name, stage.SelectedCount, stage.DroppedCount)
 		if len(stage.Notes) > 0 {
 			line += " (" + strings.Join(stage.Notes, "; ") + ")"
+		}
+		if stage.Retrieval != nil {
+			line += fmt.Sprintf(
+				" [cache_hit=%t init_cached_error=%t init_ms=%d retrieve_ms=%d hits=%d]",
+				stage.Retrieval.CacheHit,
+				stage.Retrieval.InitFailureCached,
+				stage.Retrieval.InitLatencyMs,
+				stage.Retrieval.RetrieveLatencyMs,
+				stage.Retrieval.ResultCount,
+			)
 		}
 		details = append(details, line)
 	}

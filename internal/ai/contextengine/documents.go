@@ -17,6 +17,14 @@ import (
 const defaultContextDocsQueryTimeout = 5 * time.Second
 const defaultContextDocsInitFailureTTL = 15 * time.Second
 
+type documentSelectionResult struct {
+	selected []ContextItem
+	dropped  []ContextItem
+	used     int
+	notes    []string
+	metrics  *RetrievalStageMetrics
+}
+
 var (
 	newContextRetriever  = ragretriever.NewMilvusRetriever
 	contextRetrieverPool = rag.NewRetrieverPool(
@@ -45,24 +53,27 @@ func contextDocsInitFailureTTL(ctx context.Context) time.Duration {
 	return rag.DurationFromConfig(ctx, defaultContextDocsInitFailureTTL, "context.docs_init_failure_ttl_ms", "multi_agent.knowledge_init_failure_ttl_ms")
 }
 
-func selectDocuments(ctx context.Context, query string, profile ContextProfile) ([]ContextItem, []ContextItem, int, []string) {
+func selectDocuments(ctx context.Context, query string, profile ContextProfile) documentSelectionResult {
 	if strings.TrimSpace(query) == "" || !profile.AllowDocs || profile.Budget.DocumentTokens == 0 {
-		return nil, nil, 0, []string{"documents disabled"}
+		return documentSelectionResult{notes: []string{"documents disabled"}}
 	}
 
 	queryCtx, cancel := context.WithTimeout(ctx, contextDocsQueryTimeout(ctx))
 	defer cancel()
 
-	rr, err := getOrCreateContextRetriever(queryCtx)
+	docs, trace, err := rag.Query(queryCtx, contextRetrieverPool, query)
+	metrics := retrievalMetricsFromQueryTrace(trace)
 	if err != nil {
-		return nil, nil, 0, []string{fmt.Sprintf("documents unavailable: %v", err)}
-	}
-	docs, err := rr.Retrieve(queryCtx, query)
-	if err != nil {
-		return nil, nil, 0, []string{fmt.Sprintf("documents retrieve failed: %v", err)}
+		return documentSelectionResult{
+			notes:   []string{fmt.Sprintf("documents unavailable: %v", err), formatRetrievalTraceNote(metrics)},
+			metrics: metrics,
+		}
 	}
 	if len(docs) == 0 {
-		return nil, nil, 0, []string{"documents empty"}
+		return documentSelectionResult{
+			notes:   []string{"documents empty", formatRetrievalTraceNote(metrics)},
+			metrics: metrics,
+		}
 	}
 
 	remaining := profile.Budget.DocumentTokens
@@ -94,7 +105,16 @@ func selectDocuments(ctx context.Context, query string, profile ContextProfile) 
 		}
 	}
 
-	return selected, dropped, used, []string{fmt.Sprintf("tokens=%d/%d", used, profile.Budget.DocumentTokens)}
+	return documentSelectionResult{
+		selected: selected,
+		dropped:  dropped,
+		used:     used,
+		notes: []string{
+			fmt.Sprintf("tokens=%d/%d", used, profile.Budget.DocumentTokens),
+			formatRetrievalTraceNote(metrics),
+		},
+		metrics: metrics,
+	}
 }
 
 func DocumentsContent(pkg *ContextPackage) string {
@@ -146,4 +166,37 @@ func newDroppedDocumentItem(doc *schema.Document, idx int, reason string) Contex
 	item := newDocumentItem(doc, idx)
 	item.DroppedReason = reason
 	return item
+}
+
+func retrievalMetricsFromQueryTrace(trace rag.QueryTrace) *RetrievalStageMetrics {
+	if trace.CacheKey == "" &&
+		!trace.CacheHit &&
+		!trace.InitFailureCached &&
+		trace.InitLatencyMs == 0 &&
+		trace.RetrieveLatencyMs == 0 &&
+		trace.ResultCount == 0 {
+		return nil
+	}
+	return &RetrievalStageMetrics{
+		CacheKey:          trace.CacheKey,
+		CacheHit:          trace.CacheHit,
+		InitFailureCached: trace.InitFailureCached,
+		InitLatencyMs:     trace.InitLatencyMs,
+		RetrieveLatencyMs: trace.RetrieveLatencyMs,
+		ResultCount:       trace.ResultCount,
+	}
+}
+
+func formatRetrievalTraceNote(metrics *RetrievalStageMetrics) string {
+	if metrics == nil {
+		return "retrieval_trace unavailable"
+	}
+	return fmt.Sprintf(
+		"retrieval cache_hit=%t init_cached_error=%t init_ms=%d retrieve_ms=%d hits=%d",
+		metrics.CacheHit,
+		metrics.InitFailureCached,
+		metrics.InitLatencyMs,
+		metrics.RetrieveLatencyMs,
+		metrics.ResultCount,
+	)
 }

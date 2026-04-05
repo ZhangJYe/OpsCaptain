@@ -66,6 +66,16 @@ type StageTrace struct {
 	SelectedCount int
 	DroppedCount  int
 	Notes         []string
+	Retrieval     *RetrievalStageMetrics
+}
+
+type RetrievalStageMetrics struct {
+	CacheKey          string
+	CacheHit          bool
+	InitFailureCached bool
+	InitLatencyMs     int64
+	RetrieveLatencyMs int64
+	ResultCount       int
 }
 
 type ContextAssemblyTrace struct {

@@ -70,6 +70,19 @@ func TestAssemblerBuildsStagedChatContext(t *testing.T) {
 	if len(pkg.DocumentItems) == 0 {
 		t.Fatal("expected document items in chat package")
 	}
+	var docStage *StageTrace
+	for i := range pkg.Trace.Stages {
+		if pkg.Trace.Stages[i].Name == "documents" {
+			docStage = &pkg.Trace.Stages[i]
+			break
+		}
+	}
+	if docStage == nil || docStage.Retrieval == nil {
+		t.Fatal("expected document retrieval trace")
+	}
+	if docStage.Retrieval.ResultCount != 1 {
+		t.Fatalf("expected document retrieval hit count 1, got %+v", docStage.Retrieval)
+	}
 	if len(pkg.HistoryMessages) == 0 {
 		t.Fatal("expected history messages in chat package")
 	}
@@ -78,6 +91,46 @@ func TestAssemblerBuildsStagedChatContext(t *testing.T) {
 	}
 	if len(TraceDetails(pkg.Trace)) == 0 {
 		t.Fatal("expected trace details")
+	}
+}
+
+func TestAssemblerDocumentTraceShowsCacheReuse(t *testing.T) {
+	resetLongTermMemory()
+	oldFactory := newContextRetriever
+	defer func() {
+		newContextRetriever = oldFactory
+		resetContextRetrieverCache()
+	}()
+	resetContextRetrieverCache()
+	newContextRetriever = func(context.Context) (retrieverapi.Retriever, error) {
+		return &fakeContextRetriever{
+			docs: []*schema.Document{
+				{ID: "doc-1", Content: "same doc"},
+			},
+		}, nil
+	}
+
+	assembler := NewAssembler()
+	for i := 0; i < 2; i++ {
+		pkg, err := assembler.Assemble(context.Background(), ContextRequest{
+			SessionID: "sess-cache",
+			Mode:      "chat",
+			Query:     "cache me",
+		}, nil)
+		if err != nil {
+			t.Fatalf("assemble %d: %v", i+1, err)
+		}
+		for _, stage := range pkg.Trace.Stages {
+			if stage.Name != "documents" || stage.Retrieval == nil {
+				continue
+			}
+			if i == 0 && stage.Retrieval.CacheHit {
+				t.Fatal("expected first document retrieval to miss cache")
+			}
+			if i == 1 && !stage.Retrieval.CacheHit {
+				t.Fatal("expected second document retrieval to hit cache")
+			}
+		}
 	}
 }
 

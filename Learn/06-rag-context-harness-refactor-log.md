@@ -68,3 +68,55 @@
 - harness 怎么自动做 recall 评测
 
 这些会放在后面两个阶段继续做。
+
+## 第 2 阶段：把 RAG trace 接进上下文工程
+
+这一步解决的问题是：
+
+> 以前你只能知道“documents 阶段有没有选到东西”，但不知道是没召回到，还是 retriever 初始化失败，还是缓存根本没有复用。
+
+所以这一步我做了两件事：
+
+1. 在 RAG 模块里补了统一查询入口：
+   - [query.go](D:/Agent/OnCallAI/internal/ai/rag/query.go)
+2. 在上下文工程里给 `documents` stage 挂上结构化检索 trace：
+   - [types.go](D:/Agent/OnCallAI/internal/ai/contextengine/types.go)
+   - [documents.go](D:/Agent/OnCallAI/internal/ai/contextengine/documents.go)
+   - [assembler.go](D:/Agent/OnCallAI/internal/ai/contextengine/assembler.go)
+
+现在一次文档检索会留下这些信息：
+
+- `cache_hit`
+- `init_cached_error`
+- `init_ms`
+- `retrieve_ms`
+- `hits`
+
+### 为什么这一步重要
+
+因为调 RAG 时，你经常会碰到 3 种完全不同的问题：
+
+1. **连不上向量库**
+   这时要修的是依赖和超时，不是召回策略。
+2. **连得上，但没召回到**
+   这时要修的是 chunk、embedding、top-k、query rewrite。
+3. **每次都重新初始化**
+   这时要修的是缓存和运行时复用。
+
+如果没有结构化 trace，这三种问题最后都会被你看到成一句：
+
+> documents empty
+
+这是很难调优的。
+
+### 面试时怎么讲这一步
+
+你可以这样讲：
+
+> 我把 RAG 的运行时指标显式接进了上下文工程的 trace。这样一次回答不仅知道最终选了哪些文档，还能区分是初始化失败、缓存未命中、还是检索结果为空。这一步让后面的 replay、评测和召回率分析有了可观测基础。
+
+### 你复盘时应该重点看什么
+
+1. `selectDocuments` 不再只是返回文档列表，而是返回“文档选择结果 + 检索 trace”。
+2. `ContextAssemblyTrace` 现在不仅记录 `selected/dropped`，还记录 documents 阶段的检索指标。
+3. `TraceDetails(...)` 现在可以直接把这些指标转成人能读懂的 detail。
