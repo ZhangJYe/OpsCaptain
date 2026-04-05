@@ -1,0 +1,42 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24.4"
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Run Go tests
+        run: go test ./...
+
+      - name: Build backend image
+        run: docker build -t opscaptain-backend:${{ github.sha }} .
+
+      - name: Build frontend image
+        run: docker build -f SuperBizAgentFrontend/Dockerfile -t opscaptain-frontend:${{ github.sha }} SuperBizAgentFrontend

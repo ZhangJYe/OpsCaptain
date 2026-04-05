@@ -1,7 +1,7 @@
 // SuperBizAgent 前端应用
 class SuperBizAgentApp {
     constructor() {
-        this.apiBaseUrl = 'http://localhost:8000/api';
+        this.apiBaseUrl = this.resolveApiBaseUrl();
         this.currentMode = 'quick'; // 'quick' 或 'stream'
         this.sessionId = this.generateSessionId();
         this.isStreaming = false;
@@ -19,6 +19,17 @@ class SuperBizAgentApp {
         this.initMarkdown();
         this.checkAndSetCentered();
         this.renderChatHistory();
+    }
+
+    resolveApiBaseUrl() {
+        const runtimeConfig = window.SUPERBIZAGENT_CONFIG || {};
+        const configuredBase = (runtimeConfig.apiBaseUrl || '').trim();
+
+        if (configuredBase) {
+            return configuredBase.replace(/\/+$/, '');
+        }
+
+        return '/api';
     }
 
     // 初始化Markdown配置

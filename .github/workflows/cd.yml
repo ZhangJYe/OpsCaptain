@@ -1,0 +1,90 @@
+name: cd
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ${{ secrets.ACR_REGISTRY }}
+  NAMESPACE: ${{ secrets.ACR_NAMESPACE }}
+  BACKEND_IMAGE: ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/opscaptain-backend
+  FRONTEND_IMAGE: ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/opscaptain-frontend
+  REMOTE_APP_DIR: ${{ secrets.ECS_APP_DIR }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to Alibaba Cloud Container Registry
+        run: echo "${{ secrets.ACR_PASSWORD }}" | docker login "${REGISTRY}" -u "${{ secrets.ACR_USERNAME }}" --password-stdin
+
+      - name: Build and push backend image
+        run: |
+          docker build \
+            -t "${BACKEND_IMAGE}:${GITHUB_SHA}" \
+            -t "${BACKEND_IMAGE}:latest" \
+            .
+          docker push "${BACKEND_IMAGE}:${GITHUB_SHA}"
+          docker push "${BACKEND_IMAGE}:latest"
+
+      - name: Build and push frontend image
+        run: |
+          docker build \
+            -f SuperBizAgentFrontend/Dockerfile \
+            -t "${FRONTEND_IMAGE}:${GITHUB_SHA}" \
+            -t "${FRONTEND_IMAGE}:latest" \
+            SuperBizAgentFrontend
+          docker push "${FRONTEND_IMAGE}:${GITHUB_SHA}"
+          docker push "${FRONTEND_IMAGE}:latest"
+
+      - name: Prepare SSH client
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s' "${{ secrets.ECS_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -p "${{ secrets.ECS_SSH_PORT }}" "${{ secrets.ECS_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Prepare deployment bundle
+        run: |
+          mkdir -p dist-deploy
+          cp deploy/docker-compose.prod.yml dist-deploy/docker-compose.prod.yml
+          cp deploy/config.prod.yaml dist-deploy/config.prod.yaml
+          cp deploy/remote-deploy.sh dist-deploy/remote-deploy.sh
+          printf '%s' "${{ secrets.PROD_ENV_FILE }}" > dist-deploy/.env.production
+          printf '%s' "${{ secrets.ACR_PASSWORD }}" > dist-deploy/.acr-password
+          cat <<EOF > dist-deploy/release.env
+          BACKEND_IMAGE=${BACKEND_IMAGE}:${GITHUB_SHA}
+          FRONTEND_IMAGE=${FRONTEND_IMAGE}:${GITHUB_SHA}
+          ACR_REGISTRY=${REGISTRY}
+          ACR_USERNAME=${{ secrets.ACR_USERNAME }}
+          ACR_PASSWORD_FILE=.acr-password
+          EOF
+
+      - name: Create remote directory
+        run: ssh -p "${{ secrets.ECS_SSH_PORT }}" "${{ secrets.ECS_USER }}@${{ secrets.ECS_HOST }}" "mkdir -p '${REMOTE_APP_DIR}'"
+
+      - name: Upload deployment files
+        run: |
+          scp -P "${{ secrets.ECS_SSH_PORT }}" dist-deploy/docker-compose.prod.yml "${{ secrets.ECS_USER }}@${{ secrets.ECS_HOST }}:${REMOTE_APP_DIR}/docker-compose.prod.yml"
+          scp -P "${{ secrets.ECS_SSH_PORT }}" dist-deploy/config.prod.yaml "${{ secrets.ECS_USER }}@${{ secrets.ECS_HOST }}:${REMOTE_APP_DIR}/config.prod.yaml"
+          scp -P "${{ secrets.ECS_SSH_PORT }}" dist-deploy/remote-deploy.sh "${{ secrets.ECS_USER }}@${{ secrets.ECS_HOST }}:${REMOTE_APP_DIR}/remote-deploy.sh"
+          scp -P "${{ secrets.ECS_SSH_PORT }}" dist-deploy/.env.production "${{ secrets.ECS_USER }}@${{ secrets.ECS_HOST }}:${REMOTE_APP_DIR}/.env.production"
+          scp -P "${{ secrets.ECS_SSH_PORT }}" dist-deploy/.acr-password "${{ secrets.ECS_USER }}@${{ secrets.ECS_HOST }}:${REMOTE_APP_DIR}/.acr-password"
+          scp -P "${{ secrets.ECS_SSH_PORT }}" dist-deploy/release.env "${{ secrets.ECS_USER }}@${{ secrets.ECS_HOST }}:${REMOTE_APP_DIR}/release.env"
+
+      - name: Deploy on ECS
+        run: |
+          ssh -p "${{ secrets.ECS_SSH_PORT }}" "${{ secrets.ECS_USER }}@${{ secrets.ECS_HOST }}" "\
+            cd '${REMOTE_APP_DIR}' && \
+            chmod +x ./remote-deploy.sh && \
+            APP_DIR='${REMOTE_APP_DIR}' ./remote-deploy.sh"

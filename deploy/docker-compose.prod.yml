@@ -1,0 +1,25 @@
+services:
+  backend:
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE is required}
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    volumes:
+      - docs-data:/app/docs
+      - runtime-data:/app/var/runtime
+      - ./config.prod.yaml:/app/manifest/config/config.yaml:ro
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  frontend:
+    image: ${FRONTEND_IMAGE:?FRONTEND_IMAGE is required}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+
+volumes:
+  docs-data:
+  runtime-data:
+
