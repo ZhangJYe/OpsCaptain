@@ -5,6 +5,7 @@ import (
 	"SuperBizAgent/utility/auth"
 	"SuperBizAgent/utility/common"
 	"SuperBizAgent/utility/middleware"
+	"net/http"
 
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/net/ghttp"
@@ -32,8 +33,13 @@ func main() {
 
 	s := g.Server()
 
-	s.Group("/", func(group *ghttp.RouterGroup) {
-		group.Middleware(middleware.HealthCheckMiddleware)
+	s.BindHandler("/healthz", func(r *ghttp.Request) {
+		r.Response.WriteStatus(http.StatusOK)
+		r.Response.WriteJson(g.Map{"message": "ok"})
+	})
+	s.BindHandler("/readyz", func(r *ghttp.Request) {
+		r.Response.WriteStatus(http.StatusOK)
+		r.Response.WriteJson(g.Map{"message": "ready"})
 	})
 
 	s.Group("/api", func(group *ghttp.RouterGroup) {
