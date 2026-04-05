@@ -16,10 +16,26 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
+    expose:
+      - "80"
+
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    depends_on:
+      - frontend
+    env_file:
+      - .env.production
     ports:
       - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile.generated:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
 
 volumes:
   docs-data:
   runtime-data:
-
+  caddy-data:
+  caddy-config:

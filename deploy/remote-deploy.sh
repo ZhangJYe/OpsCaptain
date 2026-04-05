@@ -19,6 +19,35 @@ set -a
 . ./release.env
 set +a
 
+domain_name="$(sed -n 's/^DOMAIN_NAME=//p' ./.env.production | tr -d '\r' | head -n 1)"
+tls_email="$(sed -n 's/^TLS_EMAIL=//p' ./.env.production | tr -d '\r' | head -n 1)"
+
+{
+  if [ -n "$tls_email" ]; then
+    echo "{"
+    printf '    email %s\n' "$tls_email"
+    echo "}"
+    echo
+  fi
+
+  cat <<'EOF'
+:80 {
+    encode zstd gzip
+    reverse_proxy frontend:80
+}
+EOF
+
+  if [ -n "$domain_name" ]; then
+    echo
+    printf '%s {\n' "$domain_name"
+    cat <<'EOF'
+    encode zstd gzip
+    reverse_proxy frontend:80
+}
+EOF
+  fi
+} > ./Caddyfile.generated
+
 if [ -n "${ACR_PASSWORD_FILE:-}" ] && [ -f "./${ACR_PASSWORD_FILE}" ]; then
   docker login "$ACR_REGISTRY" -u "$ACR_USERNAME" --password-stdin < "./${ACR_PASSWORD_FILE}"
 fi

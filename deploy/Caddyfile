@@ -1,0 +1,13 @@
+# Reference only.
+# The deployment script generates the active Caddyfile on the server
+# as ./Caddyfile.generated based on DOMAIN_NAME and TLS_EMAIL.
+
+:80 {
+    encode zstd gzip
+    reverse_proxy frontend:80
+}
+
+{$DOMAIN_NAME:placeholder.invalid} {
+    encode zstd gzip
+    reverse_proxy frontend:80
+}
