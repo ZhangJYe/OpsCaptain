@@ -32,6 +32,8 @@ attempt=0
 until docker compose --env-file .env.production -f docker-compose.prod.yml exec -T backend wget -q --spider http://127.0.0.1:8000/healthz; do
   attempt=$((attempt + 1))
   if [ "$attempt" -ge 20 ]; then
+    docker compose --env-file .env.production -f docker-compose.prod.yml ps || true
+    docker compose --env-file .env.production -f docker-compose.prod.yml logs --tail=120 backend || true
     echo "backend health check failed"
     exit 1
   fi

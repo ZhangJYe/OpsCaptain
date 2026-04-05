@@ -2,39 +2,39 @@ server:
   address: ":8000"
 
 auth:
-  enabled: "${AUTH_ENABLED}"
-  jwt_secret: "${AUTH_JWT_SECRET}"
-  token_expiry_hours: "${AUTH_TOKEN_EXPIRY_HOURS}"
-  rate_limit_per_minute: "${AUTH_RATE_LIMIT_PER_MINUTE}"
-  rate_limit_burst: "${AUTH_RATE_LIMIT_BURST}"
+  enabled: false
+  jwt_secret: "OpsCaptain_dummy_jwt_secret_for_disabled_auth_2026"
+  token_expiry_hours: 24
+  rate_limit_per_minute: 20
+  rate_limit_burst: 30
 
-file_dir: "${FILE_DIR}"
+file_dir: "/app/docs"
 
 upload:
-  max_size_mb: "${UPLOAD_MAX_SIZE_MB}"
+  max_size_mb: 20
 
 cors:
   allowed_origins:
-    - "${CORS_ALLOWED_ORIGIN}"
+    - "*"
 
 milvus:
-  address: "${MILVUS_ADDRESS}"
+  address: ""
 
 ds_think_chat_model:
-  model: "${DS_THINK_MODEL}"
+  model: "GLM-4.5-AIR"
   api_key: "${GLM_API_KEY}"
-  base_url: "${DS_THINK_BASE_URL}"
+  base_url: "https://open.bigmodel.cn/api/paas/v4"
 
 ds_quick_chat_model:
-  model: "${DS_QUICK_MODEL}"
+  model: "GLM-4.5-AIR"
   api_key: "${GLM_API_KEY}"
-  base_url: "${DS_QUICK_BASE_URL}"
+  base_url: "https://open.bigmodel.cn/api/paas/v4"
 
 doubao_embedding_model:
-  model: "${EMBEDDING_MODEL}"
+  model: "BAAI/bge-m3"
   api_key: "${SILICONFLOW_API_KEY}"
-  base_url: "${EMBEDDING_BASE_URL}"
-  dimension: "${EMBEDDING_DIMENSION}"
+  base_url: "https://api.siliconflow.cn/v1"
+  dimension: 1024
 
 memory:
   max_window_size: 20
@@ -55,7 +55,7 @@ retriever:
   top_k: 5
 
 multi_agent:
-  data_dir: "${RUNTIME_DATA_DIR}"
+  data_dir: "/app/var/runtime"
   chat_route_enabled: true
   metrics_query_timeout_ms: 5000
   knowledge_query_timeout_ms: 5000
@@ -65,15 +65,14 @@ multi_agent:
   log_evidence_limit: 3
 
 log_topic:
-  region: "${LOG_TOPIC_REGION}"
-  id: "${LOG_TOPIC_ID}"
+  region: ""
+  id: ""
 
 mcp:
-  log_url: "${MCP_LOG_URL}"
+  log_url: ""
 
 mysql:
-  dsn: "${MYSQL_DSN}"
+  dsn: ""
 
 prometheus:
-  address: "${PROMETHEUS_ADDRESS}"
-
+  address: ""

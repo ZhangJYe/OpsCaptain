@@ -33,6 +33,20 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Normalize deployment inputs
+        run: |
+          {
+            printf 'REGISTRY=%s\n' "$(printf '%s' "${REGISTRY}" | tr -d '\r\n')"
+            printf 'NAMESPACE=%s\n' "$(printf '%s' "${NAMESPACE}" | tr -d '\r\n')"
+            printf 'ACR_USERNAME=%s\n' "$(printf '%s' "${ACR_USERNAME}" | tr -d '\r\n')"
+            printf 'ACR_PASSWORD=%s\n' "$(printf '%s' "${ACR_PASSWORD}" | tr -d '\r\n')"
+            printf 'ECS_HOST=%s\n' "$(printf '%s' "${ECS_HOST}" | tr -d '\r\n')"
+            printf 'ECS_USER=%s\n' "$(printf '%s' "${ECS_USER}" | tr -d '\r\n')"
+            printf 'ECS_SSH_PORT=%s\n' "$(printf '%s' "${ECS_SSH_PORT}" | tr -d '\r\n')"
+            printf 'ECS_SSH_PRIVATE_KEY_BASE64=%s\n' "$(printf '%s' "${ECS_SSH_PRIVATE_KEY_BASE64}" | tr -d '\r\n')"
+            printf 'REMOTE_APP_DIR=%s\n' "$(printf '%s' "${REMOTE_APP_DIR}" | tr -d '\r\n')"
+          } >> "$GITHUB_ENV"
+
       - name: Validate deployment secrets
         run: |
           missing=0
@@ -90,7 +104,7 @@ jobs:
           cp deploy/docker-compose.prod.yml dist-deploy/docker-compose.prod.yml
           cp deploy/config.prod.yaml dist-deploy/config.prod.yaml
           cp deploy/remote-deploy.sh dist-deploy/remote-deploy.sh
-          printf '%s' "${PROD_ENV_FILE}" > dist-deploy/.env.production
+          printf '%s' "${PROD_ENV_FILE}" | tr -d '\r' > dist-deploy/.env.production
           printf '%s' "${ACR_PASSWORD}" > dist-deploy/.acr-password
           cat <<EOF > dist-deploy/release.env
           BACKEND_IMAGE=${BACKEND_IMAGE}:${GITHUB_SHA}
