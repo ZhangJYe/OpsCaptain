@@ -118,3 +118,71 @@ func TestMetricsAgentDegradesOnInvocationError(t *testing.T) {
 		t.Fatalf("expected degraded status, got %s", result.Status)
 	}
 }
+
+func TestMetricsAgentUsesReleaseGuardSkill(t *testing.T) {
+	oldFactory := newPrometheusAlertsQueryTool
+	defer func() {
+		newPrometheusAlertsQueryTool = oldFactory
+	}()
+
+	payload, err := json.Marshal(tools.PrometheusAlertsOutput{
+		Success: true,
+		Alerts: []tools.SimplifiedAlert{
+			{AlertName: "HighErrorRate", Description: "error rate spiked after deploy"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	newPrometheusAlertsQueryTool = func() toolapi.InvokableTool {
+		return &fakeMetricsTool{output: string(payload)}
+	}
+
+	agent := New()
+	task := protocol.NewRootTask("session-test", "Should we continue the release rollout?", agent.Name())
+	result, err := agent.Handle(context.Background(), task)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Metadata["skill_name"] != "metrics_release_guard" {
+		t.Fatalf("expected metrics_release_guard, got %#v", result.Metadata)
+	}
+	if len(result.NextActions) == 0 {
+		t.Fatalf("expected release guard next actions, got %#v", result.NextActions)
+	}
+}
+
+func TestMetricsAgentUsesCapacitySnapshotSkill(t *testing.T) {
+	oldFactory := newPrometheusAlertsQueryTool
+	defer func() {
+		newPrometheusAlertsQueryTool = oldFactory
+	}()
+
+	payload, err := json.Marshal(tools.PrometheusAlertsOutput{
+		Success: true,
+		Alerts: []tools.SimplifiedAlert{
+			{AlertName: "HighCPU", Description: "cpu saturation exceeded threshold"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	newPrometheusAlertsQueryTool = func() toolapi.InvokableTool {
+		return &fakeMetricsTool{output: string(payload)}
+	}
+
+	agent := New()
+	task := protocol.NewRootTask("session-test", "Do we have any CPU or latency capacity issues?", agent.Name())
+	result, err := agent.Handle(context.Background(), task)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Metadata["skill_name"] != "metrics_capacity_snapshot" {
+		t.Fatalf("expected metrics_capacity_snapshot, got %#v", result.Metadata)
+	}
+	if result.Metadata["metrics_focus"] != "capacity_snapshot" {
+		t.Fatalf("expected capacity focus, got %#v", result.Metadata)
+	}
+}

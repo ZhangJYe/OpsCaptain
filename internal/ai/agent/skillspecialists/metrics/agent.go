@@ -39,10 +39,11 @@ type metricsSkill struct {
 	description string
 	mode        string
 	keywords    []string
+	focus       string
 }
 
 func New() *Agent {
-	return &Agent{registry: mustNewSkillRegistry()}
+	return &Agent{registry: buildMetricsSkillRegistry()}
 }
 
 func (a *Agent) Name() string {
@@ -83,7 +84,173 @@ func (s *metricsSkill) Match(task *protocol.TaskEnvelope) bool {
 }
 
 func (s *metricsSkill) Run(ctx context.Context, task *protocol.TaskEnvelope) (*protocol.TaskResult, error) {
-	return runPrometheusAlertQuery(ctx, task, s.mode)
+	return runPrometheusAlertQueryWithFocus(ctx, task, s.mode, s.focus)
+}
+
+func buildMetricsSkillRegistry() *skills.Registry {
+	registry, err := skills.NewRegistry(
+		AgentName,
+		&metricsSkill{
+			name:        "metrics_release_guard",
+			description: "Check active alerts that could block a release or rollback decision.",
+			mode:        "release_guard",
+			focus:       "release_guard",
+			keywords: []string{
+				"release", "deploy", "deployment", "rollout", "publish", "launch", "上线", "发版", "发布", "部署", "灰度",
+			},
+		},
+		&metricsSkill{
+			name:        "metrics_capacity_snapshot",
+			description: "Check alert state relevant to capacity, latency, saturation, and performance regression.",
+			mode:        "capacity_snapshot",
+			focus:       "capacity_snapshot",
+			keywords: []string{
+				"capacity", "latency", "cpu", "memory", "load", "qps", "throughput", "saturation", "performance",
+				"容量", "延迟", "CPU", "内存", "负载", "吞吐", "性能", "饱和",
+			},
+		},
+		&metricsSkill{
+			name:        "metrics_alert_triage",
+			description: "Investigate active Prometheus alerts for explicit alert and severity questions.",
+			mode:        "alert_triage",
+			focus:       "alert_triage",
+			keywords: []string{
+				"alert", "alerts", "prometheus", "firing", "severity",
+				"告警", "报警", "prom", "alertmanager",
+			},
+		},
+		&metricsSkill{
+			name:        "metrics_incident_snapshot",
+			description: "Fallback Prometheus snapshot for broader incident health checks.",
+			mode:        "incident_snapshot",
+			focus:       "incident_snapshot",
+		},
+	)
+	if err != nil {
+		panic(fmt.Sprintf("failed to build metrics skills registry: %v", err))
+	}
+	return registry
+}
+
+func runPrometheusAlertQueryWithFocus(ctx context.Context, task *protocol.TaskEnvelope, mode string, focus string) (*protocol.TaskResult, error) {
+	tool := newPrometheusAlertsQueryTool()
+	queryCtx, cancel := context.WithTimeout(ctx, metricsQueryTimeout(ctx))
+	defer cancel()
+
+	output, err := tool.InvokableRun(queryCtx, "{}")
+	if err != nil {
+		summary := fmt.Sprintf("prometheus alert query failed: %v", err)
+		if queryCtx.Err() == context.DeadlineExceeded {
+			summary = "prometheus alert query timed out; skipped"
+		}
+		return &protocol.TaskResult{
+			TaskID:     task.TaskID,
+			Agent:      AgentName,
+			Status:     protocol.ResultStatusDegraded,
+			Summary:    summary,
+			Confidence: 0.25,
+			Metadata: map[string]any{
+				"error":         err.Error(),
+				"metrics_mode":  mode,
+				"metrics_focus": focus,
+			},
+		}, nil
+	}
+
+	var parsed tools.PrometheusAlertsOutput
+	if err := json.Unmarshal([]byte(output), &parsed); err != nil {
+		return &protocol.TaskResult{
+			TaskID:     task.TaskID,
+			Agent:      AgentName,
+			Status:     protocol.ResultStatusDegraded,
+			Summary:    "prometheus alert query returned an unreadable payload",
+			Confidence: 0.35,
+			Metadata: map[string]any{
+				"raw_output":    output,
+				"metrics_mode":  mode,
+				"metrics_focus": focus,
+				"decode_failed": true,
+			},
+		}, nil
+	}
+
+	if !parsed.Success {
+		return &protocol.TaskResult{
+			TaskID:     task.TaskID,
+			Agent:      AgentName,
+			Status:     protocol.ResultStatusDegraded,
+			Summary:    fallbackText(parsed.Message, "prometheus alert query failed"),
+			Confidence: 0.35,
+			Metadata: map[string]any{
+				"error":         parsed.Error,
+				"metrics_mode":  mode,
+				"metrics_focus": focus,
+			},
+		}, nil
+	}
+
+	evidence := make([]protocol.EvidenceItem, 0, len(parsed.Alerts))
+	alertNames := make([]string, 0, len(parsed.Alerts))
+	for _, alert := range parsed.Alerts {
+		alertNames = append(alertNames, alert.AlertName)
+		evidence = append(evidence, protocol.EvidenceItem{
+			SourceType: "prometheus",
+			SourceID:   alert.AlertName,
+			Title:      alert.AlertName,
+			Snippet:    strings.TrimSpace(alert.Description),
+			Score:      0.82,
+		})
+	}
+
+	summary := "no active alerts found in Prometheus"
+	if len(parsed.Alerts) > 0 {
+		summary = fmt.Sprintf("%s %d active alerts: %s", metricsSummaryPrefix(mode), len(parsed.Alerts), strings.Join(alertNames, ", "))
+	}
+
+	return &protocol.TaskResult{
+		TaskID:      task.TaskID,
+		Agent:       AgentName,
+		Status:      protocol.ResultStatusSucceeded,
+		Summary:     summary,
+		Confidence:  0.88,
+		Evidence:    evidence,
+		NextActions: buildMetricsNextActions(mode),
+		Metadata: map[string]any{
+			"alerts":        parsed.Alerts,
+			"metrics_mode":  mode,
+			"metrics_focus": focus,
+		},
+	}, nil
+}
+
+func metricsSummaryPrefix(mode string) string {
+	switch mode {
+	case "release_guard":
+		return "release guard found"
+	case "capacity_snapshot":
+		return "capacity snapshot found"
+	case "incident_snapshot":
+		return "prometheus snapshot found"
+	default:
+		return "found"
+	}
+}
+
+func buildMetricsNextActions(mode string) []string {
+	switch mode {
+	case "release_guard":
+		return []string{
+			"compare alert start time with the latest release window",
+			"verify canary and rollback criteria before continuing the rollout",
+		}
+	case "capacity_snapshot":
+		return []string{
+			"inspect CPU, memory, latency, and saturation dashboards",
+			"check whether autoscaling or throttling actions are required",
+		}
+	default:
+		return nil
+	}
 }
 
 func mustNewSkillRegistry() *skills.Registry {

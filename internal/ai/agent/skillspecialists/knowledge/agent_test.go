@@ -2,11 +2,14 @@ package knowledge
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
 	"SuperBizAgent/internal/ai/protocol"
 	"SuperBizAgent/internal/ai/runtime"
+	"SuperBizAgent/internal/ai/tools"
 
 	toolapi "github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
@@ -15,6 +18,7 @@ import (
 type fakeKnowledgeTool struct {
 	block  bool
 	output string
+	inputs []string
 }
 
 func (f *fakeKnowledgeTool) Info(context.Context) (*schema.ToolInfo, error) {
@@ -22,11 +26,24 @@ func (f *fakeKnowledgeTool) Info(context.Context) (*schema.ToolInfo, error) {
 }
 
 func (f *fakeKnowledgeTool) InvokableRun(ctx context.Context, input string, opts ...toolapi.Option) (string, error) {
+	f.inputs = append(f.inputs, input)
 	if f.block {
 		<-ctx.Done()
 		return "", ctx.Err()
 	}
 	return f.output, nil
+}
+
+func (f *fakeKnowledgeTool) LastQuery(t *testing.T) string {
+	t.Helper()
+	if len(f.inputs) == 0 {
+		t.Fatal("expected at least one tool invocation")
+	}
+	var payload tools.QueryInternalDocsInput
+	if err := json.Unmarshal([]byte(f.inputs[len(f.inputs)-1]), &payload); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	return payload.Query
 }
 
 func TestKnowledgeAgentUsesSOPSkillOnProcedureQuery(t *testing.T) {
@@ -64,9 +81,8 @@ func TestKnowledgeAgentEmitsSelectedSkillIntoRuntimeTrace(t *testing.T) {
 		newQueryInternalDocsTool = oldFactory
 	}()
 
-	newQueryInternalDocsTool = func() toolapi.InvokableTool {
-		return &fakeKnowledgeTool{output: "[]"}
-	}
+	tool := &fakeKnowledgeTool{output: "[]"}
+	newQueryInternalDocsTool = func() toolapi.InvokableTool { return tool }
 
 	rt := runtime.New()
 	agent := New()
@@ -93,5 +109,54 @@ func TestKnowledgeAgentEmitsSelectedSkillIntoRuntimeTrace(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("expected skill selection in detail trace, got %v", details)
+	}
+	if got := tool.LastQuery(t); !strings.Contains(got, "troubleshooting guidance") {
+		t.Fatalf("expected incident guidance focus in query, got %q", got)
+	}
+}
+
+func TestKnowledgeAgentUsesReleaseSOPSkillAndRewritesQuery(t *testing.T) {
+	oldFactory := newQueryInternalDocsTool
+	defer func() {
+		newQueryInternalDocsTool = oldFactory
+	}()
+
+	tool := &fakeKnowledgeTool{output: "[]"}
+	newQueryInternalDocsTool = func() toolapi.InvokableTool { return tool }
+
+	agent := New()
+	task := protocol.NewRootTask("session-test", "How do we deploy the payment service to production?", agent.Name())
+	result, err := agent.Handle(context.Background(), task)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Metadata["skill_name"] != "knowledge_release_sop" {
+		t.Fatalf("expected knowledge_release_sop, got %#v", result.Metadata)
+	}
+	if got := tool.LastQuery(t); !strings.Contains(got, "pre-check") || !strings.Contains(got, "rollback") {
+		t.Fatalf("expected release SOP focus in query, got %q", got)
+	}
+}
+
+func TestKnowledgeAgentUsesRollbackSkillAndRewritesQuery(t *testing.T) {
+	oldFactory := newQueryInternalDocsTool
+	defer func() {
+		newQueryInternalDocsTool = oldFactory
+	}()
+
+	tool := &fakeKnowledgeTool{output: "[]"}
+	newQueryInternalDocsTool = func() toolapi.InvokableTool { return tool }
+
+	agent := New()
+	task := protocol.NewRootTask("session-test", "Should we rollback the latest release after elevated latency?", agent.Name())
+	result, err := agent.Handle(context.Background(), task)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Metadata["skill_name"] != "knowledge_rollback_runbook" {
+		t.Fatalf("expected knowledge_rollback_runbook, got %#v", result.Metadata)
+	}
+	if got := tool.LastQuery(t); !strings.Contains(got, "mitigation actions") || !strings.Contains(got, "validation checklist") {
+		t.Fatalf("expected rollback focus in query, got %q", got)
 	}
 }
