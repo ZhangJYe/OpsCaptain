@@ -19,6 +19,12 @@
 - `skills/knowledge/`
 - `skills/metrics/`
 - `skills/logs/`
+- `skills/candidates/`
+
+其中：
+
+- `knowledge / metrics / logs`：已经在运行时落地的 skill cards
+- `candidates`：从 `docs/` 等原始知识中提炼出来、适合下一步继续实现的候选 skills
 
 ## 每张 skill card 都回答 6 个问题
 
@@ -35,3 +41,16 @@
 - `internal/ai/agent/skillspecialists/knowledge/agent.go`
 - `internal/ai/agent/skillspecialists/metrics/agent.go`
 - `internal/ai/agent/skillspecialists/logs/agent.go`
+
+## docs 和 skills 的关系
+
+不要把两者混为一谈：
+
+- `docs/` 更像原始知识库语料，会被上传、索引、检索
+- `skills/` 更像对这些知识的结构化提炼和执行意图说明
+
+最稳的做法不是“把 docs 删掉搬进 skills”，而是：
+
+1. 保留 `docs/` 作为 source-of-truth
+2. 把高频、稳定、可复用的内容提炼成 `skills/`
+3. 真正值得自动化的，再继续落到运行时代码
