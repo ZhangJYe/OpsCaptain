@@ -791,6 +791,8 @@ class SuperBizAgentApp {
         this.createAbortController();
         this.updateUI();
 
+        this.addThinkingBubble();
+
         try {
             if (this.currentMode === 'quick') {
                 await this.sendQuickMessage(message);
@@ -798,6 +800,7 @@ class SuperBizAgentApp {
                 await this.sendStreamMessage(message);
             }
         } catch (error) {
+            this.removeThinkingBubble();
             if (!this.isAbortError(error)) {
                 console.error('发送消息失败:', error);
                 this.addMessage('assistant', '抱歉，发送消息时出现错误：' + error.message);
@@ -836,6 +839,8 @@ class SuperBizAgentApp {
 
             const data = await response.json();
             
+            this.removeThinkingBubble();
+
             if (data.message === 'OK' && data.data && data.data.answer) {
                 this.addAssistantMessageWithMeta(data.data.answer, {
                     mode: data.data.mode || 'legacy',
@@ -870,6 +875,7 @@ class SuperBizAgentApp {
             }
             
             const assistantMessageElement = this.addMessage('assistant', '', true);
+            this.removeThinkingBubble();
             let fullResponse = '';
             let isFinalized = false;
             let responseMeta = { mode: '', traceId: '', details: [] };
@@ -1373,6 +1379,54 @@ class SuperBizAgentApp {
     }
     
     // 检查并设置居中样式
+    addThinkingBubble() {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message assistant';
+        messageDiv.id = 'thinking-bubble';
+
+        const messageAvatar = document.createElement('div');
+        messageAvatar.className = 'message-avatar';
+        messageAvatar.innerHTML = `
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" fill="white"/>
+            </svg>
+        `;
+        messageDiv.appendChild(messageAvatar);
+
+        const messageContentWrapper = document.createElement('div');
+        messageContentWrapper.className = 'message-content-wrapper';
+
+        const bubble = document.createElement('div');
+        bubble.className = 'thinking-bubble';
+        bubble.innerHTML = `
+            <div class="thinking-dots"><span></span><span></span><span></span></div>
+        `;
+
+        messageContentWrapper.appendChild(bubble);
+        messageDiv.appendChild(messageContentWrapper);
+
+        if (this.chatMessages) {
+            this.chatMessages.appendChild(messageDiv);
+
+            const isFirstMessage = this.chatMessages.querySelectorAll('.message').length === 1;
+            if (isFirstMessage && this.chatContainer) {
+                this.chatContainer.classList.remove('centered');
+                this.chatContainer.style.transition = 'all 0.5s ease';
+            }
+
+            this.scrollToBottom();
+        }
+
+        return messageDiv;
+    }
+
+    removeThinkingBubble() {
+        const bubble = document.getElementById('thinking-bubble');
+        if (bubble) {
+            bubble.remove();
+        }
+    }
+
     checkAndSetCentered() {
         if (this.chatMessages && this.chatContainer) {
             const hasMessages = this.chatMessages.querySelectorAll('.message').length > 0;

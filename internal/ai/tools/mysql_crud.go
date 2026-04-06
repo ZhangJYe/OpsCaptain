@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/components/tool/utils"
@@ -18,25 +19,31 @@ type MysqlCrudInput struct {
 	OperateType string `json:"operate_type" jsonschema:"description=The type of SQL operation to perform. Currently only 'query' is supported."`
 }
 
-var mysqlDB *gorm.DB
+var (
+	mysqlDB   *gorm.DB
+	mysqlOnce sync.Once
+	mysqlErr  error
+)
 
 func initMysqlDB(ctx context.Context) (*gorm.DB, error) {
-	if mysqlDB != nil {
-		return mysqlDB, nil
-	}
-	dsn, err := g.Cfg().Get(ctx, "mysql.dsn")
-	if err != nil {
-		return nil, fmt.Errorf("failed to read mysql.dsn from config: %w", err)
-	}
-	if dsn.String() == "" {
-		return nil, fmt.Errorf("mysql.dsn is not configured")
-	}
-	db, err := gorm.Open(mysql.Open(dsn.String()), &gorm.Config{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to mysql: %w", err)
-	}
-	mysqlDB = db
-	return mysqlDB, nil
+	mysqlOnce.Do(func() {
+		dsn, err := g.Cfg().Get(ctx, "mysql.dsn")
+		if err != nil {
+			mysqlErr = fmt.Errorf("failed to read mysql.dsn from config: %w", err)
+			return
+		}
+		if dsn.String() == "" {
+			mysqlErr = fmt.Errorf("mysql.dsn is not configured")
+			return
+		}
+		db, err := gorm.Open(mysql.Open(dsn.String()), &gorm.Config{})
+		if err != nil {
+			mysqlErr = fmt.Errorf("failed to connect to mysql: %w", err)
+			return
+		}
+		mysqlDB = db
+	})
+	return mysqlDB, mysqlErr
 }
 
 func NewMysqlCrudTool() tool.InvokableTool {
@@ -50,6 +57,11 @@ func NewMysqlCrudTool() tool.InvokableTool {
 			}
 			if strings.Contains(input.SQL, ";") {
 				return `{"success":false,"error":"multiple statements are not allowed"}`, nil
+			}
+			for _, kw := range []string{"INTO OUTFILE", "INTO DUMPFILE", "SLEEP(", "BENCHMARK(", "LOAD_FILE("} {
+				if strings.Contains(sqlUpper, kw) {
+					return `{"success":false,"error":"forbidden SQL keyword detected"}`, nil
+				}
 			}
 
 			db, err := initMysqlDB(ctx)

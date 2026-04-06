@@ -76,7 +76,7 @@ func queryPrometheusAlerts(ctx context.Context) (PrometheusAlertsResult, error) 
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
 	if err != nil {
 		return result, fmt.Errorf("failed to read response: %v", err)
 	}
