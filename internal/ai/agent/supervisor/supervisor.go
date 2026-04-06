@@ -8,9 +8,9 @@ import (
 	"sync"
 
 	"SuperBizAgent/internal/ai/agent/reporter"
-	"SuperBizAgent/internal/ai/agent/specialists/knowledge"
-	"SuperBizAgent/internal/ai/agent/specialists/logs"
-	"SuperBizAgent/internal/ai/agent/specialists/metrics"
+	"SuperBizAgent/internal/ai/agent/skillspecialists/knowledge"
+	"SuperBizAgent/internal/ai/agent/skillspecialists/logs"
+	"SuperBizAgent/internal/ai/agent/skillspecialists/metrics"
 	"SuperBizAgent/internal/ai/agent/triage"
 	"SuperBizAgent/internal/ai/protocol"
 	"SuperBizAgent/internal/ai/runtime"
