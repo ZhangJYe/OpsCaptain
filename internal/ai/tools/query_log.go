@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	e_mcp "github.com/cloudwego/eino-ext/components/tool/mcp"
 	"github.com/cloudwego/eino/components/tool"
@@ -26,7 +27,7 @@ func GetLogMcpTool() ([]tool.BaseTool, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read mcp.log_url from config: %w", err)
 	}
-	mcpURL := mcpURLVal.String()
+	mcpURL := normalizeOptionalURL(mcpURLVal.String())
 	if mcpURL == "" {
 		g.Log().Warning(ctx, "mcp.log_url is not configured, log query tool will be disabled")
 		return nil, nil
@@ -53,4 +54,15 @@ func GetLogMcpTool() ([]tool.BaseTool, error) {
 		return nil, fmt.Errorf("failed to get MCP tools: %w", err)
 	}
 	return mcpTools, nil
+}
+
+func normalizeOptionalURL(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if strings.Contains(value, "${") && strings.Contains(value, "}") {
+		return ""
+	}
+	return value
 }
