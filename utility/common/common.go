@@ -44,3 +44,11 @@ func GetVectorDimension(ctx context.Context) int {
 	}
 	return val.Int()
 }
+
+func GetRetrieverTopK(ctx context.Context) int {
+	topK := 3
+	if v, err := g.Cfg().Get(ctx, "retriever.top_k"); err == nil && v.Int() > 0 {
+		topK = v.Int()
+	}
+	return topK
+}

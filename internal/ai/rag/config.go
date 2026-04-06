@@ -12,11 +12,7 @@ import (
 const DefaultRetrieverInitFailureTTL = 15 * time.Second
 
 func RetrieverTopK(ctx context.Context) int {
-	topK := 3
-	if v, err := g.Cfg().Get(ctx, "retriever.top_k"); err == nil && v.Int() > 0 {
-		topK = v.Int()
-	}
-	return topK
+	return common.GetRetrieverTopK(ctx)
 }
 
 func DefaultRetrieverCacheKey(ctx context.Context) string {

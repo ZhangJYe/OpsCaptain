@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"SuperBizAgent/internal/ai/rag"
 	"context"
 	"errors"
 	"testing"
@@ -16,15 +17,15 @@ func (f *fakeInternalDocsRetriever) Retrieve(context.Context, string, ...retriev
 }
 
 func TestQueryInternalDocsToolReusesRetriever(t *testing.T) {
-	oldFactory := newMilvusRetriever
+	oldFactory := rag.NewRetrieverFunc
 	defer func() {
-		newMilvusRetriever = oldFactory
-		resetInternalDocsRetrieverCache()
+		rag.NewRetrieverFunc = oldFactory
+		rag.ResetSharedPool()
 	}()
 
-	resetInternalDocsRetrieverCache()
+	rag.ResetSharedPool()
 	created := 0
-	newMilvusRetriever = func(context.Context) (retrieverapi.Retriever, error) {
+	rag.NewRetrieverFunc = func(context.Context) (retrieverapi.Retriever, error) {
 		created++
 		return &fakeInternalDocsRetriever{}, nil
 	}
@@ -46,15 +47,15 @@ func TestQueryInternalDocsToolReusesRetriever(t *testing.T) {
 }
 
 func TestQueryInternalDocsToolCachesRecentInitFailures(t *testing.T) {
-	oldFactory := newMilvusRetriever
+	oldFactory := rag.NewRetrieverFunc
 	defer func() {
-		newMilvusRetriever = oldFactory
-		resetInternalDocsRetrieverCache()
+		rag.NewRetrieverFunc = oldFactory
+		rag.ResetSharedPool()
 	}()
 
-	resetInternalDocsRetrieverCache()
+	rag.ResetSharedPool()
 	created := 0
-	newMilvusRetriever = func(context.Context) (retrieverapi.Retriever, error) {
+	rag.NewRetrieverFunc = func(context.Context) (retrieverapi.Retriever, error) {
 		created++
 		return nil, errors.New("dial timeout")
 	}

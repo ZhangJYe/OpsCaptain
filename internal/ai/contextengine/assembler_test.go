@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"SuperBizAgent/internal/ai/rag"
 	"SuperBizAgent/utility/mem"
 
 	retrieverapi "github.com/cloudwego/eino/components/retriever"
@@ -21,13 +22,13 @@ func (f *fakeContextRetriever) Retrieve(context.Context, string, ...retrieverapi
 
 func TestAssemblerBuildsStagedChatContext(t *testing.T) {
 	resetLongTermMemory()
-	oldFactory := newContextRetriever
+	oldFactory := rag.NewRetrieverFunc
 	defer func() {
-		newContextRetriever = oldFactory
-		resetContextRetrieverCache()
+		rag.NewRetrieverFunc = oldFactory
+		rag.ResetSharedPool()
 	}()
-	resetContextRetrieverCache()
-	newContextRetriever = func(context.Context) (retrieverapi.Retriever, error) {
+	rag.ResetSharedPool()
+	rag.NewRetrieverFunc = func(context.Context) (retrieverapi.Retriever, error) {
 		return &fakeContextRetriever{
 			docs: []*schema.Document{
 				{
@@ -96,13 +97,13 @@ func TestAssemblerBuildsStagedChatContext(t *testing.T) {
 
 func TestAssemblerDocumentTraceShowsCacheReuse(t *testing.T) {
 	resetLongTermMemory()
-	oldFactory := newContextRetriever
+	oldFactory := rag.NewRetrieverFunc
 	defer func() {
-		newContextRetriever = oldFactory
-		resetContextRetrieverCache()
+		rag.NewRetrieverFunc = oldFactory
+		rag.ResetSharedPool()
 	}()
-	resetContextRetrieverCache()
-	newContextRetriever = func(context.Context) (retrieverapi.Retriever, error) {
+	rag.ResetSharedPool()
+	rag.NewRetrieverFunc = func(context.Context) (retrieverapi.Retriever, error) {
 		return &fakeContextRetriever{
 			docs: []*schema.Document{
 				{ID: "doc-1", Content: "same doc"},
@@ -136,12 +137,12 @@ func TestAssemblerDocumentTraceShowsCacheReuse(t *testing.T) {
 
 func TestAssemblerBuildsAIOpsMemoryOnlyContext(t *testing.T) {
 	resetLongTermMemory()
-	oldFactory := newContextRetriever
+	oldFactory := rag.NewRetrieverFunc
 	defer func() {
-		newContextRetriever = oldFactory
-		resetContextRetrieverCache()
+		rag.NewRetrieverFunc = oldFactory
+		rag.ResetSharedPool()
 	}()
-	resetContextRetrieverCache()
+	rag.ResetSharedPool()
 
 	ltm := mem.GetLongTermMemory()
 	ctx := context.Background()

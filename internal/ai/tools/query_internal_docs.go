@@ -2,13 +2,11 @@ package tools
 
 import (
 	"SuperBizAgent/internal/ai/rag"
-	ragretriever "SuperBizAgent/internal/ai/retriever"
 	"context"
 	"encoding/json"
 	"fmt"
 	"time"
 
-	retrieverapi "github.com/cloudwego/eino/components/retriever"
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/components/tool/utils"
 )
@@ -18,18 +16,6 @@ type QueryInternalDocsInput struct {
 }
 
 const defaultInternalDocsQueryTimeout = 5 * time.Second
-const defaultInternalDocsInitFailureTTL = 15 * time.Second
-
-var (
-	newMilvusRetriever        = ragretriever.NewMilvusRetriever
-	internalDocsRetrieverPool = rag.NewRetrieverPool(
-		func(ctx context.Context) (retrieverapi.Retriever, error) {
-			return newMilvusRetriever(ctx)
-		},
-		rag.DefaultRetrieverCacheKey,
-		internalDocsInitFailureTTL,
-	)
-)
 
 func NewQueryInternalDocsTool() tool.InvokableTool {
 	t, err := utils.InferOptionableTool(
@@ -39,7 +25,8 @@ func NewQueryInternalDocsTool() tool.InvokableTool {
 			queryCtx, cancel := context.WithTimeout(ctx, internalDocsQueryTimeout(ctx))
 			defer cancel()
 
-			rr, err := getOrCreateInternalDocsRetriever(queryCtx)
+			pool := rag.SharedPool()
+			rr, _, err := pool.GetOrCreate(queryCtx)
 			if err != nil {
 				return "", fmt.Errorf("failed to create retriever: %w", err)
 			}
@@ -61,17 +48,4 @@ func NewQueryInternalDocsTool() tool.InvokableTool {
 
 func internalDocsQueryTimeout(ctx context.Context) time.Duration {
 	return rag.DurationFromConfig(ctx, defaultInternalDocsQueryTimeout, "multi_agent.knowledge_query_timeout_ms")
-}
-
-func getOrCreateInternalDocsRetriever(ctx context.Context) (retrieverapi.Retriever, error) {
-	rr, _, err := internalDocsRetrieverPool.GetOrCreate(ctx)
-	return rr, err
-}
-
-func resetInternalDocsRetrieverCache() {
-	internalDocsRetrieverPool.Reset()
-}
-
-func internalDocsInitFailureTTL(ctx context.Context) time.Duration {
-	return rag.DurationFromConfig(ctx, defaultInternalDocsInitFailureTTL, "multi_agent.knowledge_init_failure_ttl_ms")
 }

@@ -7,15 +7,12 @@ import (
 	"strings"
 	"time"
 
-	ragretriever "SuperBizAgent/internal/ai/retriever"
 	"SuperBizAgent/utility/mem"
 
-	retrieverapi "github.com/cloudwego/eino/components/retriever"
 	"github.com/cloudwego/eino/schema"
 )
 
 const defaultContextDocsQueryTimeout = 5 * time.Second
-const defaultContextDocsInitFailureTTL = 15 * time.Second
 
 type documentSelectionResult struct {
 	selected []ContextItem
@@ -25,32 +22,8 @@ type documentSelectionResult struct {
 	metrics  *RetrievalStageMetrics
 }
 
-var (
-	newContextRetriever  = ragretriever.NewMilvusRetriever
-	contextRetrieverPool = rag.NewRetrieverPool(
-		func(ctx context.Context) (retrieverapi.Retriever, error) {
-			return newContextRetriever(ctx)
-		},
-		rag.DefaultRetrieverCacheKey,
-		contextDocsInitFailureTTL,
-	)
-)
-
-func getOrCreateContextRetriever(ctx context.Context) (retrieverapi.Retriever, error) {
-	rr, _, err := contextRetrieverPool.GetOrCreate(ctx)
-	return rr, err
-}
-
-func resetContextRetrieverCache() {
-	contextRetrieverPool.Reset()
-}
-
 func contextDocsQueryTimeout(ctx context.Context) time.Duration {
 	return rag.DurationFromConfig(ctx, defaultContextDocsQueryTimeout, "context.docs_query_timeout_ms", "multi_agent.knowledge_query_timeout_ms")
-}
-
-func contextDocsInitFailureTTL(ctx context.Context) time.Duration {
-	return rag.DurationFromConfig(ctx, defaultContextDocsInitFailureTTL, "context.docs_init_failure_ttl_ms", "multi_agent.knowledge_init_failure_ttl_ms")
 }
 
 func selectDocuments(ctx context.Context, query string, profile ContextProfile) documentSelectionResult {
@@ -61,7 +34,7 @@ func selectDocuments(ctx context.Context, query string, profile ContextProfile) 
 	queryCtx, cancel := context.WithTimeout(ctx, contextDocsQueryTimeout(ctx))
 	defer cancel()
 
-	docs, trace, err := rag.Query(queryCtx, contextRetrieverPool, query)
+	docs, trace, err := rag.Query(queryCtx, rag.SharedPool(), query)
 	metrics := retrievalMetricsFromQueryTrace(trace)
 	if err != nil {
 		return documentSelectionResult{

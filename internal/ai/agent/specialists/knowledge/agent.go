@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"SuperBizAgent/internal/ai/protocol"
+	"SuperBizAgent/internal/ai/rag"
 	"SuperBizAgent/internal/ai/tools"
 
 	"github.com/gogf/gf/v2/frame/g"
@@ -80,7 +81,7 @@ func (a *Agent) Handle(ctx context.Context, task *protocol.TaskEnvelope) (*proto
 		}, nil
 	}
 
-	limit := knowledgeEvidenceLimit()
+	limit := knowledgeEvidenceLimit(ctx)
 	evidence := make([]protocol.EvidenceItem, 0, min(limit, len(docs)))
 	highlights := make([]string, 0, min(limit, len(docs)))
 	for idx, doc := range docs {
@@ -99,7 +100,7 @@ func (a *Agent) Handle(ctx context.Context, task *protocol.TaskEnvelope) (*proto
 			SourceID:   title,
 			Title:      title,
 			Snippet:    snippet,
-			Score:      0.74 - float64(idx)*0.08,
+			Score:      extractDocScore(doc, idx),
 		})
 	}
 
@@ -119,6 +120,20 @@ func (a *Agent) Handle(ctx context.Context, task *protocol.TaskEnvelope) (*proto
 			"document_count": len(docs),
 		},
 	}, nil
+}
+
+func extractDocScore(doc map[string]any, idx int) float64 {
+	for _, key := range []string{"_score", "score"} {
+		if raw, ok := doc[key]; ok {
+			switch v := raw.(type) {
+			case float64:
+				return v
+			case float32:
+				return float64(v)
+			}
+		}
+	}
+	return 0.74 - float64(idx)*0.08
 }
 
 func firstNonEmptyString(values map[string]any, keys ...string) string {
@@ -147,14 +162,10 @@ func min(a, b int) int {
 	return b
 }
 
-func knowledgeEvidenceLimit() int {
-	v, err := g.Cfg().Get(context.Background(), "multi_agent.knowledge_evidence_limit")
+func knowledgeEvidenceLimit(ctx context.Context) int {
+	v, err := g.Cfg().Get(ctx, "multi_agent.knowledge_evidence_limit")
 	if err == nil && v.Int() > 0 {
 		return v.Int()
 	}
-	v, err = g.Cfg().Get(context.Background(), "retriever.top_k")
-	if err == nil && v.Int() > 0 {
-		return v.Int()
-	}
-	return 3
+	return rag.RetrieverTopK(ctx)
 }

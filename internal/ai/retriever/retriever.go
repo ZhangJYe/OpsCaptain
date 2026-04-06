@@ -35,11 +35,7 @@ func NewMilvusRetriever(ctx context.Context) (rtr retriever.Retriever, err error
 	if err != nil {
 		return nil, err
 	}
-	topK := 3
-	v, cfgErr := g.Cfg().Get(ctx, "retriever.top_k")
-	if cfgErr == nil && v.Int() > 0 {
-		topK = v.Int()
-	}
+	topK := common.GetRetrieverTopK(ctx)
 	r, err := milvus.NewRetriever(ctx, &milvus.RetrieverConfig{
 		Client:      cli,
 		Collection:  common.MilvusCollectionName,

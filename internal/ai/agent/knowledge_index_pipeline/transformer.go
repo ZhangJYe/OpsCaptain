@@ -12,7 +12,8 @@ import (
 func newDocumentTransformer(ctx context.Context) (tfr document.Transformer, err error) {
 	config := &markdown.HeaderConfig{
 		Headers: map[string]string{
-			"#": "title",
+			"#":  "title",
+			"##": "subtitle",
 		},
 		TrimHeaders: false,
 		IDGenerator: func(ctx context.Context, originalID string, splitIndex int) string {
