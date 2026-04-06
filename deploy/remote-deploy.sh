@@ -4,6 +4,50 @@ set -eu
 APP_DIR="${APP_DIR:-$(pwd)}"
 COMPOSE="docker compose --env-file .env.production -f docker-compose.prod.yml"
 
+normalize_optional_value() {
+  value="$(printf '%s' "${1:-}" | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+  case "$value" in
+    ""|'${'*'}')
+      printf ''
+      ;;
+    *)
+      printf '%s' "$value"
+      ;;
+  esac
+}
+
+write_site_block() {
+  site_label="$1"
+
+  printf '%s {\n' "$site_label"
+  cat <<EOF
+    encode zstd gzip
+
+    @jaegerRoot path /jaeger
+    redir @jaegerRoot /jaeger/ 308
+    handle_path /jaeger/* {
+        reverse_proxy jaeger:16686
+    }
+EOF
+
+  if [ -n "$prometheus_address" ]; then
+    cat <<EOF
+
+    @prometheusRoot path /prometheus
+    redir @prometheusRoot /prometheus/ 308
+    handle_path /prometheus/* {
+        reverse_proxy $prometheus_address
+    }
+EOF
+  fi
+
+  cat <<'EOF'
+
+    reverse_proxy frontend:80
+}
+EOF
+}
+
 cleanup() {
   rm -f "./${ACR_PASSWORD_FILE:-.acr-password}"
 }
@@ -26,9 +70,10 @@ set -a
 . ./release.env
 set +a
 
-domain_name="$(sed -n 's/^DOMAIN_NAME=//p' ./.env.production | tr -d '\r' | head -n 1)"
-tls_email="$(sed -n 's/^TLS_EMAIL=//p' ./.env.production | tr -d '\r' | head -n 1)"
-auth_secret="$(sed -n 's/^AUTH_JWT_SECRET=//p' ./.env.production | tr -d '\r' | head -n 1)"
+domain_name="$(normalize_optional_value "$(sed -n 's/^DOMAIN_NAME=//p' ./.env.production | head -n 1)")"
+tls_email="$(normalize_optional_value "$(sed -n 's/^TLS_EMAIL=//p' ./.env.production | head -n 1)")"
+auth_secret="$(normalize_optional_value "$(sed -n 's/^AUTH_JWT_SECRET=//p' ./.env.production | head -n 1)")"
+prometheus_address="$(normalize_optional_value "$(sed -n 's/^PROMETHEUS_ADDRESS=//p' ./.env.production | head -n 1)")"
 
 case "$auth_secret" in
   ""|"replace-with-a-32-char-secret"|"your-jwt-secret"|replace-with*|your-*)
@@ -50,21 +95,11 @@ fi
     echo
   fi
 
-  cat <<'EOF'
-:80 {
-    encode zstd gzip
-    reverse_proxy frontend:80
-}
-EOF
+  write_site_block ":80"
 
   if [ -n "$domain_name" ]; then
     echo
-    printf '%s {\n' "$domain_name"
-    cat <<'EOF'
-    encode zstd gzip
-    reverse_proxy frontend:80
-}
-EOF
+    write_site_block "$domain_name"
   fi
 } > ./Caddyfile.generated
 
