@@ -34,10 +34,11 @@ type logSkill struct {
 	description string
 	mode        string
 	keywords    []string
+	focus       string
 }
 
 func New() *Agent {
-	return &Agent{registry: mustNewSkillRegistry()}
+	return &Agent{registry: buildLogSkillRegistry()}
 }
 
 func (a *Agent) Name() string {
@@ -78,7 +79,175 @@ func (s *logSkill) Match(task *protocol.TaskEnvelope) bool {
 }
 
 func (s *logSkill) Run(ctx context.Context, task *protocol.TaskEnvelope) (*protocol.TaskResult, error) {
-	return runLogSkill(ctx, task, s.mode)
+	return runLogSkillWithFocus(ctx, task, s.mode, s.focus)
+}
+
+func buildLogSkillRegistry() *skills.Registry {
+	registry, err := skills.NewRegistry(
+		AgentName,
+		&logSkill{
+			name:        "logs_payment_timeout_trace",
+			description: "Trace payment, order, and checkout timeout evidence from logs.",
+			mode:        "payment_timeout_trace",
+			focus:       "Focus on payment, order, checkout, gateway timeout, retry, db timeout, and downstream latency.",
+			keywords: []string{
+				"payment timeout", "checkout timeout", "order timeout", "支付超时", "订单超时",
+				"payment", "checkout", "order", "timeout", "504", "gateway timeout",
+			},
+		},
+		&logSkill{
+			name:        "logs_auth_failure_trace",
+			description: "Trace login, token, and authorization failures from logs.",
+			mode:        "auth_failure_trace",
+			focus:       "Focus on login, token, jwt, forbidden, unauthorized, permission denied, and auth middleware.",
+			keywords: []string{
+				"login", "auth", "authentication", "authorization", "token", "jwt", "unauthorized", "forbidden",
+				"登录", "鉴权", "令牌", "权限", "未授权",
+			},
+		},
+		&logSkill{
+			name:        "logs_evidence_extract",
+			description: "Extract structured log evidence for error, timeout, and exception focused queries.",
+			mode:        "evidence_extract",
+			focus:       "Focus on error, timeout, exception, panic, and stack trace signals.",
+			keywords: []string{
+				"error", "errors", "exception", "timeout", "fail", "failed", "panic", "stack",
+				"鎶ラ敊", "寮傚父", "閿欒", "瓒呮椂", "澶辫触", "鍫嗘爤", "鏃ュ織璇佹嵁",
+			},
+		},
+		&logSkill{
+			name:        "logs_raw_review",
+			description: "Fallback log review skill that still returns raw snippets when structured evidence is unavailable.",
+			mode:        "raw_review",
+			focus:       "Focus on broad log review and retain raw output when structure is unavailable.",
+		},
+	)
+	if err != nil {
+		panic(fmt.Sprintf("failed to build log skills registry: %v", err))
+	}
+	return registry
+}
+
+func runLogSkillWithFocus(ctx context.Context, task *protocol.TaskEnvelope, mode string, focus string) (*protocol.TaskResult, error) {
+	toolList, err := discoverLogTools()
+	if err != nil {
+		return degradedLogResult(task, AgentName, fmt.Sprintf("log MCP bootstrap failed: %v", err), nil, []string{err.Error()}, mode, focus), nil
+	}
+	if len(toolList) == 0 {
+		return degradedLogResult(task, AgentName, "log query capability is not configured", nil, nil, mode, focus), nil
+	}
+
+	limit := logEvidenceLimit(ctx)
+	toolNames := make([]string, 0, len(toolList))
+	toolErrors := make([]string, 0)
+	rawOutputs := make([]string, 0)
+
+	for _, baseTool := range toolList {
+		name, desc := describeTool(ctx, baseTool)
+		toolNames = append(toolNames, name)
+
+		invokable, ok := baseTool.(toolapi.InvokableTool)
+		if !ok {
+			continue
+		}
+
+		output, invokeErr := invokeFocusedLogTool(ctx, invokable, task.Goal, limit, mode, focus)
+		if invokeErr != nil {
+			toolErrors = append(toolErrors, fmt.Sprintf("%s: %v", name, invokeErr))
+			continue
+		}
+
+		evidence := buildLogEvidence(name, output, limit)
+		if len(evidence) > 0 {
+			summary := fmt.Sprintf("log skill %s extracted %d evidence items with %s", mode, len(evidence), name)
+			if len(toolErrors) > 0 {
+				summary += "; other tools degraded automatically"
+			}
+			return &protocol.TaskResult{
+				TaskID:     task.TaskID,
+				Agent:      AgentName,
+				Status:     protocol.ResultStatusSucceeded,
+				Summary:    summary,
+				Confidence: 0.74,
+				Evidence:   evidence,
+				Metadata: map[string]any{
+					"tool_names":       toolNames,
+					"tool_errors":      toolErrors,
+					"successful_tool":  name,
+					"tool_description": desc,
+					"log_mode":         mode,
+					"log_focus":        focus,
+				},
+			}, nil
+		}
+
+		if snippet := fallbackSnippet(output, desc); snippet != "" {
+			rawOutputs = append(rawOutputs, fmt.Sprintf("%s: %s", name, snippet))
+		}
+	}
+
+	if len(rawOutputs) > 0 {
+		return &protocol.TaskResult{
+			TaskID:     task.TaskID,
+			Agent:      AgentName,
+			Status:     protocol.ResultStatusDegraded,
+			Summary:    "log tools ran, but only raw outputs were available",
+			Confidence: 0.42,
+			Evidence: []protocol.EvidenceItem{
+				{
+					SourceType: "log-raw",
+					SourceID:   "raw-output",
+					Title:      "raw log output",
+					Snippet:    shorten(strings.Join(rawOutputs, " | "), 240),
+					Score:      0.44,
+				},
+			},
+			Metadata: map[string]any{
+				"tool_names":  toolNames,
+				"tool_errors": toolErrors,
+				"log_mode":    mode,
+				"log_focus":   focus,
+			},
+		}, nil
+	}
+
+	summary := fmt.Sprintf("found %d log MCP tools but no reusable log evidence", len(toolNames))
+	if len(toolErrors) > 0 {
+		summary += "; tool errors: " + strings.Join(toolErrors, " ; ")
+	}
+	return degradedLogResult(task, AgentName, summary, toolNames, toolErrors, mode, focus), nil
+}
+
+func invokeFocusedLogTool(ctx context.Context, tool toolapi.InvokableTool, query string, limit int, mode string, focus string) (string, error) {
+	queryCtx, cancel := context.WithTimeout(ctx, logQueryTimeout(ctx))
+	defer cancel()
+	return tool.InvokableRun(queryCtx, buildLogQueryPayloadWithFocus(query, limit, mode, focus))
+}
+
+func buildLogQueryPayloadWithFocus(query string, limit int, mode string, focus string) string {
+	focusedQuery := buildFocusedLogQuery(query, focus)
+	payload, err := json.Marshal(map[string]any{
+		"query":      focusedQuery,
+		"limit":      limit,
+		"skill_mode": mode,
+		"focus":      focus,
+	})
+	if err != nil {
+		return fmt.Sprintf(`{"query":%q,"limit":%d,"skill_mode":%q}`, focusedQuery, limit, mode)
+	}
+	return string(payload)
+}
+
+func buildFocusedLogQuery(query string, focus string) string {
+	query = strings.TrimSpace(query)
+	focus = strings.TrimSpace(focus)
+	if focus == "" {
+		return query
+	}
+	if query == "" {
+		return focus
+	}
+	return query + "\nFocus: " + focus
 }
 
 func mustNewSkillRegistry() *skills.Registry {
@@ -108,10 +277,10 @@ func mustNewSkillRegistry() *skills.Registry {
 func runLogSkill(ctx context.Context, task *protocol.TaskEnvelope, mode string) (*protocol.TaskResult, error) {
 	toolList, err := discoverLogTools()
 	if err != nil {
-		return degradedLogResult(task, AgentName, fmt.Sprintf("log MCP bootstrap failed: %v", err), nil, []string{err.Error()}, mode), nil
+		return degradedLogResult(task, AgentName, fmt.Sprintf("log MCP bootstrap failed: %v", err), nil, []string{err.Error()}, mode, ""), nil
 	}
 	if len(toolList) == 0 {
-		return degradedLogResult(task, AgentName, "log query capability is not configured", nil, nil, mode), nil
+		return degradedLogResult(task, AgentName, "log query capability is not configured", nil, nil, mode, ""), nil
 	}
 
 	limit := logEvidenceLimit(ctx)
@@ -190,10 +359,10 @@ func runLogSkill(ctx context.Context, task *protocol.TaskEnvelope, mode string) 
 	if len(toolErrors) > 0 {
 		summary += "; tool errors: " + strings.Join(toolErrors, " ; ")
 	}
-	return degradedLogResult(task, AgentName, summary, toolNames, toolErrors, mode), nil
+	return degradedLogResult(task, AgentName, summary, toolNames, toolErrors, mode, ""), nil
 }
 
-func degradedLogResult(task *protocol.TaskEnvelope, agentName, summary string, toolNames []string, toolErrors []string, mode string) *protocol.TaskResult {
+func degradedLogResult(task *protocol.TaskEnvelope, agentName, summary string, toolNames []string, toolErrors []string, mode string, focus string) *protocol.TaskResult {
 	return &protocol.TaskResult{
 		TaskID:     task.TaskID,
 		Agent:      agentName,
@@ -204,6 +373,7 @@ func degradedLogResult(task *protocol.TaskEnvelope, agentName, summary string, t
 			"tool_names":  toolNames,
 			"tool_errors": toolErrors,
 			"log_mode":    mode,
+			"log_focus":   focus,
 		},
 	}
 }
