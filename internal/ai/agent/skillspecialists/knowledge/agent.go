@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -40,6 +41,7 @@ type knowledgeSkill struct {
 	mode        string
 	keywords    []string
 	focus       string
+	matcher     func(*protocol.TaskEnvelope) bool
 }
 
 func New() *Agent {
@@ -77,8 +79,14 @@ func (s *knowledgeSkill) Description() string {
 }
 
 func (s *knowledgeSkill) Match(task *protocol.TaskEnvelope) bool {
-	if task == nil || len(s.keywords) == 0 {
-		return len(s.keywords) == 0
+	if task == nil {
+		return false
+	}
+	if s.matcher != nil {
+		return s.matcher(task)
+	}
+	if len(s.keywords) == 0 {
+		return true
 	}
 	return skills.ContainsAny(task.Goal, s.keywords...)
 }
@@ -107,6 +115,14 @@ func buildKnowledgeSkillRegistry() *skills.Registry {
 			keywords: []string{
 				"release", "deploy", "deployment", "rollout", "publish", "launch", "上线", "发版", "发布", "部署", "灰度",
 			},
+		},
+		&knowledgeSkill{
+			name:        "knowledge_service_error_code_lookup",
+			description: "Retrieve service error code explanations, common causes, and operator checks.",
+			mode:        "service_error_code_lookup",
+			focus:       "Focus on exact error code meaning, common causes, affected dependency, and first troubleshooting checks.",
+			keywords:    []string{"error code", "errno", "status code", "code meaning"},
+			matcher:     matchesServiceErrorCodeTask,
 		},
 		&knowledgeSkill{
 			name:        "knowledge_sop_lookup",
@@ -210,17 +226,14 @@ func runKnowledgeLookupWithFocus(ctx context.Context, task *protocol.TaskEnvelop
 	}
 
 	return &protocol.TaskResult{
-		TaskID:     task.TaskID,
-		Agent:      AgentName,
-		Status:     protocol.ResultStatusSucceeded,
-		Summary:    summary,
-		Confidence: 0.78,
-		Evidence:   evidence,
-		Metadata: map[string]any{
-			"document_count":  len(docs),
-			"knowledge_mode":  mode,
-			"knowledge_query": retrievalQuery,
-		},
+		TaskID:      task.TaskID,
+		Agent:       AgentName,
+		Status:      protocol.ResultStatusSucceeded,
+		Summary:     summary,
+		Confidence:  0.78,
+		Evidence:    evidence,
+		NextActions: buildKnowledgeNextActions(mode),
+		Metadata:    buildKnowledgeMetadata(task, mode, retrievalQuery, len(docs)),
 	}, nil
 }
 
@@ -234,6 +247,52 @@ func buildKnowledgeQuery(goal string, focus string) string {
 		return focus
 	}
 	return goal + "\nFocus: " + focus
+}
+
+func buildKnowledgeMetadata(task *protocol.TaskEnvelope, mode string, retrievalQuery string, documentCount int) map[string]any {
+	metadata := map[string]any{
+		"document_count":  documentCount,
+		"knowledge_mode":  mode,
+		"knowledge_query": retrievalQuery,
+	}
+	if mode == "service_error_code_lookup" {
+		if codes := extractErrorCodes(task.Goal); len(codes) > 0 {
+			metadata["extracted_error_codes"] = codes
+		}
+	}
+	return metadata
+}
+
+func buildKnowledgeNextActions(mode string) []string {
+	switch mode {
+	case "service_error_code_lookup":
+		return []string{
+			"confirm which service emitted the error code and whether it came from an upstream dependency",
+			"compare the code meaning with the latest release, database change, and downstream status",
+		}
+	default:
+		return nil
+	}
+}
+
+var serviceErrorCodePattern = regexp.MustCompile(`\b\d{6,}\b`)
+
+func matchesServiceErrorCodeTask(task *protocol.TaskEnvelope) bool {
+	if task == nil {
+		return false
+	}
+	goal := strings.TrimSpace(task.Goal)
+	if goal == "" {
+		return false
+	}
+	if len(extractErrorCodes(goal)) == 0 {
+		return false
+	}
+	return skills.ContainsAny(goal, "error code", "errno", "status code", "错误码", "错误代码", "返回码", "code")
+}
+
+func extractErrorCodes(goal string) []string {
+	return serviceErrorCodePattern.FindAllString(goal, -1)
 }
 
 func mustNewSkillRegistry() *skills.Registry {

@@ -160,3 +160,33 @@ func TestKnowledgeAgentUsesRollbackSkillAndRewritesQuery(t *testing.T) {
 		t.Fatalf("expected rollback focus in query, got %q", got)
 	}
 }
+
+func TestKnowledgeAgentUsesServiceErrorCodeLookupSkill(t *testing.T) {
+	oldFactory := newQueryInternalDocsTool
+	defer func() {
+		newQueryInternalDocsTool = oldFactory
+	}()
+
+	tool := &fakeKnowledgeTool{output: "[]"}
+	newQueryInternalDocsTool = func() toolapi.InvokableTool { return tool }
+
+	agent := New()
+	task := protocol.NewRootTask("session-test", "What does error code 12000000002 mean in the billing service?", agent.Name())
+	result, err := agent.Handle(context.Background(), task)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Metadata["skill_name"] != "knowledge_service_error_code_lookup" {
+		t.Fatalf("expected knowledge_service_error_code_lookup, got %#v", result.Metadata)
+	}
+	if got := tool.LastQuery(t); !strings.Contains(got, "exact error code meaning") || !strings.Contains(got, "first troubleshooting checks") {
+		t.Fatalf("expected error code focus in query, got %q", got)
+	}
+	codes, ok := result.Metadata["extracted_error_codes"].([]string)
+	if !ok || len(codes) != 1 || codes[0] != "12000000002" {
+		t.Fatalf("expected extracted error code metadata, got %#v", result.Metadata["extracted_error_codes"])
+	}
+	if len(result.NextActions) == 0 {
+		t.Fatalf("expected next actions for error code lookup, got %#v", result.NextActions)
+	}
+}

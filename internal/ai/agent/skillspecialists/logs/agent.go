@@ -35,6 +35,7 @@ type logSkill struct {
 	mode        string
 	keywords    []string
 	focus       string
+	matcher     func(*protocol.TaskEnvelope) bool
 }
 
 func New() *Agent {
@@ -72,8 +73,14 @@ func (s *logSkill) Description() string {
 }
 
 func (s *logSkill) Match(task *protocol.TaskEnvelope) bool {
-	if task == nil || len(s.keywords) == 0 {
-		return len(s.keywords) == 0
+	if task == nil {
+		return false
+	}
+	if s.matcher != nil {
+		return s.matcher(task)
+	}
+	if len(s.keywords) == 0 {
+		return true
 	}
 	return skills.ContainsAny(task.Goal, s.keywords...)
 }
@@ -86,10 +93,30 @@ func buildLogSkillRegistry() *skills.Registry {
 	registry, err := skills.NewRegistry(
 		AgentName,
 		&logSkill{
+			name:        "logs_service_offline_panic_trace",
+			description: "Trace service offline, pod restart, crashloop, and panic evidence from logs.",
+			mode:        "service_offline_panic_trace",
+			focus:       "Focus on panic, stack trace, nil pointer, restart reason, crashloop, oom, pod restart count, and the latest release.",
+			matcher:     matchesServiceOfflinePanicTask,
+			keywords: []string{
+				"service offline", "service down", "pod restart", "crashloop", "panic", "stack trace", "nil pointer", "oom", "restart",
+			},
+		},
+		&logSkill{
+			name:        "logs_api_failure_rate_investigation",
+			description: "Trace API failure rate spikes, 5xx responses, and upstream or downstream failures from logs.",
+			mode:        "api_failure_rate_investigation",
+			focus:       "Focus on api name, route, status code, response payload, 4xx, 5xx, upstream, downstream, timeout, and dependency failures.",
+			keywords: []string{
+				"api failure rate", "failure rate", "5xx", "4xx", "response error", "error rate", "endpoint", "route", "upstream", "downstream",
+			},
+		},
+		&logSkill{
 			name:        "logs_payment_timeout_trace",
 			description: "Trace payment, order, and checkout timeout evidence from logs.",
 			mode:        "payment_timeout_trace",
 			focus:       "Focus on payment, order, checkout, gateway timeout, retry, db timeout, and downstream latency.",
+			matcher:     matchesPaymentTimeoutTask,
 			keywords: []string{
 				"payment timeout", "checkout timeout", "order timeout", "支付超时", "订单超时",
 				"payment", "checkout", "order", "timeout", "504", "gateway timeout",
@@ -164,12 +191,13 @@ func runLogSkillWithFocus(ctx context.Context, task *protocol.TaskEnvelope, mode
 				summary += "; other tools degraded automatically"
 			}
 			return &protocol.TaskResult{
-				TaskID:     task.TaskID,
-				Agent:      AgentName,
-				Status:     protocol.ResultStatusSucceeded,
-				Summary:    summary,
-				Confidence: 0.74,
-				Evidence:   evidence,
+				TaskID:      task.TaskID,
+				Agent:       AgentName,
+				Status:      protocol.ResultStatusSucceeded,
+				Summary:     summary,
+				Confidence:  0.74,
+				Evidence:    evidence,
+				NextActions: buildLogNextActions(mode),
 				Metadata: map[string]any{
 					"tool_names":       toolNames,
 					"tool_errors":      toolErrors,
@@ -202,6 +230,7 @@ func runLogSkillWithFocus(ctx context.Context, task *protocol.TaskEnvelope, mode
 					Score:      0.44,
 				},
 			},
+			NextActions: buildLogNextActions(mode),
 			Metadata: map[string]any{
 				"tool_names":  toolNames,
 				"tool_errors": toolErrors,
@@ -248,6 +277,59 @@ func buildFocusedLogQuery(query string, focus string) string {
 		return focus
 	}
 	return query + "\nFocus: " + focus
+}
+
+func matchesServiceOfflinePanicTask(task *protocol.TaskEnvelope) bool {
+	if task == nil {
+		return false
+	}
+	goal := strings.TrimSpace(task.Goal)
+	if goal == "" {
+		return false
+	}
+	hasPanicSignal := skills.ContainsAny(goal, "panic", "stack", "stack trace", "nil pointer", "oom", "fatal")
+	hasOfflineSignal := skills.ContainsAny(goal, "offline", "down", "restart", "restarting", "crashloop", "pod", "service unavailable")
+	return hasPanicSignal && hasOfflineSignal
+}
+
+func matchesPaymentTimeoutTask(task *protocol.TaskEnvelope) bool {
+	if task == nil {
+		return false
+	}
+	goal := strings.TrimSpace(task.Goal)
+	if goal == "" {
+		return false
+	}
+	primaryFlowSignal := skills.ContainsAny(goal, "payment", "checkout", "billing", "gateway")
+	orderFlowSignal := skills.ContainsAny(goal, "order")
+	hasIssueSignal := skills.ContainsAny(goal, "timeout", "latency", "retry", "504", "slow", "downstream", "error", "errors", "fail", "failed", "exception")
+	if !(primaryFlowSignal || orderFlowSignal) {
+		return false
+	}
+	if skills.ContainsAny(goal, "api failure rate", "failure rate", "error rate", "5xx", "4xx", "endpoint", "route") {
+		return false
+	}
+	if primaryFlowSignal {
+		return true
+	}
+	return hasIssueSignal
+}
+
+func buildLogNextActions(mode string) []string {
+	switch mode {
+	case "service_offline_panic_trace":
+		return []string{
+			"compare the panic timestamp with the latest deploy or config change",
+			"check pod restart count, crashloop reason, and the failing stack frame owner",
+		}
+	case "api_failure_rate_investigation":
+		return []string{
+			"separate client errors from server errors and confirm the dominant status code family",
+			"check whether the failure spike correlates with an upstream or downstream dependency change",
+		}
+	default:
+		return nil
+	}
 }
 
 func mustNewSkillRegistry() *skills.Registry {
@@ -364,11 +446,12 @@ func runLogSkill(ctx context.Context, task *protocol.TaskEnvelope, mode string) 
 
 func degradedLogResult(task *protocol.TaskEnvelope, agentName, summary string, toolNames []string, toolErrors []string, mode string, focus string) *protocol.TaskResult {
 	return &protocol.TaskResult{
-		TaskID:     task.TaskID,
-		Agent:      agentName,
-		Status:     protocol.ResultStatusDegraded,
-		Summary:    summary,
-		Confidence: 0.28,
+		TaskID:      task.TaskID,
+		Agent:       agentName,
+		Status:      protocol.ResultStatusDegraded,
+		Summary:     summary,
+		Confidence:  0.28,
+		NextActions: buildLogNextActions(mode),
 		Metadata: map[string]any{
 			"tool_names":  toolNames,
 			"tool_errors": toolErrors,

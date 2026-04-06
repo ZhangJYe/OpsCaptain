@@ -233,3 +233,75 @@ func TestLogAgentUsesAuthFailureSkill(t *testing.T) {
 		t.Fatalf("expected auth failure focus in query, got %#v", payload)
 	}
 }
+
+func TestLogAgentUsesServiceOfflinePanicSkill(t *testing.T) {
+	oldDiscover := discoverLogTools
+	defer func() {
+		discoverLogTools = oldDiscover
+	}()
+
+	tool := &fakeLogTool{
+		name:   "query_logs",
+		desc:   "query service logs",
+		output: `[{"timestamp":"2026-04-04T10:00:00Z","level":"ERROR","service":"cart","message":"panic: nil pointer dereference"}]`,
+	}
+	discoverLogTools = func() ([]toolapi.BaseTool, error) {
+		return []toolapi.BaseTool{tool}, nil
+	}
+
+	agent := New()
+	task := protocol.NewRootTask("session-test", "The cart service went offline and pods keep restarting after a panic", agent.Name())
+	result, err := agent.Handle(context.Background(), task)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Metadata["skill_name"] != "logs_service_offline_panic_trace" {
+		t.Fatalf("expected logs_service_offline_panic_trace, got %#v", result.Metadata)
+	}
+	payload := tool.LastPayload(t)
+	if payload["skill_mode"] != "service_offline_panic_trace" {
+		t.Fatalf("expected service_offline_panic_trace mode, got %#v", payload)
+	}
+	if !strings.Contains(payload["query"].(string), "crashloop") || !strings.Contains(payload["query"].(string), "stack trace") {
+		t.Fatalf("expected panic focus in query, got %#v", payload)
+	}
+	if len(result.NextActions) == 0 {
+		t.Fatalf("expected next actions for panic trace, got %#v", result.NextActions)
+	}
+}
+
+func TestLogAgentUsesAPIFailureRateSkill(t *testing.T) {
+	oldDiscover := discoverLogTools
+	defer func() {
+		discoverLogTools = oldDiscover
+	}()
+
+	tool := &fakeLogTool{
+		name:   "query_logs",
+		desc:   "query service logs",
+		output: `[{"timestamp":"2026-04-04T10:00:00Z","level":"ERROR","service":"gateway","message":"POST /createOrder returned 502 from downstream order-service"}]`,
+	}
+	discoverLogTools = func() ([]toolapi.BaseTool, error) {
+		return []toolapi.BaseTool{tool}, nil
+	}
+
+	agent := New()
+	task := protocol.NewRootTask("session-test", "Investigate why the createOrder API failure rate is spiking with 5xx responses", agent.Name())
+	result, err := agent.Handle(context.Background(), task)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Metadata["skill_name"] != "logs_api_failure_rate_investigation" {
+		t.Fatalf("expected logs_api_failure_rate_investigation, got %#v", result.Metadata)
+	}
+	payload := tool.LastPayload(t)
+	if payload["skill_mode"] != "api_failure_rate_investigation" {
+		t.Fatalf("expected api_failure_rate_investigation mode, got %#v", payload)
+	}
+	if !strings.Contains(payload["query"].(string), "status code") || !strings.Contains(payload["query"].(string), "downstream") {
+		t.Fatalf("expected API failure focus in query, got %#v", payload)
+	}
+	if len(result.NextActions) == 0 {
+		t.Fatalf("expected next actions for API failure investigation, got %#v", result.NextActions)
+	}
+}
