@@ -1,9 +1,11 @@
 package service
 
 import (
+	"SuperBizAgent/internal/consts"
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"SuperBizAgent/internal/ai/agent/reporter"
@@ -23,7 +25,10 @@ var (
 	aiOpsRuntimes         = make(map[string]*runtime.Runtime)
 	newPersistentRuntime  = runtime.NewPersistent
 	registerAIOpsAgentsFn = registerAIOpsAgents
-	newMemoryService      = func() aiOpsMemory {
+	newApprovalQueue      = func() *ApprovalQueue {
+		return NewApprovalQueue()
+	}
+	newMemoryService = func() aiOpsMemory {
 		return NewMemoryService()
 	}
 )
@@ -34,19 +39,39 @@ type aiOpsMemory interface {
 	PersistOutcome(ctx context.Context, sessionID, query, summary string)
 }
 
-func RunAIOpsMultiAgent(ctx context.Context, query string) (string, []string, string, error) {
+func RunAIOpsMultiAgent(ctx context.Context, query string) (ExecutionResponse, error) {
 	approval := NewApprovalGate()
 	if decision := approval.Check(ctx, query); !decision.Approved {
-		return decision.Reason, []string{decision.Reason}, "", nil
+		if decision.Queued && decision.ApprovalRequest != nil {
+			return ExecutionResponse{
+				Content:           decision.Reason,
+				Detail:            []string{decision.Reason},
+				Status:            protocol.ResultStatusSucceeded,
+				ApprovalRequired:  true,
+				ApprovalRequestID: decision.ApprovalRequest.ID,
+				ApprovalStatus:    string(decision.ApprovalRequest.Status),
+				ExecutionPlan:     append([]string{}, decision.ApprovalRequest.ExecutionPlan...),
+			}, nil
+		}
+		return ExecutionResponse{
+			Content: decision.Reason,
+			Detail:  []string{decision.Reason},
+			Status:  protocol.ResultStatusSucceeded,
+		}, nil
+	}
+
+	if decision := GetDegradationDecision(ctx, "ai_ops"); decision.Enabled {
+		return NewDegradedExecutionResponse(decision), nil
 	}
 
 	rt, err := getOrCreateAIOpsRuntime(ctx)
 	if err != nil {
-		return "", nil, "", err
+		return ExecutionResponse{}, err
 	}
 
 	memorySvc := newMemoryService()
 	sessionID := memorySvc.ResolveSessionID(ctx)
+	ctx = context.WithValue(ctx, consts.CtxKeySessionID, sessionID)
 	memoryContext, refs, contextDetail := memorySvc.BuildContextPlan(ctx, "aiops", sessionID, query)
 
 	rootTask := protocol.NewRootTask(sessionID, query, supervisor.AgentName)
@@ -62,10 +87,48 @@ func RunAIOpsMultiAgent(ctx context.Context, query string) (string, []string, st
 	detail := append([]string{}, contextDetail...)
 	detail = append(detail, rt.DetailMessages(ctx, rootTask.TraceID)...)
 	if result == nil {
-		return "", detail, rootTask.TraceID, err
+		return ExecutionResponse{
+			Detail:  detail,
+			TraceID: rootTask.TraceID,
+		}, err
 	}
 	memorySvc.PersistOutcome(ctx, sessionID, query, result.Summary)
-	return result.Summary, detail, rootTask.TraceID, err
+	return ExecutionResponseFromResult(result, detail, rootTask.TraceID), err
+}
+
+func ListApprovalRequests(ctx context.Context, status string) ([]ApprovalRequest, error) {
+	return newApprovalQueue().List(ctx, parseApprovalStatus(status))
+}
+
+func RejectQueuedAIOpsRequest(ctx context.Context, requestID, reviewReason string) (*ApprovalRequest, error) {
+	return newApprovalQueue().Reject(ctx, requestID, reviewerIdentity(ctx), reviewReason)
+}
+
+func ApproveQueuedAIOpsRequest(ctx context.Context, requestID string) (ExecutionResponse, error) {
+	queue := newApprovalQueue()
+	request, err := queue.Approve(ctx, requestID, reviewerIdentity(ctx))
+	if err != nil {
+		return ExecutionResponse{}, err
+	}
+
+	runCtx := context.WithValue(ctx, consts.CtxKeyApprovalBypass, true)
+	runCtx = context.WithValue(runCtx, consts.CtxKeyApprovalRequestID, requestID)
+	if request.SessionID != "" {
+		runCtx = context.WithValue(runCtx, consts.CtxKeySessionID, request.SessionID)
+	}
+
+	response, err := RunAIOpsMultiAgent(runCtx, request.Query)
+	if err != nil {
+		return response, err
+	}
+	response.ApprovalRequestID = requestID
+	response.ApprovalStatus = string(ApprovalStatusApproved)
+	if response.TraceID != "" {
+		if markErr := queue.MarkExecuted(ctx, requestID, response.TraceID); markErr == nil {
+			response.ApprovalStatus = string(ApprovalStatusExecuted)
+		}
+	}
+	return response, nil
 }
 
 func GetAIOpsTrace(ctx context.Context, traceID string) ([]*protocol.TaskEvent, []string, error) {
@@ -135,4 +198,24 @@ func runtimeDataDir(ctx context.Context) string {
 		return v.String()
 	}
 	return filepath.Join(".", "var", "runtime")
+}
+
+func reviewerIdentity(ctx context.Context) string {
+	if userID, ok := ctx.Value(consts.CtxKeyUserID).(string); ok && userID != "" {
+		return userID
+	}
+	return "system"
+}
+
+func parseApprovalStatus(status string) ApprovalStatus {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case string(ApprovalStatusApproved):
+		return ApprovalStatusApproved
+	case string(ApprovalStatusRejected):
+		return ApprovalStatusRejected
+	case string(ApprovalStatusExecuted):
+		return ApprovalStatusExecuted
+	default:
+		return ApprovalStatusPending
+	}
 }

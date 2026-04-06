@@ -8,6 +8,45 @@ auth:
   rate_limit_per_minute: 20
   rate_limit_burst: 30
 
+safety:
+  prompt_guard:
+    enabled: true
+  output_filter:
+    enabled: true
+
+logging:
+  level: "DEBUG"
+
+tracing:
+  enabled: false
+  service_name: "oncallai-backend"
+  jaeger_endpoint: ""
+  sample_ratio: 1.0
+
+debug:
+  pprof_enabled: false
+  pprof_address: "127.0.0.1:6060"
+
+cache:
+  llm_response:
+    enabled: true
+    ttl_seconds: 300
+
+degradation:
+  kill_switch: false
+  redis_key: "oncallai:degradation:kill_switch"
+  message: "AI capabilities are temporarily degraded. Please retry later."
+
+approval:
+  enabled: true
+  redis_key_prefix: "oncallai:approval"
+  request_ttl_seconds: 86400
+
+cost:
+  daily_limit_tokens: 0
+  hourly_alert_tokens: 200000
+  user_daily_alert_tokens: 50000
+
 file_dir: "./docs/"
 
 upload:
@@ -29,6 +68,10 @@ ds_quick_chat_model:
   model: "GLM-4.5-AIR"
   api_key: "${GLM_API_KEY}"
   base_url: "https://open.bigmodel.cn/api/paas/v4"
+
+llm:
+  max_concurrent_calls: 10
+  concurrent_wait_timeout_ms: 5000
 
 doubao_embedding_model:
   model: "BAAI/bge-m3"
@@ -57,6 +100,7 @@ retriever:
 multi_agent:
   data_dir: "./var/runtime"
   chat_route_enabled: true
+  agent_timeout_ms: 30000
   metrics_query_timeout_ms: 5000
   knowledge_query_timeout_ms: 5000
   knowledge_init_failure_ttl_ms: 15000
@@ -73,6 +117,14 @@ mcp:
 
 mysql:
   dsn: ""
+  allowed_tables: []
+  query_timeout_ms: 10000
+  max_rows: 100
 
 prometheus:
   address: ""
+
+redis:
+  default:
+    address: "127.0.0.1:6379"
+    db: 0

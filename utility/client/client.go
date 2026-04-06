@@ -5,9 +5,16 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
+	"sync"
 
 	cli "github.com/milvus-io/milvus-sdk-go/v2/client"
 	"github.com/milvus-io/milvus-sdk-go/v2/entity"
+)
+
+var (
+	milvusClientsMu sync.Mutex
+	milvusClients   []cli.Client
 )
 
 func NewMilvusClient(ctx context.Context) (cli.Client, error) {
@@ -47,6 +54,7 @@ func NewMilvusClient(ctx context.Context) (cli.Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to agent database: %w", err)
 	}
+	registerMilvusClient(agentClient)
 
 	collections, err := agentClient.ListCollections(ctx)
 	if err != nil {
@@ -89,6 +97,36 @@ func NewMilvusClient(ctx context.Context) (cli.Client, error) {
 	}
 
 	return agentClient, nil
+}
+
+func CloseAllMilvusClients() error {
+	milvusClientsMu.Lock()
+	clients := milvusClients
+	milvusClients = nil
+	milvusClientsMu.Unlock()
+
+	var errs []string
+	for _, c := range clients {
+		if c == nil {
+			continue
+		}
+		if err := c.Close(); err != nil {
+			errs = append(errs, err.Error())
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("milvus close failed: %s", strings.Join(errs, "; "))
+	}
+	return nil
+}
+
+func registerMilvusClient(c cli.Client) {
+	if c == nil {
+		return
+	}
+	milvusClientsMu.Lock()
+	milvusClients = append(milvusClients, c)
+	milvusClientsMu.Unlock()
 }
 
 func BuildMilvusFields(ctx context.Context) []*entity.Field {

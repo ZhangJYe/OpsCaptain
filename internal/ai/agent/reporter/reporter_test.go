@@ -16,26 +16,24 @@ func TestReporterBuildsToolItemContextAndEmitsTrace(t *testing.T) {
 		t.Fatalf("register reporter: %v", err)
 	}
 
-	task := protocol.NewRootTask("sess-reporter", "请分析当前告警", AgentName)
+	task := protocol.NewRootTask("sess-reporter", "analyze current alerts", AgentName)
 	task.Input = map[string]any{
-		"query":         "请分析当前告警",
+		"query":         "analyze current alerts",
 		"response_mode": "chat",
 		"results": []*protocol.TaskResult{
 			{
 				TaskID:     "metrics-task",
 				Agent:      "metrics",
 				Status:     protocol.ResultStatusSucceeded,
-				Summary:    "发现 1 条告警。",
+				Summary:    "found 1 alert",
 				Confidence: 0.8,
-				Evidence: []protocol.EvidenceItem{
-					{
-						SourceType: "prometheus",
-						SourceID:   "HighLatency",
-						Title:      "HighLatency",
-						Snippet:    "payment-service 延迟过高",
-						Score:      0.8,
-					},
-				},
+				Evidence: []protocol.EvidenceItem{{
+					SourceType: "prometheus",
+					SourceID:   "HighLatency",
+					Title:      "HighLatency",
+					Snippet:    "payment-service latency is high",
+					Score:      0.8,
+				}},
 			},
 		},
 	}
@@ -47,7 +45,7 @@ func TestReporterBuildsToolItemContextAndEmitsTrace(t *testing.T) {
 	if result == nil {
 		t.Fatal("expected result")
 	}
-	if !strings.Contains(result.Summary, "可参考证据") {
+	if !strings.Contains(result.Summary, "Evidence:") {
 		t.Fatalf("expected chat response to include evidence section, got %q", result.Summary)
 	}
 	if got, _ := result.Metadata["tool_item_count"].(int); got != 1 {

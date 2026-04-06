@@ -6,6 +6,7 @@ import (
 	"SuperBizAgent/internal/ai/contextengine"
 	aiservice "SuperBizAgent/internal/ai/service"
 	"SuperBizAgent/internal/consts"
+	"SuperBizAgent/utility/cache"
 	"SuperBizAgent/utility/log_call_back"
 	"SuperBizAgent/utility/mem"
 	"context"
@@ -22,6 +23,7 @@ var (
 	buildChatAgent             = chat_pipeline.BuildChatAgent
 	runChatMultiAgent          = aiservice.RunChatMultiAgent
 	shouldUseMultiAgentForChat = aiservice.ShouldUseMultiAgentForChat
+	getDegradationDecision     = aiservice.GetDegradationDecision
 )
 
 func acquireSessionLock(id string) *sync.Mutex {
@@ -46,28 +48,63 @@ func (c *ControllerV1) Chat(ctx context.Context, req *v1.ChatReq) (res *v1.ChatR
 	requestID := guid.S()
 	ctx = context.WithValue(ctx, consts.CtxKeySessionID, id)
 	ctx = context.WithValue(ctx, consts.CtxKeyRequestID, requestID)
+	ctx = enrichRequestContext(ctx, id, requestID)
 
 	g.Log().Infof(ctx, "[session:%s][req:%s] Chat request received, question length: %d", id, requestID, len(msg))
+
+	if err := rejectSuspiciousPrompt(ctx, msg); err != nil {
+		return nil, err
+	}
+	if decision := getDegradationDecision(ctx, "chat"); decision.Enabled {
+		return &v1.ChatRes{
+			Answer:            decision.Message,
+			Detail:            []string{decision.Reason},
+			Mode:              "degraded",
+			Degraded:          true,
+			DegradationReason: decision.Reason,
+		}, nil
+	}
 
 	mu := acquireSessionLock(id)
 	defer releaseSessionLock(id, mu)
 
 	sessionMem := mem.GetSimpleMemory(id)
-	if shouldUseMultiAgentForChat(ctx, msg) {
-		answer, detail, traceID, err := runChatMultiAgent(ctx, id, msg)
+	useMultiAgent := shouldUseMultiAgentForChat(ctx, msg)
+	if !useMultiAgent {
+		if entry, found, cacheErr := cache.LoadChatResponse(ctx, id, msg); cacheErr != nil {
+			g.Log().Warningf(ctx, "[session:%s][req:%s] cache lookup failed: %v", id, requestID, cacheErr)
+		} else if found {
+			answer, detail := filterAssistantPayload(ctx, entry.Answer, entry.Detail)
+			return &v1.ChatRes{
+				Answer: answer,
+				Detail: detail,
+				Mode:   "cache",
+				Cached: true,
+			}, nil
+		}
+	}
+
+	if useMultiAgent {
+		response, err := runChatMultiAgent(ctx, id, msg)
 		if err != nil {
+			if fallback := userFacingChatError(ctx, err); fallback != nil {
+				return fallback, nil
+			}
 			g.Log().Errorf(ctx, "[session:%s][req:%s] Chat multi-agent failed: %v", id, requestID, err)
 			return nil, err
 		}
+		answer, detail := filterAssistantPayload(ctx, response.Content, response.Detail)
 
 		g.Log().Infof(ctx, "[session:%s][req:%s] Chat multi-agent completed, answer length: %d, turns: %d, trace: %s",
-			id, requestID, len(answer), sessionMem.TurnCount(), traceID)
+			id, requestID, len(answer), sessionMem.TurnCount(), response.TraceID)
 
 		return &v1.ChatRes{
-			Answer:  answer,
-			TraceID: traceID,
-			Detail:  detail,
-			Mode:    "multi_agent",
+			Answer:            answer,
+			TraceID:           response.TraceID,
+			Detail:            detail,
+			Mode:              "multi_agent",
+			Degraded:          response.Degraded(),
+			DegradationReason: response.DegradationReason,
 		}, nil
 	}
 
@@ -89,18 +126,29 @@ func (c *ControllerV1) Chat(ctx context.Context, req *v1.ChatReq) (res *v1.ChatR
 
 	out, err := runner.Invoke(ctx, userMessage, compose.WithCallbacks(log_call_back.LogCallback(nil)))
 	if err != nil {
+		if fallback := userFacingChatError(ctx, err); fallback != nil {
+			return fallback, nil
+		}
 		g.Log().Errorf(ctx, "[session:%s][req:%s] Agent invoke failed: %v", id, requestID, err)
 		return nil, err
 	}
 
-	memorySvc.PersistOutcome(ctx, id, msg, out.Content)
+	answer, detail := filterAssistantPayload(ctx, out.Content, contextDetail)
+	memorySvc.PersistOutcome(ctx, id, msg, answer)
+	if cacheErr := cache.StoreChatResponse(ctx, id, msg, cache.ChatResponseEntry{
+		Answer: answer,
+		Detail: detail,
+		Mode:   "legacy",
+	}); cacheErr != nil {
+		g.Log().Warningf(ctx, "[session:%s][req:%s] cache store failed: %v", id, requestID, cacheErr)
+	}
 
 	g.Log().Infof(ctx, "[session:%s][req:%s] Chat completed, answer length: %d, turns: %d",
-		id, requestID, len(out.Content), sessionMem.TurnCount())
+		id, requestID, len(answer), sessionMem.TurnCount())
 
 	res = &v1.ChatRes{
-		Answer: out.Content,
-		Detail: contextDetail,
+		Answer: answer,
+		Detail: detail,
 		Mode:   "legacy",
 	}
 	return res, nil

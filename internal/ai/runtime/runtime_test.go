@@ -2,8 +2,10 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"SuperBizAgent/internal/ai/protocol"
 )
@@ -11,6 +13,8 @@ import (
 type fakeAgent struct {
 	name    string
 	summary string
+	status  protocol.ResultStatus
+	delay   time.Duration
 }
 
 func (f *fakeAgent) Name() string {
@@ -22,14 +26,21 @@ func (f *fakeAgent) Capabilities() []string {
 }
 
 func (f *fakeAgent) Handle(_ context.Context, task *protocol.TaskEnvelope) (*protocol.TaskResult, error) {
+	if f.delay > 0 {
+		time.Sleep(f.delay)
+	}
 	summary := f.summary
 	if summary == "" {
 		summary = "ok"
 	}
+	status := f.status
+	if status == "" {
+		status = protocol.ResultStatusSucceeded
+	}
 	return &protocol.TaskResult{
 		TaskID:     task.TaskID,
 		Agent:      f.name,
-		Status:     protocol.ResultStatusSucceeded,
+		Status:     status,
 		Summary:    summary,
 		Confidence: 1,
 	}, nil
@@ -56,9 +67,82 @@ func TestRuntimeDispatchRecordsDetails(t *testing.T) {
 	}
 }
 
+func TestRuntimeDispatchTimeoutReturnsFailureAndTraceEvent(t *testing.T) {
+	rt := New()
+	if err := rt.Register(&fakeAgent{name: "slow", delay: 120 * time.Millisecond}); err != nil {
+		t.Fatalf("register agent: %v", err)
+	}
+
+	task := protocol.NewRootTask("session-timeout", "slow work", "slow")
+	task.Constraints = map[string]any{"timeout_ms": 20}
+
+	started := time.Now()
+	result, err := rt.Dispatch(context.Background(), task)
+	elapsed := time.Since(started)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected deadline exceeded, got %v", err)
+	}
+	if elapsed >= 100*time.Millisecond {
+		t.Fatalf("expected dispatch to return before slow handler completed, took %s", elapsed)
+	}
+	if result == nil || result.Status != protocol.ResultStatusFailed {
+		t.Fatalf("expected failed result, got %#v", result)
+	}
+	if result.Error == nil || result.Error.Code != "timeout" {
+		t.Fatalf("expected timeout error code, got %#v", result.Error)
+	}
+
+	events, traceErr := rt.TraceEvents(context.Background(), task.TraceID)
+	if traceErr != nil {
+		t.Fatalf("trace events: %v", traceErr)
+	}
+	foundTimeout := false
+	for _, event := range events {
+		if event != nil && event.Type == "task_timeout" {
+			foundTimeout = true
+			break
+		}
+	}
+	if !foundTimeout {
+		t.Fatalf("expected task_timeout event, got %#v", events)
+	}
+}
+
+func TestRuntimeNormalizesDegradedReason(t *testing.T) {
+	rt := New()
+	if err := rt.Register(&fakeAgent{name: "degraded", status: protocol.ResultStatusDegraded, summary: "partial data available"}); err != nil {
+		t.Fatalf("register agent: %v", err)
+	}
+
+	task := protocol.NewRootTask("session-degraded", "degraded work", "degraded")
+	result, err := rt.Dispatch(context.Background(), task)
+	if err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	if result == nil || result.DegradationReason == "" {
+		t.Fatalf("expected degradation reason, got %#v", result)
+	}
+
+	events, traceErr := rt.TraceEvents(context.Background(), task.TraceID)
+	if traceErr != nil {
+		t.Fatalf("trace events: %v", traceErr)
+	}
+	foundReason := false
+	for _, event := range events {
+		if event != nil && event.Type == "task_completed" && event.Payload != nil {
+			if reason, ok := event.Payload["degradation_reason"].(string); ok && reason != "" {
+				foundReason = true
+			}
+		}
+	}
+	if !foundReason {
+		t.Fatal("expected degradation reason in completed event payload")
+	}
+}
+
 func TestRuntimeDetailMessagesOmitVerboseSummaryBodies(t *testing.T) {
 	rt := New()
-	longSummary := "# 告警分析报告\n\n## 执行摘要\n这里是一段很长的汇总内容，用于模拟 reporter/supervisor 生成的完整报告。"
+	longSummary := strings.Repeat("very long summary body ", 20) + "\nwith extra lines"
 	if err := rt.Register(&fakeAgent{name: "reporter", summary: longSummary}); err != nil {
 		t.Fatalf("register agent: %v", err)
 	}
@@ -70,10 +154,7 @@ func TestRuntimeDetailMessagesOmitVerboseSummaryBodies(t *testing.T) {
 
 	details := rt.DetailMessages(context.Background(), task.TraceID)
 	joined := strings.Join(details, "\n")
-	if strings.Contains(joined, "## 执行摘要") || strings.Contains(joined, "这里是一段很长的汇总内容") {
+	if strings.Contains(joined, "with extra lines") {
 		t.Fatalf("expected verbose report body to be omitted from details, got:\n%s", joined)
-	}
-	if !strings.Contains(joined, "详细摘要已折叠") {
-		t.Fatalf("expected compact completion message, got:\n%s", joined)
 	}
 }

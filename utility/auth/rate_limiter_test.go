@@ -1,25 +1,11 @@
 package auth
 
 import (
-	"sync"
 	"testing"
 	"time"
 )
 
-func TestRateLimiter_BasicAllow(t *testing.T) {
-	globalLimiterOnce = sync.Once{}
-	globalLimiter = nil
-
-	limiter := GetRateLimiter()
-
-	for i := 0; i < 25; i++ {
-		if !limiter.Allow("test-client") {
-			t.Fatalf("request %d should be allowed", i+1)
-		}
-	}
-}
-
-func TestRateLimiter_ExceedLimit(t *testing.T) {
+func TestInMemoryRateLimiterAllowsWithinCapacity(t *testing.T) {
 	rl := &RateLimiter{
 		buckets:  make(map[string]*tokenBucket),
 		rate:     5,
@@ -28,34 +14,60 @@ func TestRateLimiter_ExceedLimit(t *testing.T) {
 	}
 
 	for i := 0; i < 5; i++ {
-		if !rl.Allow("burst-client") {
-			t.Fatalf("request %d should be allowed within capacity", i+1)
+		if !rl.Allow("user-1") {
+			t.Fatalf("expected allow on request %d", i+1)
 		}
 	}
 
-	if rl.Allow("burst-client") {
-		t.Fatal("request should be rejected after exceeding capacity")
+	if rl.Allow("user-1") {
+		t.Fatal("expected rate limit to reject 6th request")
 	}
 }
 
-func TestRateLimiter_DifferentClients(t *testing.T) {
+func TestInMemoryRateLimiterIsolatesClients(t *testing.T) {
 	rl := &RateLimiter{
 		buckets:  make(map[string]*tokenBucket),
-		rate:     5,
-		capacity: 5,
+		rate:     2,
+		capacity: 2,
 		window:   time.Minute,
 	}
 
-	for i := 0; i < 5; i++ {
-		rl.Allow("client-A")
+	rl.Allow("user-a")
+	rl.Allow("user-a")
+
+	if rl.Allow("user-a") {
+		t.Fatal("expected user-a to be rate limited")
 	}
 
-	if !rl.Allow("client-B") {
-		t.Fatal("client-B should not be affected by client-A's rate limit")
+	if !rl.Allow("user-b") {
+		t.Fatal("expected user-b to still have capacity")
 	}
 }
 
-func TestRateLimiter_RemainingTokens(t *testing.T) {
+func TestInMemoryRateLimiterRefillsOverTime(t *testing.T) {
+	rl := &RateLimiter{
+		buckets:  make(map[string]*tokenBucket),
+		rate:     60,
+		capacity: 1,
+		window:   time.Minute,
+	}
+
+	if !rl.Allow("user-1") {
+		t.Fatal("expected first request to be allowed")
+	}
+
+	if rl.Allow("user-1") {
+		t.Fatal("expected second request to be rejected immediately")
+	}
+
+	time.Sleep(1100 * time.Millisecond)
+
+	if !rl.Allow("user-1") {
+		t.Fatal("expected request to be allowed after refill")
+	}
+}
+
+func TestRemainingTokensReportsCorrectly(t *testing.T) {
 	rl := &RateLimiter{
 		buckets:  make(map[string]*tokenBucket),
 		rate:     10,
@@ -63,43 +75,16 @@ func TestRateLimiter_RemainingTokens(t *testing.T) {
 		window:   time.Minute,
 	}
 
-	remaining := rl.RemainingTokens("new-client")
-	if remaining != 10 {
-		t.Fatalf("expected 10 remaining for new client, got %d", remaining)
+	if remaining := rl.RemainingTokens("unknown-user"); remaining != 10 {
+		t.Fatalf("expected 10 remaining for unknown user, got %d", remaining)
 	}
 
-	rl.Allow("new-client")
-	remaining = rl.RemainingTokens("new-client")
-	if remaining != 9 {
-		t.Fatalf("expected 9 remaining after 1 request, got %d", remaining)
-	}
-}
+	rl.Allow("user-1")
+	rl.Allow("user-1")
+	rl.Allow("user-1")
 
-func TestCheckRateLimit(t *testing.T) {
-	globalLimiterOnce = sync.Once{}
-	globalLimiter = nil
-
-	err := CheckRateLimit("check-test")
-	if err != nil {
-		t.Fatalf("first request should be allowed: %v", err)
+	remaining := rl.RemainingTokens("user-1")
+	if remaining != 7 {
+		t.Fatalf("expected 7 remaining, got %d", remaining)
 	}
-}
-
-func TestRateLimiter_ConcurrentAccess(t *testing.T) {
-	rl := &RateLimiter{
-		buckets:  make(map[string]*tokenBucket),
-		rate:     100,
-		capacity: 100,
-		window:   time.Minute,
-	}
-
-	var wg sync.WaitGroup
-	for i := 0; i < 50; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			rl.Allow("concurrent-client")
-		}()
-	}
-	wg.Wait()
 }

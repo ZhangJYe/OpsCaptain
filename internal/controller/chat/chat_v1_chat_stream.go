@@ -33,12 +33,23 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 	ctx = context.WithValue(ctx, consts.CtxKeySessionID, id)
 	ctx = context.WithValue(ctx, consts.CtxKeyRequestID, requestID)
 	ctx = context.WithValue(ctx, consts.CtxKeyClientID, req.Id)
+	ctx = enrichRequestContext(ctx, id, requestID)
 
 	g.Log().Infof(ctx, "[session:%s][req:%s] ChatStream request received, question length: %d", id, requestID, len(msg))
+
+	if err := rejectSuspiciousPrompt(ctx, msg); err != nil {
+		return nil, err
+	}
 
 	client, err := c.service.Create(ctx, g.RequestFromCtx(ctx))
 	if err != nil {
 		return nil, err
+	}
+	if decision := getDegradationDecision(ctx, "chat_stream"); decision.Enabled {
+		sendChatStreamMeta(client, "degraded", "", []string{decision.Reason}, true, decision.Reason)
+		streamTextToClient(client, decision.Message)
+		client.SendToClient("done", "Stream completed")
+		return &v1.ChatStreamRes{}, nil
 	}
 
 	mu := acquireSessionLock(id)
@@ -46,17 +57,24 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 
 	sessionMem := mem.GetSimpleMemory(id)
 	if shouldUseMultiAgentForChat(ctx, msg) {
-		answer, detail, traceID, err := runChatMultiAgent(ctx, id, msg)
+		response, err := runChatMultiAgent(ctx, id, msg)
 		if err != nil {
+			if fallback := userFacingChatError(ctx, err); fallback != nil {
+				sendChatStreamMeta(client, fallback.Mode, "", fallback.Detail, fallback.Degraded, fallback.DegradationReason)
+				streamTextToClient(client, fallback.Answer)
+				client.SendToClient("done", "Stream completed")
+				return &v1.ChatStreamRes{}, nil
+			}
 			g.Log().Errorf(ctx, "[session:%s][req:%s] ChatStream multi-agent failed: %v", id, requestID, err)
 			client.SendToClient("error", err.Error())
 			return nil, err
 		}
-		sendChatStreamMeta(client, "multi_agent", traceID, detail)
+		answer, detail := filterAssistantPayload(ctx, response.Content, response.Detail)
+		sendChatStreamMeta(client, "multi_agent", response.TraceID, detail, response.Degraded(), response.DegradationReason)
 		streamTextToClient(client, answer)
 		client.SendToClient("done", "Stream completed")
 		g.Log().Infof(ctx, "[session:%s][req:%s] ChatStream multi-agent completed, answer length: %d, turns: %d, trace: %s",
-			id, requestID, len(answer), sessionMem.TurnCount(), traceID)
+			id, requestID, len(answer), sessionMem.TurnCount(), response.TraceID)
 		return &v1.ChatStreamRes{}, nil
 	}
 
@@ -72,13 +90,26 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 
 	runner, err := buildChatAgent(ctx)
 	if err != nil {
+		if fallback := userFacingChatError(ctx, err); fallback != nil {
+			sendChatStreamMeta(client, fallback.Mode, "", fallback.Detail, fallback.Degraded, fallback.DegradationReason)
+			streamTextToClient(client, fallback.Answer)
+			client.SendToClient("done", "Stream completed")
+			return &v1.ChatStreamRes{}, nil
+		}
 		g.Log().Errorf(ctx, "[session:%s][req:%s] BuildChatAgent failed: %v", id, requestID, err)
 		client.SendToClient("error", err.Error())
 		return nil, err
 	}
-	sendChatStreamMeta(client, "legacy", "", contextDetail)
+	_, filteredDetail := filterAssistantPayload(ctx, "", contextDetail)
+	sendChatStreamMeta(client, "legacy", "", filteredDetail, false, "")
 	sr, err := runner.Stream(ctx, userMessage, compose.WithCallbacks(log_call_back.LogCallback(nil)))
 	if err != nil {
+		if fallback := userFacingChatError(ctx, err); fallback != nil {
+			sendChatStreamMeta(client, fallback.Mode, "", fallback.Detail, fallback.Degraded, fallback.DegradationReason)
+			streamTextToClient(client, fallback.Answer)
+			client.SendToClient("done", "Stream completed")
+			return &v1.ChatStreamRes{}, nil
+		}
 		g.Log().Errorf(ctx, "[session:%s][req:%s] Agent stream failed: %v", id, requestID, err)
 		client.SendToClient("error", err.Error())
 		return nil, err
@@ -107,8 +138,9 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 			client.SendToClient("error", err.Error())
 			return &v1.ChatStreamRes{}, nil
 		}
-		fullResponse.WriteString(chunk.Content)
-		client.SendToClient("message", chunk.Content)
+		filteredChunk, _ := filterAssistantPayload(ctx, chunk.Content, nil)
+		fullResponse.WriteString(filteredChunk)
+		client.SendToClient("message", filteredChunk)
 	}
 }
 
@@ -137,14 +169,16 @@ func splitStreamChunks(text string, maxRunes int) []string {
 	return chunks
 }
 
-func sendChatStreamMeta(client *sse.Client, mode, traceID string, details []string) {
+func sendChatStreamMeta(client *sse.Client, mode, traceID string, details []string, degraded bool, degradationReason string) {
 	if client == nil {
 		return
 	}
 	payload, err := json.Marshal(map[string]any{
-		"mode":     mode,
-		"trace_id": traceID,
-		"detail":   details,
+		"mode":               mode,
+		"trace_id":           traceID,
+		"detail":             details,
+		"degraded":           degraded,
+		"degradation_reason": degradationReason,
 	})
 	if err != nil {
 		return

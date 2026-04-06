@@ -77,18 +77,19 @@ type EvidenceItem struct {
 }
 
 type TaskResult struct {
-	TaskID       string         `json:"task_id"`
-	Agent        string         `json:"agent"`
-	Status       ResultStatus   `json:"status"`
-	Summary      string         `json:"summary"`
-	Confidence   float64        `json:"confidence"`
-	Evidence     []EvidenceItem `json:"evidence,omitempty"`
-	ArtifactRefs []ArtifactRef  `json:"artifact_refs,omitempty"`
-	NextActions  []string       `json:"next_actions,omitempty"`
-	Metadata     map[string]any `json:"metadata,omitempty"`
-	Error        *TaskError     `json:"error,omitempty"`
-	StartedAt    int64          `json:"started_at"`
-	FinishedAt   int64          `json:"finished_at"`
+	TaskID            string         `json:"task_id"`
+	Agent             string         `json:"agent"`
+	Status            ResultStatus   `json:"status"`
+	Summary           string         `json:"summary"`
+	Confidence        float64        `json:"confidence"`
+	DegradationReason string         `json:"degradation_reason,omitempty"`
+	Evidence          []EvidenceItem `json:"evidence,omitempty"`
+	ArtifactRefs      []ArtifactRef  `json:"artifact_refs,omitempty"`
+	NextActions       []string       `json:"next_actions,omitempty"`
+	Metadata          map[string]any `json:"metadata,omitempty"`
+	Error             *TaskError     `json:"error,omitempty"`
+	StartedAt         int64          `json:"started_at"`
+	FinishedAt        int64          `json:"finished_at"`
 }
 
 type TaskEvent struct {

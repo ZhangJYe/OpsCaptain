@@ -1,6 +1,7 @@
 package resilience
 
 import (
+	"SuperBizAgent/utility/metrics"
 	"context"
 	"fmt"
 	"sync"
@@ -19,7 +20,7 @@ type CallOption struct {
 var DefaultCallOption = CallOption{
 	Timeout:    30 * time.Second,
 	MaxRetries: 2,
-	RetryDelay: 500 * time.Millisecond,
+	RetryDelay: time.Second,
 	Name:       "unknown",
 }
 
@@ -33,6 +34,7 @@ const (
 
 type CircuitBreaker struct {
 	mu              sync.Mutex
+	name            string
 	state           CircuitState
 	failures        int
 	successes       int
@@ -62,6 +64,7 @@ func (cb *CircuitBreaker) Allow() bool {
 		if time.Since(cb.lastFailureTime) > cb.resetTimeout {
 			cb.state = StateHalfOpen
 			cb.successes = 0
+			cb.observeStateLocked()
 			return true
 		}
 		return false
@@ -81,9 +84,11 @@ func (cb *CircuitBreaker) RecordSuccess() {
 		if cb.successes >= cb.halfOpenMax {
 			cb.state = StateClosed
 			cb.failures = 0
+			cb.observeStateLocked()
 		}
 	case StateClosed:
 		cb.failures = 0
+		cb.observeStateLocked()
 	}
 }
 
@@ -98,9 +103,11 @@ func (cb *CircuitBreaker) RecordFailure() {
 	case StateClosed:
 		if cb.failures >= cb.threshold {
 			cb.state = StateOpen
+			cb.observeStateLocked()
 		}
 	case StateHalfOpen:
 		cb.state = StateOpen
+		cb.observeStateLocked()
 	}
 }
 
@@ -129,11 +136,14 @@ func GetBreaker(name string) *CircuitBreaker {
 		return cb
 	}
 	cb = NewCircuitBreaker(5, 30*time.Second)
+	cb.name = name
 	breakers[name] = cb
+	metrics.SetCircuitBreakerState(name, breakerMetricValue(cb.State()))
 	return cb
 }
 
 func Execute[T any](ctx context.Context, opt CallOption, fn func(ctx context.Context) (T, error)) (T, error) {
+	opt = normalizeCallOption(opt)
 	cb := GetBreaker(opt.Name)
 
 	if !cb.Allow() {
@@ -145,7 +155,10 @@ func Execute[T any](ctx context.Context, opt CallOption, fn func(ctx context.Con
 	for attempt := 0; attempt <= opt.MaxRetries; attempt++ {
 		if attempt > 0 {
 			g.Log().Infof(ctx, "[resilience][%s] retry attempt %d/%d", opt.Name, attempt, opt.MaxRetries)
-			time.Sleep(opt.RetryDelay * time.Duration(attempt))
+			if !sleepWithContext(ctx, opt.RetryDelay*time.Duration(attempt)) {
+				var zero T
+				return zero, ctx.Err()
+			}
 		}
 
 		callCtx, cancel := context.WithTimeout(ctx, opt.Timeout)
@@ -171,4 +184,50 @@ func ExecuteVoid(ctx context.Context, opt CallOption, fn func(ctx context.Contex
 		return struct{}{}, fn(ctx)
 	})
 	return err
+}
+
+func (cb *CircuitBreaker) observeStateLocked() {
+	metrics.SetCircuitBreakerState(cb.name, breakerMetricValue(cb.state))
+}
+
+func breakerMetricValue(state CircuitState) float64 {
+	switch state {
+	case StateOpen:
+		return 1
+	case StateHalfOpen:
+		return 2
+	default:
+		return 0
+	}
+}
+
+func normalizeCallOption(opt CallOption) CallOption {
+	if opt.Timeout <= 0 {
+		opt.Timeout = DefaultCallOption.Timeout
+	}
+	if opt.MaxRetries < 0 {
+		opt.MaxRetries = DefaultCallOption.MaxRetries
+	}
+	if opt.RetryDelay <= 0 {
+		opt.RetryDelay = DefaultCallOption.RetryDelay
+	}
+	if opt.Name == "" {
+		opt.Name = DefaultCallOption.Name
+	}
+	return opt
+}
+
+func sleepWithContext(ctx context.Context, delay time.Duration) bool {
+	if delay <= 0 {
+		return true
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
 }

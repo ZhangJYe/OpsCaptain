@@ -31,7 +31,7 @@ func OpenAIForDeepSeekV31Think(ctx context.Context) (cm model.ToolCallingChatMod
 	if err != nil {
 		return nil, err
 	}
-	return cm, nil
+	return wrapToolCallingChatModel(cm, config.Model), nil
 }
 
 func OpenAIForDeepSeekV3Quick(ctx context.Context) (cm model.ToolCallingChatModel, err error) {
@@ -56,5 +56,5 @@ func OpenAIForDeepSeekV3Quick(ctx context.Context) (cm model.ToolCallingChatMode
 	if err != nil {
 		return nil, err
 	}
-	return cm, nil
+	return wrapToolCallingChatModel(cm, config.Model), nil
 }

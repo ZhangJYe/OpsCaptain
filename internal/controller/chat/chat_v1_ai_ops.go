@@ -3,46 +3,76 @@ package chat
 import (
 	"SuperBizAgent/api/chat/v1"
 	"SuperBizAgent/internal/ai/service"
+	"SuperBizAgent/internal/consts"
 	"context"
 	"errors"
+
+	"github.com/gogf/gf/v2/util/guid"
 )
 
 var runAIOpsMultiAgent = service.RunAIOpsMultiAgent
 
 func (c *ControllerV1) AIOps(ctx context.Context, req *v1.AIOpsReq) (res *v1.AIOpsRes, err error) {
-	query := req.Query
-	if query == "" {
-		query = `你是一个智能的服务告警分析助手，请按照以下步骤执行分析：
-1. 调用 query_prometheus_alerts 获取所有活跃告警。如果该工具返回失败或无法连接，直接跳过告警查询步骤并在报告中注明。
-2. 对每个告警，调用 query_internal_docs 查找对应的处理方案。
-3. 完全遵循内部文档的内容进行分析，不使用文档外的信息。
-4. 涉及时间参数时，先通过 get_current_time 获取当前时间。
-5. 如果某个工具不可用或返回错误，跳过该步骤并在报告中说明，不要反复重试。
-6. 生成告警运维分析报告，格式如下：
-# 告警分析报告
-## 活跃告警清单
-## 告警根因分析
-## 处理方案
-## 结论`
-	}
+	requestID := guid.S()
+	ctx = context.WithValue(ctx, consts.CtxKeyRequestID, requestID)
+	ctx = enrichRequestContext(ctx, "", requestID)
 
-	resp, detail, traceID, err := runAIOpsMultiAgent(ctx, query)
-	if err != nil {
+	if err := rejectSuspiciousPrompt(ctx, req.Query); err != nil {
 		return nil, err
 	}
-	if resp == "" {
-		if len(detail) > 0 && detail[0] != "" {
-			resp = detail[0]
+	if decision := getDegradationDecision(ctx, "ai_ops"); decision.Enabled {
+		return &v1.AIOpsRes{
+			Result:            decision.Message,
+			Detail:            []string{decision.Reason},
+			Degraded:          true,
+			DegradationReason: decision.Reason,
+		}, nil
+	}
+
+	query := req.Query
+	if query == "" {
+		query = `You are an AIOps incident assistant. Follow this order:
+1. Query active Prometheus alerts.
+2. For each alert, look up the matching internal docs or runbook.
+3. Use only tool results and internal docs for analysis.
+4. If a tool fails, skip that step and call it out once in the report.
+5. Produce a markdown report with sections: Active Alerts, Root Cause Analysis, Mitigation, Conclusion.`
+	}
+
+	response, err := runAIOpsMultiAgent(ctx, query)
+	if err != nil {
+		if fallback := userFacingAIOpsError(ctx, err); fallback != nil {
+			return fallback, nil
+		}
+		return nil, err
+	}
+
+	result := response.Content
+	if result == "" {
+		if len(response.Detail) > 0 && response.Detail[0] != "" {
+			result = response.Detail[0]
 		} else {
-			return nil, errors.New("内部错误")
+			return nil, errors.New("internal error")
 		}
 	}
-	res = &v1.AIOpsRes{
-		TraceID: traceID,
-		Result: resp,
-		Detail: detail,
+	result, detail := filterAssistantPayload(ctx, result, response.Detail)
+	executionPlan := make([]string, 0, len(response.ExecutionPlan))
+	for _, step := range response.ExecutionPlan {
+		filtered, _ := filterAssistantPayload(ctx, step, nil)
+		executionPlan = append(executionPlan, filtered)
 	}
-	return res, nil
+
+	return &v1.AIOpsRes{
+		TraceID:           response.TraceID,
+		Result:            result,
+		Detail:            detail,
+		ApprovalRequired:  response.ApprovalRequired,
+		ApprovalRequestID: response.ApprovalRequestID,
+		ApprovalStatus:    response.ApprovalStatus,
+		ExecutionPlan:     executionPlan,
+		Degraded:          response.Degraded(),
+		DegradationReason: response.DegradationReason,
+	}, nil
 }
 
 func (c *ControllerV1) AIOpsTrace(ctx context.Context, req *v1.AIOpsTraceReq) (res *v1.AIOpsTraceRes, err error) {

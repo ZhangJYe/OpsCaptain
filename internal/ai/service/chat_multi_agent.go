@@ -6,6 +6,7 @@ import (
 
 	"SuperBizAgent/internal/ai/agent/supervisor"
 	"SuperBizAgent/internal/ai/protocol"
+	"SuperBizAgent/internal/consts"
 
 	"github.com/gogf/gf/v2/frame/g"
 )
@@ -34,10 +35,15 @@ func ShouldUseMultiAgentForChat(ctx context.Context, query string) bool {
 	return false
 }
 
-func RunChatMultiAgent(ctx context.Context, sessionID, query string) (string, []string, string, error) {
+func RunChatMultiAgent(ctx context.Context, sessionID, query string) (ExecutionResponse, error) {
+	if decision := GetDegradationDecision(ctx, "chat"); decision.Enabled {
+		return NewDegradedExecutionResponse(decision), nil
+	}
+	ctx = context.WithValue(ctx, consts.CtxKeySessionID, sessionID)
+
 	rt, err := getOrCreateAIOpsRuntime(ctx)
 	if err != nil {
-		return "", nil, "", err
+		return ExecutionResponse{}, err
 	}
 
 	memorySvc := newMemoryService()
@@ -57,9 +63,12 @@ func RunChatMultiAgent(ctx context.Context, sessionID, query string) (string, []
 	detail := append([]string{}, contextDetail...)
 	detail = append(detail, rt.DetailMessages(ctx, rootTask.TraceID)...)
 	if result == nil {
-		return "", detail, rootTask.TraceID, err
+		return ExecutionResponse{
+			Detail:  detail,
+			TraceID: rootTask.TraceID,
+		}, err
 	}
 
 	memorySvc.PersistOutcome(ctx, sessionID, query, result.Summary)
-	return result.Summary, detail, rootTask.TraceID, err
+	return ExecutionResponseFromResult(result, detail, rootTask.TraceID), err
 }

@@ -130,27 +130,32 @@ func (a *Agent) Handle(ctx context.Context, task *protocol.TaskEnvelope) (*proto
 			evidence = append(evidence, child.Evidence...)
 		}
 	}
+	metadata := make(map[string]any, len(reportResult.Metadata)+1)
+	metadata["intent"] = intent
+	for k, v := range reportResult.Metadata {
+		metadata[k] = v
+	}
 
 	return &protocol.TaskResult{
-		TaskID:     task.TaskID,
-		Agent:      a.Name(),
-		Status:     protocol.ResultStatusSucceeded,
-		Summary:    reportResult.Summary,
-		Confidence: reportResult.Confidence,
-		Evidence:   evidence,
-		Metadata: map[string]any{
-			"intent": intent,
-		},
+		TaskID:            task.TaskID,
+		Agent:             a.Name(),
+		Status:            reportResult.Status,
+		Summary:           reportResult.Summary,
+		Confidence:        reportResult.Confidence,
+		DegradationReason: reportResult.DegradationReason,
+		Evidence:          evidence,
+		Metadata:          metadata,
 	}, nil
 }
 
 func createResultArtifact(ctx context.Context, rt *runtime.Runtime, result *protocol.TaskResult) (*protocol.ArtifactRef, error) {
 	payload, err := json.Marshal(map[string]any{
-		"agent":      result.Agent,
-		"status":     result.Status,
-		"summary":    result.Summary,
-		"confidence": result.Confidence,
-		"evidence":   result.Evidence,
+		"agent":              result.Agent,
+		"status":             result.Status,
+		"summary":            result.Summary,
+		"confidence":         result.Confidence,
+		"degradation_reason": result.DegradationReason,
+		"evidence":           result.Evidence,
 	})
 	if err != nil {
 		return nil, err

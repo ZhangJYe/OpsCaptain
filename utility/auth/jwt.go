@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"SuperBizAgent/utility/common"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -17,6 +18,10 @@ import (
 const (
 	defaultTokenExpiry = 24 * time.Hour
 	issuer             = "SuperBizAgent"
+
+	RoleAdmin    = "admin"
+	RoleOperator = "operator"
+	RoleViewer   = "viewer"
 )
 
 type Claims struct {
@@ -49,20 +54,22 @@ func loadSecret() []byte {
 			return
 		}
 		v, err := g.Cfg().Get(context.Background(), "auth.jwt_secret")
-		if err != nil || v.String() == "" {
+		resolved := common.ResolveEnv(v.String())
+		if err != nil || resolved == "" || common.LooksLikePlaceholderSecret(resolved) {
 			panic(ErrMissingJWTSecret)
 		}
-		jwtSecret = []byte(v.String())
+		jwtSecret = []byte(resolved)
 	})
 	return jwtSecret
 }
 
 func ValidateConfig() error {
 	v, err := g.Cfg().Get(context.Background(), "auth.jwt_secret")
-	if err != nil || v.String() == "" {
+	resolved := common.ResolveEnv(v.String())
+	if err != nil || resolved == "" || common.LooksLikePlaceholderSecret(resolved) {
 		return ErrMissingJWTSecret
 	}
-	if len(v.String()) < 32 {
+	if len(resolved) < 32 {
 		return fmt.Errorf("auth.jwt_secret must be at least 32 characters")
 	}
 	return nil
@@ -71,6 +78,10 @@ func ValidateConfig() error {
 func GenerateToken(userID string, role string) (*TokenPair, error) {
 	secret := loadSecret()
 	now := time.Now()
+	role = NormalizeRole(role)
+	if err := ValidateRole(role); err != nil {
+		return nil, err
+	}
 
 	expiry := defaultTokenExpiry
 	v, err := g.Cfg().Get(context.Background(), "auth.token_expiry_hours")
@@ -121,6 +132,10 @@ func ValidateToken(tokenStr string) (*Claims, error) {
 	if claims.Iss != issuer {
 		return nil, fmt.Errorf("invalid token issuer")
 	}
+	if err := ValidateRole(claims.Role); err != nil {
+		return nil, err
+	}
+	claims.Role = NormalizeRole(claims.Role)
 
 	return claims, nil
 }
@@ -230,4 +245,45 @@ func base64URLDecode(s string) ([]byte, error) {
 		s += "="
 	}
 	return base64.URLEncoding.DecodeString(s)
+}
+
+func NormalizeRole(role string) string {
+	role = strings.ToLower(strings.TrimSpace(role))
+	if role == "" {
+		return RoleViewer
+	}
+	return role
+}
+
+func ValidateRole(role string) error {
+	switch NormalizeRole(role) {
+	case RoleAdmin, RoleOperator, RoleViewer:
+		return nil
+	default:
+		return fmt.Errorf("invalid role %q", role)
+	}
+}
+
+func IsRoleAllowed(role string, allowed ...string) bool {
+	role = NormalizeRole(role)
+	if role == RoleAdmin {
+		return true
+	}
+	for _, candidate := range allowed {
+		if role == NormalizeRole(candidate) {
+			return true
+		}
+	}
+	return false
+}
+
+func RequiredRolesForPath(path string) []string {
+	switch strings.ToLower(strings.TrimSpace(path)) {
+	case "/api/ai_ops", "/api/ai_ops_trace", "/api/upload", "/api/token_audit", "/api/approval_requests":
+		return []string{RoleOperator, RoleAdmin}
+	case "/api/approval_requests/approve", "/api/approval_requests/reject":
+		return []string{RoleAdmin}
+	default:
+		return nil
+	}
 }

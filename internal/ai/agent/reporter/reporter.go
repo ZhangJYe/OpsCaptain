@@ -34,23 +34,29 @@ func (a *Agent) Handle(ctx context.Context, task *protocol.TaskEnvelope) (*proto
 	intent, _ := task.Input["intent"].(string)
 	responseMode, _ := task.Input["response_mode"].(string)
 	contextPkg, contextDetail := buildReporterContext(ctx, task, raw, query)
+	degradationReasons := collectDegradationReasons(raw)
+	status := aggregateResultStatus(raw)
+	degradationReason := strings.Join(degradationReasons, " ; ")
 
 	if responseMode == "chat" {
 		result := buildChatResponse(task, raw, query, intent, contextPkg)
 		result.Metadata = mergeMetadata(result.Metadata, map[string]any{
-			"context_detail":  contextDetail,
-			"tool_item_count": len(contextPkg.ToolItems),
+			"context_detail":      contextDetail,
+			"tool_item_count":     len(contextPkg.ToolItems),
+			"degradation_reasons": degradationReasons,
 		})
+		result.Status = status
+		result.DegradationReason = degradationReason
 		return result, nil
 	}
 
-	sections := make([]string, 0, len(raw)+4)
-	sections = append(sections, "# 告警分析报告")
+	sections := make([]string, 0, len(raw)+6)
+	sections = append(sections, "# Alert Analysis Report")
 	if query != "" {
-		sections = append(sections, "## 用户目标\n"+query)
+		sections = append(sections, "## User Goal\n"+query)
 	}
-	sections = append(sections, "## 任务类型\n"+fallback(intent, "alert_analysis"))
-	sections = append(sections, "## 执行摘要")
+	sections = append(sections, "## Intent\n"+fallback(intent, "alert_analysis"))
+	sections = append(sections, "## Execution Summary")
 
 	conclusionLines := make([]string, 0, len(raw))
 	evidence := make([]protocol.EvidenceItem, 0)
@@ -59,34 +65,41 @@ func (a *Agent) Handle(ctx context.Context, task *protocol.TaskEnvelope) (*proto
 			continue
 		}
 		label := displayAgentName(result.Agent)
-		sections = append(sections, fmt.Sprintf("### %s\n%s", label, fallback(result.Summary, "无结果")))
+		sections = append(sections, fmt.Sprintf("### %s\n%s", label, fallback(result.Summary, "no result")))
 		if len(result.Evidence) > 0 {
 			evidence = append(evidence, result.Evidence...)
 		}
-		statusText := fmt.Sprintf("%s: %s", result.Agent, result.Summary)
-		if result.Status == protocol.ResultStatusDegraded {
-			statusText += "（降级）"
+		statusText := fmt.Sprintf("%s: %s", result.Agent, fallback(result.Summary, "no result"))
+		if result.Status != protocol.ResultStatusSucceeded {
+			statusText += " (degraded)"
 		}
 		conclusionLines = append(conclusionLines, statusText)
 	}
 
-	sections = append(sections, "## 结论")
+	if len(degradationReasons) > 0 {
+		sections = append(sections, "## Degradation")
+		sections = append(sections, strings.Join(prefixEach(degradationReasons, "- "), "\n"))
+	}
+
+	sections = append(sections, "## Conclusion")
 	if len(conclusionLines) == 0 {
-		sections = append(sections, "当前没有足够的子任务结果，建议检查工具配置与依赖服务。")
+		sections = append(sections, "No specialist results were available. Check tool configuration and dependent services.")
 	} else {
 		sections = append(sections, strings.Join(prefixEach(conclusionLines, "- "), "\n"))
 	}
 
 	return &protocol.TaskResult{
-		TaskID:     task.TaskID,
-		Agent:      a.Name(),
-		Status:     protocol.ResultStatusSucceeded,
-		Summary:    strings.Join(sections, "\n\n"),
-		Confidence: deriveConfidence(raw),
-		Evidence:   evidence,
+		TaskID:            task.TaskID,
+		Agent:             a.Name(),
+		Status:            status,
+		Summary:           strings.Join(sections, "\n\n"),
+		Confidence:        deriveConfidence(raw),
+		DegradationReason: degradationReason,
+		Evidence:          evidence,
 		Metadata: map[string]any{
-			"context_detail":  contextDetail,
-			"tool_item_count": len(contextPkg.ToolItems),
+			"context_detail":      contextDetail,
+			"tool_item_count":     len(contextPkg.ToolItems),
+			"degradation_reasons": degradationReasons,
 		},
 	}, nil
 }
@@ -94,6 +107,7 @@ func (a *Agent) Handle(ctx context.Context, task *protocol.TaskEnvelope) (*proto
 func buildChatResponse(task *protocol.TaskEnvelope, raw []*protocol.TaskResult, query, intent string, contextPkg *contextengine.ContextPackage) *protocol.TaskResult {
 	evidence := make([]protocol.EvidenceItem, 0)
 	lines := make([]string, 0, len(raw))
+	degradationReasons := collectDegradationReasons(raw)
 
 	for _, result := range raw {
 		if result == nil {
@@ -103,44 +117,48 @@ func buildChatResponse(task *protocol.TaskEnvelope, raw []*protocol.TaskResult, 
 			evidence = append(evidence, result.Evidence...)
 		}
 		label := displayAgentName(result.Agent)
-		line := fmt.Sprintf("%s：%s", label, fallback(result.Summary, "无结果"))
-		if result.Status == protocol.ResultStatusDegraded {
-			line += "（降级）"
+		line := fmt.Sprintf("%s: %s", label, fallback(result.Summary, "no result"))
+		if result.Status != protocol.ResultStatusSucceeded {
+			line += " (degraded)"
 		}
 		lines = append(lines, line)
 	}
 
-	parts := make([]string, 0, 4)
+	parts := make([]string, 0, 5)
 	switch intent {
 	case "kb_qa":
-		parts = append(parts, "我查询了当前可用的知识与工具结果：")
+		parts = append(parts, "I checked the currently available knowledge and tool results.")
 	case "incident_analysis":
-		parts = append(parts, "我结合当前可用的排障结果做了分析：")
+		parts = append(parts, "I combined the currently available troubleshooting signals.")
 	default:
-		parts = append(parts, "我结合当前可用的多智能体结果做了分析：")
+		parts = append(parts, "I combined the currently available multi-agent results.")
 	}
 	if strings.TrimSpace(query) != "" {
-		parts = append(parts, "问题："+query)
+		parts = append(parts, "Question: "+query)
 	}
 	if len(lines) == 0 {
-		parts = append(parts, "当前没有拿到足够的子任务结果，建议检查工具配置或稍后重试。")
+		parts = append(parts, "No specialist results were available. Check tool configuration or retry later.")
 	} else {
 		parts = append(parts, strings.Join(prefixEach(lines, "- "), "\n"))
 	}
 	toolSnippets := contextengine.ToolItemSnippets(contextPkg.ToolItems, 3)
 	if len(toolSnippets) > 0 {
-		parts = append(parts, "可参考证据：\n"+strings.Join(prefixEach(toolSnippets, "- "), "\n"))
+		parts = append(parts, "Evidence:\n"+strings.Join(prefixEach(toolSnippets, "- "), "\n"))
 	} else if len(evidence) > 0 {
-		parts = append(parts, "可参考证据：\n"+strings.Join(prefixEach(chatEvidenceSnippets(evidence, 3), "- "), "\n"))
+		parts = append(parts, "Evidence:\n"+strings.Join(prefixEach(chatEvidenceSnippets(evidence, 3), "- "), "\n"))
+	}
+	if len(degradationReasons) > 0 {
+		parts = append(parts, "Partial degradation:\n"+strings.Join(prefixEach(degradationReasons, "- "), "\n"))
 	}
 
 	return &protocol.TaskResult{
-		TaskID:     task.TaskID,
-		Agent:      AgentName,
-		Status:     protocol.ResultStatusSucceeded,
-		Summary:    strings.Join(parts, "\n\n"),
-		Confidence: deriveConfidence(raw),
-		Evidence:   evidence,
+		TaskID:            task.TaskID,
+		Agent:             AgentName,
+		Status:            aggregateResultStatus(raw),
+		Summary:           strings.Join(parts, "\n\n"),
+		Confidence:        deriveConfidence(raw),
+		DegradationReason: strings.Join(degradationReasons, " ; "),
+		Evidence:          evidence,
 	}
 }
 
@@ -234,10 +252,52 @@ func chatEvidenceSnippets(items []protocol.EvidenceItem, limit int) []string {
 			break
 		}
 		label := fallback(item.Title, item.SourceID)
-		snippet := fallback(item.Snippet, "无摘要")
-		out = append(out, fmt.Sprintf("%s：%s", label, snippet))
+		snippet := fallback(item.Snippet, "no snippet")
+		out = append(out, fmt.Sprintf("%s: %s", label, snippet))
 	}
 	return out
+}
+
+func aggregateResultStatus(results []*protocol.TaskResult) protocol.ResultStatus {
+	if len(results) == 0 {
+		return protocol.ResultStatusDegraded
+	}
+	for _, result := range results {
+		if result == nil || result.Status != protocol.ResultStatusSucceeded {
+			return protocol.ResultStatusDegraded
+		}
+	}
+	return protocol.ResultStatusSucceeded
+}
+
+func collectDegradationReasons(results []*protocol.TaskResult) []string {
+	if len(results) == 0 {
+		return []string{"no specialist results available"}
+	}
+
+	seen := make(map[string]struct{}, len(results))
+	reasons := make([]string, 0, len(results))
+	for _, result := range results {
+		if result == nil || result.Status == protocol.ResultStatusSucceeded {
+			continue
+		}
+		reason := strings.TrimSpace(result.DegradationReason)
+		if reason == "" && result.Error != nil {
+			reason = strings.TrimSpace(result.Error.Message)
+		}
+		if reason == "" {
+			reason = strings.TrimSpace(result.Summary)
+		}
+		if reason == "" {
+			continue
+		}
+		if _, ok := seen[reason]; ok {
+			continue
+		}
+		seen[reason] = struct{}{}
+		reasons = append(reasons, reason)
+	}
+	return reasons
 }
 
 func min(a, b int) int {

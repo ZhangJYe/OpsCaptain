@@ -25,7 +25,29 @@ type tokenBucket struct {
 var (
 	globalLimiter     *RateLimiter
 	globalLimiterOnce sync.Once
+	redisLimiter      *RedisRateLimiter
+	useRedis          bool
+	limiterInitOnce   sync.Once
 )
+
+func initLimiterBackend() {
+	limiterInitOnce.Do(func() {
+		ctx := context.Background()
+		if IsRedisAvailable(ctx) {
+			rate := 20
+			v, err := g.Cfg().Get(ctx, "auth.rate_limit_per_minute")
+			if err == nil && v.Int() > 0 {
+				rate = v.Int()
+			}
+			redisLimiter = NewRedisRateLimiter(rate, time.Minute)
+			useRedis = true
+			g.Log().Info(ctx, "rate limiter: using Redis sliding window")
+		} else {
+			useRedis = false
+			g.Log().Info(ctx, "rate limiter: using in-memory token bucket")
+		}
+	})
+}
 
 func GetRateLimiter() *RateLimiter {
 	globalLimiterOnce.Do(func() {
@@ -109,9 +131,41 @@ func (rl *RateLimiter) cleanup() {
 }
 
 func CheckRateLimit(clientID string) error {
+	initLimiterBackend()
+
+	if useRedis {
+		ctx := context.Background()
+		allowed, err := redisLimiter.Allow(ctx, clientID)
+		if err != nil {
+			g.Log().Warningf(ctx, "redis rate limit error, falling back to in-memory: %v", err)
+			return checkInMemoryRateLimit(clientID)
+		}
+		if !allowed {
+			return fmt.Errorf("rate limit exceeded, please try again later")
+		}
+		return nil
+	}
+
+	return checkInMemoryRateLimit(clientID)
+}
+
+func checkInMemoryRateLimit(clientID string) error {
 	limiter := GetRateLimiter()
 	if !limiter.Allow(clientID) {
 		return fmt.Errorf("rate limit exceeded, please try again later")
 	}
 	return nil
+}
+
+func RemainingTokens(clientID string) int {
+	initLimiterBackend()
+
+	if useRedis {
+		remaining, err := redisLimiter.Remaining(context.Background(), clientID)
+		if err == nil {
+			return remaining
+		}
+	}
+
+	return GetRateLimiter().RemainingTokens(clientID)
 }

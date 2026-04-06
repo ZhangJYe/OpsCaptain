@@ -137,6 +137,11 @@ class SuperBizAgentApp {
         this.chatMessages = document.getElementById('chatMessages');
         this.loadingOverlay = document.getElementById('loadingOverlay');
         this.chatContainer = document.querySelector('.chat-container');
+        this.themeToggleBtn = document.getElementById('themeToggleBtn');
+        this.themeIconMoon = document.getElementById('themeIconMoon');
+        this.themeIconSun = document.getElementById('themeIconSun');
+
+        this.applyStoredTheme();
         this.welcomeGreeting = document.getElementById('welcomeGreeting');
         this.chatHistoryList = document.getElementById('chatHistoryList');
 
@@ -170,6 +175,10 @@ class SuperBizAgentApp {
 
         if (this.sidebarBackdrop) {
             this.sidebarBackdrop.addEventListener('click', () => this.closeSidebar());
+        }
+
+        if (this.themeToggleBtn) {
+            this.themeToggleBtn.addEventListener('click', () => this.toggleTheme());
         }
 
         if (this.promptCards) {
@@ -845,7 +854,10 @@ class SuperBizAgentApp {
                 this.addAssistantMessageWithMeta(data.data.answer, {
                     mode: data.data.mode || 'legacy',
                     traceId: data.data.trace_id || '',
-                    details: data.data.detail || []
+                    details: data.data.detail || [],
+                    cached: data.data.cached || false,
+                    degraded: data.data.degraded || false,
+                    degradationReason: data.data.degradation_reason || ''
                 });
             } else {
                 throw new Error(data.message || '未知错误');
@@ -1059,7 +1071,16 @@ class SuperBizAgentApp {
         return {
             mode: meta.mode || '',
             traceId: meta.traceId || meta.trace_id || '',
-            details: Array.isArray(details) ? details : []
+            details: Array.isArray(details) ? details : [],
+            cached: Boolean(meta.cached),
+            degraded: Boolean(meta.degraded),
+            degradationReason: meta.degradationReason || meta.degradation_reason || '',
+            approvalRequired: Boolean(meta.approvalRequired || meta.approval_required),
+            approvalRequestId: meta.approvalRequestId || meta.approval_request_id || '',
+            approvalStatus: meta.approvalStatus || meta.approval_status || '',
+            executionPlan: Array.isArray(meta.executionPlan || meta.execution_plan)
+                ? (meta.executionPlan || meta.execution_plan)
+                : []
         };
     }
 
@@ -1067,7 +1088,9 @@ class SuperBizAgentApp {
         const labels = {
             aiops: 'AI Ops',
             multi_agent: 'Multi-Agent',
-            legacy: 'Legacy'
+            legacy: 'Legacy',
+            cache: 'Cache',
+            degraded: 'Degraded'
         };
         return labels[mode] || '';
     }
@@ -1079,7 +1102,13 @@ class SuperBizAgentApp {
             content: content,
             timestamp: new Date().toISOString()
         };
-        if (normalizedMeta.mode || normalizedMeta.traceId || normalizedMeta.details.length > 0) {
+        if (
+            normalizedMeta.mode ||
+            normalizedMeta.traceId ||
+            normalizedMeta.details.length > 0 ||
+            normalizedMeta.approvalRequired ||
+            normalizedMeta.approvalRequestId
+        ) {
             historyItem.meta = normalizedMeta;
         }
         this.currentChatHistory.push(historyItem);
@@ -1276,6 +1305,99 @@ class SuperBizAgentApp {
         detailsContainer.appendChild(detailsContent);
     }
 
+    renderApprovalPanel(messageElement, messageContentWrapper, meta = {}) {
+        const normalizedMeta = this.normalizeAssistantMeta(meta);
+        let container = messageElement.querySelector('.approval-panel');
+        const messageContent = messageContentWrapper.querySelector('.message-content');
+
+        if (
+            normalizedMeta.mode !== 'aiops' ||
+            (
+                !normalizedMeta.approvalRequired &&
+                !normalizedMeta.approvalStatus &&
+                normalizedMeta.executionPlan.length === 0
+            )
+        ) {
+            if (container) {
+                container.remove();
+            }
+            return;
+        }
+
+        if (!container) {
+            container = document.createElement('div');
+            container.className = 'approval-panel';
+            messageContentWrapper.insertBefore(container, messageContent);
+        }
+
+        container.innerHTML = '';
+
+        const header = document.createElement('div');
+        header.className = 'approval-panel-header';
+
+        const title = document.createElement('div');
+        title.className = 'approval-panel-title';
+        title.textContent = normalizedMeta.approvalRequired ? '待审批执行计划' : '执行计划';
+        header.appendChild(title);
+
+        if (normalizedMeta.approvalStatus) {
+            const status = document.createElement('span');
+            status.className = `approval-status-pill approval-status-${this.escapeHtml(normalizedMeta.approvalStatus)}`;
+            status.textContent = normalizedMeta.approvalStatus;
+            header.appendChild(status);
+        }
+
+        container.appendChild(header);
+
+        if (normalizedMeta.executionPlan.length > 0) {
+            const planList = document.createElement('ol');
+            planList.className = 'approval-plan-list';
+            normalizedMeta.executionPlan.forEach((step) => {
+                const item = document.createElement('li');
+                item.textContent = step;
+                planList.appendChild(item);
+            });
+            container.appendChild(planList);
+        }
+
+        if (normalizedMeta.degradationReason) {
+            const note = document.createElement('div');
+            note.className = 'approval-panel-note';
+            note.textContent = normalizedMeta.degradationReason;
+            container.appendChild(note);
+        }
+
+        const canApprove = normalizedMeta.approvalRequired &&
+            normalizedMeta.approvalRequestId &&
+            (!normalizedMeta.approvalStatus || normalizedMeta.approvalStatus === 'pending');
+        if (!canApprove) {
+            return;
+        }
+
+        const actionBar = document.createElement('div');
+        actionBar.className = 'approval-action-bar';
+
+        const approveButton = document.createElement('button');
+        approveButton.type = 'button';
+        approveButton.className = 'approval-action-btn';
+        approveButton.textContent = '批准并执行';
+        approveButton.addEventListener('click', async () => {
+            approveButton.disabled = true;
+            approveButton.textContent = '执行中...';
+            try {
+                await this.approveApprovalRequest(normalizedMeta.approvalRequestId, messageElement);
+                this.showNotification('审批已通过，原请求开始执行', 'success');
+            } catch (error) {
+                approveButton.disabled = false;
+                approveButton.textContent = '批准并执行';
+                this.showNotification('审批执行失败: ' + (error.message || '未知错误'), 'error');
+            }
+        });
+
+        actionBar.appendChild(approveButton);
+        container.appendChild(actionBar);
+    }
+
     addAssistantMessageWithMeta(response, meta = {}, saveToHistory = true) {
         const normalizedMeta = this.normalizeAssistantMeta(meta);
         const messageDiv = document.createElement('div');
@@ -1306,6 +1428,7 @@ class SuperBizAgentApp {
             normalizedMeta.details,
             normalizedMeta.mode === 'aiops' ? '查看详细步骤' : '查看执行步骤'
         );
+        this.renderApprovalPanel(messageDiv, messageContentWrapper, normalizedMeta);
         this.appendMessageActions(messageContentWrapper, 'assistant', response);
         messageDiv.appendChild(messageContentWrapper);
 
@@ -1379,6 +1502,44 @@ class SuperBizAgentApp {
     }
     
     // 检查并设置居中样式
+    applyStoredTheme() {
+        const stored = localStorage.getItem('opscaptain-theme');
+        if (stored === 'light') {
+            document.documentElement.setAttribute('data-theme', 'light');
+            this.updateThemeIcons('light');
+        } else {
+            document.documentElement.removeAttribute('data-theme');
+            this.updateThemeIcons('dark');
+        }
+    }
+
+    toggleTheme() {
+        const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+        if (isLight) {
+            document.documentElement.removeAttribute('data-theme');
+            localStorage.setItem('opscaptain-theme', 'dark');
+            this.updateThemeIcons('dark');
+        } else {
+            document.documentElement.setAttribute('data-theme', 'light');
+            localStorage.setItem('opscaptain-theme', 'light');
+            this.updateThemeIcons('light');
+        }
+    }
+
+    updateThemeIcons(theme) {
+        if (!this.themeIconMoon || !this.themeIconSun) return;
+        const hljsLink = document.getElementById('hljsTheme');
+        if (theme === 'light') {
+            this.themeIconMoon.style.display = 'none';
+            this.themeIconSun.style.display = 'block';
+            if (hljsLink) hljsLink.href = 'https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css';
+        } else {
+            this.themeIconMoon.style.display = 'block';
+            this.themeIconSun.style.display = 'none';
+            if (hljsLink) hljsLink.href = 'https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css';
+        }
+    }
+
     addThinkingBubble() {
         const messageDiv = document.createElement('div');
         messageDiv.className = 'message assistant';
@@ -1612,8 +1773,7 @@ class SuperBizAgentApp {
                 this.updateAIOpsMessage(
                     loadingMessageElement,
                     responseText,
-                    data.data.detail || [],
-                    data.data.trace_id || ''
+                    data.data || {}
                 );
             } else {
                 throw new Error(data.message || '未知错误');
@@ -1639,6 +1799,31 @@ class SuperBizAgentApp {
         throw new Error(data.message || 'Trace查询失败');
     }
 
+    async approveApprovalRequest(requestId, messageElement) {
+        const response = await fetch(`${this.apiBaseUrl}/approval_requests/approve`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                request_id: requestId
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP错误: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (!(data.message === 'OK' && data.data)) {
+            throw new Error(data.message || '审批执行失败');
+        }
+
+        const payload = data.data;
+        this.updateAIOpsMessage(messageElement, payload.result || '', payload);
+        return payload;
+    }
+
     formatAIOpsTraceTime(timestamp) {
         if (!timestamp) {
             return '--:--:--';
@@ -1656,10 +1841,10 @@ class SuperBizAgentApp {
     }
 
     // 更新智能运维消息（带折叠详情）
-    updateAIOpsMessage(messageElement, response, details, traceId = '') {
+    updateAIOpsMessage(messageElement, response, meta = {}) {
         if (!messageElement) {
             // 如果没有传入消息元素，则创建新消息
-            return this.addAIOpsMessage(response, details, traceId);
+            return this.addAIOpsMessage(response, meta);
         }
 
         // 添加aiops-message类
@@ -1671,11 +1856,11 @@ class SuperBizAgentApp {
             return;
         }
 
-        this.renderAssistantMeta(messageElement, messageContentWrapper, {
+        const normalizedMeta = this.normalizeAssistantMeta({
             mode: 'aiops',
-            traceId: traceId,
-            details: details || []
+            ...meta
         });
+        this.renderAssistantMeta(messageElement, messageContentWrapper, normalizedMeta);
 
         // 清空现有内容（保留消息内容容器）
         const messageContent = messageContentWrapper.querySelector('.message-content');
@@ -1694,7 +1879,8 @@ class SuperBizAgentApp {
         }
 
         // 详情部分（可折叠）- 先显示
-        this.renderAssistantDetails(messageElement, messageContentWrapper, details || [], '查看详细步骤');
+        this.renderAssistantDetails(messageElement, messageContentWrapper, normalizedMeta.details || [], '查看详细步骤');
+        this.renderApprovalPanel(messageElement, messageContentWrapper, normalizedMeta);
 
         // 更新主要响应内容（使用Markdown渲染）
         messageContent.innerHTML = this.renderMarkdown(response);
@@ -1703,22 +1889,17 @@ class SuperBizAgentApp {
         this.appendMessageActions(messageContentWrapper, 'assistant', response);
         
         // 保存到历史记录
-        this.persistAssistantHistory(response, {
-            mode: 'aiops',
-            traceId: traceId,
-            details: details || []
-        });
+        this.persistAssistantHistory(response, normalizedMeta);
         
         this.scrollToBottom();
         return messageElement;
     }
 
     // 添加智能运维消息（带折叠详情）- 保留用于兼容性
-    addAIOpsMessage(response, details, traceId = '') {
+    addAIOpsMessage(response, meta = {}) {
         return this.addAssistantMessageWithMeta(response, {
             mode: 'aiops',
-            traceId: traceId,
-            details: details || []
+            ...meta
         });
     }
 

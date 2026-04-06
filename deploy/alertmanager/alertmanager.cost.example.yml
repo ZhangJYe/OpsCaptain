@@ -1,0 +1,16 @@
+route:
+  receiver: oncallai-webhook
+  group_by:
+    - alertname
+    - service
+    - session_id
+    - user_id
+  group_wait: 30s
+  group_interval: 2m
+  repeat_interval: 1h
+
+receivers:
+  - name: oncallai-webhook
+    webhook_configs:
+      - url: https://hooks.example.com/oncallai-cost-alerts
+        send_resolved: true

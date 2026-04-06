@@ -3,14 +3,22 @@ package middleware
 import (
 	"SuperBizAgent/internal/consts"
 	"SuperBizAgent/utility/auth"
+	"SuperBizAgent/utility/metrics"
+	traceutil "SuperBizAgent/utility/tracing"
 	"context"
 	"fmt"
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/net/ghttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
+	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 var (
@@ -106,8 +114,15 @@ func AuthMiddleware(r *ghttp.Request) {
 		return
 	}
 
+	role := auth.NormalizeRole(claims.Role)
 	r.SetCtx(context.WithValue(ctx, consts.CtxKeyUserID, claims.Sub))
-	r.SetCtx(context.WithValue(r.GetCtx(), consts.CtxKeyUserRole, claims.Role))
+	r.SetCtx(context.WithValue(r.GetCtx(), consts.CtxKeyUserRole, role))
+
+	if !authorizePathAccess(r.URL.Path, role) {
+		r.Response.WriteStatus(http.StatusForbidden)
+		r.Response.WriteJson(Response{Message: "forbidden: insufficient role permissions"})
+		return
+	}
 
 	r.Middleware.Next()
 }
@@ -121,7 +136,7 @@ func RateLimitMiddleware(r *ghttp.Request) {
 	}
 
 	if err := auth.CheckRateLimit(clientID); err != nil {
-		remaining := auth.GetRateLimiter().RemainingTokens(clientID)
+		remaining := auth.RemainingTokens(clientID)
 		r.Response.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", remaining))
 		r.Response.WriteStatus(http.StatusTooManyRequests)
 		r.Response.WriteJson(Response{Message: err.Error()})
@@ -166,6 +181,78 @@ func ResponseMiddleware(r *ghttp.Request) {
 		Message: msg,
 		Data:    res,
 	})
+}
+
+func TracingMiddleware(r *ghttp.Request) {
+	ctx := r.GetCtx()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.HeaderCarrier(r.Request.Header))
+	ctx, span := traceutil.StartSpan(
+		ctx,
+		"http",
+		r.Method+" "+requestPath(r),
+		oteltrace.WithSpanKind(oteltrace.SpanKindServer),
+		oteltrace.WithAttributes(
+			attribute.String("http.method", r.Method),
+			attribute.String("http.route", requestPath(r)),
+			attribute.String("http.target", r.RequestURI),
+		),
+	)
+	r.SetCtx(ctx)
+	if traceID := traceutil.CurrentTraceID(ctx); traceID != "" {
+		r.Response.Header().Set("X-Trace-ID", traceID)
+	}
+
+	defer func() {
+		status := r.Response.Status
+		if status == 0 {
+			status = http.StatusOK
+		}
+		span.SetAttributes(attribute.Int("http.status_code", status))
+		if err := r.GetError(); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		} else if status >= http.StatusInternalServerError {
+			span.SetStatus(codes.Error, http.StatusText(status))
+		}
+		span.End()
+	}()
+
+	r.Middleware.Next()
+}
+
+func MetricsMiddleware(r *ghttp.Request) {
+	if r.URL != nil && r.URL.Path == "/metrics" {
+		r.Middleware.Next()
+		return
+	}
+
+	started := time.Now()
+	r.Middleware.Next()
+
+	status := r.Response.Status
+	if status == 0 {
+		status = http.StatusOK
+	}
+	metrics.ObserveHTTPRequest(r.Method, requestPath(r), status, time.Since(started))
+}
+
+func requestPath(r *ghttp.Request) string {
+	if r == nil || r.URL == nil || r.URL.Path == "" {
+		return "unknown"
+	}
+	return r.URL.Path
+}
+
+func authorizePathAccess(path, role string) bool {
+	required := auth.RequiredRolesForPath(path)
+	if len(required) == 0 {
+		return true
+	}
+	return auth.IsRoleAllowed(role, required...)
 }
 
 type Response struct {

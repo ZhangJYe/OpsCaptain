@@ -9,10 +9,10 @@ import (
 )
 
 func TestShouldUseMultiAgentForChat(t *testing.T) {
-	if !ShouldUseMultiAgentForChat(context.Background(), "请分析当前 Prometheus 告警") {
+	if !ShouldUseMultiAgentForChat(context.Background(), "analyze current Prometheus alerts") {
 		t.Fatal("expected ops query to route to multi-agent")
 	}
-	if ShouldUseMultiAgentForChat(context.Background(), "你好，介绍一下你自己") {
+	if ShouldUseMultiAgentForChat(context.Background(), "hello, introduce yourself") {
 		t.Fatal("expected generic chat to stay on legacy route")
 	}
 }
@@ -22,54 +22,52 @@ func TestRunChatMultiAgentUsesChatMode(t *testing.T) {
 	oldRegister := registerAIOpsAgentsFn
 	oldMemoryFactory := newMemoryService
 	oldRuntimes := aiOpsRuntimes
+	oldCfgBool := degradationConfigBool
+	oldCfgString := degradationConfigString
 	defer func() {
 		newPersistentRuntime = oldFactory
 		registerAIOpsAgentsFn = oldRegister
 		newMemoryService = oldMemoryFactory
 		aiOpsRuntimes = oldRuntimes
+		degradationConfigBool = oldCfgBool
+		degradationConfigString = oldCfgString
 	}()
 
+	degradationConfigBool = func(context.Context, string) bool { return false }
+	degradationConfigString = func(context.Context, string) string { return "" }
 	aiOpsRuntimes = make(map[string]*runtime.Runtime)
 	supervisorAgent := &captureSupervisorAgent{}
 	memorySvc := &stubAIOpsMemory{
 		sessionID:     "chat-session",
-		memoryContext: "- [fact] 支付服务最近有一次超时历史",
+		memoryContext: "- [fact] payment service had a recent timeout",
 		contextDetail: []string{"context profile=aiops-default"},
-		refs: []protocol.MemoryRef{
-			{ID: "mem-1", Type: "fact"},
-		},
+		refs:          []protocol.MemoryRef{{ID: "mem-1", Type: "fact"}},
 	}
 
-	newPersistentRuntime = func(string) (*runtime.Runtime, error) {
-		return runtime.New(), nil
-	}
-	registerAIOpsAgentsFn = func(rt *runtime.Runtime) error {
-		return rt.Register(supervisorAgent)
-	}
-	newMemoryService = func() aiOpsMemory {
-		return memorySvc
-	}
+	newPersistentRuntime = func(string) (*runtime.Runtime, error) { return runtime.New(), nil }
+	registerAIOpsAgentsFn = func(rt *runtime.Runtime) error { return rt.Register(supervisorAgent) }
+	newMemoryService = func() aiOpsMemory { return memorySvc }
 
-	result, detail, traceID, err := RunChatMultiAgent(context.Background(), "chat-session", "请排查支付服务日志错误")
+	response, err := RunChatMultiAgent(context.Background(), "chat-session", "check payment service log errors")
 	if err != nil {
 		t.Fatalf("run chat multi-agent: %v", err)
 	}
-	if result != "ok" {
-		t.Fatalf("unexpected result: %q", result)
+	if response.Content != "ok" {
+		t.Fatalf("unexpected result: %q", response.Content)
 	}
-	if traceID == "" {
+	if response.TraceID == "" {
 		t.Fatal("expected trace id")
 	}
-	if len(detail) == 0 {
+	if len(response.Detail) == 0 {
 		t.Fatal("expected detail messages")
 	}
-	if detail[0] != "context profile=aiops-default" {
-		t.Fatalf("expected context detail first, got %v", detail)
+	if response.Detail[0] != "context profile=aiops-default" {
+		t.Fatalf("expected context detail first, got %v", response.Detail)
 	}
 	if supervisorAgent.lastTask == nil {
 		t.Fatal("expected supervisor root task")
 	}
-	if supervisorAgent.lastTask.Goal != "请排查支付服务日志错误" {
+	if supervisorAgent.lastTask.Goal != "check payment service log errors" {
 		t.Fatalf("expected raw query goal, got %q", supervisorAgent.lastTask.Goal)
 	}
 	if got, _ := supervisorAgent.lastTask.Input["response_mode"].(string); got != "chat" {

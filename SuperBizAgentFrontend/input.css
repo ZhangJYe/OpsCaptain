@@ -1,0 +1,237 @@
+.chat-input-container {
+    width: 100%;
+    padding: 0 24px 28px;
+    flex-shrink: 0;
+}
+
+.input-group-wrapper,
+.composer-footnote {
+    width: 100%;
+    max-width: var(--content-width);
+    margin: 0 auto;
+}
+
+.input-wrapper {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: 28px;
+    box-shadow: var(--shadow-soft);
+    padding: 10px 12px 10px 14px;
+}
+
+.input-wrapper:focus-within {
+    border-color: var(--accent);
+}
+
+.composer-header {
+    display: none;
+}
+
+.message-input {
+    width: 100%;
+    min-height: 28px;
+    max-height: 200px;
+    resize: none;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--text-main);
+    font-size: 1rem;
+    line-height: 1.6;
+    padding: 10px 6px 12px;
+}
+
+.message-input::placeholder {
+    color: var(--text-muted);
+}
+
+.input-bottom-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.tools-btn-wrapper,
+.right-actions,
+.mode-selector-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.tools-btn,
+.send-btn-circle {
+    width: 38px;
+    height: 38px;
+    border: none;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.tools-btn {
+    background: var(--bg-user);
+    color: var(--text-main);
+}
+
+.tools-btn:hover {
+    background: var(--bg-sidebar-hover);
+}
+
+.tools-icon {
+    width: 18px;
+    height: 18px;
+}
+
+.mode-selector-btn {
+    height: 38px;
+    border: 1px solid var(--border-soft);
+    border-radius: 999px;
+    background: var(--bg-elevated);
+    color: var(--text-main);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 14px;
+    font-size: 0.88rem;
+    font-weight: 500;
+}
+
+.mode-selector-btn:hover {
+    background: var(--bg-sidebar-hover);
+}
+
+.dropdown-arrow {
+    width: 16px;
+    height: 16px;
+    transition: transform 0.2s ease;
+}
+
+.mode-selector-wrapper.active .dropdown-arrow {
+    transform: rotate(180deg);
+}
+
+.tools-menu,
+.mode-dropdown {
+    position: absolute;
+    bottom: calc(100% + 10px);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-soft);
+    border-radius: 16px;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(8px);
+    transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s ease;
+    z-index: 40;
+}
+
+.tools-menu {
+    left: 0;
+    min-width: 210px;
+    padding: 8px;
+}
+
+.mode-dropdown {
+    right: 0;
+    min-width: 220px;
+    padding: 6px;
+}
+
+.tools-btn-wrapper.active .tools-menu,
+.mode-selector-wrapper.active .mode-dropdown {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.dropdown-header {
+    padding: 10px 12px 8px;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.tools-menu-item,
+.dropdown-item {
+    border-radius: 12px;
+    padding: 10px 12px;
+    transition: background 0.18s ease;
+}
+
+.tools-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.tools-menu-item:hover,
+.dropdown-item:hover {
+    background: var(--bg-sidebar-hover);
+}
+
+.tools-menu-item svg {
+    width: 17px;
+    height: 17px;
+    color: var(--text-subtle);
+}
+
+.dropdown-item.active {
+    background: rgba(16, 163, 127, 0.1);
+}
+
+.dropdown-item-main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+.dropdown-item-sub {
+    margin-top: 4px;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+}
+
+.badge-new {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(16, 163, 127, 0.12);
+    color: var(--accent-strong);
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.send-btn-circle {
+    background: var(--accent);
+    color: #fff;
+}
+
+.send-btn-circle:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.1);
+}
+
+.send-btn-circle.stop-mode {
+    background: var(--text-muted);
+}
+
+.send-btn-circle svg {
+    width: 18px;
+    height: 18px;
+}
+
+.composer-footnote {
+    margin-top: 10px;
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}

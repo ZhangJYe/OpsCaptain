@@ -60,7 +60,7 @@ func TestValidateToken_Expired(t *testing.T) {
 	secret := jwtSecret
 	claims := &Claims{
 		Sub:  "user-expired",
-		Role: "user",
+		Role: RoleViewer,
 		Iss:  issuer,
 		Iat:  time.Now().Add(-2 * time.Hour).Unix(),
 		Exp:  time.Now().Add(-1 * time.Hour).Unix(),
@@ -78,7 +78,7 @@ func TestValidateToken_Expired(t *testing.T) {
 
 func TestRevokeToken(t *testing.T) {
 	resetRevokedTokensForTest()
-	pair, _ := GenerateToken("user-revoke", "user")
+	pair, _ := GenerateToken("user-revoke", RoleViewer)
 
 	_, err := ValidateToken(pair.AccessToken)
 	if err != nil {
@@ -112,7 +112,7 @@ func TestValidateToken_WrongIssuer(t *testing.T) {
 	secret := jwtSecret
 	claims := &Claims{
 		Sub:  "user-wrong-iss",
-		Role: "user",
+		Role: RoleViewer,
 		Iss:  "wrong-issuer",
 		Iat:  time.Now().Unix(),
 		Exp:  time.Now().Add(time.Hour).Unix(),
@@ -151,6 +151,31 @@ func TestValidateConfig_MissingSecret(t *testing.T) {
 	err := ValidateConfig()
 	if err == nil {
 		return
+	}
+}
+
+func TestNormalizeRoleDefaultsToViewer(t *testing.T) {
+	if role := NormalizeRole(""); role != RoleViewer {
+		t.Fatalf("expected empty role to default to viewer, got %q", role)
+	}
+}
+
+func TestValidateRoleRejectsUnknownRole(t *testing.T) {
+	if err := ValidateRole("root"); err == nil {
+		t.Fatal("expected unknown role to be rejected")
+	}
+}
+
+func TestRequiredRolesForPath(t *testing.T) {
+	required := RequiredRolesForPath("/api/ai_ops")
+	if len(required) != 2 || required[0] != RoleOperator {
+		t.Fatalf("unexpected required roles: %v", required)
+	}
+	if !IsRoleAllowed(RoleAdmin, required...) {
+		t.Fatal("expected admin to satisfy operator path")
+	}
+	if IsRoleAllowed(RoleViewer, required...) {
+		t.Fatal("viewer should not satisfy operator path")
 	}
 }
 

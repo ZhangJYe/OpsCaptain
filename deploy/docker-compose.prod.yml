@@ -1,7 +1,19 @@
 services:
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    restart: unless-stopped
+    expose:
+      - "14268"
+    ports:
+      - "127.0.0.1:16686:16686"
+
   backend:
     image: ${BACKEND_IMAGE:?BACKEND_IMAGE is required}
     restart: unless-stopped
+    stop_grace_period: 35s
+    depends_on:
+      jaeger:
+        condition: service_started
     env_file:
       - .env.production
     volumes:
@@ -10,12 +22,19 @@ services:
       - ./config.prod.yaml:/app/manifest/config/config.yaml:ro
     ports:
       - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8000/readyz"]
+      interval: 15s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
 
   frontend:
     image: ${FRONTEND_IMAGE:?FRONTEND_IMAGE is required}
     restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     expose:
       - "80"
 
@@ -23,7 +42,8 @@ services:
     image: caddy:2.8-alpine
     restart: unless-stopped
     depends_on:
-      - frontend
+      frontend:
+        condition: service_started
     env_file:
       - .env.production
     ports:
