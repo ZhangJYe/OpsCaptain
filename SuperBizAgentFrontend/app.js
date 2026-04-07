@@ -2,6 +2,7 @@
 class SuperBizAgentApp {
     constructor() {
         this.apiBaseUrl = this.resolveApiBaseUrl();
+        this.observability = this.resolveObservabilityConfig();
         this.currentMode = 'quick'; // 'quick' 或 'stream'
         this.sessionId = this.generateSessionId();
         this.isStreaming = false;
@@ -19,6 +20,7 @@ class SuperBizAgentApp {
         this.initMarkdown();
         this.checkAndSetCentered();
         this.renderChatHistory();
+        this.refreshObservabilityStatus();
     }
 
     resolveApiBaseUrl() {
@@ -30,6 +32,18 @@ class SuperBizAgentApp {
         }
 
         return '/api';
+    }
+
+    resolveObservabilityConfig() {
+        const runtimeConfig = window.SUPERBIZAGENT_CONFIG || {};
+        const configured = runtimeConfig.observability || {};
+
+        return {
+            backendReadyUrl: (configured.backendReadyUrl || '/readyz').trim() || '/readyz',
+            jaegerUrl: (configured.jaegerUrl || '/jaeger/').trim() || '/jaeger/',
+            prometheusUrl: (configured.prometheusUrl || '/prometheus/').trim() || '/prometheus/',
+            prometheusHealthUrl: (configured.prometheusHealthUrl || '/prometheus/-/healthy').trim() || '/prometheus/-/healthy',
+        };
     }
 
     // 初始化Markdown配置
@@ -144,6 +158,27 @@ class SuperBizAgentApp {
         this.applyStoredTheme();
         this.welcomeGreeting = document.getElementById('welcomeGreeting');
         this.chatHistoryList = document.getElementById('chatHistoryList');
+        this.observabilityLastCheck = document.getElementById('observabilityLastCheck');
+        this.refreshObservabilityBtn = document.getElementById('refreshObservabilityBtn');
+        this.backendObservabilityStatus = document.getElementById('backendObservabilityStatus');
+        this.backendObservabilityText = document.getElementById('backendObservabilityText');
+        this.backendObservabilityLink = document.getElementById('backendObservabilityLink');
+        this.jaegerObservabilityStatus = document.getElementById('jaegerObservabilityStatus');
+        this.jaegerObservabilityText = document.getElementById('jaegerObservabilityText');
+        this.jaegerObservabilityLink = document.getElementById('jaegerObservabilityLink');
+        this.prometheusObservabilityStatus = document.getElementById('prometheusObservabilityStatus');
+        this.prometheusObservabilityText = document.getElementById('prometheusObservabilityText');
+        this.prometheusObservabilityLink = document.getElementById('prometheusObservabilityLink');
+
+        if (this.backendObservabilityLink) {
+            this.backendObservabilityLink.href = this.observability.backendReadyUrl;
+        }
+        if (this.jaegerObservabilityLink) {
+            this.jaegerObservabilityLink.href = this.observability.jaegerUrl;
+        }
+        if (this.prometheusObservabilityLink) {
+            this.prometheusObservabilityLink.href = this.observability.prometheusUrl;
+        }
 
         if (this.fileInput) {
             this.fileInput.setAttribute('accept', this.allowedUploadExtensions.join(','));
@@ -179,6 +214,10 @@ class SuperBizAgentApp {
 
         if (this.themeToggleBtn) {
             this.themeToggleBtn.addEventListener('click', () => this.toggleTheme());
+        }
+
+        if (this.refreshObservabilityBtn) {
+            this.refreshObservabilityBtn.addEventListener('click', () => this.refreshObservabilityStatus(true));
         }
 
         if (this.promptCards) {
@@ -283,6 +322,95 @@ class SuperBizAgentApp {
 
     closeSidebar() {
         this.toggleSidebar(false);
+    }
+
+    async probeObservabilityEndpoint(url) {
+        try {
+            const response = await fetch(url, {
+                method: 'GET',
+                cache: 'no-store',
+                headers: {
+                    'Cache-Control': 'no-cache',
+                },
+            });
+            return {
+                ok: response.ok,
+                status: response.status,
+            };
+        } catch (error) {
+            return {
+                ok: false,
+                error: error.message || 'network error',
+            };
+        }
+    }
+
+    updateObservabilityCard(statusElement, textElement, linkElement, state) {
+        if (!statusElement || !textElement || !linkElement) {
+            return;
+        }
+
+        statusElement.className = `observability-status observability-status-${state.variant}`;
+        statusElement.textContent = state.label;
+        textElement.textContent = state.text;
+
+        if (state.disabled) {
+            linkElement.classList.add('is-disabled');
+            linkElement.setAttribute('aria-disabled', 'true');
+        } else {
+            linkElement.classList.remove('is-disabled');
+            linkElement.removeAttribute('aria-disabled');
+        }
+    }
+
+    async refreshObservabilityStatus(manual = false) {
+        if (this.refreshObservabilityBtn) {
+            this.refreshObservabilityBtn.disabled = true;
+            this.refreshObservabilityBtn.textContent = 'Checking...';
+        }
+
+        const now = new Date();
+        if (this.observabilityLastCheck) {
+            this.observabilityLastCheck.textContent = `Last check ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+        }
+
+        const [backend, jaeger, prometheus] = await Promise.all([
+            this.probeObservabilityEndpoint(this.observability.backendReadyUrl),
+            this.probeObservabilityEndpoint(this.observability.jaegerUrl),
+            this.probeObservabilityEndpoint(this.observability.prometheusHealthUrl),
+        ]);
+
+        this.updateObservabilityCard(
+            this.backendObservabilityStatus,
+            this.backendObservabilityText,
+            this.backendObservabilityLink,
+            backend.ok
+                ? { variant: 'live', label: 'Live', text: 'Backend readiness endpoint is responding normally.' }
+                : { variant: 'down', label: 'Down', text: `Backend readiness probe failed${backend.status ? ` (HTTP ${backend.status})` : ''}.` }
+        );
+
+        this.updateObservabilityCard(
+            this.jaegerObservabilityStatus,
+            this.jaegerObservabilityText,
+            this.jaegerObservabilityLink,
+            jaeger.ok
+                ? { variant: 'live', label: 'Live', text: 'Jaeger UI is reachable from the current deployment.' }
+                : { variant: 'down', label: 'Down', text: `Jaeger UI is not reachable${jaeger.status ? ` (HTTP ${jaeger.status})` : ''}.` }
+        );
+
+        this.updateObservabilityCard(
+            this.prometheusObservabilityStatus,
+            this.prometheusObservabilityText,
+            this.prometheusObservabilityLink,
+            prometheus.ok
+                ? { variant: 'live', label: 'Live', text: 'Prometheus health endpoint is reachable from the current deployment.' }
+                : { variant: 'down', label: 'Down', text: `Prometheus endpoint is not reachable${prometheus.status ? ` (HTTP ${prometheus.status})` : ''}.`, disabled: !manual && !prometheus.status }
+        );
+
+        if (this.refreshObservabilityBtn) {
+            this.refreshObservabilityBtn.disabled = false;
+            this.refreshObservabilityBtn.textContent = 'Refresh';
+        }
     }
 
     applyPrompt(prompt) {

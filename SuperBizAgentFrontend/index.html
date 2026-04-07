@@ -59,6 +59,42 @@
                     </div>
                 </div>
 
+                <section class="observability-section" id="observabilitySection">
+                    <div class="observability-header">
+                        <div>
+                            <div class="observability-title">Observability</div>
+                            <div class="observability-subtitle" id="observabilityLastCheck">Checking endpoints...</div>
+                        </div>
+                        <button class="observability-refresh-btn" id="refreshObservabilityBtn" type="button">Refresh</button>
+                    </div>
+                    <div class="observability-grid">
+                        <article class="observability-card">
+                            <div class="observability-card-head">
+                                <span class="observability-card-title">Backend</span>
+                                <span class="observability-status observability-status-pending" id="backendObservabilityStatus">Checking</span>
+                            </div>
+                            <p class="observability-card-text" id="backendObservabilityText">Probe readiness to confirm the app is serving traffic.</p>
+                            <a class="observability-link" id="backendObservabilityLink" href="/readyz" target="_blank" rel="noreferrer">Open readiness</a>
+                        </article>
+                        <article class="observability-card">
+                            <div class="observability-card-head">
+                                <span class="observability-card-title">Jaeger</span>
+                                <span class="observability-status observability-status-pending" id="jaegerObservabilityStatus">Checking</span>
+                            </div>
+                            <p class="observability-card-text" id="jaegerObservabilityText">Inspect trace search and spans from the deployed app.</p>
+                            <a class="observability-link" id="jaegerObservabilityLink" href="/jaeger/" target="_blank" rel="noreferrer">Open Jaeger</a>
+                        </article>
+                        <article class="observability-card">
+                            <div class="observability-card-head">
+                                <span class="observability-card-title">Prometheus</span>
+                                <span class="observability-status observability-status-pending" id="prometheusObservabilityStatus">Checking</span>
+                            </div>
+                            <p class="observability-card-text" id="prometheusObservabilityText">Inspect metrics and alert state from the configured Prometheus.</p>
+                            <a class="observability-link" id="prometheusObservabilityLink" href="/prometheus/" target="_blank" rel="noreferrer">Open Prometheus</a>
+                        </article>
+                    </div>
+                </section>
+
                 <div class="sidebar-footer">
                     <div class="sidebar-footer-label">当前能力</div>
                     <div class="sidebar-footer-meta">对话 / 流式 / AI Ops / 文件入库</div>
