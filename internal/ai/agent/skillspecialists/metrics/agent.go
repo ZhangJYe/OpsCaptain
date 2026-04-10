@@ -46,6 +46,10 @@ func New() *Agent {
 	return &Agent{registry: buildMetricsSkillRegistry()}
 }
 
+func SkillRegistry() *skills.Registry {
+	return buildMetricsSkillRegistry()
+}
+
 func (a *Agent) Name() string {
 	return AgentName
 }
@@ -85,6 +89,10 @@ func (s *metricsSkill) Match(task *protocol.TaskEnvelope) bool {
 
 func (s *metricsSkill) Run(ctx context.Context, task *protocol.TaskEnvelope) (*protocol.TaskResult, error) {
 	return runPrometheusAlertQueryWithFocus(ctx, task, s.mode, s.focus)
+}
+
+func (s *metricsSkill) Focus() string {
+	return s.focus
 }
 
 func buildMetricsSkillRegistry() *skills.Registry {

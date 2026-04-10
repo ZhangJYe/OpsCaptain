@@ -16,7 +16,7 @@ import (
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
-const defaultServiceName = "oncallai-backend"
+const defaultServiceName = "opscaptionai-backend"
 
 func Init(ctx context.Context) (func(context.Context) error, error) {
 	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(

@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	defaultApprovalKeyPrefix = "oncallai:approval"
+	defaultApprovalKeyPrefix = "opscaptionai:approval"
 	defaultApprovalTTL       = 24 * time.Hour
 )
 

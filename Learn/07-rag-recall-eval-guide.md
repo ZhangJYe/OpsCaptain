@@ -8,11 +8,11 @@
 
 新增了一个离线评测模块：
 
-- [types.go](D:/Agent/OnCallAI/internal/ai/rag/eval/types.go)
-- [runner.go](D:/Agent/OnCallAI/internal/ai/rag/eval/runner.go)
-- [inmemory.go](D:/Agent/OnCallAI/internal/ai/rag/eval/inmemory.go)
-- [samples.go](D:/Agent/OnCallAI/internal/ai/rag/eval/samples.go)
-- [runner_test.go](D:/Agent/OnCallAI/internal/ai/rag/eval/runner_test.go)
+- [types.go](D:/Agent/OpsCaptionAI/internal/ai/rag/eval/types.go)
+- [runner.go](D:/Agent/OpsCaptionAI/internal/ai/rag/eval/runner.go)
+- [inmemory.go](D:/Agent/OpsCaptionAI/internal/ai/rag/eval/inmemory.go)
+- [samples.go](D:/Agent/OpsCaptionAI/internal/ai/rag/eval/samples.go)
+- [runner_test.go](D:/Agent/OpsCaptionAI/internal/ai/rag/eval/runner_test.go)
 
 还会把原来的 `recall_cmd` 改成真正可用的评测入口。
 
@@ -59,7 +59,7 @@
 
 这次样例数据就在：
 
-- [samples.go](D:/Agent/OnCallAI/internal/ai/rag/eval/samples.go)
+- [samples.go](D:/Agent/OpsCaptionAI/internal/ai/rag/eval/samples.go)
 
 你会看到两部分：
 

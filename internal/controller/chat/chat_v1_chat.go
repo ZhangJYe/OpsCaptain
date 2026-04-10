@@ -20,10 +20,8 @@ import (
 
 var sessionLocks sync.Map
 var (
-	buildChatAgent             = chat_pipeline.BuildChatAgent
-	runChatMultiAgent          = aiservice.RunChatMultiAgent
-	shouldUseMultiAgentForChat = aiservice.ShouldUseMultiAgentForChat
-	getDegradationDecision     = aiservice.GetDegradationDecision
+	buildChatAgent         = chat_pipeline.BuildChatAgentWithQuery
+	getDegradationDecision = aiservice.GetDegradationDecision
 )
 
 func acquireSessionLock(id string) *sync.Mutex {
@@ -69,42 +67,16 @@ func (c *ControllerV1) Chat(ctx context.Context, req *v1.ChatReq) (res *v1.ChatR
 	defer releaseSessionLock(id, mu)
 
 	sessionMem := mem.GetSimpleMemory(id)
-	useMultiAgent := shouldUseMultiAgentForChat(ctx, msg)
-	if !useMultiAgent {
-		if entry, found, cacheErr := cache.LoadChatResponse(ctx, id, msg); cacheErr != nil {
-			g.Log().Warningf(ctx, "[session:%s][req:%s] cache lookup failed: %v", id, requestID, cacheErr)
-		} else if found {
-			answer, detail := filterAssistantPayload(ctx, entry.Answer, entry.Detail)
-			return &v1.ChatRes{
-				Answer: answer,
-				Detail: detail,
-				Mode:   "cache",
-				Cached: true,
-			}, nil
-		}
-	}
 
-	if useMultiAgent {
-		response, err := runChatMultiAgent(ctx, id, msg)
-		if err != nil {
-			if fallback := userFacingChatError(ctx, err); fallback != nil {
-				return fallback, nil
-			}
-			g.Log().Errorf(ctx, "[session:%s][req:%s] Chat multi-agent failed: %v", id, requestID, err)
-			return nil, err
-		}
-		answer, detail := filterAssistantPayload(ctx, response.Content, response.Detail)
-
-		g.Log().Infof(ctx, "[session:%s][req:%s] Chat multi-agent completed, answer length: %d, turns: %d, trace: %s",
-			id, requestID, len(answer), sessionMem.TurnCount(), response.TraceID)
-
+	if entry, found, cacheErr := cache.LoadChatResponse(ctx, id, msg); cacheErr != nil {
+		g.Log().Warningf(ctx, "[session:%s][req:%s] cache lookup failed: %v", id, requestID, cacheErr)
+	} else if found {
+		answer, detail := filterAssistantPayload(ctx, entry.Answer, entry.Detail)
 		return &v1.ChatRes{
-			Answer:            answer,
-			TraceID:           response.TraceID,
-			Detail:            detail,
-			Mode:              "multi_agent",
-			Degraded:          response.Degraded(),
-			DegradationReason: response.DegradationReason,
+			Answer: answer,
+			Detail: detail,
+			Mode:   "cache",
+			Cached: true,
 		}, nil
 	}
 
@@ -118,7 +90,7 @@ func (c *ControllerV1) Chat(ctx context.Context, req *v1.ChatReq) (res *v1.ChatR
 		History:   contextPkg.HistoryMessages,
 	}
 
-	runner, err := buildChatAgent(ctx)
+	runner, err := buildChatAgent(ctx, msg)
 	if err != nil {
 		g.Log().Errorf(ctx, "[session:%s][req:%s] BuildChatAgent failed: %v", id, requestID, err)
 		return nil, err
@@ -138,7 +110,7 @@ func (c *ControllerV1) Chat(ctx context.Context, req *v1.ChatReq) (res *v1.ChatR
 	if cacheErr := cache.StoreChatResponse(ctx, id, msg, cache.ChatResponseEntry{
 		Answer: answer,
 		Detail: detail,
-		Mode:   "legacy",
+		Mode:   "chat",
 	}); cacheErr != nil {
 		g.Log().Warningf(ctx, "[session:%s][req:%s] cache store failed: %v", id, requestID, cacheErr)
 	}
@@ -149,7 +121,7 @@ func (c *ControllerV1) Chat(ctx context.Context, req *v1.ChatReq) (res *v1.ChatR
 	res = &v1.ChatRes{
 		Answer: answer,
 		Detail: detail,
-		Mode:   "legacy",
+		Mode:   "chat",
 	}
 	return res, nil
 }

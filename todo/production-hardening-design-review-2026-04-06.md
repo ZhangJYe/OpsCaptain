@@ -1,10 +1,10 @@
-# OnCallAI 生产级加固设计规划与评审
+# OpsCaptionAI 生产级加固设计规划与评审
 
 ## CoT 思维链
 
 ### 第一步：理解当前系统现状
 
-当前 OnCallAI 是一个 AIOps Multi-Agent 系统，技术栈如下：
+当前 OpsCaptionAI 是一个 AIOps Multi-Agent 系统，技术栈如下：
 
 - 语言：Go 1.24 + GoFrame v2
 - AI 框架：cloudwego/eino（chat pipeline、embedding、retriever）
@@ -333,16 +333,16 @@
 
 - 暴露 `/metrics` endpoint
 - 核心指标：
-  - `oncallai_http_requests_total{method, path, status}`
-  - `oncallai_http_request_duration_seconds{method, path}`
-  - `oncallai_llm_calls_total{agent, model, status}`
-  - `oncallai_llm_call_duration_seconds{agent, model}`
-  - `oncallai_llm_tokens_total{agent, model, type}` (prompt/completion)
-  - `oncallai_agent_dispatch_total{agent, status}`
-  - `oncallai_agent_dispatch_duration_seconds{agent}`
-  - `oncallai_circuit_breaker_state{name}`
-  - `oncallai_cache_hits_total{type}`
-  - `oncallai_cache_misses_total{type}`
+  - `opscaptionai_http_requests_total{method, path, status}`
+  - `opscaptionai_http_request_duration_seconds{method, path}`
+  - `opscaptionai_llm_calls_total{agent, model, status}`
+  - `opscaptionai_llm_call_duration_seconds{agent, model}`
+  - `opscaptionai_llm_tokens_total{agent, model, type}` (prompt/completion)
+  - `opscaptionai_agent_dispatch_total{agent, status}`
+  - `opscaptionai_agent_dispatch_duration_seconds{agent}`
+  - `opscaptionai_circuit_breaker_state{name}`
+  - `opscaptionai_cache_hits_total{type}`
+  - `opscaptionai_cache_misses_total{type}`
 
 验收标准：
 
@@ -434,7 +434,7 @@
 要求：
 
 - 从 LLM 响应中提取 `usage.prompt_tokens` 和 `usage.completion_tokens`
-- 写入 Prometheus metric `oncallai_llm_tokens_total`
+- 写入 Prometheus metric `opscaptionai_llm_tokens_total`
 - 写入 TaskEvent payload，使 trace 可回溯 token 消耗
 
 验收标准：

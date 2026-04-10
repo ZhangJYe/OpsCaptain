@@ -8,6 +8,10 @@ import (
 )
 
 func BuildChatAgent(ctx context.Context) (r compose.Runnable[*UserMessage, *schema.Message], err error) {
+	return BuildChatAgentWithQuery(ctx, "")
+}
+
+func BuildChatAgentWithQuery(ctx context.Context, query string) (r compose.Runnable[*UserMessage, *schema.Message], err error) {
 	const (
 		ChatTemplate = "ChatTemplate"
 		ReactAgent   = "ReactAgent"
@@ -19,7 +23,7 @@ func BuildChatAgent(ctx context.Context) (r compose.Runnable[*UserMessage, *sche
 		return nil, err
 	}
 	_ = g.AddChatTemplateNode(ChatTemplate, chatTemplateKeyOfChatTemplate)
-	reactAgentKeyOfLambda, err := newReactAgentLambda(ctx)
+	reactAgentKeyOfLambda, err := newReactAgentLambdaWithQuery(ctx, query)
 	if err != nil {
 		return nil, err
 	}

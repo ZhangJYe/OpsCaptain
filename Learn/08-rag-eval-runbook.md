@@ -6,12 +6,12 @@
 
 命令入口：
 
-- [main.go](D:/Agent/OnCallAI/internal/ai/cmd/rag_eval_cmd/main.go)
+- [main.go](D:/Agent/OpsCaptionAI/internal/ai/cmd/rag_eval_cmd/main.go)
 
 评测核心：
 
-- [runner.go](D:/Agent/OnCallAI/internal/ai/rag/eval/runner.go)
-- [samples.go](D:/Agent/OnCallAI/internal/ai/rag/eval/samples.go)
+- [runner.go](D:/Agent/OpsCaptionAI/internal/ai/rag/eval/runner.go)
+- [samples.go](D:/Agent/OpsCaptionAI/internal/ai/rag/eval/samples.go)
 
 ## 运行命令
 
@@ -62,9 +62,9 @@ go run ./internal/ai/cmd/rag_eval_cmd
 
 ## 你复盘时最该看哪 3 个文件
 
-1. [samples.go](D:/Agent/OnCallAI/internal/ai/rag/eval/samples.go)
+1. [samples.go](D:/Agent/OpsCaptionAI/internal/ai/rag/eval/samples.go)
    先看 golden cases 是怎么定义的。
-2. [runner.go](D:/Agent/OnCallAI/internal/ai/rag/eval/runner.go)
+2. [runner.go](D:/Agent/OpsCaptionAI/internal/ai/rag/eval/runner.go)
    再看 Recall@K 是怎么计算的。
-3. [main.go](D:/Agent/OnCallAI/internal/ai/cmd/rag_eval_cmd/main.go)
+3. [main.go](D:/Agent/OpsCaptionAI/internal/ai/cmd/rag_eval_cmd/main.go)
    最后看怎么把评测跑起来。

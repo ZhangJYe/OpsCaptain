@@ -83,6 +83,10 @@ func (r *Registry) Execute(ctx context.Context, task *protocol.TaskEnvelope) (*E
 	}, nil
 }
 
+func (r *Registry) Domain() string {
+	return r.domain
+}
+
 func (r *Registry) SkillNames() []string {
 	if r == nil || len(r.skills) == 0 {
 		return nil

@@ -1,4 +1,4 @@
-# OnCallAI 上下文工程完整设计文档
+# OpsCaptionAI 上下文工程完整设计文档
 
 ## 1. 文档目的
 
@@ -137,7 +137,7 @@
 
 代码位置：
 
-- [mem.go](/Users/agiuser/Agent/OnCallAI/utility/mem/mem.go)
+- [mem.go](/Users/agiuser/Agent/OpsCaptionAI/utility/mem/mem.go)
 
 当前能力：
 
@@ -149,8 +149,8 @@
 
 代码位置：
 
-- [long_term.go](/Users/agiuser/Agent/OnCallAI/utility/mem/long_term.go)
-- [extraction.go](/Users/agiuser/Agent/OnCallAI/utility/mem/extraction.go)
+- [long_term.go](/Users/agiuser/Agent/OpsCaptionAI/utility/mem/long_term.go)
+- [extraction.go](/Users/agiuser/Agent/OpsCaptionAI/utility/mem/extraction.go)
 
 当前能力：
 
@@ -162,9 +162,9 @@
 
 代码位置：
 
-- [orchestration.go](/Users/agiuser/Agent/OnCallAI/internal/ai/agent/chat_pipeline/orchestration.go)
-- [prompt.go](/Users/agiuser/Agent/OnCallAI/internal/ai/agent/chat_pipeline/prompt.go)
-- [query_internal_docs.go](/Users/agiuser/Agent/OnCallAI/internal/ai/tools/query_internal_docs.go)
+- [orchestration.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/agent/chat_pipeline/orchestration.go)
+- [prompt.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/agent/chat_pipeline/prompt.go)
+- [query_internal_docs.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/tools/query_internal_docs.go)
 
 当前能力：
 
@@ -175,7 +175,7 @@
 
 代码位置：
 
-- [token_budget.go](/Users/agiuser/Agent/OnCallAI/utility/mem/token_budget.go)
+- [token_budget.go](/Users/agiuser/Agent/OpsCaptionAI/utility/mem/token_budget.go)
 
 当前能力：
 
@@ -187,7 +187,7 @@
 
 代码位置：
 
-- [memory_service.go](/Users/agiuser/Agent/OnCallAI/internal/ai/service/memory_service.go)
+- [memory_service.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/service/memory_service.go)
 
 当前能力：
 
@@ -928,12 +928,12 @@ sequenceDiagram
 
 | 当前实现 | 位置 | 评价 |
 | --- | --- | --- |
-| 短期记忆 | [mem.go](/Users/agiuser/Agent/OnCallAI/utility/mem/mem.go) | 有基础，但缺少场景化装配 |
-| 长期记忆抽取 | [extraction.go](/Users/agiuser/Agent/OnCallAI/utility/mem/extraction.go) | 有基础，但策略偏粗糙 |
-| token budget 工具 | [token_budget.go](/Users/agiuser/Agent/OnCallAI/utility/mem/token_budget.go) | 有设计但未接主链路 |
-| Chat prompt | [prompt.go](/Users/agiuser/Agent/OnCallAI/internal/ai/agent/chat_pipeline/prompt.go) | 指令层次初步清晰，但注入偏硬 |
-| Chat orchestration | [orchestration.go](/Users/agiuser/Agent/OnCallAI/internal/ai/agent/chat_pipeline/orchestration.go) | 有 graph，但缺少 context control |
-| AI Ops memory service | [memory_service.go](/Users/agiuser/Agent/OnCallAI/internal/ai/service/memory_service.go) | 是统一治理的好起点 |
+| 短期记忆 | [mem.go](/Users/agiuser/Agent/OpsCaptionAI/utility/mem/mem.go) | 有基础，但缺少场景化装配 |
+| 长期记忆抽取 | [extraction.go](/Users/agiuser/Agent/OpsCaptionAI/utility/mem/extraction.go) | 有基础，但策略偏粗糙 |
+| token budget 工具 | [token_budget.go](/Users/agiuser/Agent/OpsCaptionAI/utility/mem/token_budget.go) | 有设计但未接主链路 |
+| Chat prompt | [prompt.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/agent/chat_pipeline/prompt.go) | 指令层次初步清晰，但注入偏硬 |
+| Chat orchestration | [orchestration.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/agent/chat_pipeline/orchestration.go) | 有 graph，但缺少 context control |
+| AI Ops memory service | [memory_service.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/service/memory_service.go) | 是统一治理的好起点 |
 
 ## 15.2 优先级建议
 

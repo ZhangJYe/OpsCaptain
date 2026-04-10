@@ -1,4 +1,4 @@
-# OnCallAI RAG 工程完整设计文档
+# OpsCaptionAI RAG 工程完整设计文档
 
 ## 1. 文档目的
 
@@ -92,7 +92,7 @@
 
 代码位置：
 
-- [retriever.go](/Users/agiuser/Agent/OnCallAI/internal/ai/retriever/retriever.go)
+- [retriever.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/retriever/retriever.go)
 
 当前能力：
 
@@ -105,7 +105,7 @@
 
 代码位置：
 
-- [indexer.go](/Users/agiuser/Agent/OnCallAI/internal/ai/indexer/indexer.go)
+- [indexer.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/indexer/indexer.go)
 
 当前能力：
 
@@ -116,7 +116,7 @@
 
 代码位置：
 
-- [embedder.go](/Users/agiuser/Agent/OnCallAI/internal/ai/embedder/embedder.go)
+- [embedder.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/embedder/embedder.go)
 
 当前能力：
 
@@ -127,9 +127,9 @@
 
 代码位置：
 
-- [orchestration.go](/Users/agiuser/Agent/OnCallAI/internal/ai/agent/knowledge_index_pipeline/orchestration.go)
-- [loader.go](/Users/agiuser/Agent/OnCallAI/internal/ai/agent/knowledge_index_pipeline/loader.go)
-- [transformer.go](/Users/agiuser/Agent/OnCallAI/internal/ai/agent/knowledge_index_pipeline/transformer.go)
+- [orchestration.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/agent/knowledge_index_pipeline/orchestration.go)
+- [loader.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/agent/knowledge_index_pipeline/loader.go)
+- [transformer.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/agent/knowledge_index_pipeline/transformer.go)
 
 当前能力：
 
@@ -141,7 +141,7 @@
 
 代码位置：
 
-- [chat_v1_file_upload.go](/Users/agiuser/Agent/OnCallAI/internal/controller/chat/chat_v1_file_upload.go)
+- [chat_v1_file_upload.go](/Users/agiuser/Agent/OpsCaptionAI/internal/controller/chat/chat_v1_file_upload.go)
 
 当前能力：
 
@@ -154,9 +154,9 @@
 
 代码位置：
 
-- [orchestration.go](/Users/agiuser/Agent/OnCallAI/internal/ai/agent/chat_pipeline/orchestration.go)
-- [prompt.go](/Users/agiuser/Agent/OnCallAI/internal/ai/agent/chat_pipeline/prompt.go)
-- [query_internal_docs.go](/Users/agiuser/Agent/OnCallAI/internal/ai/tools/query_internal_docs.go)
+- [orchestration.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/agent/chat_pipeline/orchestration.go)
+- [prompt.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/agent/chat_pipeline/prompt.go)
+- [query_internal_docs.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/tools/query_internal_docs.go)
 
 当前能力：
 
@@ -927,13 +927,13 @@ sequenceDiagram
 
 | 当前实现 | 位置 | 评价 |
 | --- | --- | --- |
-| Retriever | [retriever.go](/Users/agiuser/Agent/OnCallAI/internal/ai/retriever/retriever.go) | 基础可用，但只有单阶段 dense retrieval |
-| Indexer | [indexer.go](/Users/agiuser/Agent/OnCallAI/internal/ai/indexer/indexer.go) | 基础可用，但缺少版本治理 |
-| Embedder | [embedder.go](/Users/agiuser/Agent/OnCallAI/internal/ai/embedder/embedder.go) | 简洁，但缺少模型版本治理和缓存策略 |
-| Knowledge indexing pipeline | [orchestration.go](/Users/agiuser/Agent/OnCallAI/internal/ai/agent/knowledge_index_pipeline/orchestration.go) | 已有 graph，但 chunking 策略太单一 |
-| Upload to index | [chat_v1_file_upload.go](/Users/agiuser/Agent/OnCallAI/internal/controller/chat/chat_v1_file_upload.go) | 入口完整，但入库 service 化不足 |
-| Tool RAG | [query_internal_docs.go](/Users/agiuser/Agent/OnCallAI/internal/ai/tools/query_internal_docs.go) | 可复用，但返回的是裸检索结果而不是 evidence |
-| Chat 注入 | [prompt.go](/Users/agiuser/Agent/OnCallAI/internal/ai/agent/chat_pipeline/prompt.go) | 直接 documents 注入，需优化 |
+| Retriever | [retriever.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/retriever/retriever.go) | 基础可用，但只有单阶段 dense retrieval |
+| Indexer | [indexer.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/indexer/indexer.go) | 基础可用，但缺少版本治理 |
+| Embedder | [embedder.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/embedder/embedder.go) | 简洁，但缺少模型版本治理和缓存策略 |
+| Knowledge indexing pipeline | [orchestration.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/agent/knowledge_index_pipeline/orchestration.go) | 已有 graph，但 chunking 策略太单一 |
+| Upload to index | [chat_v1_file_upload.go](/Users/agiuser/Agent/OpsCaptionAI/internal/controller/chat/chat_v1_file_upload.go) | 入口完整，但入库 service 化不足 |
+| Tool RAG | [query_internal_docs.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/tools/query_internal_docs.go) | 可复用，但返回的是裸检索结果而不是 evidence |
+| Chat 注入 | [prompt.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/agent/chat_pipeline/prompt.go) | 直接 documents 注入，需优化 |
 
 ## 14.2 优先级建议
 

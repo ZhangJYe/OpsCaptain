@@ -7,7 +7,7 @@
 - 什么是 Harness Engineering
 - 它为什么在 AI Agent 场景里变得重要
 - 它和 Multi-Agent 的关系
-- 它是否适合当前 OnCallAI 项目
+- 它是否适合当前 OpsCaptionAI 项目
 - 如果要在当前项目中落地，应该如何分阶段实施
 - 一份按 `P0 / P1 / P2` 优先级排序的落地清单
 
@@ -381,7 +381,7 @@ Harness 就是在补这些能力。
 
 ---
 
-## 9. OnCallAI 项目的 Harness Engineering 落地清单
+## 9. OpsCaptionAI 项目的 Harness Engineering 落地清单
 
 以下清单按优先级划分。
 
@@ -710,7 +710,7 @@ P2 表示：系统进入更成熟、更规模化的阶段。
 
 ## 15. 一句话总结
 
-对 OnCallAI 来说，Harness Engineering 最有价值的作用不是“让模型更聪明”，而是：
+对 OpsCaptionAI 来说，Harness Engineering 最有价值的作用不是“让模型更聪明”，而是：
 
 > 让即将变复杂的 Multi-Agent 系统，在工程上保持可控、可验证、可维护。
 

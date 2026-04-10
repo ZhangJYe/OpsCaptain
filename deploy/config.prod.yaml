@@ -58,6 +58,11 @@ cors:
 
 milvus:
   address: "${MILVUS_ADDRESS}"
+  index_type: "HNSW"
+  metric_type: "IP"
+  hnsw:
+    m: 16
+    ef_construction: 200
 
 ds_think_chat_model:
   model: "GLM-4.5-AIR"

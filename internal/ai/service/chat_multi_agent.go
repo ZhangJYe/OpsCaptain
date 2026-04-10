@@ -2,13 +2,28 @@ package service
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
+	"sync"
 
+	"SuperBizAgent/internal/ai/agent/reporter"
+	"SuperBizAgent/internal/ai/agent/skillspecialists/knowledge"
+	"SuperBizAgent/internal/ai/agent/skillspecialists/logs"
+	"SuperBizAgent/internal/ai/agent/skillspecialists/metrics"
 	"SuperBizAgent/internal/ai/agent/supervisor"
+	"SuperBizAgent/internal/ai/agent/triage"
 	"SuperBizAgent/internal/ai/protocol"
+	"SuperBizAgent/internal/ai/runtime"
 	"SuperBizAgent/internal/consts"
 
 	"github.com/gogf/gf/v2/frame/g"
+)
+
+var (
+	chatRuntimeMu        sync.Mutex
+	chatRuntimes         = make(map[string]*runtime.Runtime)
+	newPersistentRuntime = runtime.NewPersistent
+	registerChatAgentsFn = registerChatAgents
 )
 
 var chatMultiAgentKeywords = []string{
@@ -41,7 +56,7 @@ func RunChatMultiAgent(ctx context.Context, sessionID, query string) (ExecutionR
 	}
 	ctx = context.WithValue(ctx, consts.CtxKeySessionID, sessionID)
 
-	rt, err := getOrCreateAIOpsRuntime(ctx)
+	rt, err := getOrCreateChatRuntime(ctx)
 	if err != nil {
 		return ExecutionResponse{}, err
 	}
@@ -71,4 +86,48 @@ func RunChatMultiAgent(ctx context.Context, sessionID, query string) (ExecutionR
 
 	memorySvc.PersistOutcome(ctx, sessionID, query, result.Summary)
 	return ExecutionResponseFromResult(result, detail, rootTask.TraceID), err
+}
+
+func getOrCreateChatRuntime(ctx context.Context) (*runtime.Runtime, error) {
+	dataDir := chatRuntimeDataDir(ctx)
+	chatRuntimeMu.Lock()
+	defer chatRuntimeMu.Unlock()
+
+	if rt, ok := chatRuntimes[dataDir]; ok {
+		return rt, nil
+	}
+
+	rt, err := newPersistentRuntime(dataDir)
+	if err != nil {
+		return nil, err
+	}
+	if err := registerChatAgentsFn(rt); err != nil {
+		return nil, err
+	}
+	chatRuntimes[dataDir] = rt
+	return rt, nil
+}
+
+func registerChatAgents(rt *runtime.Runtime) error {
+	for _, agent := range []runtime.Agent{
+		supervisor.New(),
+		triage.New(),
+		metrics.New(),
+		logs.New(),
+		knowledge.New(),
+		reporter.New(),
+	} {
+		if err := rt.Register(agent); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func chatRuntimeDataDir(ctx context.Context) string {
+	v, err := g.Cfg().Get(ctx, "multi_agent.data_dir")
+	if err == nil && v.String() != "" {
+		return v.String()
+	}
+	return filepath.Join(".", "var", "runtime")
 }

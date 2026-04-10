@@ -1,4 +1,4 @@
-# OnCallAI 修改记录与复盘文档
+# OpsCaptionAI 修改记录与复盘文档
 
 ## 1. 文档目的
 
@@ -1378,7 +1378,7 @@ env GOCACHE=/tmp/gocache GOTMPDIR=/tmp/go-tmp go build ./...
 
 新增了 `ShouldUseMultiAgentForChat(...)`：
 
-- 对 `告警 / prometheus / 日志 / log / 排查 / 故障 / 知识库 / SOP / runbook / mysql / sql / 数据库 / 指标 / 运维 / oncall / 根因` 等关键词命中时，Chat 会路由到 Multi-Agent
+- 对 `告警 / prometheus / 日志 / log / 排查 / 故障 / 知识库 / SOP / runbook / mysql / sql / 数据库 / 指标 / 运维 / opscaption / 根因` 等关键词命中时，Chat 会路由到 Multi-Agent
 - 其余普通聊天继续走旧 `chat_pipeline`
 - 配置项：
   - `multi_agent.chat_route_enabled: true`

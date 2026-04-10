@@ -19,7 +19,7 @@ logging:
 
 tracing:
   enabled: false
-  service_name: "oncallai-backend"
+  service_name: "opscaptionai-backend"
   jaeger_endpoint: ""
   sample_ratio: 1.0
 
@@ -34,12 +34,12 @@ cache:
 
 degradation:
   kill_switch: false
-  redis_key: "oncallai:degradation:kill_switch"
+  redis_key: "opscaptionai:degradation:kill_switch"
   message: "AI capabilities are temporarily degraded. Please retry later."
 
 approval:
   enabled: true
-  redis_key_prefix: "oncallai:approval"
+  redis_key_prefix: "opscaptionai:approval"
   request_ttl_seconds: 86400
 
 cost:

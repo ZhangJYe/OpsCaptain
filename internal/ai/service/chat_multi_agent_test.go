@@ -4,9 +4,21 @@ import (
 	"context"
 	"testing"
 
+	"SuperBizAgent/internal/ai/agent/supervisor"
 	"SuperBizAgent/internal/ai/protocol"
 	"SuperBizAgent/internal/ai/runtime"
 )
+
+type captureSupervisorAgent struct {
+	lastTask *protocol.TaskEnvelope
+}
+
+func (a *captureSupervisorAgent) Name() string           { return supervisor.AgentName }
+func (a *captureSupervisorAgent) Capabilities() []string { return []string{"test"} }
+func (a *captureSupervisorAgent) Handle(_ context.Context, task *protocol.TaskEnvelope) (*protocol.TaskResult, error) {
+	a.lastTask = task
+	return &protocol.TaskResult{TaskID: task.TaskID, Agent: a.Name(), Status: protocol.ResultStatusSucceeded, Summary: "ok", Confidence: 1}, nil
+}
 
 func TestShouldUseMultiAgentForChat(t *testing.T) {
 	if !ShouldUseMultiAgentForChat(context.Background(), "analyze current Prometheus alerts") {
@@ -19,23 +31,23 @@ func TestShouldUseMultiAgentForChat(t *testing.T) {
 
 func TestRunChatMultiAgentUsesChatMode(t *testing.T) {
 	oldFactory := newPersistentRuntime
-	oldRegister := registerAIOpsAgentsFn
+	oldRegister := registerChatAgentsFn
 	oldMemoryFactory := newMemoryService
-	oldRuntimes := aiOpsRuntimes
+	oldRuntimes := chatRuntimes
 	oldCfgBool := degradationConfigBool
 	oldCfgString := degradationConfigString
 	defer func() {
 		newPersistentRuntime = oldFactory
-		registerAIOpsAgentsFn = oldRegister
+		registerChatAgentsFn = oldRegister
 		newMemoryService = oldMemoryFactory
-		aiOpsRuntimes = oldRuntimes
+		chatRuntimes = oldRuntimes
 		degradationConfigBool = oldCfgBool
 		degradationConfigString = oldCfgString
 	}()
 
 	degradationConfigBool = func(context.Context, string) bool { return false }
 	degradationConfigString = func(context.Context, string) string { return "" }
-	aiOpsRuntimes = make(map[string]*runtime.Runtime)
+	chatRuntimes = make(map[string]*runtime.Runtime)
 	supervisorAgent := &captureSupervisorAgent{}
 	memorySvc := &stubAIOpsMemory{
 		sessionID:     "chat-session",
@@ -45,7 +57,7 @@ func TestRunChatMultiAgentUsesChatMode(t *testing.T) {
 	}
 
 	newPersistentRuntime = func(string) (*runtime.Runtime, error) { return runtime.New(), nil }
-	registerAIOpsAgentsFn = func(rt *runtime.Runtime) error { return rt.Register(supervisorAgent) }
+	registerChatAgentsFn = func(rt *runtime.Runtime) error { return rt.Register(supervisorAgent) }
 	newMemoryService = func() aiOpsMemory { return memorySvc }
 
 	response, err := RunChatMultiAgent(context.Background(), "chat-session", "check payment service log errors")

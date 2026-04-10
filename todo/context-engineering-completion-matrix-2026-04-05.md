@@ -88,7 +88,7 @@
 
 代码：
 
-- [types.go](/Users/agiuser/Agent/OnCallAI/internal/ai/contextengine/types.go)
+- [types.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/contextengine/types.go)
 
 已完成内容：
 
@@ -109,7 +109,7 @@
 
 代码：
 
-- [assembler.go](/Users/agiuser/Agent/OnCallAI/internal/ai/contextengine/assembler.go)
+- [assembler.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/contextengine/assembler.go)
 
 已完成内容：
 
@@ -129,8 +129,8 @@
 
 代码：
 
-- [chat_v1_chat.go](/Users/agiuser/Agent/OnCallAI/internal/controller/chat/chat_v1_chat.go)
-- [chat_v1_chat_stream.go](/Users/agiuser/Agent/OnCallAI/internal/controller/chat/chat_v1_chat_stream.go)
+- [chat_v1_chat.go](/Users/agiuser/Agent/OpsCaptionAI/internal/controller/chat/chat_v1_chat.go)
+- [chat_v1_chat_stream.go](/Users/agiuser/Agent/OpsCaptionAI/internal/controller/chat/chat_v1_chat_stream.go)
 
 已完成内容：
 
@@ -146,8 +146,8 @@
 
 代码：
 
-- [ai_ops_service.go](/Users/agiuser/Agent/OnCallAI/internal/ai/service/ai_ops_service.go)
-- [chat_multi_agent.go](/Users/agiuser/Agent/OnCallAI/internal/ai/service/chat_multi_agent.go)
+- [ai_ops_service.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/service/ai_ops_service.go)
+- [chat_multi_agent.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/service/chat_multi_agent.go)
 
 已完成内容：
 
@@ -162,8 +162,8 @@
 
 代码：
 
-- [documents.go](/Users/agiuser/Agent/OnCallAI/internal/ai/contextengine/documents.go)
-- [orchestration.go](/Users/agiuser/Agent/OnCallAI/internal/ai/agent/chat_pipeline/orchestration.go)
+- [documents.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/contextengine/documents.go)
+- [orchestration.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/agent/chat_pipeline/orchestration.go)
 
 已完成内容：
 
@@ -178,8 +178,8 @@
 
 代码：
 
-- [tool_items.go](/Users/agiuser/Agent/OnCallAI/internal/ai/contextengine/tool_items.go)
-- [reporter.go](/Users/agiuser/Agent/OnCallAI/internal/ai/agent/reporter/reporter.go)
+- [tool_items.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/contextengine/tool_items.go)
+- [reporter.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/agent/reporter/reporter.go)
 
 已完成内容：
 
@@ -199,7 +199,7 @@
 
 代码：
 
-- [extraction.go](/Users/agiuser/Agent/OnCallAI/utility/mem/extraction.go)
+- [extraction.go](/Users/agiuser/Agent/OpsCaptionAI/utility/mem/extraction.go)
 
 当前状态：
 

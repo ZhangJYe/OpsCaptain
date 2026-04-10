@@ -75,7 +75,13 @@ type RetrievalStageMetrics struct {
 	InitFailureCached bool
 	InitLatencyMs     int64
 	RetrieveLatencyMs int64
+	RewriteLatencyMs  int64
+	RerankLatencyMs   int64
+	OriginalQuery     string
+	RewrittenQuery    string
+	RawResultCount    int
 	ResultCount       int
+	RerankEnabled     bool
 }
 
 type ContextAssemblyTrace struct {

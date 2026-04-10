@@ -56,27 +56,6 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 	defer releaseSessionLock(id, mu)
 
 	sessionMem := mem.GetSimpleMemory(id)
-	if shouldUseMultiAgentForChat(ctx, msg) {
-		response, err := runChatMultiAgent(ctx, id, msg)
-		if err != nil {
-			if fallback := userFacingChatError(ctx, err); fallback != nil {
-				sendChatStreamMeta(client, fallback.Mode, "", fallback.Detail, fallback.Degraded, fallback.DegradationReason)
-				streamTextToClient(client, fallback.Answer)
-				client.SendToClient("done", "Stream completed")
-				return &v1.ChatStreamRes{}, nil
-			}
-			g.Log().Errorf(ctx, "[session:%s][req:%s] ChatStream multi-agent failed: %v", id, requestID, err)
-			client.SendToClient("error", err.Error())
-			return nil, err
-		}
-		answer, detail := filterAssistantPayload(ctx, response.Content, response.Detail)
-		sendChatStreamMeta(client, "multi_agent", response.TraceID, detail, response.Degraded(), response.DegradationReason)
-		streamTextToClient(client, answer)
-		client.SendToClient("done", "Stream completed")
-		g.Log().Infof(ctx, "[session:%s][req:%s] ChatStream multi-agent completed, answer length: %d, turns: %d, trace: %s",
-			id, requestID, len(answer), sessionMem.TurnCount(), response.TraceID)
-		return &v1.ChatStreamRes{}, nil
-	}
 
 	memorySvc := aiservice.NewMemoryService()
 	contextPkg, contextDetail := memorySvc.BuildChatPackage(ctx, id, msg, sessionMem.GetContextMessages())
@@ -88,7 +67,7 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 		History:   contextPkg.HistoryMessages,
 	}
 
-	runner, err := buildChatAgent(ctx)
+	runner, err := buildChatAgent(ctx, msg)
 	if err != nil {
 		if fallback := userFacingChatError(ctx, err); fallback != nil {
 			sendChatStreamMeta(client, fallback.Mode, "", fallback.Detail, fallback.Degraded, fallback.DegradationReason)
@@ -101,7 +80,7 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 		return nil, err
 	}
 	_, filteredDetail := filterAssistantPayload(ctx, "", contextDetail)
-	sendChatStreamMeta(client, "legacy", "", filteredDetail, false, "")
+	sendChatStreamMeta(client, "chat", "", filteredDetail, false, "")
 	sr, err := runner.Stream(ctx, userMessage, compose.WithCallbacks(log_call_back.LogCallback(nil)))
 	if err != nil {
 		if fallback := userFacingChatError(ctx, err); fallback != nil {

@@ -14,7 +14,7 @@
 
 ## 为什么先整理这些
 
-- 都是典型的 oncall / ops 高频场景
+- 都是典型的 opscaption / ops 高频场景
 - 和你当前项目里的 `logs` / `metrics` / `knowledge` skills 高度匹配
 - 非常适合面试时解释“知识库为什么这样建”
 

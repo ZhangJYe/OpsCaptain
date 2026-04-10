@@ -202,7 +202,7 @@ func validateMysqlQuery(sql string, policy mysqlQueryPolicy) (string, error) {
 		}
 	}
 
-	return fmt.Sprintf("SELECT * FROM (%s) AS oncallai_safe_query LIMIT %d", trimmed, policy.maxRows), nil
+	return fmt.Sprintf("SELECT * FROM (%s) AS opscaptionai_safe_query LIMIT %d", trimmed, policy.maxRows), nil
 }
 
 func sanitizeSQLForInspection(sql string) string {

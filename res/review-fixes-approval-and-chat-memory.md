@@ -74,8 +74,8 @@
 
 ## 2.4 代码落点
 
-- [ai_ops_service.go](/Users/agiuser/Agent/OnCallAI/internal/ai/service/ai_ops_service.go)
-- [ai_ops_service_test.go](/Users/agiuser/Agent/OnCallAI/internal/ai/service/ai_ops_service_test.go)
+- [ai_ops_service.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/service/ai_ops_service.go)
+- [ai_ops_service_test.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/service/ai_ops_service_test.go)
 
 ---
 
@@ -123,9 +123,9 @@
 
 ## 3.4 代码落点
 
-- [chat_v1_chat.go](/Users/agiuser/Agent/OnCallAI/internal/controller/chat/chat_v1_chat.go)
-- [chat_v1_chat_stream.go](/Users/agiuser/Agent/OnCallAI/internal/controller/chat/chat_v1_chat_stream.go)
-- [memory_service.go](/Users/agiuser/Agent/OnCallAI/internal/ai/service/memory_service.go)
+- [chat_v1_chat.go](/Users/agiuser/Agent/OpsCaptionAI/internal/controller/chat/chat_v1_chat.go)
+- [chat_v1_chat_stream.go](/Users/agiuser/Agent/OpsCaptionAI/internal/controller/chat/chat_v1_chat_stream.go)
+- [memory_service.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/service/memory_service.go)
 
 ---
 

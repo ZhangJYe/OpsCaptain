@@ -52,7 +52,7 @@ GitOps 不是“把 kubectl 换个入口”，而是：
 
 - 发布
 - rollback
-- oncall
+- opscaption
 - skills
 
 Argo CD 文档补进来以后，知识库就更像真实平台工程。

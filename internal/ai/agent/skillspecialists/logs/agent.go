@@ -42,6 +42,10 @@ func New() *Agent {
 	return &Agent{registry: buildLogSkillRegistry()}
 }
 
+func SkillRegistry() *skills.Registry {
+	return buildLogSkillRegistry()
+}
+
 func (a *Agent) Name() string {
 	return AgentName
 }
@@ -87,6 +91,10 @@ func (s *logSkill) Match(task *protocol.TaskEnvelope) bool {
 
 func (s *logSkill) Run(ctx context.Context, task *protocol.TaskEnvelope) (*protocol.TaskResult, error) {
 	return runLogSkillWithFocus(ctx, task, s.mode, s.focus)
+}
+
+func (s *logSkill) Focus() string {
+	return s.focus
 }
 
 func buildLogSkillRegistry() *skills.Registry {

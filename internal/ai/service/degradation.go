@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	defaultDegradationRedisKey = "oncallai:degradation:kill_switch"
+	defaultDegradationRedisKey = "opscaptionai:degradation:kill_switch"
 	defaultDegradationMessage  = "AI capabilities are temporarily degraded. Please retry later."
 )
 

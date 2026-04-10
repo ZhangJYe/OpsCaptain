@@ -1,5 +1,5 @@
 route:
-  receiver: oncallai-webhook
+  receiver: opscaptionai-webhook
   group_by:
     - alertname
     - service
@@ -10,7 +10,7 @@ route:
   repeat_interval: 1h
 
 receivers:
-  - name: oncallai-webhook
+  - name: opscaptionai-webhook
     webhook_configs:
-      - url: https://hooks.example.com/oncallai-cost-alerts
+      - url: https://hooks.example.com/opscaptionai-cost-alerts
         send_resolved: true

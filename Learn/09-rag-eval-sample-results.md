@@ -8,7 +8,7 @@ go run ./internal/ai/cmd/rag_eval_cmd
 
 命令入口在这里：
 
-- [main.go](D:/Agent/OnCallAI/internal/ai/cmd/rag_eval_cmd/main.go)
+- [main.go](D:/Agent/OpsCaptionAI/internal/ai/cmd/rag_eval_cmd/main.go)
 
 ## 本次结果
 

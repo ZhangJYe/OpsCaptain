@@ -48,6 +48,10 @@ func New() *Agent {
 	return &Agent{registry: buildKnowledgeSkillRegistry()}
 }
 
+func SkillRegistry() *skills.Registry {
+	return buildKnowledgeSkillRegistry()
+}
+
 func (a *Agent) Name() string {
 	return AgentName
 }
@@ -93,6 +97,10 @@ func (s *knowledgeSkill) Match(task *protocol.TaskEnvelope) bool {
 
 func (s *knowledgeSkill) Run(ctx context.Context, task *protocol.TaskEnvelope) (*protocol.TaskResult, error) {
 	return runKnowledgeLookupWithFocus(ctx, task, s.mode, s.focus)
+}
+
+func (s *knowledgeSkill) Focus() string {
+	return s.focus
 }
 
 func buildKnowledgeSkillRegistry() *skills.Registry {

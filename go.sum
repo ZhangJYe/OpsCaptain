@@ -54,6 +54,10 @@ github.com/cloudwego/eino-ext/components/document/loader/file v0.0.0-20251022075
 github.com/cloudwego/eino-ext/components/document/loader/file v0.0.0-20251022075257-f53d64495d2f/go.mod h1:wRq8UHQENoJos8nxrZnbtvzCygSXsoO9NJWWQT5scY0=
 github.com/cloudwego/eino-ext/components/document/transformer/splitter/markdown v0.0.0-20251022075257-f53d64495d2f h1:vlCPQLukufywlRJ1y6XOxfAqYFScFqbMyKEdgZwRe9U=
 github.com/cloudwego/eino-ext/components/document/transformer/splitter/markdown v0.0.0-20251022075257-f53d64495d2f/go.mod h1:HZNxjGsgkN+1jsXdcKR8TwnE7J3W5C8aqX/hwWyAOoU=
+github.com/cloudwego/eino-ext/components/document/transformer/splitter/recursive v0.0.0-20260408111519-100ca7063d18 h1:djI97Yfp0TnkcZFQFhCUncZdMSBM57Da679/o16CtYc=
+github.com/cloudwego/eino-ext/components/document/transformer/splitter/recursive v0.0.0-20260408111519-100ca7063d18/go.mod h1:9R0RQrQSpg1JaNnRtw7+RfRAAv0HgdE348YnrlZ6coo=
+github.com/cloudwego/eino-ext/components/document/transformer/splitter/semantic v0.0.0-20260408111519-100ca7063d18 h1:JS/BirRrlfX3byditmKXNdhquu6ZI0+ISkiHiPAA23U=
+github.com/cloudwego/eino-ext/components/document/transformer/splitter/semantic v0.0.0-20260408111519-100ca7063d18/go.mod h1:Ov33JMUewdOoUgJbYNJt3qL7KQDVHYpoVBCjJXsz8sw=
 github.com/cloudwego/eino-ext/components/embedding/openai v0.0.0-20260331071634-4f359694d2d9 h1:Xvp5nJuIYAHbLECy60G7kp5hIWPrhimnz6m7CzGkCbg=
 github.com/cloudwego/eino-ext/components/embedding/openai v0.0.0-20260331071634-4f359694d2d9/go.mod h1:zyPrZT2bO6LyRJgVksQowR18jVgyLSvqK93hnO53/Lc=
 github.com/cloudwego/eino-ext/components/indexer/milvus v0.0.0-20251011073417-75b93b87b8a9 h1:MMqIG9ogRY3jjmlJ4qnSEnBG5/ToFtOhMfEKkIlN1AY=

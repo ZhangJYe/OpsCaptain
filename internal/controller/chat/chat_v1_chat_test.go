@@ -30,78 +30,48 @@ func (f *fakeChatRunnable) Transform(context.Context, *schema.StreamReader[*chat
 	return nil, nil
 }
 
-func TestChatUsesMultiAgentRoute(t *testing.T) {
-	oldShouldUse := shouldUseMultiAgentForChat
-	oldRun := runChatMultiAgent
+func TestChatReturnsAnswer(t *testing.T) {
 	oldBuild := buildChatAgent
 	oldDecision := getDegradationDecision
 	defer func() {
-		shouldUseMultiAgentForChat = oldShouldUse
-		runChatMultiAgent = oldRun
 		buildChatAgent = oldBuild
 		getDegradationDecision = oldDecision
 	}()
 
-	shouldUseMultiAgentForChat = func(context.Context, string) bool { return true }
 	getDegradationDecision = func(context.Context, string) aiService.DegradationDecision { return aiService.DegradationDecision{} }
-	buildChatAgent = func(context.Context) (compose.Runnable[*chat_pipeline.UserMessage, *schema.Message], error) {
-		t.Fatal("legacy chat agent should not be built for multi-agent route")
-		return nil, nil
-	}
-
-	capturedSessionID := ""
-	capturedQuery := ""
-	runChatMultiAgent = func(ctx context.Context, sessionID, query string) (aiService.ExecutionResponse, error) {
-		capturedSessionID = sessionID
-		capturedQuery = query
-		return aiService.ExecutionResponse{Content: "multi-agent answer", Detail: []string{"detail"}, TraceID: "trace-chat-1", Status: "succeeded"}, nil
+	buildChatAgent = func(_ context.Context, _ string) (compose.Runnable[*chat_pipeline.UserMessage, *schema.Message], error) {
+		return &fakeChatRunnable{answer: "hello back"}, nil
 	}
 
 	ctrl := &ControllerV1{}
-	sessionID := mem.GenerateSessionID()
-	res, err := ctrl.Chat(context.Background(), &v1.ChatReq{Id: sessionID, Question: "analyze current Prometheus alerts"})
+	res, err := ctrl.Chat(context.Background(), &v1.ChatReq{Id: mem.GenerateSessionID(), Question: "hello"})
 	if err != nil {
 		t.Fatalf("chat returned error: %v", err)
 	}
 	if res == nil {
 		t.Fatal("expected response")
 	}
-	if res.Answer != "multi-agent answer" {
+	if res.Answer != "hello back" {
 		t.Fatalf("unexpected answer: %q", res.Answer)
 	}
-	if res.Mode != "multi_agent" {
-		t.Fatalf("expected multi_agent mode, got %q", res.Mode)
-	}
-	if res.TraceID != "trace-chat-1" {
-		t.Fatalf("unexpected trace id: %q", res.TraceID)
-	}
-	if capturedSessionID != sessionID || capturedQuery != "analyze current Prometheus alerts" {
-		t.Fatalf("unexpected multi-agent inputs: session=%q query=%q", capturedSessionID, capturedQuery)
+	if res.Mode != "chat" {
+		t.Fatalf("expected chat mode, got %q", res.Mode)
 	}
 }
 
 func TestChatReturnsKillSwitchResponse(t *testing.T) {
-	oldShouldUse := shouldUseMultiAgentForChat
-	oldRun := runChatMultiAgent
 	oldBuild := buildChatAgent
 	oldDecision := getDegradationDecision
 	defer func() {
-		shouldUseMultiAgentForChat = oldShouldUse
-		runChatMultiAgent = oldRun
 		buildChatAgent = oldBuild
 		getDegradationDecision = oldDecision
 	}()
 
-	shouldUseMultiAgentForChat = func(context.Context, string) bool { return true }
 	getDegradationDecision = func(context.Context, string) aiService.DegradationDecision {
 		return aiService.DegradationDecision{Enabled: true, Message: "degraded response", Reason: "kill switch"}
 	}
-	runChatMultiAgent = func(context.Context, string, string) (aiService.ExecutionResponse, error) {
-		t.Fatal("multi-agent route should not run when kill switch is enabled")
-		return aiService.ExecutionResponse{}, nil
-	}
-	buildChatAgent = func(context.Context) (compose.Runnable[*chat_pipeline.UserMessage, *schema.Message], error) {
-		t.Fatal("legacy chat agent should not run when kill switch is enabled")
+	buildChatAgent = func(_ context.Context, _ string) (compose.Runnable[*chat_pipeline.UserMessage, *schema.Message], error) {
+		t.Fatal("chat agent should not run when kill switch is enabled")
 		return nil, nil
 	}
 
@@ -115,70 +85,17 @@ func TestChatReturnsKillSwitchResponse(t *testing.T) {
 	}
 }
 
-func TestChatFallsBackToLegacyRoute(t *testing.T) {
-	oldShouldUse := shouldUseMultiAgentForChat
-	oldRun := runChatMultiAgent
-	oldBuild := buildChatAgent
-	oldDecision := getDegradationDecision
-	defer func() {
-		shouldUseMultiAgentForChat = oldShouldUse
-		runChatMultiAgent = oldRun
-		buildChatAgent = oldBuild
-		getDegradationDecision = oldDecision
-	}()
-
-	shouldUseMultiAgentForChat = func(context.Context, string) bool { return false }
-	getDegradationDecision = func(context.Context, string) aiService.DegradationDecision { return aiService.DegradationDecision{} }
-	runChatMultiAgent = func(context.Context, string, string) (aiService.ExecutionResponse, error) {
-		t.Fatal("multi-agent route should not be used for generic chat")
-		return aiService.ExecutionResponse{}, nil
-	}
-	buildChatAgent = func(context.Context) (compose.Runnable[*chat_pipeline.UserMessage, *schema.Message], error) {
-		return &fakeChatRunnable{answer: "legacy answer"}, nil
-	}
-
-	ctrl := &ControllerV1{}
-	res, err := ctrl.Chat(context.Background(), &v1.ChatReq{Id: mem.GenerateSessionID(), Question: "hello"})
-	if err != nil {
-		t.Fatalf("chat returned error: %v", err)
-	}
-	if res == nil {
-		t.Fatal("expected response")
-	}
-	if res.Answer != "legacy answer" {
-		t.Fatalf("unexpected answer: %q", res.Answer)
-	}
-	if res.Mode != "legacy" {
-		t.Fatalf("expected legacy mode, got %q", res.Mode)
-	}
-	if len(res.Detail) == 0 {
-		t.Fatal("expected legacy route to include context detail")
-	}
-}
-
 func TestChatBlocksPromptInjection(t *testing.T) {
-	oldShouldUse := shouldUseMultiAgentForChat
-	oldRun := runChatMultiAgent
 	oldBuild := buildChatAgent
 	oldDecision := getDegradationDecision
 	defer func() {
-		shouldUseMultiAgentForChat = oldShouldUse
-		runChatMultiAgent = oldRun
 		buildChatAgent = oldBuild
 		getDegradationDecision = oldDecision
 	}()
 
 	getDegradationDecision = func(context.Context, string) aiService.DegradationDecision { return aiService.DegradationDecision{} }
-	shouldUseMultiAgentForChat = func(context.Context, string) bool {
-		t.Fatal("prompt guard should block before route selection")
-		return false
-	}
-	runChatMultiAgent = func(context.Context, string, string) (aiService.ExecutionResponse, error) {
-		t.Fatal("prompt guard should block before multi-agent execution")
-		return aiService.ExecutionResponse{}, nil
-	}
-	buildChatAgent = func(context.Context) (compose.Runnable[*chat_pipeline.UserMessage, *schema.Message], error) {
-		t.Fatal("prompt guard should block before legacy execution")
+	buildChatAgent = func(_ context.Context, _ string) (compose.Runnable[*chat_pipeline.UserMessage, *schema.Message], error) {
+		t.Fatal("prompt guard should block before execution")
 		return nil, nil
 	}
 

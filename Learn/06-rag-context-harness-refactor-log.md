@@ -21,9 +21,9 @@
 这一步我做了两件关键事：
 
 1. 新建统一的 RAG 模块：
-   - [config.go](D:/Agent/OnCallAI/internal/ai/rag/config.go)
-   - [retriever_pool.go](D:/Agent/OnCallAI/internal/ai/rag/retriever_pool.go)
-   - [indexing_service.go](D:/Agent/OnCallAI/internal/ai/rag/indexing_service.go)
+   - [config.go](D:/Agent/OpsCaptionAI/internal/ai/rag/config.go)
+   - [retriever_pool.go](D:/Agent/OpsCaptionAI/internal/ai/rag/retriever_pool.go)
+   - [indexing_service.go](D:/Agent/OpsCaptionAI/internal/ai/rag/indexing_service.go)
 2. 让工具、上下文装配、聊天检索、文件入库都开始走这个模块。
 
 你复盘时重点看这几个问题：
@@ -78,11 +78,11 @@
 所以这一步我做了两件事：
 
 1. 在 RAG 模块里补了统一查询入口：
-   - [query.go](D:/Agent/OnCallAI/internal/ai/rag/query.go)
+   - [query.go](D:/Agent/OpsCaptionAI/internal/ai/rag/query.go)
 2. 在上下文工程里给 `documents` stage 挂上结构化检索 trace：
-   - [types.go](D:/Agent/OnCallAI/internal/ai/contextengine/types.go)
-   - [documents.go](D:/Agent/OnCallAI/internal/ai/contextengine/documents.go)
-   - [assembler.go](D:/Agent/OnCallAI/internal/ai/contextengine/assembler.go)
+   - [types.go](D:/Agent/OpsCaptionAI/internal/ai/contextengine/types.go)
+   - [documents.go](D:/Agent/OpsCaptionAI/internal/ai/contextengine/documents.go)
+   - [assembler.go](D:/Agent/OpsCaptionAI/internal/ai/contextengine/assembler.go)
 
 现在一次文档检索会留下这些信息：
 

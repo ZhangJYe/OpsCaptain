@@ -156,7 +156,13 @@ func retrievalMetricsFromQueryTrace(trace rag.QueryTrace) *RetrievalStageMetrics
 		InitFailureCached: trace.InitFailureCached,
 		InitLatencyMs:     trace.InitLatencyMs,
 		RetrieveLatencyMs: trace.RetrieveLatencyMs,
+		RewriteLatencyMs:  trace.RewriteLatencyMs,
+		RerankLatencyMs:   trace.RerankLatencyMs,
+		OriginalQuery:     trace.OriginalQuery,
+		RewrittenQuery:    trace.RewrittenQuery,
+		RawResultCount:    trace.RawResultCount,
 		ResultCount:       trace.ResultCount,
+		RerankEnabled:     trace.RerankEnabled,
 	}
 }
 
@@ -165,11 +171,14 @@ func formatRetrievalTraceNote(metrics *RetrievalStageMetrics) string {
 		return "retrieval_trace unavailable"
 	}
 	return fmt.Sprintf(
-		"retrieval cache_hit=%t init_cached_error=%t init_ms=%d retrieve_ms=%d hits=%d",
+		"retrieval cache_hit=%t init_ms=%d rewrite_ms=%d retrieve_ms=%d rerank_ms=%d raw=%d final=%d rerank=%t",
 		metrics.CacheHit,
-		metrics.InitFailureCached,
 		metrics.InitLatencyMs,
+		metrics.RewriteLatencyMs,
 		metrics.RetrieveLatencyMs,
+		metrics.RerankLatencyMs,
+		metrics.RawResultCount,
 		metrics.ResultCount,
+		metrics.RerankEnabled,
 	)
 }

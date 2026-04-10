@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/gogf/gf/v2/frame/g"
 	cli "github.com/milvus-io/milvus-sdk-go/v2/client"
 	"github.com/milvus-io/milvus-sdk-go/v2/entity"
 )
@@ -81,7 +82,7 @@ func NewMilvusClient(ctx context.Context) (cli.Client, error) {
 			return nil, fmt.Errorf("failed to create biz collection: %w", err)
 		}
 
-		vectorIndex, err := entity.NewIndexAUTOINDEX(entity.IP)
+		vectorIndex, err := buildMilvusVectorIndex(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create vector index: %w", err)
 		}
@@ -127,6 +128,39 @@ func registerMilvusClient(c cli.Client) {
 	milvusClientsMu.Lock()
 	milvusClients = append(milvusClients, c)
 	milvusClientsMu.Unlock()
+}
+
+func buildMilvusVectorIndex(ctx context.Context) (entity.Index, error) {
+	metricType, err := resolveMilvusMetricType(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	switch strings.ToUpper(strings.TrimSpace(common.GetMilvusIndexType(ctx))) {
+	case "HNSW":
+		m := common.GetMilvusHNSWM(ctx)
+		efConstruction := common.GetMilvusHNSWEfConstruction(ctx)
+		g.Log().Infof(ctx, "creating Milvus HNSW index, metric=%s, m=%d, efConstruction=%d", string(metricType), m, efConstruction)
+		return entity.NewIndexHNSW(metricType, m, efConstruction)
+	case "AUTOINDEX", "AUTO":
+		g.Log().Infof(ctx, "creating Milvus AUTOINDEX, metric=%s", string(metricType))
+		return entity.NewIndexAUTOINDEX(metricType)
+	default:
+		return nil, fmt.Errorf("unsupported milvus.index_type: %s", common.GetMilvusIndexType(ctx))
+	}
+}
+
+func resolveMilvusMetricType(ctx context.Context) (entity.MetricType, error) {
+	switch strings.ToUpper(strings.TrimSpace(common.GetMilvusMetricType(ctx))) {
+	case "IP":
+		return entity.IP, nil
+	case "L2":
+		return entity.L2, nil
+	case "COSINE":
+		return entity.COSINE, nil
+	default:
+		return "", fmt.Errorf("unsupported milvus.metric_type: %s", common.GetMilvusMetricType(ctx))
+	}
 }
 
 func BuildMilvusFields(ctx context.Context) []*entity.Field {

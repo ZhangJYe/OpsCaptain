@@ -114,7 +114,7 @@
 
 当前这些 case 已由自动化测试覆盖：
 
-- [supervisor_replay_test.go](/Users/agiuser/Agent/OnCallAI/internal/ai/agent/supervisor/supervisor_replay_test.go)
+- [supervisor_replay_test.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/agent/supervisor/supervisor_replay_test.go)
 
 说明：
 

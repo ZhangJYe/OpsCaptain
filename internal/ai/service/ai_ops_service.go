@@ -1,36 +1,36 @@
 package service
 
 import (
-	"SuperBizAgent/internal/consts"
-	"context"
-	"fmt"
-	"path/filepath"
-	"strings"
-	"sync"
-
-	"SuperBizAgent/internal/ai/agent/reporter"
 	"SuperBizAgent/internal/ai/agent/skillspecialists/knowledge"
 	"SuperBizAgent/internal/ai/agent/skillspecialists/logs"
 	"SuperBizAgent/internal/ai/agent/skillspecialists/metrics"
-	"SuperBizAgent/internal/ai/agent/supervisor"
-	"SuperBizAgent/internal/ai/agent/triage"
+	"SuperBizAgent/internal/consts"
+	"context"
+	"fmt"
+	"strings"
+
+	"SuperBizAgent/internal/ai/agent/plan_execute_replan"
 	"SuperBizAgent/internal/ai/protocol"
-	"SuperBizAgent/internal/ai/runtime"
+	"SuperBizAgent/internal/ai/skills"
 
 	"github.com/gogf/gf/v2/frame/g"
+	"github.com/google/uuid"
 )
 
 var (
-	aiOpsRuntimeMu        sync.Mutex
-	aiOpsRuntimes         = make(map[string]*runtime.Runtime)
-	newPersistentRuntime  = runtime.NewPersistent
-	registerAIOpsAgentsFn = registerAIOpsAgents
-	newApprovalQueue      = func() *ApprovalQueue {
+	newApprovalQueue = func() *ApprovalQueue {
 		return NewApprovalQueue()
 	}
 	newMemoryService = func() aiOpsMemory {
 		return NewMemoryService()
 	}
+	buildPlanAgent = plan_execute_replan.BuildPlanAgent
+
+	skillFocusCollector = skills.NewFocusCollector(
+		logs.SkillRegistry(),
+		metrics.SkillRegistry(),
+		knowledge.SkillRegistry(),
+	)
 )
 
 type aiOpsMemory interface {
@@ -64,36 +64,47 @@ func RunAIOpsMultiAgent(ctx context.Context, query string) (ExecutionResponse, e
 		return NewDegradedExecutionResponse(decision), nil
 	}
 
-	rt, err := getOrCreateAIOpsRuntime(ctx)
-	if err != nil {
-		return ExecutionResponse{}, err
-	}
+	traceID := uuid.NewString()
 
 	memorySvc := newMemoryService()
 	sessionID := memorySvc.ResolveSessionID(ctx)
 	ctx = context.WithValue(ctx, consts.CtxKeySessionID, sessionID)
-	memoryContext, refs, contextDetail := memorySvc.BuildContextPlan(ctx, "aiops", sessionID, query)
+	memoryContext, _, contextDetail := memorySvc.BuildContextPlan(ctx, "aiops", sessionID, query)
 
-	rootTask := protocol.NewRootTask(sessionID, query, supervisor.AgentName)
-	if memoryContext != "" || len(refs) > 0 || len(contextDetail) > 0 {
-		rootTask.Input = map[string]any{
-			"raw_query":      query,
-			"memory_context": memoryContext,
-			"context_detail": contextDetail,
-		}
+	enrichedQuery := query
+	if strings.TrimSpace(memoryContext) != "" {
+		enrichedQuery = query + "\n\n可参考的历史上下文：\n" + memoryContext
 	}
-	rootTask.MemoryRefs = refs
-	result, err := rt.Dispatch(ctx, rootTask)
-	detail := append([]string{}, contextDetail...)
-	detail = append(detail, rt.DetailMessages(ctx, rootTask.TraceID)...)
-	if result == nil {
+
+	if hints := skillFocusCollector.Collect(query); len(hints) > 0 {
+		enrichedQuery = enrichedQuery + "\n\n场景分析方向（基于 Skill 匹配）：\n" + skills.FormatFocusHints(hints)
+		g.Log().Infof(ctx, "[AIOps] skill focus injected: %d hints", len(hints))
+	}
+
+	g.Log().Infof(ctx, "[AIOps] plan-execute-replan started, trace_id=%s", traceID)
+	content, planDetail, err := buildPlanAgent(ctx, enrichedQuery)
+	if err != nil {
+		g.Log().Errorf(ctx, "[AIOps] plan-execute-replan failed: %v", err)
 		return ExecutionResponse{
-			Detail:  detail,
-			TraceID: rootTask.TraceID,
+			Detail:            append(contextDetail, fmt.Sprintf("plan-execute-replan error: %v", err)),
+			TraceID:           traceID,
+			Status:            protocol.ResultStatusFailed,
+			DegradationReason: err.Error(),
 		}, err
 	}
-	memorySvc.PersistOutcome(ctx, sessionID, query, result.Summary)
-	return ExecutionResponseFromResult(result, detail, rootTask.TraceID), err
+
+	detail := append([]string{}, contextDetail...)
+	detail = append(detail, planDetail...)
+
+	memorySvc.PersistOutcome(ctx, sessionID, query, content)
+	g.Log().Infof(ctx, "[AIOps] plan-execute-replan completed, trace_id=%s, steps=%d", traceID, len(planDetail))
+
+	return ExecutionResponse{
+		Content: content,
+		Detail:  detail,
+		TraceID: traceID,
+		Status:  protocol.ResultStatusSucceeded,
+	}, nil
 }
 
 func ListApprovalRequests(ctx context.Context, status string) ([]ApprovalRequest, error) {
@@ -131,73 +142,11 @@ func ApproveQueuedAIOpsRequest(ctx context.Context, requestID string) (Execution
 	return response, nil
 }
 
-func GetAIOpsTrace(ctx context.Context, traceID string) ([]*protocol.TaskEvent, []string, error) {
-	return getAIOpsTraceForDir(ctx, runtimeDataDir(ctx), traceID)
-}
-
-func getAIOpsTraceForDir(ctx context.Context, dataDir, traceID string) ([]*protocol.TaskEvent, []string, error) {
+func GetAIOpsTrace(_ context.Context, traceID string) ([]*protocol.TaskEvent, []string, error) {
 	if traceID == "" {
 		return nil, nil, fmt.Errorf("traceID is empty")
 	}
-	rt, err := getOrCreateAIOpsRuntimeForDir(dataDir)
-	if err != nil {
-		return nil, nil, err
-	}
-	events, err := rt.TraceEvents(ctx, traceID)
-	if err != nil {
-		return nil, nil, err
-	}
-	if len(events) == 0 {
-		return nil, nil, fmt.Errorf("trace %s not found", traceID)
-	}
-	return events, rt.DetailMessages(ctx, traceID), nil
-}
-
-func getOrCreateAIOpsRuntime(ctx context.Context) (*runtime.Runtime, error) {
-	return getOrCreateAIOpsRuntimeForDir(runtimeDataDir(ctx))
-}
-
-func getOrCreateAIOpsRuntimeForDir(dataDir string) (*runtime.Runtime, error) {
-	aiOpsRuntimeMu.Lock()
-	defer aiOpsRuntimeMu.Unlock()
-
-	if rt, ok := aiOpsRuntimes[dataDir]; ok {
-		return rt, nil
-	}
-
-	rt, err := newPersistentRuntime(dataDir)
-	if err != nil {
-		return nil, err
-	}
-	if err := registerAIOpsAgentsFn(rt); err != nil {
-		return nil, err
-	}
-	aiOpsRuntimes[dataDir] = rt
-	return rt, nil
-}
-
-func registerAIOpsAgents(rt *runtime.Runtime) error {
-	for _, agent := range []runtime.Agent{
-		supervisor.New(),
-		triage.New(),
-		metrics.New(),
-		logs.New(),
-		knowledge.New(),
-		reporter.New(),
-	} {
-		if err := rt.Register(agent); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func runtimeDataDir(ctx context.Context) string {
-	v, err := g.Cfg().Get(ctx, "multi_agent.data_dir")
-	if err == nil && v.String() != "" {
-		return v.String()
-	}
-	return filepath.Join(".", "var", "runtime")
+	return nil, nil, fmt.Errorf("trace %s not found: plan-execute-replan traces are recorded in application logs", traceID)
 }
 
 func reviewerIdentity(ctx context.Context) string {

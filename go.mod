@@ -24,6 +24,8 @@ require (
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/cloudwego/eino-ext/components/document/transformer/splitter/recursive v0.0.0-20260408111519-100ca7063d18 // indirect
+	github.com/cloudwego/eino-ext/components/document/transformer/splitter/semantic v0.0.0-20260408111519-100ca7063d18 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/emirpasic/gods/v2 v2.0.0-alpha // indirect

@@ -52,3 +52,31 @@ func GetRetrieverTopK(ctx context.Context) int {
 	}
 	return topK
 }
+
+func GetMilvusIndexType(ctx context.Context) string {
+	if v, err := g.Cfg().Get(ctx, "milvus.index_type"); err == nil && v.String() != "" {
+		return v.String()
+	}
+	return "HNSW"
+}
+
+func GetMilvusMetricType(ctx context.Context) string {
+	if v, err := g.Cfg().Get(ctx, "milvus.metric_type"); err == nil && v.String() != "" {
+		return v.String()
+	}
+	return "IP"
+}
+
+func GetMilvusHNSWM(ctx context.Context) int {
+	if v, err := g.Cfg().Get(ctx, "milvus.hnsw.m"); err == nil && v.Int() > 0 {
+		return v.Int()
+	}
+	return 16
+}
+
+func GetMilvusHNSWEfConstruction(ctx context.Context) int {
+	if v, err := g.Cfg().Get(ctx, "milvus.hnsw.ef_construction"); err == nil && v.Int() > 0 {
+		return v.Int()
+	}
+	return 200
+}

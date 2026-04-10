@@ -94,5 +94,5 @@ func responseCacheTTL(ctx context.Context) time.Duration {
 
 func responseCacheKey(sessionID, query string) string {
 	sum := sha256.Sum256([]byte(strings.TrimSpace(query)))
-	return fmt.Sprintf("oncallai:cache:chat:%s:%s", strings.TrimSpace(sessionID), hex.EncodeToString(sum[:8]))
+	return fmt.Sprintf("opscaptionai:cache:chat:%s:%s", strings.TrimSpace(sessionID), hex.EncodeToString(sum[:8]))
 }

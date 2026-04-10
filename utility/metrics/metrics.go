@@ -15,14 +15,14 @@ var registerMetricsOnce sync.Once
 var (
 	httpRequestsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "oncallai_http_requests_total",
+			Name: "opscaptionai_http_requests_total",
 			Help: "Total number of HTTP requests handled by the service.",
 		},
 		[]string{"method", "path", "status"},
 	)
 	httpRequestDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    "oncallai_http_request_duration_seconds",
+			Name:    "opscaptionai_http_request_duration_seconds",
 			Help:    "HTTP request duration in seconds.",
 			Buckets: prometheus.DefBuckets,
 		},
@@ -30,14 +30,14 @@ var (
 	)
 	llmCallsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "oncallai_llm_calls_total",
+			Name: "opscaptionai_llm_calls_total",
 			Help: "Total number of LLM calls.",
 		},
 		[]string{"agent", "model", "status"},
 	)
 	llmCallDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    "oncallai_llm_call_duration_seconds",
+			Name:    "opscaptionai_llm_call_duration_seconds",
 			Help:    "LLM call duration in seconds.",
 			Buckets: prometheus.DefBuckets,
 		},
@@ -45,21 +45,21 @@ var (
 	)
 	llmTokensTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "oncallai_llm_tokens_total",
+			Name: "opscaptionai_llm_tokens_total",
 			Help: "Total number of LLM tokens consumed.",
 		},
 		[]string{"agent", "model", "type"},
 	)
 	agentDispatchTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "oncallai_agent_dispatch_total",
+			Name: "opscaptionai_agent_dispatch_total",
 			Help: "Total number of agent dispatches.",
 		},
 		[]string{"agent", "status"},
 	)
 	agentDispatchDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Name:    "oncallai_agent_dispatch_duration_seconds",
+			Name:    "opscaptionai_agent_dispatch_duration_seconds",
 			Help:    "Agent dispatch duration in seconds.",
 			Buckets: prometheus.DefBuckets,
 		},
@@ -67,28 +67,28 @@ var (
 	)
 	circuitBreakerState = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "oncallai_circuit_breaker_state",
+			Name: "opscaptionai_circuit_breaker_state",
 			Help: "Circuit breaker state encoded as closed=0, open=1, half_open=2.",
 		},
 		[]string{"name"},
 	)
 	cacheHitsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "oncallai_cache_hits_total",
+			Name: "opscaptionai_cache_hits_total",
 			Help: "Total number of cache hits.",
 		},
 		[]string{"type"},
 	)
 	cacheMissesTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "oncallai_cache_misses_total",
+			Name: "opscaptionai_cache_misses_total",
 			Help: "Total number of cache misses.",
 		},
 		[]string{"type"},
 	)
 	sessionTokensTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "oncallai_session_tokens_total",
+			Name: "opscaptionai_session_tokens_total",
 			Help: "Per-session token consumption for auditing and alerting.",
 		},
 		[]string{"session_id", "user_id"},

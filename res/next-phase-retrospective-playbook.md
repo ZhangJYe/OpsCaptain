@@ -1,4 +1,4 @@
-# OnCallAI 下一阶段推进与复盘手册
+# OpsCaptionAI 下一阶段推进与复盘手册
 
 ## 1. 文档定位
 
@@ -15,7 +15,7 @@
 
 - `res/todo.md`
 - `res/multi-agent-system-design.md`
-- `res/harness-engineering-for-oncallai.md`
+- `res/harness-engineering-for-opscaptionai.md`
 
 ---
 
