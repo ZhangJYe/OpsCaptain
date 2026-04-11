@@ -90,7 +90,7 @@ func (s *IndexingService) deleteExistingSource(ctx context.Context, sourceValue 
 		return 0, err
 	}
 	expr := fmt.Sprintf(`metadata["_source"] == "%s"`, sourceValue)
-	queryResult, err := cli.Query(ctx, common.MilvusCollectionName, []string{}, expr, []string{"id"})
+	queryResult, err := cli.Query(ctx, common.GetMilvusCollectionName(ctx), []string{}, expr, []string{"id"})
 	if err != nil {
 		return 0, err
 	}
@@ -112,7 +112,7 @@ func (s *IndexingService) deleteExistingSource(ctx context.Context, sourceValue 
 	}
 
 	deleteExpr := fmt.Sprintf(`id in ["%s"]`, strings.Join(idsToDelete, `","`))
-	if err := cli.Delete(ctx, common.MilvusCollectionName, "", deleteExpr); err != nil {
+	if err := cli.Delete(ctx, common.GetMilvusCollectionName(ctx), "", deleteExpr); err != nil {
 		g.Log().Warningf(ctx, "delete existing data failed: %v", err)
 		return 0, nil
 	}

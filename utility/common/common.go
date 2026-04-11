@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"regexp"
+	"strings"
 
 	"github.com/gogf/gf/v2/frame/g"
 )
@@ -35,6 +36,21 @@ func GetMilvusAddr(ctx context.Context) string {
 		return "localhost:19530"
 	}
 	return normalizeMilvusAddr(val.String())
+}
+
+func GetMilvusCollectionName(ctx context.Context) string {
+	if v, err := g.Cfg().Get(ctx, "milvus.collection"); err == nil {
+		if resolved, ok := ResolveOptionalEnv(v.String()); ok {
+			return resolved
+		}
+		if trimmed := strings.TrimSpace(v.String()); trimmed != "" && !IsEnvReference(trimmed) {
+			return trimmed
+		}
+	}
+	if env := strings.TrimSpace(os.Getenv("MILVUS_COLLECTION")); env != "" {
+		return env
+	}
+	return MilvusCollectionName
 }
 
 func normalizeMilvusAddr(raw string) string {

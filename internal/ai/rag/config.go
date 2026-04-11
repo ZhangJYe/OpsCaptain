@@ -16,7 +16,7 @@ func RetrieverTopK(ctx context.Context) int {
 }
 
 func DefaultRetrieverCacheKey(ctx context.Context) string {
-	return fmt.Sprintf("%s|%d", common.GetMilvusAddr(ctx), RetrieverTopK(ctx))
+	return fmt.Sprintf("%s|%s|%d", common.GetMilvusAddr(ctx), common.GetMilvusCollectionName(ctx), RetrieverTopK(ctx))
 }
 
 func DefaultInitFailureTTL(context.Context) time.Duration {

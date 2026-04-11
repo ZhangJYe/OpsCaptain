@@ -38,7 +38,7 @@ func NewMilvusRetriever(ctx context.Context) (rtr retriever.Retriever, err error
 	topK := common.GetRetrieverTopK(ctx)
 	r, err := milvus.NewRetriever(ctx, &milvus.RetrieverConfig{
 		Client:      cli,
-		Collection:  common.MilvusCollectionName,
+		Collection:  common.GetMilvusCollectionName(ctx),
 		VectorField: "vector",
 		OutputFields: []string{
 			"id",

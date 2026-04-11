@@ -33,7 +33,7 @@ func (s *EinoRetrieverSearcher) Search(ctx context.Context, query string, topK i
 			continue
 		}
 		results = append(results, RetrievedDoc{
-			ID:      doc.ID,
+			ID:      CanonicalSchemaDocID(doc),
 			Title:   metadataTitle(doc.MetaData),
 			Content: doc.Content,
 			Score:   doc.Score(),

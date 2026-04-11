@@ -20,7 +20,7 @@ func NewMilvusIndexer(ctx context.Context) (*milvus.Indexer, error) {
 	}
 	config := &milvus.IndexerConfig{
 		Client:     cli,
-		Collection: common.MilvusCollectionName,
+		Collection: common.GetMilvusCollectionName(ctx),
 		Fields:     client.BuildMilvusFields(ctx),
 		Embedding:  eb,
 	}

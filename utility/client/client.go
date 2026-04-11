@@ -20,6 +20,7 @@ var (
 
 func NewMilvusClient(ctx context.Context) (cli.Client, error) {
 	addr := common.GetMilvusAddr(ctx)
+	collectionName := common.GetMilvusCollectionName(ctx)
 
 	defaultClient, err := cli.NewClient(ctx, cli.Config{
 		Address: addr,
@@ -64,7 +65,7 @@ func NewMilvusClient(ctx context.Context) (cli.Client, error) {
 
 	bizCollectionExists := false
 	for _, collection := range collections {
-		if collection.Name == common.MilvusCollectionName {
+		if collection.Name == collectionName {
 			bizCollectionExists = true
 			break
 		}
@@ -72,7 +73,7 @@ func NewMilvusClient(ctx context.Context) (cli.Client, error) {
 
 	if !bizCollectionExists {
 		collSchema := &entity.Schema{
-			CollectionName: common.MilvusCollectionName,
+			CollectionName: collectionName,
 			Description:    "Business knowledge collection",
 			Fields:         BuildMilvusFields(ctx),
 		}
@@ -86,13 +87,13 @@ func NewMilvusClient(ctx context.Context) (cli.Client, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to create vector index: %w", err)
 		}
-		err = agentClient.CreateIndex(ctx, common.MilvusCollectionName, "vector", vectorIndex, false)
+		err = agentClient.CreateIndex(ctx, collectionName, "vector", vectorIndex, false)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create vector index: %w", err)
 		}
 	}
 
-	err = agentClient.LoadCollection(ctx, common.MilvusCollectionName, false)
+	err = agentClient.LoadCollection(ctx, collectionName, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load biz collection: %w", err)
 	}

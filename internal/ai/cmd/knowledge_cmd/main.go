@@ -3,6 +3,7 @@ package main
 import (
 	"SuperBizAgent/internal/ai/rag"
 	"context"
+	"flag"
 	"fmt"
 	"io/fs"
 	"path/filepath"
@@ -12,10 +13,13 @@ import (
 )
 
 func main() {
+	dir := flag.String("dir", "./docs", "directory containing markdown files to index")
+	flag.Parse()
+
 	ctx := context.Background()
 	indexing := rag.DefaultIndexingService()
 	var err error
-	err = filepath.WalkDir("./docs", func(path string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(*dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return fmt.Errorf("walk dir failed: %w", err)
 		}

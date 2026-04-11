@@ -36,6 +36,21 @@ func TestConstants(t *testing.T) {
 	}
 }
 
+func TestGetMilvusCollectionName_Default(t *testing.T) {
+	ctx := context.Background()
+	if got := GetMilvusCollectionName(ctx); got != "biz" {
+		t.Fatalf("expected default collection 'biz', got %q", got)
+	}
+}
+
+func TestGetMilvusCollectionName_FromEnv(t *testing.T) {
+	t.Setenv("MILVUS_COLLECTION", "aiops-evidence")
+	ctx := context.Background()
+	if got := GetMilvusCollectionName(ctx); got != "aiops-evidence" {
+		t.Fatalf("expected env collection override, got %q", got)
+	}
+}
+
 func TestGetMilvusAddrFallsBackWhenPlaceholderIsUnresolved(t *testing.T) {
 	t.Setenv("MILVUS_ADDRESS", "")
 	if got := normalizeMilvusAddr("${MILVUS_ADDRESS}"); got != "localhost:19530" {
