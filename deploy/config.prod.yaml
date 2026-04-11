@@ -2,7 +2,7 @@ server:
   address: ":8000"
 
 auth:
-  enabled: true
+  enabled: false
   jwt_secret: "${AUTH_JWT_SECRET}"
   token_expiry_hours: 24
   rate_limit_per_minute: 20
