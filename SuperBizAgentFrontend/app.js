@@ -2,6 +2,7 @@
 class SuperBizAgentApp {
     constructor() {
         this.apiBaseUrl = this.resolveApiBaseUrl();
+        this.authConfig = this.resolveAuthConfig();
         this.observability = this.resolveObservabilityConfig();
         this.currentMode = 'quick'; // 'quick' 或 'stream'
         this.sessionId = this.generateSessionId();
@@ -32,6 +33,39 @@ class SuperBizAgentApp {
         }
 
         return '/api';
+    }
+
+    resolveAuthConfig() {
+        const runtimeConfig = window.SUPERBIZAGENT_CONFIG || {};
+        return {
+            authToken: (runtimeConfig.authToken || '').trim(),
+            authTokenStorageKey: (runtimeConfig.authTokenStorageKey || 'opscaptain-auth-token').trim() || 'opscaptain-auth-token',
+        };
+    }
+
+    resolveAuthToken() {
+        if (this.authConfig && this.authConfig.authToken) {
+            return this.authConfig.authToken;
+        }
+        if (typeof window === 'undefined' || !window.localStorage || !this.authConfig || !this.authConfig.authTokenStorageKey) {
+            return '';
+        }
+        return (window.localStorage.getItem(this.authConfig.authTokenStorageKey) || '').trim();
+    }
+
+    buildApiHeaders(extraHeaders = {}) {
+        const headers = { ...extraHeaders };
+        const token = this.resolveAuthToken();
+        if (token) {
+            headers.Authorization = `Bearer ${token}`;
+        }
+        return headers;
+    }
+
+    async apiFetch(path, options = {}) {
+        const requestOptions = { ...options };
+        requestOptions.headers = this.buildApiHeaders(options.headers || {});
+        return fetch(`${this.apiBaseUrl}${path}`, requestOptions);
     }
 
     resolveObservabilityConfig() {
@@ -958,7 +992,7 @@ class SuperBizAgentApp {
     // 发送快速消息（普通对话）
     async sendQuickMessage(message) {
         try {
-            const response = await fetch(`${this.apiBaseUrl}/chat`, {
+            const response = await this.apiFetch('/chat', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -998,7 +1032,7 @@ class SuperBizAgentApp {
     // 发送流式消息
     async sendStreamMessage(message) {
         try {
-            const response = await fetch(`${this.apiBaseUrl}/chat_stream`, {
+            const response = await this.apiFetch('/chat_stream', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -1823,7 +1857,7 @@ class SuperBizAgentApp {
             formData.append('file', file);
 
             // 发送上传请求
-            const response = await fetch(`${this.apiBaseUrl}/upload`, {
+            const response = await this.apiFetch('/upload', {
                 method: 'POST',
                 signal: this.abortController ? this.abortController.signal : undefined,
                 body: formData
@@ -1872,7 +1906,7 @@ class SuperBizAgentApp {
     // 发送智能运维请求
     async sendAIOpsRequest(loadingMessageElement) {
         try {
-            const response = await fetch(`${this.apiBaseUrl}/ai_ops`, {
+            const response = await this.apiFetch('/ai_ops', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -1915,7 +1949,7 @@ class SuperBizAgentApp {
     }
 
     async fetchAIOpsTrace(traceId) {
-        const response = await fetch(`${this.apiBaseUrl}/ai_ops_trace?trace_id=${encodeURIComponent(traceId)}`);
+        const response = await this.apiFetch(`/ai_ops_trace?trace_id=${encodeURIComponent(traceId)}`);
         if (!response.ok) {
             throw new Error(`HTTP错误: ${response.status}`);
         }
@@ -1928,7 +1962,7 @@ class SuperBizAgentApp {
     }
 
     async approveApprovalRequest(requestId, messageElement) {
-        const response = await fetch(`${this.apiBaseUrl}/approval_requests/approve`, {
+        const response = await this.apiFetch('/approval_requests/approve', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
