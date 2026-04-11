@@ -3,7 +3,7 @@ package eval
 import (
 	"context"
 	"fmt"
-	"path/filepath"
+	"path"
 	"strings"
 
 	"github.com/cloudwego/eino/schema"
@@ -171,8 +171,9 @@ func canonicalSourceID(raw string) string {
 	if trimmed == "" {
 		return ""
 	}
-	base := filepath.Base(trimmed)
-	ext := filepath.Ext(base)
+	normalized := strings.ReplaceAll(trimmed, "\\", "/")
+	base := path.Base(normalized)
+	ext := path.Ext(base)
 	if ext != "" {
 		return strings.TrimSuffix(base, ext)
 	}
