@@ -51,6 +51,9 @@ func TestGenerateAIOPSBaselineArtifacts(t *testing.T) {
 	if summary.Cases != 2 || summary.EvidenceDocs != 2 || summary.HistoryDocs != 2 {
 		t.Fatalf("unexpected summary: %+v", summary)
 	}
+	if summary.BuildEvidenceDocs != 1 || summary.BuildHistoryDocs != 1 {
+		t.Fatalf("unexpected build-only summary: %+v", summary)
+	}
 	if summary.EvalCases != 4 {
 		t.Fatalf("expected 4 eval cases, got %+v", summary)
 	}
@@ -61,6 +64,8 @@ func TestGenerateAIOPSBaselineArtifacts(t *testing.T) {
 	for _, path := range []string{
 		filepath.Join(outputRoot, "docs_evidence", "case-a.md"),
 		filepath.Join(outputRoot, "docs_history", "case-b.md"),
+		filepath.Join(outputRoot, "docs_evidence_build", "case-a.md"),
+		filepath.Join(outputRoot, "docs_history_build", "case-a.md"),
 		filepath.Join(outputRoot, "eval", "eval_cases.jsonl"),
 		filepath.Join(outputRoot, "eval", "eval_cases_holdout.jsonl"),
 		filepath.Join(outputRoot, "eval", "build_split.json"),
@@ -85,6 +90,9 @@ func TestGenerateAIOPSBaselineArtifacts(t *testing.T) {
 	}
 	if len(evalCases) != 2 {
 		t.Fatalf("expected 2 holdout eval cases, got %d", len(evalCases))
+	}
+	if _, err := os.Stat(filepath.Join(outputRoot, "docs_evidence_build", "case-b.md")); !os.IsNotExist(err) {
+		t.Fatalf("expected holdout case to be absent from build evidence dir, got err=%v", err)
 	}
 }
 

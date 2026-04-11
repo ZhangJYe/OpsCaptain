@@ -22,14 +22,16 @@ type AIOPSPrepOptions struct {
 }
 
 type AIOPSPrepSummary struct {
-	Cases            int    `json:"cases"`
-	EvidenceDocs     int    `json:"evidence_docs"`
-	HistoryDocs      int    `json:"history_docs"`
-	EvalCases        int    `json:"eval_cases"`
-	HoldoutEvalCases int    `json:"holdout_eval_cases"`
-	BuildCases       int    `json:"build_cases"`
-	HoldoutCases     int    `json:"holdout_cases"`
-	OutputRoot       string `json:"output_root"`
+	Cases             int    `json:"cases"`
+	EvidenceDocs      int    `json:"evidence_docs"`
+	HistoryDocs       int    `json:"history_docs"`
+	BuildEvidenceDocs int    `json:"build_evidence_docs"`
+	BuildHistoryDocs  int    `json:"build_history_docs"`
+	EvalCases         int    `json:"eval_cases"`
+	HoldoutEvalCases  int    `json:"holdout_eval_cases"`
+	BuildCases        int    `json:"build_cases"`
+	HoldoutCases      int    `json:"holdout_cases"`
+	OutputRoot        string `json:"output_root"`
 }
 
 type AIOPSInputCase struct {
@@ -130,11 +132,19 @@ func GenerateAIOPSBaselineArtifacts(ctx context.Context, opts AIOPSPrepOptions) 
 
 	docsEvidenceDir := filepath.Join(outputRoot, "docs_evidence")
 	docsHistoryDir := filepath.Join(outputRoot, "docs_history")
+	docsEvidenceBuildDir := filepath.Join(outputRoot, "docs_evidence_build")
+	docsHistoryBuildDir := filepath.Join(outputRoot, "docs_history_build")
 	evalDir := filepath.Join(outputRoot, "eval")
-	for _, dir := range []string{docsEvidenceDir, docsHistoryDir, evalDir} {
+	for _, dir := range []string{docsEvidenceDir, docsHistoryDir, docsEvidenceBuildDir, docsHistoryBuildDir, evalDir} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return AIOPSPrepSummary{}, fmt.Errorf("mkdir %s: %w", dir, err)
 		}
+	}
+
+	buildIDs, holdoutIDs := splitCaseIDs(ids, evalRatio)
+	buildSet := make(map[string]struct{}, len(buildIDs))
+	for _, id := range buildIDs {
+		buildSet[id] = struct{}{}
 	}
 
 	allEvalCases := make([]EvalCase, 0, len(ids)*2)
@@ -148,16 +158,26 @@ func GenerateAIOPSBaselineArtifacts(ctx context.Context, opts AIOPSPrepOptions) 
 			return AIOPSPrepSummary{}, fmt.Errorf("missing groundtruth record for case %s", id)
 		}
 
-		if err := os.WriteFile(filepath.Join(docsEvidenceDir, id+".md"), []byte(renderEvidenceDoc(inputCase, gt)), 0o644); err != nil {
+		evidenceDoc := renderEvidenceDoc(inputCase, gt)
+		historyDoc := renderHistoryDoc(inputCase, gt)
+
+		if err := os.WriteFile(filepath.Join(docsEvidenceDir, id+".md"), []byte(evidenceDoc), 0o644); err != nil {
 			return AIOPSPrepSummary{}, fmt.Errorf("write evidence doc %s: %w", id, err)
 		}
-		if err := os.WriteFile(filepath.Join(docsHistoryDir, id+".md"), []byte(renderHistoryDoc(inputCase, gt)), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(docsHistoryDir, id+".md"), []byte(historyDoc), 0o644); err != nil {
 			return AIOPSPrepSummary{}, fmt.Errorf("write history doc %s: %w", id, err)
+		}
+		if _, ok := buildSet[id]; ok {
+			if err := os.WriteFile(filepath.Join(docsEvidenceBuildDir, id+".md"), []byte(evidenceDoc), 0o644); err != nil {
+				return AIOPSPrepSummary{}, fmt.Errorf("write build evidence doc %s: %w", id, err)
+			}
+			if err := os.WriteFile(filepath.Join(docsHistoryBuildDir, id+".md"), []byte(historyDoc), 0o644); err != nil {
+				return AIOPSPrepSummary{}, fmt.Errorf("write build history doc %s: %w", id, err)
+			}
 		}
 		allEvalCases = append(allEvalCases, buildEvalCases(inputCase, gt)...)
 	}
 
-	buildIDs, holdoutIDs := splitCaseIDs(ids, evalRatio)
 	holdoutSet := make(map[string]struct{}, len(holdoutIDs))
 	for _, id := range holdoutIDs {
 		holdoutSet[id] = struct{}{}
@@ -194,14 +214,16 @@ func GenerateAIOPSBaselineArtifacts(ctx context.Context, opts AIOPSPrepOptions) 
 
 	_ = ctx
 	return AIOPSPrepSummary{
-		Cases:            len(ids),
-		EvidenceDocs:     len(ids),
-		HistoryDocs:      len(ids),
-		EvalCases:        len(allEvalCases),
-		HoldoutEvalCases: len(holdoutEvalCases),
-		BuildCases:       len(buildIDs),
-		HoldoutCases:     len(holdoutIDs),
-		OutputRoot:       outputRoot,
+		Cases:             len(ids),
+		EvidenceDocs:      len(ids),
+		HistoryDocs:       len(ids),
+		BuildEvidenceDocs: len(buildIDs),
+		BuildHistoryDocs:  len(buildIDs),
+		EvalCases:         len(allEvalCases),
+		HoldoutEvalCases:  len(holdoutEvalCases),
+		BuildCases:        len(buildIDs),
+		HoldoutCases:      len(holdoutIDs),
+		OutputRoot:        outputRoot,
 	}, nil
 }
 
