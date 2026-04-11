@@ -40,5 +40,6 @@ coverage.out
 # Local Go build scratch
 .gocache/
 .gocache*/
+.gomodcache/
 .gotmp*/
 *.go.[0-9]*
