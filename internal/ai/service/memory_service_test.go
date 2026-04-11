@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"SuperBizAgent/internal/consts"
 	"SuperBizAgent/utility/mem"
 )
 
@@ -66,5 +67,15 @@ func TestBuildChatPackageReturnsContextTraceDetails(t *testing.T) {
 	}
 	if len(details) == 0 {
 		t.Fatal("expected context details")
+	}
+}
+
+func TestResolveSessionIDPrefersExistingContextSession(t *testing.T) {
+	svc := NewMemoryService()
+	ctx := context.WithValue(context.Background(), consts.CtxKeySessionID, "approval-session")
+
+	got := svc.ResolveSessionID(ctx)
+	if got != "approval-session" {
+		t.Fatalf("expected existing session id to be reused, got %q", got)
 	}
 }

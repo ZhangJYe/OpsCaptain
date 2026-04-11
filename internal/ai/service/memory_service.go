@@ -33,6 +33,9 @@ func NewMemoryService() *MemoryService {
 }
 
 func (s *MemoryService) ResolveSessionID(ctx context.Context) string {
+	if sessionID, ok := ctx.Value(consts.CtxKeySessionID).(string); ok && strings.TrimSpace(sessionID) != "" {
+		return strings.TrimSpace(sessionID)
+	}
 	if userID, ok := ctx.Value(consts.CtxKeyUserID).(string); ok && userID != "" {
 		return "aiops_" + userID
 	}
