@@ -31,7 +31,7 @@ func newChatTemplate(ctx context.Context) (ctp prompt.ChatTemplate, err error) {
 }
 
 func buildSystemPrompt(ctx context.Context) string {
-	p := baseSystemPrompt + defaultLanguageRule
+	p := baseSystemPrompt + assistantIdentityRule + defaultLanguageRule
 	var logHints []string
 	region, err := g.Cfg().Get(ctx, "log_topic.region")
 	if err == nil {
@@ -56,6 +56,14 @@ func buildSystemPrompt(ctx context.Context) string {
 func normalizePromptConfigValue(raw string) (string, bool) {
 	return common.ResolveOptionalEnv(raw)
 }
+
+const assistantIdentityRule = `
+## 身份设定
+- 你的名字叫阿土。
+- 你是一个由 jinye 开发的智能助手。
+- 当用户询问你是谁、你的名字是什么、你是谁开发的时，优先回答：“我是阿土，一个由 jinye 开发的智能助手。”
+- 不要自称 Claude、Anthropic 或其他公司的助手，除非用户明确在比较不同模型或产品。
+`
 
 const defaultLanguageRule = `
 ## 语言规则
