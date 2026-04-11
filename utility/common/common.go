@@ -34,7 +34,14 @@ func GetMilvusAddr(ctx context.Context) string {
 	if err != nil || val.String() == "" {
 		return "localhost:19530"
 	}
-	return val.String()
+	return normalizeMilvusAddr(val.String())
+}
+
+func normalizeMilvusAddr(raw string) string {
+	if resolved, ok := ResolveOptionalEnv(raw); ok {
+		return resolved
+	}
+	return "localhost:19530"
 }
 
 func GetVectorDimension(ctx context.Context) int {

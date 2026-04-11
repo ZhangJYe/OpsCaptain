@@ -17,6 +17,7 @@ import (
 const (
 	defaultLLMResponseTTL = 5 * time.Minute
 	llmResponseCacheType  = "llm_response"
+	llmResponseCacheVsn   = "v2"
 )
 
 type ChatResponseEntry struct {
@@ -94,5 +95,5 @@ func responseCacheTTL(ctx context.Context) time.Duration {
 
 func responseCacheKey(sessionID, query string) string {
 	sum := sha256.Sum256([]byte(strings.TrimSpace(query)))
-	return fmt.Sprintf("opscaptionai:cache:chat:%s:%s", strings.TrimSpace(sessionID), hex.EncodeToString(sum[:8]))
+	return fmt.Sprintf("opscaptionai:cache:chat:%s:%s:%s", llmResponseCacheVsn, strings.TrimSpace(sessionID), hex.EncodeToString(sum[:8]))
 }

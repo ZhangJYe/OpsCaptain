@@ -35,3 +35,10 @@ func TestConstants(t *testing.T) {
 		t.Fatalf("expected MilvusCollectionName 'biz', got '%s'", MilvusCollectionName)
 	}
 }
+
+func TestGetMilvusAddrFallsBackWhenPlaceholderIsUnresolved(t *testing.T) {
+	t.Setenv("MILVUS_ADDRESS", "")
+	if got := normalizeMilvusAddr("${MILVUS_ADDRESS}"); got != "localhost:19530" {
+		t.Fatalf("expected unresolved placeholder to fall back, got %q", got)
+	}
+}
