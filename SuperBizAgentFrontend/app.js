@@ -53,8 +53,26 @@ class SuperBizAgentApp {
         return (window.localStorage.getItem(this.authConfig.authTokenStorageKey) || '').trim();
     }
 
-    buildApiHeaders(extraHeaders = {}) {
+    clearStoredAuthToken() {
+        if (this.authConfig && this.authConfig.authToken) {
+            return;
+        }
+        if (typeof window === 'undefined' || !window.localStorage || !this.authConfig || !this.authConfig.authTokenStorageKey) {
+            return;
+        }
+        window.localStorage.removeItem(this.authConfig.authTokenStorageKey);
+    }
+
+    isAnonymousPublicPath(path) {
+        const normalized = String(path || '').split('?')[0];
+        return normalized === '/chat' || normalized === '/chat_stream';
+    }
+
+    buildApiHeaders(extraHeaders = {}, includeAuth = true) {
         const headers = { ...extraHeaders };
+        if (!includeAuth) {
+            return headers;
+        }
         const token = this.resolveAuthToken();
         if (token) {
             headers.Authorization = `Bearer ${token}`;
@@ -65,7 +83,18 @@ class SuperBizAgentApp {
     async apiFetch(path, options = {}) {
         const requestOptions = { ...options };
         requestOptions.headers = this.buildApiHeaders(options.headers || {});
-        return fetch(`${this.apiBaseUrl}${path}`, requestOptions);
+        const response = await fetch(`${this.apiBaseUrl}${path}`, requestOptions);
+        if (
+            response.status === 401 &&
+            this.isAnonymousPublicPath(path) &&
+            this.resolveAuthToken()
+        ) {
+            this.clearStoredAuthToken();
+            const retryOptions = { ...options };
+            retryOptions.headers = this.buildApiHeaders(options.headers || {}, false);
+            return fetch(`${this.apiBaseUrl}${path}`, retryOptions);
+        }
+        return response;
     }
 
     resolveObservabilityConfig() {

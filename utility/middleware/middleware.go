@@ -189,6 +189,7 @@ func CORSMiddleware(r *ghttp.Request) {
 
 func AuthMiddleware(r *ghttp.Request) {
 	ctx := r.GetCtx()
+	path := requestPath(r)
 
 	authEnabled, err := g.Cfg().Get(ctx, "auth.enabled")
 	if err != nil || !authEnabled.Bool() {
@@ -198,6 +199,11 @@ func AuthMiddleware(r *ghttp.Request) {
 
 	authHeader := r.GetHeader("Authorization")
 	if authHeader == "" {
+		if allowAnonymousPath(path) {
+			applyAnonymousViewerContext(r, ctx)
+			r.Middleware.Next()
+			return
+		}
 		r.Response.WriteStatus(http.StatusUnauthorized)
 		r.Response.WriteJson(Response{Message: "missing authorization header"})
 		return
@@ -221,7 +227,7 @@ func AuthMiddleware(r *ghttp.Request) {
 	r.SetCtx(context.WithValue(ctx, consts.CtxKeyUserID, claims.Sub))
 	r.SetCtx(context.WithValue(r.GetCtx(), consts.CtxKeyUserRole, role))
 
-	if !authorizePathAccess(r.URL.Path, role) {
+	if !authorizePathAccess(path, role) {
 		r.Response.WriteStatus(http.StatusForbidden)
 		r.Response.WriteJson(Response{Message: "forbidden: insufficient role permissions"})
 		return
@@ -356,6 +362,17 @@ func authorizePathAccess(path, role string) bool {
 		return true
 	}
 	return auth.IsRoleAllowed(role, required...)
+}
+
+func allowAnonymousPath(path string) bool {
+	return len(auth.RequiredRolesForPath(path)) == 0
+}
+
+func applyAnonymousViewerContext(r *ghttp.Request, ctx context.Context) {
+	if r == nil {
+		return
+	}
+	r.SetCtx(context.WithValue(ctx, consts.CtxKeyUserRole, auth.RoleViewer))
 }
 
 type Response struct {

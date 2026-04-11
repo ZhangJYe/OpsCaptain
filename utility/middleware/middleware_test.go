@@ -75,3 +75,12 @@ func TestAuthorizePathAccess(t *testing.T) {
 		t.Fatal("operator should not access approval actions")
 	}
 }
+
+func TestAllowAnonymousPath(t *testing.T) {
+	if !allowAnonymousPath("/api/chat") {
+		t.Fatal("chat should allow anonymous access")
+	}
+	if allowAnonymousPath("/api/ai_ops") {
+		t.Fatal("ai_ops should require authentication")
+	}
+}
