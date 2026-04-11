@@ -33,13 +33,14 @@ func (a *Agent) Handle(ctx context.Context, task *protocol.TaskEnvelope) (*proto
 	query, _ := task.Input["query"].(string)
 	intent, _ := task.Input["intent"].(string)
 	responseMode, _ := task.Input["response_mode"].(string)
+	english := prefersEnglishResponse(query)
 	contextPkg, contextDetail := buildReporterContext(ctx, task, raw, query)
 	degradationReasons := collectDegradationReasons(raw)
 	status := aggregateResultStatus(raw)
 	degradationReason := strings.Join(degradationReasons, " ; ")
 
 	if responseMode == "chat" {
-		result := buildChatResponse(task, raw, query, intent, contextPkg)
+		result := buildChatResponse(task, raw, query, intent, contextPkg, english)
 		result.Metadata = mergeMetadata(result.Metadata, map[string]any{
 			"context_detail":      contextDetail,
 			"tool_item_count":     len(contextPkg.ToolItems),
@@ -50,13 +51,14 @@ func (a *Agent) Handle(ctx context.Context, task *protocol.TaskEnvelope) (*proto
 		return result, nil
 	}
 
+	text := reporterText(english)
 	sections := make([]string, 0, len(raw)+6)
-	sections = append(sections, "# Alert Analysis Report")
+	sections = append(sections, text.reportTitle)
 	if query != "" {
-		sections = append(sections, "## User Goal\n"+query)
+		sections = append(sections, text.userGoalHeading+"\n"+query)
 	}
-	sections = append(sections, "## Intent\n"+fallback(intent, "alert_analysis"))
-	sections = append(sections, "## Execution Summary")
+	sections = append(sections, text.intentHeading+"\n"+fallback(intent, "alert_analysis"))
+	sections = append(sections, text.executionSummaryHeading)
 
 	conclusionLines := make([]string, 0, len(raw))
 	evidence := make([]protocol.EvidenceItem, 0)
@@ -64,26 +66,26 @@ func (a *Agent) Handle(ctx context.Context, task *protocol.TaskEnvelope) (*proto
 		if result == nil {
 			continue
 		}
-		label := displayAgentName(result.Agent)
-		sections = append(sections, fmt.Sprintf("### %s\n%s", label, fallback(result.Summary, "no result")))
+		label := displayAgentName(result.Agent, english)
+		sections = append(sections, fmt.Sprintf("### %s\n%s", label, fallback(result.Summary, text.noResult)))
 		if len(result.Evidence) > 0 {
 			evidence = append(evidence, result.Evidence...)
 		}
-		statusText := fmt.Sprintf("%s: %s", result.Agent, fallback(result.Summary, "no result"))
+		statusText := fmt.Sprintf("%s%s%s", displayAgentName(result.Agent, english), text.labelSeparator, fallback(result.Summary, text.noResult))
 		if result.Status != protocol.ResultStatusSucceeded {
-			statusText += " (degraded)"
+			statusText += text.degradedSuffix
 		}
 		conclusionLines = append(conclusionLines, statusText)
 	}
 
 	if len(degradationReasons) > 0 {
-		sections = append(sections, "## Degradation")
+		sections = append(sections, text.degradationHeading)
 		sections = append(sections, strings.Join(prefixEach(degradationReasons, "- "), "\n"))
 	}
 
-	sections = append(sections, "## Conclusion")
+	sections = append(sections, text.conclusionHeading)
 	if len(conclusionLines) == 0 {
-		sections = append(sections, "No specialist results were available. Check tool configuration and dependent services.")
+		sections = append(sections, text.noSpecialistResults)
 	} else {
 		sections = append(sections, strings.Join(prefixEach(conclusionLines, "- "), "\n"))
 	}
@@ -104,10 +106,11 @@ func (a *Agent) Handle(ctx context.Context, task *protocol.TaskEnvelope) (*proto
 	}, nil
 }
 
-func buildChatResponse(task *protocol.TaskEnvelope, raw []*protocol.TaskResult, query, intent string, contextPkg *contextengine.ContextPackage) *protocol.TaskResult {
+func buildChatResponse(task *protocol.TaskEnvelope, raw []*protocol.TaskResult, query, intent string, contextPkg *contextengine.ContextPackage, english bool) *protocol.TaskResult {
 	evidence := make([]protocol.EvidenceItem, 0)
 	lines := make([]string, 0, len(raw))
 	degradationReasons := collectDegradationReasons(raw)
+	text := reporterText(english)
 
 	for _, result := range raw {
 		if result == nil {
@@ -116,10 +119,10 @@ func buildChatResponse(task *protocol.TaskEnvelope, raw []*protocol.TaskResult, 
 		if len(result.Evidence) > 0 {
 			evidence = append(evidence, result.Evidence...)
 		}
-		label := displayAgentName(result.Agent)
-		line := fmt.Sprintf("%s: %s", label, fallback(result.Summary, "no result"))
+		label := displayAgentName(result.Agent, english)
+		line := fmt.Sprintf("%s%s%s", label, text.labelSeparator, fallback(result.Summary, text.noResult))
 		if result.Status != protocol.ResultStatusSucceeded {
-			line += " (degraded)"
+			line += text.degradedSuffix
 		}
 		lines = append(lines, line)
 	}
@@ -127,28 +130,28 @@ func buildChatResponse(task *protocol.TaskEnvelope, raw []*protocol.TaskResult, 
 	parts := make([]string, 0, 5)
 	switch intent {
 	case "kb_qa":
-		parts = append(parts, "I checked the currently available knowledge and tool results.")
+		parts = append(parts, text.kbIntro)
 	case "incident_analysis":
-		parts = append(parts, "I combined the currently available troubleshooting signals.")
+		parts = append(parts, text.incidentIntro)
 	default:
-		parts = append(parts, "I combined the currently available multi-agent results.")
+		parts = append(parts, text.defaultIntro)
 	}
 	if strings.TrimSpace(query) != "" {
-		parts = append(parts, "Question: "+query)
+		parts = append(parts, text.questionPrefix+query)
 	}
 	if len(lines) == 0 {
-		parts = append(parts, "No specialist results were available. Check tool configuration or retry later.")
+		parts = append(parts, text.noSpecialistResults)
 	} else {
 		parts = append(parts, strings.Join(prefixEach(lines, "- "), "\n"))
 	}
 	toolSnippets := contextengine.ToolItemSnippets(contextPkg.ToolItems, 3)
 	if len(toolSnippets) > 0 {
-		parts = append(parts, "Evidence:\n"+strings.Join(prefixEach(toolSnippets, "- "), "\n"))
+		parts = append(parts, text.evidenceHeading+"\n"+strings.Join(prefixEach(toolSnippets, "- "), "\n"))
 	} else if len(evidence) > 0 {
-		parts = append(parts, "Evidence:\n"+strings.Join(prefixEach(chatEvidenceSnippets(evidence, 3), "- "), "\n"))
+		parts = append(parts, text.evidenceHeading+"\n"+strings.Join(prefixEach(chatEvidenceSnippets(evidence, 3), "- "), "\n"))
 	}
 	if len(degradationReasons) > 0 {
-		parts = append(parts, "Partial degradation:\n"+strings.Join(prefixEach(degradationReasons, "- "), "\n"))
+		parts = append(parts, text.partialDegradationHeading+"\n"+strings.Join(prefixEach(degradationReasons, "- "), "\n"))
 	}
 
 	return &protocol.TaskResult{
@@ -197,9 +200,28 @@ func mergeMetadata(left, right map[string]any) map[string]any {
 	return out
 }
 
-func displayAgentName(name string) string {
+func displayAgentName(name string, english bool) string {
+	if !english {
+		switch strings.ToLower(strings.TrimSpace(name)) {
+		case "metrics":
+			return "指标"
+		case "logs":
+			return "日志"
+		case "knowledge":
+			return "知识库"
+		case "triage":
+			return "分诊"
+		case "supervisor":
+			return "调度"
+		case "reporter":
+			return "汇总"
+		}
+	}
 	if name == "" {
-		return "Unknown"
+		if english {
+			return "Unknown"
+		}
+		return "未知"
 	}
 	r, size := utf8.DecodeRuneInString(name)
 	if r == utf8.RuneError {
@@ -213,6 +235,93 @@ func fallback(value, alt string) string {
 		return alt
 	}
 	return value
+}
+
+type reporterLocalization struct {
+	reportTitle               string
+	userGoalHeading           string
+	intentHeading             string
+	executionSummaryHeading   string
+	degradationHeading        string
+	conclusionHeading         string
+	noSpecialistResults       string
+	kbIntro                   string
+	incidentIntro             string
+	defaultIntro              string
+	questionPrefix            string
+	evidenceHeading           string
+	partialDegradationHeading string
+	labelSeparator            string
+	degradedSuffix            string
+	noResult                  string
+}
+
+func reporterText(english bool) reporterLocalization {
+	if english {
+		return reporterLocalization{
+			reportTitle:               "# Alert Analysis Report",
+			userGoalHeading:           "## User Goal",
+			intentHeading:             "## Intent",
+			executionSummaryHeading:   "## Execution Summary",
+			degradationHeading:        "## Degradation",
+			conclusionHeading:         "## Conclusion",
+			noSpecialistResults:       "No specialist results were available. Check tool configuration or retry later.",
+			kbIntro:                   "I checked the currently available knowledge and tool results.",
+			incidentIntro:             "I combined the currently available troubleshooting signals.",
+			defaultIntro:              "I combined the currently available multi-agent results.",
+			questionPrefix:            "Question: ",
+			evidenceHeading:           "Evidence:",
+			partialDegradationHeading: "Partial degradation:",
+			labelSeparator:            ": ",
+			degradedSuffix:            " (degraded)",
+			noResult:                  "no result",
+		}
+	}
+	return reporterLocalization{
+		reportTitle:               "# 告警分析报告",
+		userGoalHeading:           "## 用户目标",
+		intentHeading:             "## 意图",
+		executionSummaryHeading:   "## 执行摘要",
+		degradationHeading:        "## 降级信息",
+		conclusionHeading:         "## 结论",
+		noSpecialistResults:       "当前没有可用的专业代理结果，请检查工具配置、依赖服务或稍后重试。",
+		kbIntro:                   "我已结合当前可用的知识和工具结果。",
+		incidentIntro:             "我已综合当前可用的排障信号。",
+		defaultIntro:              "我已汇总当前可用的多智能体结果。",
+		questionPrefix:            "问题：",
+		evidenceHeading:           "依据：",
+		partialDegradationHeading: "部分降级：",
+		labelSeparator:            "：",
+		degradedSuffix:            "（已降级）",
+		noResult:                  "暂无结果",
+	}
+}
+
+func prefersEnglishResponse(query string) bool {
+	lower := strings.ToLower(strings.TrimSpace(query))
+	if lower == "" {
+		return false
+	}
+	for _, token := range []string{
+		"answer in english",
+		"respond in english",
+		"reply in english",
+		"please use english",
+		"please answer in english",
+		"in english",
+		"用英文",
+		"请用英文",
+		"英文回答",
+		"英文回复",
+		"英语回答",
+		"英语回复",
+		"英文输出",
+	} {
+		if strings.Contains(lower, token) {
+			return true
+		}
+	}
+	return false
 }
 
 func prefixEach(items []string, prefix string) []string {

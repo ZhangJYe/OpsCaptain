@@ -56,19 +56,19 @@ func TestSupervisorReplayCases(t *testing.T) {
 		{
 			name:         "alert-analysis-fanout",
 			query:        "请分析当前 Prometheus 告警并结合日志排查",
-			wantContains: []string{"### Metrics", "### Logs", "### Knowledge"},
+			wantContains: []string{"### 指标", "### 日志", "### 知识库"},
 		},
 		{
 			name:            "knowledge-only",
 			query:           "请查询知识库中的 SOP 文档",
-			wantContains:    []string{"### Knowledge"},
-			wantNotContains: []string{"### Metrics", "### Logs"},
+			wantContains:    []string{"### 知识库"},
+			wantNotContains: []string{"### 指标", "### 日志"},
 		},
 		{
 			name:            "incident-analysis",
 			query:           "请排查支付服务日志错误",
-			wantContains:    []string{"### Logs", "### Knowledge"},
-			wantNotContains: []string{"### Metrics"},
+			wantContains:    []string{"### 日志", "### 知识库"},
+			wantNotContains: []string{"### 指标"},
 		},
 	}
 

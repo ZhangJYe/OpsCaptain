@@ -31,7 +31,7 @@ func newChatTemplate(ctx context.Context) (ctp prompt.ChatTemplate, err error) {
 }
 
 func buildSystemPrompt(ctx context.Context) string {
-	p := baseSystemPrompt
+	p := baseSystemPrompt + defaultLanguageRule
 	var logHints []string
 	region, err := g.Cfg().Get(ctx, "log_topic.region")
 	if err == nil {
@@ -56,6 +56,13 @@ func buildSystemPrompt(ctx context.Context) string {
 func normalizePromptConfigValue(raw string) (string, bool) {
 	return common.ResolveOptionalEnv(raw)
 }
+
+const defaultLanguageRule = `
+## 语言规则
+- 默认使用中文回答。
+- 仅当用户明确要求英文或其他语言时，才切换到对应语言。
+- 如果信息不足，直接用中文说明还缺少哪些关键信息，不要输出英文客服式套话。
+`
 
 var baseSystemPrompt = `
 # 角色：对话小助手

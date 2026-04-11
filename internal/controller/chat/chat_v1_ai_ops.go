@@ -31,12 +31,13 @@ func (c *ControllerV1) AIOps(ctx context.Context, req *v1.AIOpsReq) (res *v1.AIO
 
 	query := req.Query
 	if query == "" {
-		query = `You are an AIOps incident assistant. Follow this order:
-1. Query active Prometheus alerts.
-2. For each alert, look up the matching internal docs or runbook.
-3. Use only tool results and internal docs for analysis.
-4. If a tool fails, skip that step and call it out once in the report.
-5. Produce a markdown report with sections: Active Alerts, Root Cause Analysis, Mitigation, Conclusion.`
+		query = `你是一个 AIOps 事故分析助手，请严格按以下顺序执行：
+1. 查询当前活跃的 Prometheus 告警。
+2. 对每条告警查询匹配的内部文档或 runbook。
+3. 只能基于工具结果和内部文档进行分析。
+4. 如果某个工具失败，跳过该步骤，并在报告中明确说明一次。
+5. 默认使用中文输出报告，除非用户明确要求其他语言。
+6. 报告使用 Markdown，包含这些章节：活跃告警、根因分析、缓解建议、结论。`
 	}
 
 	response, err := runAIOpsMultiAgent(ctx, query)
