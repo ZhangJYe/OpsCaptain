@@ -27,3 +27,13 @@ func TestFloatVectorConverter_ProducesMilvusFloatVectors(t *testing.T) {
 		t.Fatalf("unexpected float vector: %#v", floatVector)
 	}
 }
+
+func TestResolveMilvusSearchParam_HNSW(t *testing.T) {
+	param, err := resolveMilvusSearchParam(context.Background(), 5)
+	if err != nil {
+		t.Fatalf("resolveMilvusSearchParam returned error: %v", err)
+	}
+	if _, ok := param.(*entity.IndexHNSWSearchParam); !ok {
+		t.Fatalf("expected *entity.IndexHNSWSearchParam, got %T", param)
+	}
+}

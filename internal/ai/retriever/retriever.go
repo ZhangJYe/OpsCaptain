@@ -42,6 +42,10 @@ func NewMilvusRetriever(ctx context.Context) (rtr retriever.Retriever, err error
 	if err != nil {
 		return nil, err
 	}
+	searchParam, err := resolveMilvusSearchParam(ctx, topK)
+	if err != nil {
+		return nil, err
+	}
 	r, err := milvus.NewRetriever(ctx, &milvus.RetrieverConfig{
 		Client:      cli,
 		Collection:  common.GetMilvusCollectionName(ctx),
@@ -54,6 +58,7 @@ func NewMilvusRetriever(ctx context.Context) (rtr retriever.Retriever, err error
 		TopK:            topK,
 		MetricType:      metricType,
 		VectorConverter: floatVectorConverter,
+		Sp:              searchParam,
 		Embedding:       eb,
 	})
 	if err != nil {
@@ -88,5 +93,22 @@ func resolveMilvusMetricType(ctx context.Context) (entity.MetricType, error) {
 		return entity.COSINE, nil
 	default:
 		return "", fmt.Errorf("unsupported milvus.metric_type: %s", common.GetMilvusMetricType(ctx))
+	}
+}
+
+func resolveMilvusSearchParam(ctx context.Context, topK int) (entity.SearchParam, error) {
+	switch strings.ToUpper(strings.TrimSpace(common.GetMilvusIndexType(ctx))) {
+	case "HNSW":
+		ef := topK * 16
+		if ef < 64 {
+			ef = 64
+		}
+		return entity.NewIndexHNSWSearchParam(ef)
+	case "AUTOINDEX", "AUTO":
+		return entity.NewIndexAUTOINDEXSearchParam(1)
+	case "FLAT":
+		return entity.NewIndexFlatSearchParam()
+	default:
+		return nil, fmt.Errorf("unsupported milvus.index_type: %s", common.GetMilvusIndexType(ctx))
 	}
 }
