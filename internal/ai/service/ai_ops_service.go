@@ -9,12 +9,10 @@ import (
 	"fmt"
 	"strings"
 
-	"SuperBizAgent/internal/ai/agent/plan_execute_replan"
 	"SuperBizAgent/internal/ai/protocol"
 	"SuperBizAgent/internal/ai/skills"
 
 	"github.com/gogf/gf/v2/frame/g"
-	"github.com/google/uuid"
 )
 
 var (
@@ -24,7 +22,6 @@ var (
 	newMemoryService = func() aiOpsMemory {
 		return NewMemoryService()
 	}
-	buildPlanAgent = plan_execute_replan.BuildPlanAgent
 
 	skillFocusCollector = skills.NewFocusCollector(
 		logs.SkillRegistry(),
@@ -64,8 +61,6 @@ func RunAIOpsMultiAgent(ctx context.Context, query string) (ExecutionResponse, e
 		return NewDegradedExecutionResponse(decision), nil
 	}
 
-	traceID := uuid.NewString()
-
 	memorySvc := newMemoryService()
 	sessionID := memorySvc.ResolveSessionID(ctx)
 	ctx = context.WithValue(ctx, consts.CtxKeySessionID, sessionID)
@@ -81,30 +76,41 @@ func RunAIOpsMultiAgent(ctx context.Context, query string) (ExecutionResponse, e
 		g.Log().Infof(ctx, "[AIOps] skill focus injected: %d hints", len(hints))
 	}
 
-	g.Log().Infof(ctx, "[AIOps] plan-execute-replan started, trace_id=%s", traceID)
-	content, planDetail, err := buildPlanAgent(ctx, enrichedQuery)
+	rt, err := getOrCreateAIOpsRuntime(ctx)
 	if err != nil {
-		g.Log().Errorf(ctx, "[AIOps] plan-execute-replan failed: %v", err)
 		return ExecutionResponse{
-			Detail:            append(contextDetail, fmt.Sprintf("plan-execute-replan error: %v", err)),
-			TraceID:           traceID,
+			Detail:            append(contextDetail, fmt.Sprintf("aiops runtime unavailable: %v", err)),
 			Status:            protocol.ResultStatusFailed,
 			DegradationReason: err.Error(),
 		}, err
 	}
 
+	rootTask := protocol.NewRootTask(sessionID, query, aiOpsPlanAgentName)
+	rootTask.Input = map[string]any{
+		"raw_query":        query,
+		"executable_query": enrichedQuery,
+		"context_detail":   append([]string{}, contextDetail...),
+		"response_mode":    "ai_ops",
+		"entrypoint":       "ai_ops",
+	}
+
+	g.Log().Infof(ctx, "[AIOps] runtime dispatch started, trace_id=%s", rootTask.TraceID)
+	result, err := rt.Dispatch(ctx, rootTask)
 	detail := append([]string{}, contextDetail...)
-	detail = append(detail, planDetail...)
+	detail = append(detail, rt.DetailMessages(ctx, rootTask.TraceID)...)
+	if result == nil {
+		return ExecutionResponse{
+			Detail:            detail,
+			TraceID:           rootTask.TraceID,
+			Status:            protocol.ResultStatusFailed,
+			DegradationReason: "aiops execution returned no result",
+		}, err
+	}
 
-	memorySvc.PersistOutcome(ctx, sessionID, query, content)
-	g.Log().Infof(ctx, "[AIOps] plan-execute-replan completed, trace_id=%s, steps=%d", traceID, len(planDetail))
+	memorySvc.PersistOutcome(ctx, sessionID, query, result.Summary)
+	g.Log().Infof(ctx, "[AIOps] runtime dispatch completed, trace_id=%s", rootTask.TraceID)
 
-	return ExecutionResponse{
-		Content: content,
-		Detail:  detail,
-		TraceID: traceID,
-		Status:  protocol.ResultStatusSucceeded,
-	}, nil
+	return ExecutionResponseFromResult(result, detail, rootTask.TraceID), err
 }
 
 func ListApprovalRequests(ctx context.Context, status string) ([]ApprovalRequest, error) {
@@ -146,7 +152,18 @@ func GetAIOpsTrace(_ context.Context, traceID string) ([]*protocol.TaskEvent, []
 	if traceID == "" {
 		return nil, nil, fmt.Errorf("traceID is empty")
 	}
-	return nil, nil, fmt.Errorf("trace %s not found: plan-execute-replan traces are recorded in application logs", traceID)
+	rt, err := getOrCreateAIOpsRuntime(context.Background())
+	if err != nil {
+		return nil, nil, fmt.Errorf("aiops runtime unavailable: %w", err)
+	}
+	events, err := rt.TraceEvents(context.Background(), traceID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(events) == 0 {
+		return nil, nil, fmt.Errorf("trace %s not found", traceID)
+	}
+	return events, rt.DetailMessages(context.Background(), traceID), nil
 }
 
 func reviewerIdentity(ctx context.Context) string {

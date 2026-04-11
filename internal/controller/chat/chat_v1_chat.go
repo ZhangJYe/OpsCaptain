@@ -20,8 +20,10 @@ import (
 
 var sessionLocks sync.Map
 var (
-	buildChatAgent         = chat_pipeline.BuildChatAgentWithQuery
-	getDegradationDecision = aiservice.GetDegradationDecision
+	buildChatAgent          = chat_pipeline.BuildChatAgentWithQuery
+	getDegradationDecision  = aiservice.GetDegradationDecision
+	shouldUseChatMultiAgent = aiservice.ShouldUseMultiAgentForChat
+	runChatMultiAgent       = aiservice.RunChatMultiAgent
 )
 
 func acquireSessionLock(id string) *sync.Mutex {
@@ -77,6 +79,32 @@ func (c *ControllerV1) Chat(ctx context.Context, req *v1.ChatReq) (res *v1.ChatR
 			Detail: detail,
 			Mode:   "cache",
 			Cached: true,
+		}, nil
+	}
+
+	if shouldUseChatMultiAgent(ctx, msg) {
+		response, err := runChatMultiAgent(ctx, id, msg)
+		if err != nil {
+			if fallback := userFacingChatError(ctx, err); fallback != nil {
+				return fallback, nil
+			}
+			return nil, err
+		}
+		answer, detail := filterAssistantPayload(ctx, response.Content, response.Detail)
+		if cacheErr := cache.StoreChatResponse(ctx, id, msg, cache.ChatResponseEntry{
+			Answer: answer,
+			Detail: detail,
+			Mode:   "multi_agent",
+		}); cacheErr != nil {
+			g.Log().Warningf(ctx, "[session:%s][req:%s] cache store failed: %v", id, requestID, cacheErr)
+		}
+		return &v1.ChatRes{
+			Answer:            answer,
+			TraceID:           response.TraceID,
+			Detail:            detail,
+			Mode:              "multi_agent",
+			Degraded:          response.Degraded(),
+			DegradationReason: response.DegradationReason,
 		}, nil
 	}
 

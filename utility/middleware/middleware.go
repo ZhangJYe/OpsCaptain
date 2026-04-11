@@ -69,11 +69,13 @@ func CORSMiddleware(r *ghttp.Request) {
 		}
 		r.Response.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
 		r.Response.Header().Set("Vary", "Origin")
+		if allowedOrigin != "*" {
+			r.Response.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
 	}
 
 	r.Response.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 	r.Response.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization, X-Session-ID")
-	r.Response.Header().Set("Access-Control-Allow-Credentials", "true")
 	r.Response.Header().Set("Access-Control-Max-Age", "3600")
 
 	if r.Method == "OPTIONS" {

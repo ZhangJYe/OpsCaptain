@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"SuperBizAgent/internal/ai/protocol"
+	"SuperBizAgent/internal/ai/runtime"
 )
 
 type stubAIOpsMemory struct {
@@ -44,15 +45,21 @@ func TestRunAIOpsCallsBuildPlanAgent(t *testing.T) {
 	oldMemoryFactory := newMemoryService
 	oldCfgBool := degradationConfigBool
 	oldCfgString := degradationConfigString
+	oldFactory := newPersistentRuntime
+	oldAIOpsRuntimes := aiOpsRuntimes
 	defer func() {
 		buildPlanAgent = oldBuild
 		newMemoryService = oldMemoryFactory
 		degradationConfigBool = oldCfgBool
 		degradationConfigString = oldCfgString
+		newPersistentRuntime = oldFactory
+		aiOpsRuntimes = oldAIOpsRuntimes
 	}()
 
 	degradationConfigBool = func(context.Context, string) bool { return false }
 	degradationConfigString = func(context.Context, string) string { return "" }
+	aiOpsRuntimes = make(map[string]*runtime.Runtime)
+	newPersistentRuntime = func(string) (*runtime.Runtime, error) { return runtime.New(), nil }
 
 	var capturedQuery string
 	buildPlanAgent = func(_ context.Context, query string) (string, []string, error) {
@@ -100,15 +107,21 @@ func TestRunAIOpsWithEmptyMemoryContext(t *testing.T) {
 	oldMemoryFactory := newMemoryService
 	oldCfgBool := degradationConfigBool
 	oldCfgString := degradationConfigString
+	oldFactory := newPersistentRuntime
+	oldAIOpsRuntimes := aiOpsRuntimes
 	defer func() {
 		buildPlanAgent = oldBuild
 		newMemoryService = oldMemoryFactory
 		degradationConfigBool = oldCfgBool
 		degradationConfigString = oldCfgString
+		newPersistentRuntime = oldFactory
+		aiOpsRuntimes = oldAIOpsRuntimes
 	}()
 
 	degradationConfigBool = func(context.Context, string) bool { return false }
 	degradationConfigString = func(context.Context, string) string { return "" }
+	aiOpsRuntimes = make(map[string]*runtime.Runtime)
+	newPersistentRuntime = func(string) (*runtime.Runtime, error) { return runtime.New(), nil }
 
 	var capturedQuery string
 	buildPlanAgent = func(_ context.Context, query string) (string, []string, error) {
@@ -129,5 +142,48 @@ func TestRunAIOpsWithEmptyMemoryContext(t *testing.T) {
 	}
 	if strings.Contains(capturedQuery, "历史上下文") {
 		t.Fatalf("expected no memory context, got %q", capturedQuery)
+	}
+}
+
+func TestGetAIOpsTraceReturnsRuntimeEvents(t *testing.T) {
+	oldBuild := buildPlanAgent
+	oldMemoryFactory := newMemoryService
+	oldCfgBool := degradationConfigBool
+	oldCfgString := degradationConfigString
+	oldFactory := newPersistentRuntime
+	oldAIOpsRuntimes := aiOpsRuntimes
+	defer func() {
+		buildPlanAgent = oldBuild
+		newMemoryService = oldMemoryFactory
+		degradationConfigBool = oldCfgBool
+		degradationConfigString = oldCfgString
+		newPersistentRuntime = oldFactory
+		aiOpsRuntimes = oldAIOpsRuntimes
+	}()
+
+	degradationConfigBool = func(context.Context, string) bool { return false }
+	degradationConfigString = func(context.Context, string) string { return "" }
+	aiOpsRuntimes = make(map[string]*runtime.Runtime)
+	newPersistentRuntime = func(string) (*runtime.Runtime, error) { return runtime.New(), nil }
+	newMemoryService = func() aiOpsMemory {
+		return &stubAIOpsMemory{sessionID: "trace-session"}
+	}
+	buildPlanAgent = func(_ context.Context, query string) (string, []string, error) {
+		return "analysis complete", []string{"step1", "step2"}, nil
+	}
+
+	response, err := RunAIOpsMultiAgent(context.Background(), "check alerts")
+	if err != nil {
+		t.Fatalf("run aiops: %v", err)
+	}
+	events, detail, err := GetAIOpsTrace(context.Background(), response.TraceID)
+	if err != nil {
+		t.Fatalf("get trace: %v", err)
+	}
+	if len(events) == 0 {
+		t.Fatal("expected trace events")
+	}
+	if len(detail) == 0 {
+		t.Fatal("expected trace detail")
 	}
 }

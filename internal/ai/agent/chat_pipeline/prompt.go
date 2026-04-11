@@ -1,6 +1,7 @@
 package chat_pipeline
 
 import (
+	"SuperBizAgent/utility/common"
 	"context"
 	"fmt"
 	"strings"
@@ -33,12 +34,16 @@ func buildSystemPrompt(ctx context.Context) string {
 	p := baseSystemPrompt
 	var logHints []string
 	region, err := g.Cfg().Get(ctx, "log_topic.region")
-	if err == nil && region.String() != "" {
-		logHints = append(logHints, fmt.Sprintf("日志主题地域：%s", region.String()))
+	if err == nil {
+		if resolved, ok := normalizePromptConfigValue(region.String()); ok {
+			logHints = append(logHints, fmt.Sprintf("日志主题地域：%s", resolved))
+		}
 	}
 	topicID, err := g.Cfg().Get(ctx, "log_topic.id")
-	if err == nil && topicID.String() != "" {
-		logHints = append(logHints, fmt.Sprintf("日志主题id：%s", topicID.String()))
+	if err == nil {
+		if resolved, ok := normalizePromptConfigValue(topicID.String()); ok {
+			logHints = append(logHints, fmt.Sprintf("日志主题id：%s", resolved))
+		}
 	}
 	if len(logHints) > 0 {
 		p = strings.Replace(p, "{log_topic_info}", "  • "+strings.Join(logHints, "；"), 1)
@@ -46,6 +51,10 @@ func buildSystemPrompt(ctx context.Context) string {
 		p = strings.Replace(p, "{log_topic_info}\n", "", 1)
 	}
 	return p
+}
+
+func normalizePromptConfigValue(raw string) (string, bool) {
+	return common.ResolveOptionalEnv(raw)
 }
 
 var baseSystemPrompt = `

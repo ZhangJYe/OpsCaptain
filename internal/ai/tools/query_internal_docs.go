@@ -25,14 +25,9 @@ func NewQueryInternalDocsTool() tool.InvokableTool {
 			queryCtx, cancel := context.WithTimeout(ctx, internalDocsQueryTimeout(ctx))
 			defer cancel()
 
-			pool := rag.SharedPool()
-			rr, _, err := pool.GetOrCreate(queryCtx)
+			resp, _, err := rag.Query(queryCtx, rag.SharedPool(), input.Query)
 			if err != nil {
-				return "", fmt.Errorf("failed to create retriever: %w", err)
-			}
-			resp, err := rr.Retrieve(queryCtx, input.Query)
-			if err != nil {
-				return "", fmt.Errorf("failed to retrieve documents: %w", err)
+				return "", fmt.Errorf("failed to query internal docs: %w", err)
 			}
 			respBytes, err := json.Marshal(resp)
 			if err != nil {

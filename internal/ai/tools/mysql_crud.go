@@ -133,6 +133,10 @@ func CloseMySQL() error {
 	return sqlDB.Close()
 }
 
+func MySQLToolEnabled() bool {
+	return len(loadAllowedTables(context.Background())) > 0
+}
+
 func loadMySQLQueryPolicy(ctx context.Context) mysqlQueryPolicy {
 	policy := mysqlQueryPolicy{
 		allowedTables: loadAllowedTables(ctx),

@@ -2,7 +2,7 @@ server:
   address: ":8000"
 
 auth:
-  enabled: false
+  enabled: true
   jwt_secret: "${AUTH_JWT_SECRET}"
   token_expiry_hours: 24
   rate_limit_per_minute: 20
@@ -54,7 +54,7 @@ upload:
 
 cors:
   allowed_origins:
-    - "*"
+    - "${CORS_ALLOWED_ORIGIN}"
 
 milvus:
   address: "${MILVUS_ADDRESS}"

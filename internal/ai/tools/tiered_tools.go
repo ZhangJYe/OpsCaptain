@@ -40,11 +40,15 @@ func BuildTieredTools() []skills.TieredTool {
 		Domains: []string{"metrics"},
 	})
 
-	tiered = append(tiered, skills.TieredTool{
-		Tool:    NewMysqlCrudTool(),
-		Tier:    skills.TierOnDemand,
-		Domains: []string{"logs", "metrics", "knowledge"},
-	})
+	if MySQLToolEnabled() {
+		tiered = append(tiered, skills.TieredTool{
+			Tool:    NewMysqlCrudTool(),
+			Tier:    skills.TierOnDemand,
+			Domains: []string{"logs", "metrics", "knowledge"},
+		})
+	} else {
+		g.Log().Warningf(nil, "progressive disclosure: mysql tool disabled because mysql.allowed_tables is empty")
+	}
 
 	return tiered
 }

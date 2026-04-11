@@ -55,6 +55,26 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 	mu := acquireSessionLock(id)
 	defer releaseSessionLock(id, mu)
 
+	if shouldUseChatMultiAgent(ctx, msg) {
+		response, execErr := runChatMultiAgent(ctx, id, msg)
+		if execErr != nil {
+			if fallback := userFacingChatError(ctx, execErr); fallback != nil {
+				sendChatStreamMeta(client, fallback.Mode, fallback.TraceID, fallback.Detail, fallback.Degraded, fallback.DegradationReason)
+				streamTextToClient(client, fallback.Answer)
+				client.SendToClient("done", "Stream completed")
+				return &v1.ChatStreamRes{}, nil
+			}
+			client.SendToClient("error", execErr.Error())
+			return nil, execErr
+		}
+		_, filteredDetail := filterAssistantPayload(ctx, "", response.Detail)
+		sendChatStreamMeta(client, "multi_agent", response.TraceID, filteredDetail, response.Degraded(), response.DegradationReason)
+		filteredContent, _ := filterAssistantPayload(ctx, response.Content, nil)
+		streamTextToClient(client, filteredContent)
+		client.SendToClient("done", "Stream completed")
+		return &v1.ChatStreamRes{}, nil
+	}
+
 	sessionMem := mem.GetSimpleMemory(id)
 
 	memorySvc := aiservice.NewMemoryService()
