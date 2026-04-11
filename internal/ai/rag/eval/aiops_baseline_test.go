@@ -32,7 +32,7 @@ func TestGenerateAIOPSBaselineArtifacts(t *testing.T) {
 
 	gtLines := []string{
 		`{"uuid":"case-a","fault_category":"stress","fault_type":"cpu stress","instance_type":"service","service":"svc-a","instance":"svc-a","source":"","destination":"","start_time":"2025-06-05T16:10:02Z","end_time":"2025-06-05T16:31:02Z","key_observations":[{"type":"metric","keyword":["rrt","cpu_usage"]}],"key_metrics":["cpu_usage"],"fault_description":["high cpu"]}`,
-		`{"uuid":"case-b","fault_category":"network","fault_type":"network delay","instance_type":"service","service":"svc-b","instance":"svc-b","source":"frontend","destination":"svc-b","start_time":"2025-06-06T10:00:00Z","end_time":"2025-06-06T10:10:00Z","key_observations":[{"type":"trace","keyword":["timeout","latency"]}],"key_metrics":["latency"],"fault_description":["network delay"]}`,
+		`{"uuid":"case-b","fault_category":"stress","fault_type":"network delay","instance_type":"service","service":"svc-b","instance":"svc-b","source":"frontend","destination":"svc-b","start_time":"2025-06-06T10:00:00Z","end_time":"2025-06-06T10:10:00Z","key_observations":[{"type":"trace","keyword":["timeout","latency"]}],"key_metrics":["latency"],"fault_description":["network delay"]}`,
 	}
 	if err := os.WriteFile(filepath.Join(datasetRoot, "groundtruth.jsonl"), []byte(gtLines[0]+"\n"+gtLines[1]+"\n"), 0o644); err != nil {
 		t.Fatalf("write groundtruth: %v", err)
@@ -54,6 +54,9 @@ func TestGenerateAIOPSBaselineArtifacts(t *testing.T) {
 	if summary.BuildEvidenceDocs != 1 || summary.BuildHistoryDocs != 1 {
 		t.Fatalf("unexpected build-only summary: %+v", summary)
 	}
+	if summary.HoldoutRelatedEvalCases != 2 {
+		t.Fatalf("expected 2 holdout related eval cases, got %+v", summary)
+	}
 	if summary.EvalCases != 4 {
 		t.Fatalf("expected 4 eval cases, got %+v", summary)
 	}
@@ -68,6 +71,7 @@ func TestGenerateAIOPSBaselineArtifacts(t *testing.T) {
 		filepath.Join(outputRoot, "docs_history_build", "case-a.md"),
 		filepath.Join(outputRoot, "eval", "eval_cases.jsonl"),
 		filepath.Join(outputRoot, "eval", "eval_cases_holdout.jsonl"),
+		filepath.Join(outputRoot, "eval", "eval_cases_holdout_related.jsonl"),
 		filepath.Join(outputRoot, "eval", "build_split.json"),
 		filepath.Join(outputRoot, "eval", "eval_split.json"),
 	} {
@@ -90,6 +94,18 @@ func TestGenerateAIOPSBaselineArtifacts(t *testing.T) {
 	}
 	if len(evalCases) != 2 {
 		t.Fatalf("expected 2 holdout eval cases, got %d", len(evalCases))
+	}
+	relatedCases, err := LoadEvalCasesJSONL(filepath.Join(outputRoot, "eval", "eval_cases_holdout_related.jsonl"))
+	if err != nil {
+		t.Fatalf("load related holdout eval cases: %v", err)
+	}
+	if len(relatedCases) != 2 {
+		t.Fatalf("expected 2 related holdout eval cases, got %d", len(relatedCases))
+	}
+	for _, item := range relatedCases {
+		if len(item.RelevantIDs) != 1 || item.RelevantIDs[0] != "case-a" {
+			t.Fatalf("expected related case to point to build case-a, got %+v", item)
+		}
 	}
 	if _, err := os.Stat(filepath.Join(outputRoot, "docs_evidence_build", "case-b.md")); !os.IsNotExist(err) {
 		t.Fatalf("expected holdout case to be absent from build evidence dir, got err=%v", err)

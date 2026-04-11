@@ -22,16 +22,17 @@ type AIOPSPrepOptions struct {
 }
 
 type AIOPSPrepSummary struct {
-	Cases             int    `json:"cases"`
-	EvidenceDocs      int    `json:"evidence_docs"`
-	HistoryDocs       int    `json:"history_docs"`
-	BuildEvidenceDocs int    `json:"build_evidence_docs"`
-	BuildHistoryDocs  int    `json:"build_history_docs"`
-	EvalCases         int    `json:"eval_cases"`
-	HoldoutEvalCases  int    `json:"holdout_eval_cases"`
-	BuildCases        int    `json:"build_cases"`
-	HoldoutCases      int    `json:"holdout_cases"`
-	OutputRoot        string `json:"output_root"`
+	Cases                   int    `json:"cases"`
+	EvidenceDocs            int    `json:"evidence_docs"`
+	HistoryDocs             int    `json:"history_docs"`
+	BuildEvidenceDocs       int    `json:"build_evidence_docs"`
+	BuildHistoryDocs        int    `json:"build_history_docs"`
+	EvalCases               int    `json:"eval_cases"`
+	HoldoutEvalCases        int    `json:"holdout_eval_cases"`
+	HoldoutRelatedEvalCases int    `json:"holdout_related_eval_cases"`
+	BuildCases              int    `json:"build_cases"`
+	HoldoutCases            int    `json:"holdout_cases"`
+	OutputRoot              string `json:"output_root"`
 }
 
 type AIOPSInputCase struct {
@@ -184,9 +185,16 @@ func GenerateAIOPSBaselineArtifacts(ctx context.Context, opts AIOPSPrepOptions) 
 	}
 
 	holdoutEvalCases := make([]EvalCase, 0, len(allEvalCases))
+	holdoutRelatedEvalCases := make([]EvalCase, 0, len(allEvalCases))
 	for _, item := range allEvalCases {
 		if hasRelevantID(item, holdoutSet) {
 			holdoutEvalCases = append(holdoutEvalCases, item)
+			if relatedIDs := relatedBuildCaseIDs(item, buildIDs, groundtruth); len(relatedIDs) > 0 {
+				related := item
+				related.RelevantIDs = relatedIDs
+				related.Notes = strings.TrimSpace(item.Notes + "; relevant_ids derived from build split fault_type/fault_category matches")
+				holdoutRelatedEvalCases = append(holdoutRelatedEvalCases, related)
+			}
 		}
 	}
 
@@ -194,6 +202,9 @@ func GenerateAIOPSBaselineArtifacts(ctx context.Context, opts AIOPSPrepOptions) 
 		return AIOPSPrepSummary{}, err
 	}
 	if err := WriteEvalCasesJSONL(filepath.Join(evalDir, "eval_cases_holdout.jsonl"), holdoutEvalCases); err != nil {
+		return AIOPSPrepSummary{}, err
+	}
+	if err := WriteEvalCasesJSONL(filepath.Join(evalDir, "eval_cases_holdout_related.jsonl"), holdoutRelatedEvalCases); err != nil {
 		return AIOPSPrepSummary{}, err
 	}
 
@@ -214,16 +225,17 @@ func GenerateAIOPSBaselineArtifacts(ctx context.Context, opts AIOPSPrepOptions) 
 
 	_ = ctx
 	return AIOPSPrepSummary{
-		Cases:             len(ids),
-		EvidenceDocs:      len(ids),
-		HistoryDocs:       len(ids),
-		BuildEvidenceDocs: len(buildIDs),
-		BuildHistoryDocs:  len(buildIDs),
-		EvalCases:         len(allEvalCases),
-		HoldoutEvalCases:  len(holdoutEvalCases),
-		BuildCases:        len(buildIDs),
-		HoldoutCases:      len(holdoutIDs),
-		OutputRoot:        outputRoot,
+		Cases:                   len(ids),
+		EvidenceDocs:            len(ids),
+		HistoryDocs:             len(ids),
+		BuildEvidenceDocs:       len(buildIDs),
+		BuildHistoryDocs:        len(buildIDs),
+		EvalCases:               len(allEvalCases),
+		HoldoutEvalCases:        len(holdoutEvalCases),
+		HoldoutRelatedEvalCases: len(holdoutRelatedEvalCases),
+		BuildCases:              len(buildIDs),
+		HoldoutCases:            len(holdoutIDs),
+		OutputRoot:              outputRoot,
 	}, nil
 }
 
@@ -411,6 +423,41 @@ func hasRelevantID(item EvalCase, allowed map[string]struct{}) bool {
 		}
 	}
 	return false
+}
+
+func relatedBuildCaseIDs(item EvalCase, buildIDs []string, groundtruth map[string]AIOPSGroundTruth) []string {
+	if len(item.RelevantIDs) == 0 {
+		return nil
+	}
+
+	current, ok := groundtruth[item.RelevantIDs[0]]
+	if !ok {
+		return nil
+	}
+
+	currentType := strings.TrimSpace(current.FaultType)
+	currentCategory := strings.TrimSpace(current.FaultCategory)
+	typeMatches := make([]string, 0)
+	categoryMatches := make([]string, 0)
+
+	for _, id := range buildIDs {
+		candidate, ok := groundtruth[id]
+		if !ok {
+			continue
+		}
+		if currentType != "" && strings.EqualFold(strings.TrimSpace(candidate.FaultType), currentType) {
+			typeMatches = append(typeMatches, id)
+			continue
+		}
+		if currentCategory != "" && strings.EqualFold(strings.TrimSpace(candidate.FaultCategory), currentCategory) {
+			categoryMatches = append(categoryMatches, id)
+		}
+	}
+
+	if len(typeMatches) > 0 {
+		return uniqueNonEmpty(typeMatches)
+	}
+	return uniqueNonEmpty(categoryMatches)
 }
 
 func joinTopKeywords(keywords []string, limit int) string {
