@@ -3,11 +3,14 @@ package middleware
 import (
 	"SuperBizAgent/internal/consts"
 	"SuperBizAgent/utility/auth"
+	"SuperBizAgent/utility/common"
 	"SuperBizAgent/utility/metrics"
 	traceutil "SuperBizAgent/utility/tracing"
 	"context"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -30,7 +33,7 @@ func loadCORSOrigins(ctx context.Context) []string {
 	corsOriginsOnce.Do(func() {
 		v, err := g.Cfg().Get(ctx, "cors.allowed_origins")
 		if err == nil && v.String() != "" {
-			corsOrigins = v.Strings()
+			corsOrigins = normalizeCORSOrigins(v.Strings())
 		}
 	})
 	return corsOrigins
@@ -59,18 +62,116 @@ func matchAllowedOrigin(origin string, origins []string) (string, bool) {
 	return "", false
 }
 
+func normalizeCORSOrigins(origins []string) []string {
+	if len(origins) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(origins))
+	for _, allowed := range origins {
+		allowed = strings.TrimSpace(allowed)
+		if allowed == "" {
+			continue
+		}
+		if allowed == "*" {
+			out = append(out, allowed)
+			continue
+		}
+		if resolved, ok := common.ResolveOptionalEnv(allowed); ok {
+			out = append(out, strings.TrimSpace(resolved))
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func isSameOriginRequest(r *ghttp.Request, origin string) bool {
+	if r == nil || strings.TrimSpace(origin) == "" {
+		return false
+	}
+	parsedOrigin, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	reqScheme, reqHost := requestSchemeAndHost(r)
+	if reqScheme == "" || reqHost == "" {
+		return false
+	}
+	return strings.EqualFold(parsedOrigin.Scheme, reqScheme) && sameHostPort(parsedOrigin.Host, reqHost, reqScheme)
+}
+
+func requestSchemeAndHost(r *ghttp.Request) (string, string) {
+	if r == nil || r.Request == nil {
+		return "", ""
+	}
+	scheme := strings.TrimSpace(r.GetHeader("X-Forwarded-Proto"))
+	if scheme == "" {
+		if r.TLS != nil {
+			scheme = "https"
+		} else {
+			scheme = "http"
+		}
+	}
+	host := strings.TrimSpace(r.GetHeader("X-Forwarded-Host"))
+	if host == "" {
+		host = strings.TrimSpace(r.Host)
+	}
+	if host == "" && r.URL != nil {
+		host = strings.TrimSpace(r.URL.Host)
+	}
+	return strings.ToLower(scheme), strings.ToLower(host)
+}
+
+func sameHostPort(a, b, scheme string) bool {
+	hostA, portA := splitHostPortDefault(a, scheme)
+	hostB, portB := splitHostPortDefault(b, scheme)
+	return hostA != "" && strings.EqualFold(hostA, hostB) && portA == portB
+}
+
+func splitHostPortDefault(hostport, scheme string) (string, string) {
+	hostport = strings.TrimSpace(hostport)
+	if hostport == "" {
+		return "", ""
+	}
+	host, port, err := net.SplitHostPort(hostport)
+	if err == nil {
+		return strings.ToLower(host), normalizePort(port, scheme)
+	}
+	return strings.ToLower(hostport), normalizePort("", scheme)
+}
+
+func normalizePort(port, scheme string) string {
+	port = strings.TrimSpace(port)
+	if port != "" {
+		return port
+	}
+	switch strings.ToLower(strings.TrimSpace(scheme)) {
+	case "https":
+		return "443"
+	default:
+		return "80"
+	}
+}
+
 func CORSMiddleware(r *ghttp.Request) {
 	origin := r.GetHeader("Origin")
 	if origin != "" {
-		allowedOrigin, allowed := ResolveAllowedOrigin(r.GetCtx(), origin)
-		if !allowed {
-			r.Response.WriteStatus(http.StatusForbidden)
-			return
-		}
-		r.Response.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
-		r.Response.Header().Set("Vary", "Origin")
-		if allowedOrigin != "*" {
+		if isSameOriginRequest(r, origin) {
+			r.Response.Header().Set("Access-Control-Allow-Origin", origin)
+			r.Response.Header().Set("Vary", "Origin")
 			r.Response.Header().Set("Access-Control-Allow-Credentials", "true")
+		} else {
+			allowedOrigin, allowed := ResolveAllowedOrigin(r.GetCtx(), origin)
+			if !allowed {
+				r.Response.WriteStatus(http.StatusForbidden)
+				return
+			}
+			r.Response.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+			r.Response.Header().Set("Vary", "Origin")
+			if allowedOrigin != "*" {
+				r.Response.Header().Set("Access-Control-Allow-Credentials", "true")
+			}
 		}
 	}
 

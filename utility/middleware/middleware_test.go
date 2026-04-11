@@ -2,8 +2,11 @@ package middleware
 
 import (
 	"SuperBizAgent/utility/auth"
+	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/gogf/gf/v2/net/ghttp"
 )
 
 func TestSSEContentTypeDetection(t *testing.T) {
@@ -38,6 +41,23 @@ func TestResolveAllowedOrigin(t *testing.T) {
 	}
 	if _, ok := matchAllowedOrigin("https://evil.example", []string{"https://example.com"}); ok {
 		t.Fatal("expected unknown origin to be rejected")
+	}
+}
+
+func TestNormalizeCORSOriginsDropsUnresolvedEnvPlaceholder(t *testing.T) {
+	got := normalizeCORSOrigins([]string{"${CORS_ALLOWED_ORIGIN}", "https://example.com"})
+	if len(got) != 1 || got[0] != "https://example.com" {
+		t.Fatalf("expected unresolved placeholder to be dropped, got %#v", got)
+	}
+}
+
+func TestIsSameOriginRequest(t *testing.T) {
+	r := &ghttp.Request{}
+	r.Request = &http.Request{Host: "example.com"}
+	r.Header = http.Header{}
+	r.Header.Set("X-Forwarded-Proto", "https")
+	if !isSameOriginRequest(r, "https://example.com") {
+		t.Fatal("expected same origin request to be allowed")
 	}
 }
 
