@@ -7,6 +7,7 @@ import (
 
 	"SuperBizAgent/internal/ai/protocol"
 	"SuperBizAgent/internal/ai/runtime"
+	"SuperBizAgent/internal/consts"
 )
 
 type stubAIOpsMemory struct {
@@ -185,5 +186,63 @@ func TestGetAIOpsTraceReturnsRuntimeEvents(t *testing.T) {
 	}
 	if len(detail) == 0 {
 		t.Fatal("expected trace detail")
+	}
+}
+
+func TestApproveQueuedAIOpsRequestRestoresOriginalUserID(t *testing.T) {
+	oldApprove := approveApprovalRequest
+	oldMarkExecuted := markApprovalRequestExecuted
+	oldBuild := buildPlanAgent
+	oldMemoryFactory := newMemoryService
+	oldCfgBool := degradationConfigBool
+	oldCfgString := degradationConfigString
+	oldFactory := newPersistentRuntime
+	oldAIOpsRuntimes := aiOpsRuntimes
+	defer func() {
+		approveApprovalRequest = oldApprove
+		markApprovalRequestExecuted = oldMarkExecuted
+		buildPlanAgent = oldBuild
+		newMemoryService = oldMemoryFactory
+		degradationConfigBool = oldCfgBool
+		degradationConfigString = oldCfgString
+		newPersistentRuntime = oldFactory
+		aiOpsRuntimes = oldAIOpsRuntimes
+	}()
+
+	degradationConfigBool = func(context.Context, string) bool { return false }
+	degradationConfigString = func(context.Context, string) string { return "" }
+	aiOpsRuntimes = make(map[string]*runtime.Runtime)
+	newPersistentRuntime = func(string) (*runtime.Runtime, error) { return runtime.New(), nil }
+	newMemoryService = func() aiOpsMemory {
+		return &stubAIOpsMemory{sessionID: "approval-session"}
+	}
+
+	approveApprovalRequest = func(context.Context, string, string) (*ApprovalRequest, error) {
+		return &ApprovalRequest{
+			ID:        "approval-1",
+			Query:     "check alerts",
+			Status:    ApprovalStatusApproved,
+			SessionID: "original-session",
+			UserID:    "requester-user",
+		}, nil
+	}
+	markApprovalRequestExecuted = func(context.Context, string, string) error { return nil }
+
+	var capturedUserID string
+	buildPlanAgent = func(ctx context.Context, query string) (string, []string, error) {
+		capturedUserID, _ = ctx.Value(consts.CtxKeyUserID).(string)
+		return "analysis complete", nil, nil
+	}
+
+	ctx := context.WithValue(context.Background(), consts.CtxKeyUserID, "reviewer-user")
+	response, err := ApproveQueuedAIOpsRequest(ctx, "approval-1")
+	if err != nil {
+		t.Fatalf("approve queued request: %v", err)
+	}
+	if capturedUserID != "requester-user" {
+		t.Fatalf("expected original requester user id, got %q", capturedUserID)
+	}
+	if response.ApprovalStatus != string(ApprovalStatusExecuted) {
+		t.Fatalf("expected executed approval status, got %q", response.ApprovalStatus)
 	}
 }

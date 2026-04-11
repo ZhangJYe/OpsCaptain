@@ -4,7 +4,14 @@ import (
 	v1 "SuperBizAgent/api/chat/v1"
 	"SuperBizAgent/internal/ai/service"
 	"context"
+	"errors"
 	"time"
+)
+
+var (
+	listApprovalRequests      = service.ListApprovalRequests
+	approveQueuedAIOpsRequest = service.ApproveQueuedAIOpsRequest
+	rejectQueuedAIOpsRequest  = service.RejectQueuedAIOpsRequest
 )
 
 func (c *ControllerV1) TokenAudit(ctx context.Context, req *v1.TokenAuditReq) (res *v1.TokenAuditRes, err error) {
@@ -34,7 +41,7 @@ func (c *ControllerV1) TokenAudit(ctx context.Context, req *v1.TokenAuditReq) (r
 }
 
 func (c *ControllerV1) ApprovalRequests(ctx context.Context, req *v1.ApprovalRequestsReq) (res *v1.ApprovalRequestsRes, err error) {
-	requests, err := service.ListApprovalRequests(ctx, req.Status)
+	requests, err := listApprovalRequests(ctx, req.Status)
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +53,7 @@ func (c *ControllerV1) ApprovalRequests(ctx context.Context, req *v1.ApprovalReq
 }
 
 func (c *ControllerV1) ApproveApprovalRequest(ctx context.Context, req *v1.ApprovalActionReq) (res *v1.AIOpsRes, err error) {
-	response, err := service.ApproveQueuedAIOpsRequest(ctx, req.RequestID)
+	response, err := approveQueuedAIOpsRequest(ctx, req.RequestID)
 	if err != nil {
 		if fallback := userFacingAIOpsError(ctx, err); fallback != nil {
 			return fallback, nil
@@ -54,7 +61,20 @@ func (c *ControllerV1) ApproveApprovalRequest(ctx context.Context, req *v1.Appro
 		return nil, err
 	}
 
-	result, detail := filterAssistantPayload(ctx, response.Content, response.Detail)
+	result := response.Content
+	if result == "" {
+		if len(response.Detail) > 0 && response.Detail[0] != "" {
+			result = response.Detail[0]
+		} else {
+			return nil, errors.New("internal error")
+		}
+	}
+	result, detail := filterAssistantPayload(ctx, result, response.Detail)
+	executionPlan := make([]string, 0, len(response.ExecutionPlan))
+	for _, step := range response.ExecutionPlan {
+		filtered, _ := filterAssistantPayload(ctx, step, nil)
+		executionPlan = append(executionPlan, filtered)
+	}
 	return &v1.AIOpsRes{
 		TraceID:           response.TraceID,
 		Result:            result,
@@ -62,14 +82,14 @@ func (c *ControllerV1) ApproveApprovalRequest(ctx context.Context, req *v1.Appro
 		ApprovalRequired:  response.ApprovalRequired,
 		ApprovalRequestID: response.ApprovalRequestID,
 		ApprovalStatus:    response.ApprovalStatus,
-		ExecutionPlan:     append([]string{}, response.ExecutionPlan...),
+		ExecutionPlan:     executionPlan,
 		Degraded:          response.Degraded(),
 		DegradationReason: response.DegradationReason,
 	}, nil
 }
 
 func (c *ControllerV1) RejectApprovalRequest(ctx context.Context, req *v1.ApprovalRejectReq) (res *v1.ApprovalRequestItem, err error) {
-	request, err := service.RejectQueuedAIOpsRequest(ctx, req.RequestID, req.Reason)
+	request, err := rejectQueuedAIOpsRequest(ctx, req.RequestID, req.Reason)
 	if err != nil {
 		return nil, err
 	}

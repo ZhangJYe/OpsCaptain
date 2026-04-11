@@ -22,6 +22,18 @@ var (
 	newMemoryService = func() aiOpsMemory {
 		return NewMemoryService()
 	}
+	listApprovalRequests = func(ctx context.Context, status ApprovalStatus) ([]ApprovalRequest, error) {
+		return newApprovalQueue().List(ctx, status)
+	}
+	rejectApprovalRequest = func(ctx context.Context, requestID, reviewer, reviewReason string) (*ApprovalRequest, error) {
+		return newApprovalQueue().Reject(ctx, requestID, reviewer, reviewReason)
+	}
+	approveApprovalRequest = func(ctx context.Context, requestID, reviewer string) (*ApprovalRequest, error) {
+		return newApprovalQueue().Approve(ctx, requestID, reviewer)
+	}
+	markApprovalRequestExecuted = func(ctx context.Context, requestID, traceID string) error {
+		return newApprovalQueue().MarkExecuted(ctx, requestID, traceID)
+	}
 
 	skillFocusCollector = skills.NewFocusCollector(
 		logs.SkillRegistry(),
@@ -114,16 +126,15 @@ func RunAIOpsMultiAgent(ctx context.Context, query string) (ExecutionResponse, e
 }
 
 func ListApprovalRequests(ctx context.Context, status string) ([]ApprovalRequest, error) {
-	return newApprovalQueue().List(ctx, parseApprovalStatus(status))
+	return listApprovalRequests(ctx, parseApprovalStatus(status))
 }
 
 func RejectQueuedAIOpsRequest(ctx context.Context, requestID, reviewReason string) (*ApprovalRequest, error) {
-	return newApprovalQueue().Reject(ctx, requestID, reviewerIdentity(ctx), reviewReason)
+	return rejectApprovalRequest(ctx, requestID, reviewerIdentity(ctx), reviewReason)
 }
 
 func ApproveQueuedAIOpsRequest(ctx context.Context, requestID string) (ExecutionResponse, error) {
-	queue := newApprovalQueue()
-	request, err := queue.Approve(ctx, requestID, reviewerIdentity(ctx))
+	request, err := approveApprovalRequest(ctx, requestID, reviewerIdentity(ctx))
 	if err != nil {
 		return ExecutionResponse{}, err
 	}
@@ -133,6 +144,9 @@ func ApproveQueuedAIOpsRequest(ctx context.Context, requestID string) (Execution
 	if request.SessionID != "" {
 		runCtx = context.WithValue(runCtx, consts.CtxKeySessionID, request.SessionID)
 	}
+	if request.UserID != "" {
+		runCtx = context.WithValue(runCtx, consts.CtxKeyUserID, request.UserID)
+	}
 
 	response, err := RunAIOpsMultiAgent(runCtx, request.Query)
 	if err != nil {
@@ -141,7 +155,7 @@ func ApproveQueuedAIOpsRequest(ctx context.Context, requestID string) (Execution
 	response.ApprovalRequestID = requestID
 	response.ApprovalStatus = string(ApprovalStatusApproved)
 	if response.TraceID != "" {
-		if markErr := queue.MarkExecuted(ctx, requestID, response.TraceID); markErr == nil {
+		if markErr := markApprovalRequestExecuted(ctx, requestID, response.TraceID); markErr == nil {
 			response.ApprovalStatus = string(ApprovalStatusExecuted)
 		}
 	}
