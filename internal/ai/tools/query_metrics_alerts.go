@@ -50,10 +50,11 @@ type PrometheusAlertsOutput struct {
 func queryPrometheusAlerts(ctx context.Context) (PrometheusAlertsResult, error) {
 	baseURLVal, err := g.Cfg().Get(ctx, "prometheus.address")
 	var result PrometheusAlertsResult
-	if err != nil || baseURLVal.String() == "" {
+	baseURL := normalizeOptionalURL(baseURLVal.String())
+	if err != nil || baseURL == "" {
 		return result, fmt.Errorf("prometheus.address is not configured")
 	}
-	apiURL := fmt.Sprintf("%s/api/v1/alerts", baseURLVal.String())
+	apiURL := fmt.Sprintf("%s/api/v1/alerts", baseURL)
 
 	g.Log().Debugf(ctx, "querying Prometheus alerts: %s", apiURL)
 
