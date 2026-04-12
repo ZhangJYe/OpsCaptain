@@ -151,7 +151,7 @@ docker run --rm --network host \
   -v /opt/opscaptain/go-cache/mod:/go/pkg/mod \
   -v /opt/opscaptain/go-cache/build:/root/.cache/go-build \
   -w /work golang:1.24 \
-  sh -lc 'export PATH=/usr/local/go/bin:$PATH; go run ./internal/ai/cmd/rag_online_eval_cmd -eval ./aiopschallenge2025/baseline/eval/eval_cases_holdout.jsonl -ks 1,3,5 -out ./aiopschallenge2025/baseline/eval/report_evidence_build.json'
+  sh -lc 'export PATH=/usr/local/go/bin:$PATH; go run ./internal/ai/cmd/rag_online_eval_cmd -eval ./aiopschallenge2025/baseline/eval/eval_cases_holdout_related.jsonl -ks 1,3,5 -timeout-ms 30000 -out ./aiopschallenge2025/baseline/eval/report_evidence_build_related.json'
 ```
 
 ### 步骤 5：索引 build-only history 集合
@@ -185,7 +185,7 @@ docker run --rm --network host \
   -v /opt/opscaptain/go-cache/mod:/go/pkg/mod \
   -v /opt/opscaptain/go-cache/build:/root/.cache/go-build \
   -w /work golang:1.24 \
-  sh -lc 'export PATH=/usr/local/go/bin:$PATH; go run ./internal/ai/cmd/rag_online_eval_cmd -eval ./aiopschallenge2025/baseline/eval/eval_cases_holdout.jsonl -ks 1,3,5 -out ./aiopschallenge2025/baseline/eval/report_history_build.json'
+  sh -lc 'export PATH=/usr/local/go/bin:$PATH; go run ./internal/ai/cmd/rag_online_eval_cmd -eval ./aiopschallenge2025/baseline/eval/eval_cases_holdout_related.jsonl -ks 1,3,5 -timeout-ms 30000 -out ./aiopschallenge2025/baseline/eval/report_history_build_related.json'
 ```
 
 ## 6. 这次实际修掉的问题
@@ -258,6 +258,21 @@ docker run --rm --network host \
   - `docs_evidence_build`
   - `docs_history_build`
 
+### 6.6 Holdout 指标定义最初不成立
+
+现象：
+
+- build-only 索引里本来就不包含 holdout case 自己
+- 但最初的 `eval_cases_holdout.jsonl` 仍然把 `RelevantIDs` 指向 holdout 自己
+- 结果严格评测天然会得到 `Recall=0`
+
+修复：
+
+- 额外生成 `eval_cases_holdout_related.jsonl`
+- 对每个 holdout query，把 `RelevantIDs` 映射到 build split 的历史相似案例：
+  - 先按 `fault_type` 精确匹配
+  - 若无命中，再按 `fault_category` 回退
+
 ## 7. 验证方式
 
 本次至少做了三层验证：
@@ -295,31 +310,81 @@ docker run --rm --network host \
 
 ### 8.2 严格结果：build-only evidence
 
-待本轮云端任务完成后补充。
+评测文件：
+
+- `eval_cases_holdout_related.jsonl`
+- `report_evidence_build_related.json`
+
+关键结果：
+
+- `Cases: 160`
+- `Avg Total ms: 2932.31`
+- `Avg Rewrite ms: 1087.57`
+- `Avg Retrieve ms: 49.78`
+- `Avg Rerank ms: 1793.17`
+- `HitRate@1: 0.61875`
+- `HitRate@3: 0.70000`
+- `HitRate@5: 0.71875`
+- `AvgRecall@1: 0.03572`
+- `AvgRecall@3: 0.10640`
+- `AvgRecall@5: 0.15844`
+- `FullRecall@5: 0 / 160`
 
 ### 8.3 严格结果：build-only history
 
-待本轮云端任务完成后补充。
+评测文件：
+
+- `eval_cases_holdout_related.jsonl`
+- `report_history_build_related.json`
+
+关键结果：
+
+- `Cases: 160`
+- `Avg Total ms: 720.96`
+- `Avg Rewrite ms: 262.53`
+- `Avg Retrieve ms: 40.84`
+- `Avg Rerank ms: 416.01`
+- `HitRate@1: 0.61875`
+- `HitRate@3: 0.69375`
+- `HitRate@5: 0.71250`
+- `AvgRecall@1: 0.03572`
+- `AvgRecall@3: 0.10611`
+- `AvgRecall@5: 0.15816`
+- `FullRecall@5: 0 / 160`
 
 ## 9. 如何解读这两套 baseline
 
-如果后面两套严格结果都跑完，解读方式应该是：
+这两套严格结果现在已经跑完，结论很明确：
 
 - `evidence_build`：看当前系统靠“症状和观测信息”本身能召回到什么程度
 - `history_build`：看加入历史标签知识后，召回和排序能提升多少
 
-如果 `history_build` 明显优于 `evidence_build`，说明：
+本轮结果说明：
 
-- 你的系统更像“历史案例辅助 RCA”
-- 不是“纯证据检索型 RCA”
+1. `history_build` 相比 `evidence_build` 几乎没有带来召回提升。
+2. 当前系统更多是在做“症状词面相似召回”，而不是有效利用历史标签知识。
+3. `HitRate@5` 约 `0.71`，但 `AvgRecall@5` 只有约 `0.158`，原因不是指标冲突，而是相关集合本身很大。
 
-如果两者都低，优先怀疑：
+这轮 `holdout_related` 评测里：
 
-- 文档投影质量
-- query 构造质量
-- chunk 方式
-- embedding 模型
-- rewrite/rerank 稳定性
+- `Cases: 160`
+- 平均每条 query 的 `RelevantIDs` 约 `20.05`
+- 中位数 `18`
+- 最小 `10`
+- 最大 `34`
+
+所以当前结果的含义是：
+
+- top-5 里经常能碰到至少一个历史相似案例
+- 但只能覆盖相关集合里很小一部分
+- 这说明检索“命中方向”还可以，但“覆盖和排序”都不够强
+
+另外，`history_build` 的延迟明显低于 `evidence_build`，但这个不能直接解读成“history 更高效”。这次日志里有大量：
+
+- `query rewrite failed: circuit breaker open`
+- `rerank failed: circuit breaker open`
+
+也就是说，后一轮评测更多是在 LLM rewrite/rerank 退化后快速返回，延迟下降里混有“外部模型服务退化”的因素。
 
 ## 10. 下一步建议
 
