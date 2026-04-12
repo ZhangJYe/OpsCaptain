@@ -41,5 +41,7 @@ coverage.out
 .gocache/
 .gocache*/
 .gomodcache/
+__pycache__/
+*.pyc
 .gotmp*/
 *.go.[0-9]*
