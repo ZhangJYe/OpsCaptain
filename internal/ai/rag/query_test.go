@@ -9,12 +9,19 @@ import (
 )
 
 type fakeQueryRetriever struct {
-	queries []string
-	docs    []*schema.Document
+	queries      []string
+	requestedTop []int
+	docs         []*schema.Document
 }
 
 func (f *fakeQueryRetriever) Retrieve(ctx context.Context, query string, opts ...retrieverapi.Option) ([]*schema.Document, error) {
 	f.queries = append(f.queries, query)
+	options := retrieverapi.GetCommonOptions(&retrieverapi.Options{}, opts...)
+	requestedTop := 0
+	if options.TopK != nil {
+		requestedTop = *options.TopK
+	}
+	f.requestedTop = append(f.requestedTop, requestedTop)
 	return f.docs, nil
 }
 
@@ -85,6 +92,9 @@ func TestQueryWithMode_RetrieveOnlySkipsRewriteAndRerank(t *testing.T) {
 	if len(retriever.queries) != 1 || retriever.queries[0] != "cpu high" {
 		t.Fatalf("expected retrieve query to use original query, got %#v", retriever.queries)
 	}
+	if len(retriever.requestedTop) != 1 || retriever.requestedTop[0] != RetrieverCandidateTopK(context.Background()) {
+		t.Fatalf("expected expanded retrieve topK, got %#v", retriever.requestedTop)
+	}
 	if trace.RewrittenQuery != "cpu high" {
 		t.Fatalf("expected rewritten query to stay original, got %q", trace.RewrittenQuery)
 	}
@@ -134,10 +144,51 @@ func TestQueryWithMode_RewriteModeUsesRewrittenQueryWithoutRerank(t *testing.T) 
 	if len(retriever.queries) != 1 || retriever.queries[0] != "cpu usage saturation" {
 		t.Fatalf("expected retrieve query to use rewritten query, got %#v", retriever.queries)
 	}
+	if len(retriever.requestedTop) != 1 || retriever.requestedTop[0] != RetrieverCandidateTopK(context.Background()) {
+		t.Fatalf("expected expanded retrieve topK, got %#v", retriever.requestedTop)
+	}
 	if trace.RewrittenQuery != "cpu usage saturation" {
 		t.Fatalf("expected rewritten query trace, got %q", trace.RewrittenQuery)
 	}
 	if trace.RerankEnabled {
 		t.Fatalf("expected rerank disabled trace")
+	}
+}
+
+func TestRefineRetrievedDocs_PrefersMetadataAndLexicalOverlap(t *testing.T) {
+	t.Parallel()
+
+	docs := []*schema.Document{
+		{
+			ID:      "generic",
+			Content: "payment latency spike with sparse details",
+			MetaData: map[string]any{
+				"service":        "paymentservice",
+				"instance_type":  "service",
+				"metric_names":   []any{"rrt"},
+				"trace_services": []any{"paymentservice"},
+			},
+		},
+		{
+			ID:      "match",
+			Content: "checkoutservice rrt timeout spike with paymentservice downstream failures",
+			MetaData: map[string]any{
+				"service":          "checkoutservice",
+				"instance_type":    "service",
+				"source":           "checkoutservice",
+				"destination":      "paymentservice",
+				"service_tokens":   []any{"checkoutservice", "paymentservice"},
+				"metric_names":     []any{"rrt", "timeout"},
+				"trace_operations": []any{"charge"},
+			},
+		},
+	}
+
+	ranked := refineRetrievedDocs("checkoutservice rrt timeout to paymentservice", docs)
+	if len(ranked) != 2 {
+		t.Fatalf("expected 2 docs, got %d", len(ranked))
+	}
+	if ranked[0].ID != "match" {
+		t.Fatalf("expected metadata/lexical match to rank first, got %s", ranked[0].ID)
 	}
 }

@@ -15,6 +15,27 @@ func RetrieverTopK(ctx context.Context) int {
 	return common.GetRetrieverTopK(ctx)
 }
 
+func RetrieverCandidateTopK(ctx context.Context) int {
+	topK := RetrieverTopK(ctx)
+	if v, err := g.Cfg().Get(ctx, "retriever.candidate_top_k"); err == nil && v.Int() > 0 {
+		if v.Int() < topK {
+			return topK
+		}
+		return v.Int()
+	}
+	candidate := topK * 4
+	if candidate < 20 {
+		candidate = 20
+	}
+	if candidate > 50 {
+		candidate = 50
+	}
+	if candidate < topK {
+		return topK
+	}
+	return candidate
+}
+
 func DefaultRetrieverCacheKey(ctx context.Context) string {
 	return fmt.Sprintf("%s|%s|%d", common.GetMilvusAddr(ctx), common.GetMilvusCollectionName(ctx), RetrieverTopK(ctx))
 }

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	retrieverapi "github.com/cloudwego/eino/components/retriever"
 	"github.com/cloudwego/eino/schema"
 )
 
@@ -77,6 +78,8 @@ func queryWithMode(
 		OriginalQuery:  query,
 		RewrittenQuery: query,
 	}
+	topK := RetrieverTopK(ctx)
+	candidateTopK := RetrieverCandidateTopK(ctx)
 
 	rewritten := query
 	if mode != QueryModeRetrieveOnly {
@@ -96,21 +99,23 @@ func queryWithMode(
 	}
 
 	retrieveStart := time.Now()
-	docs, err := rr.Retrieve(ctx, rewritten)
+	docs, err := rr.Retrieve(ctx, rewritten, retrieverapi.WithTopK(candidateTopK))
 	trace.RetrieveLatencyMs = time.Since(retrieveStart).Milliseconds()
 	trace.RawResultCount = len(docs)
 	if err != nil {
 		return nil, trace, err
 	}
+	docs = refineRetrievedDocs(query, docs)
 
 	if mode != QueryModeRewriteRetrieveRerank {
-		trace.ResultCount = len(docs)
+		finalDocs := trimRetrievedDocs(docs, topK)
+		trace.ResultCount = len(finalDocs)
 		trace.RerankEnabled = false
-		return docs, trace, nil
+		return finalDocs, trace, nil
 	}
 
 	rerankStart := time.Now()
-	rerankResult := rerank(ctx, query, docs, RetrieverTopK(ctx))
+	rerankResult := rerank(ctx, query, docs, topK)
 	trace.RerankLatencyMs = time.Since(rerankStart).Milliseconds()
 	trace.RerankEnabled = rerankResult.Enabled
 
