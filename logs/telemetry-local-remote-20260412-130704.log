@@ -1,0 +1,60 @@
+﻿[2026-04-12 13:07:04] repo_root=D:\Agent\OpsCaption
+[2026-04-12 13:07:04] dataset_root=D:\Agent\OpsCaption\aiopschallenge2025
+[2026-04-12 13:07:04] output_root=D:\Agent\OpsCaption\aiopschallenge2025\baseline
+[2026-04-12 13:07:04] ssh_host=tencent-opscaptain
+[2026-04-12 13:07:04] remote_workspace=/opt/opscaptain/baseline-workspace
+[2026-04-12 13:07:04] mode=full
+[2026-04-12 13:07:04] progress_seconds=5
+[2026-04-12 13:07:04] poll_seconds=5
+[2026-04-12 13:07:04] log_path=D:\Agent\OpsCaption\logs\telemetry-local-remote-20260412-130704.log
+[2026-04-12 13:07:04] DRYRUN ssh tencent-opscaptain echo connected
+[2026-04-12 13:07:05] stopping existing telemetry builder pid=364848
+[2026-04-12 13:07:05] cleaning previous telemetry output
+[2026-04-12 13:07:05] starting local telemetry preprocessing
+[2026-04-12 13:07:05] DRYRUN python D:\Agent\OpsCaption\scripts\aiops\build_telemetry_evidence.py --dataset-root D:\Agent\OpsCaption\aiopschallenge2025 --output-root D:\Agent\OpsCaption\aiopschallenge2025\baseline --progress-seconds 5
+[2026-04-12 13:07:05] packing lightweight telemetry artifacts
+[2026-04-12 13:07:05] DRYRUN tar -czf D:\Agent\OpsCaption\logs\telemetry-light-artifacts-20260412-130704.tar.gz -C D:\Agent\OpsCaption aiopschallenge2025/baseline/docs_evidence_telemetry_build aiopschallenge2025/baseline/telemetry aiopschallenge2025/baseline/eval
+[2026-04-12 13:07:05] archive_path=D:\Agent\OpsCaption\logs\telemetry-light-artifacts-20260412-130704.tar.gz bytes=0
+[2026-04-12 13:07:05] preparing remote workspace for lightweight artifact upload
+[2026-04-12 13:07:05] DRYRUN ssh tencent-opscaptain mkdir -p '/opt/opscaptain/baseline-workspace/aiopschallenge2025/baseline' && rm -rf '/opt/opscaptain/baseline-workspace/aiopschallenge2025/baseline/docs_evidence_telemetry_build' '/opt/opscaptain/baseline-workspace/aiopschallenge2025/baseline/telemetry' '/opt/opscaptain/baseline-workspace/aiopschallenge2025/baseline/eval'
+[2026-04-12 13:07:05] uploading lightweight archive to remote
+[2026-04-12 13:07:05] DRYRUN scp D:\Agent\OpsCaption\logs\telemetry-light-artifacts-20260412-130704.tar.gz tencent-opscaptain:/tmp/telemetry-light-artifacts-20260412-130704.tar.gz
+[2026-04-12 13:07:05] extracting lightweight archive on remote
+[2026-04-12 13:07:05] DRYRUN ssh tencent-opscaptain cd '/opt/opscaptain/baseline-workspace' && tar -xzf '/tmp/telemetry-light-artifacts-20260412-130704.tar.gz' && rm -f '/tmp/telemetry-light-artifacts-20260412-130704.tar.gz'
+[2026-04-12 13:07:05] starting remote indexing and evaluation
+[2026-04-12 13:07:05] DRYRUN ssh tencent-opscaptain cd '/opt/opscaptain/baseline-workspace' && nohup bash scripts/aiops/run_telemetry_baseline_remote.sh --start-milvus --skip-prep --skip-telemetry --mode full > '/opt/opscaptain/telemetry-light-baseline-20260412-130704.log' 2>&1 & echo $!
+[2026-04-12 13:07:05] remote_eval_pid=[2026-04-12 13:07:05] DRYRUN ssh tencent-opscaptain cd '/opt/opscaptain/baseline-workspace' && nohup bash scripts/aiops/run_telemetry_baseline_remote.sh --start-milvus --skip-prep --skip-telemetry --mode full > '/opt/opscaptain/telemetry-light-baseline-20260412-130704.log' 2>&1 & echo $!  remote_log=/opt/opscaptain/telemetry-light-baseline-20260412-130704.log
+[2026-04-12 13:07:05] fetching remote evaluation summary
+[2026-04-12 13:07:05] DRYRUN ssh tencent-opscaptain python3 - <<'PY'
+import json
+from pathlib import Path
+path = Path("/opt/opscaptain/baseline-workspace/aiopschallenge2025/baseline/eval/report_evidence_telemetry_build_related.json")
+if not path.exists():
+    raise SystemExit("missing report: " + str(path))
+data = json.loads(path.read_text(encoding="utf-8"))
+summary = data.get("summary", {})
+print(json.dumps({
+    "cases": summary.get("cases"),
+    "avg_total_latency_ms": summary.get("avg_total_latency_ms"),
+    "empty_rate": summary.get("empty_rate"),
+    "hit_rate_at_k": summary.get("hit_rate_at_k"),
+    "avg_recall_at_k": summary.get("avg_recall_at_k"),
+}, ensure_ascii=False))
+PY
+[2026-04-12 13:07:05] remote_summary [2026-04-12 13:07:05] DRYRUN ssh tencent-opscaptain python3 - <<'PY'
+import json
+from pathlib import Path
+path = Path("/opt/opscaptain/baseline-workspace/aiopschallenge2025/baseline/eval/report_evidence_telemetry_build_related.json")
+if not path.exists():
+    raise SystemExit("missing report: " + str(path))
+data = json.loads(path.read_text(encoding="utf-8"))
+summary = data.get("summary", {})
+print(json.dumps({
+    "cases": summary.get("cases"),
+    "avg_total_latency_ms": summary.get("avg_total_latency_ms"),
+    "empty_rate": summary.get("empty_rate"),
+    "hit_rate_at_k": summary.get("hit_rate_at_k"),
+    "avg_recall_at_k": summary.get("avg_recall_at_k"),
+}, ensure_ascii=False))
+PY 
+[2026-04-12 13:07:05] pipeline completed

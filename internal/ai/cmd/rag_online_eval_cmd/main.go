@@ -25,7 +25,7 @@ type report struct {
 func main() {
 	evalPath := flag.String("eval", filepath.Join(".", "aiopschallenge2025", "baseline", "eval", "eval_cases.jsonl"), "path to eval_cases.jsonl")
 	ksRaw := flag.String("ks", "1,3,5", "comma-separated k values, e.g. 1,3,5")
-	modeRaw := flag.String("mode", string(rag.QueryModeRewriteRetrieveRerank), "eval mode: retrieve, rewrite, or full")
+	modeRaw := flag.String("mode", string(rag.QueryModeRetrieveOnly), "eval mode: retrieve, rewrite, or full")
 	limit := flag.Int("limit", 0, "optional limit on number of eval cases")
 	perQueryTimeoutMs := flag.Int("timeout-ms", 15000, "per-query timeout in milliseconds")
 	outPath := flag.String("out", "", "optional path to write full JSON report")
@@ -55,6 +55,10 @@ func main() {
 	retrieverTopK := common.GetRetrieverTopK(context.Background())
 	if retrieverTopK < maxK {
 		fmt.Fprintf(os.Stderr, "warning: retriever.top_k=%d is smaller than requested max k=%d; recall will be truncated\n", retrieverTopK, maxK)
+	}
+
+	if mode == rag.QueryModeHybrid {
+		warmupBM25(context.Background(), *evalPath)
 	}
 
 	exec := func(ctx context.Context, query string) ([]eval.RetrievedDoc, eval.QueryMetrics, error) {
@@ -105,6 +109,33 @@ func main() {
 	}
 }
 
+
+func warmupBM25(ctx context.Context, evalPath string) {
+	docsDir := filepath.Dir(filepath.Dir(evalPath))
+	evidenceDir := filepath.Join(docsDir, "evidence")
+	historyDir := filepath.Join(docsDir, "history")
+	idx := rag.SharedBM25Index()
+	count := 0
+	for _, dir := range []string{evidenceDir, historyDir} {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+				continue
+			}
+			raw, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+			if err != nil {
+				continue
+			}
+			docID := strings.TrimSuffix(entry.Name(), ".md")
+			idx.AddDocument(docID, string(raw), map[string]string{"_source": entry.Name()})
+			count++
+		}
+	}
+	fmt.Fprintf(os.Stderr, "BM25 warm-up: indexed %d docs from %s and %s\n", count, evidenceDir, historyDir)
+}
 func parseKs(raw string) ([]int, error) {
 	parts := strings.Split(raw, ",")
 	ks := make([]int, 0, len(parts))

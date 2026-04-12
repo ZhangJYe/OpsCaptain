@@ -11,6 +11,7 @@ import argparse
 import json
 import math
 import re
+import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -220,6 +221,12 @@ def parse_args() -> argparse.Namespace:
         help="Optional build split manifest; defaults to <output-root>/eval/build_split.json if present",
     )
     parser.add_argument("--limit", type=int, default=0, help="Optional limit on processed cases")
+    parser.add_argument(
+        "--progress-seconds",
+        type=int,
+        default=30,
+        help="Emit a progress line and refresh telemetry_report.json every N seconds; 0 disables periodic progress",
+    )
     return parser.parse_args()
 
 
@@ -249,7 +256,9 @@ def main() -> None:
     metadata_rows: list[TelemetryDocMetadata] = []
     build_metadata_rows: list[TelemetryDocMetadata] = []
     stats = {
+        "status": "running",
         "cases": 0,
+        "total_cases": len(all_ids),
         "build_cases": 0,
         "metric_signals": 0,
         "log_signals": 0,
@@ -258,7 +267,43 @@ def main() -> None:
         "output_root": str(output_root),
     }
 
-    for case_id in all_ids:
+    started_at = datetime.now(UTC).isoformat()
+    started_monotonic = time.monotonic()
+    last_progress = started_monotonic
+
+    def emit_progress(current_case_id: str, force: bool = False) -> None:
+        nonlocal last_progress
+        now = time.monotonic()
+        if not force:
+            if args.progress_seconds <= 0:
+                return
+            if (now - last_progress) < args.progress_seconds:
+                return
+        elapsed = now - started_monotonic
+        last_progress = now
+        report = {
+            **stats,
+            "started_at": started_at,
+            "elapsed_seconds": round(elapsed, 1),
+            "current_case_id": current_case_id,
+            "docs_dir": str(docs_dir),
+            "docs_build_dir": str(docs_build_dir),
+            "doc_metadata_path": str(telemetry_dir / "doc_metadata.jsonl"),
+            "doc_metadata_build_path": str(telemetry_dir / "doc_metadata_build.jsonl"),
+            "split_manifest": str(split_manifest) if split_manifest.exists() else "",
+        }
+        write_json(telemetry_dir / "telemetry_report.json", report)
+        print(
+            "[progress] "
+            + f"{stats['cases']}/{stats['total_cases']} cases "
+            + f"(build={stats['build_cases']}, empty={stats['empty_cases']}) "
+            + f"signals(metric/log/trace)="
+            + f"{stats['metric_signals']}/{stats['log_signals']}/{stats['trace_signals']} "
+            + f"current={current_case_id} elapsed={elapsed:.1f}s",
+            flush=True,
+        )
+
+    for index, case_id in enumerate(all_ids, start=1):
         context = build_case_context(inputs[case_id], groundtruth[case_id])
         summary = summarize_case(dataset_root, context)
         doc_metadata = build_doc_metadata(context, summary, split="all")
@@ -281,14 +326,19 @@ def main() -> None:
             build_metadata_rows.append(build_doc_metadata_row)
             stats["build_cases"] += 1
 
+        emit_progress(case_id, force=index == 1 or index == len(all_ids))
+
     write_jsonl(telemetry_dir / "case_evidence_summary.jsonl", [item.to_json() for item in summaries])
     write_jsonl(telemetry_dir / "case_evidence_summary_build.jsonl", [item.to_json() for item in build_summaries])
     write_jsonl(telemetry_dir / "doc_metadata.jsonl", [item.to_json() for item in metadata_rows])
     write_jsonl(telemetry_dir / "doc_metadata_build.jsonl", [item.to_json() for item in build_metadata_rows])
+    stats["status"] = "completed"
     write_json(
         telemetry_dir / "telemetry_report.json",
         {
             **stats,
+            "started_at": started_at,
+            "elapsed_seconds": round(time.monotonic() - started_monotonic, 1),
             "docs_dir": str(docs_dir),
             "docs_build_dir": str(docs_build_dir),
             "doc_metadata_path": str(telemetry_dir / "doc_metadata.jsonl"),

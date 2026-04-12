@@ -16,9 +16,11 @@ const (
 	QueryModeRetrieveOnly          QueryMode = "retrieve"
 	QueryModeRewriteRetrieve       QueryMode = "rewrite"
 	QueryModeRewriteRetrieveRerank QueryMode = "full"
+	QueryModeHybrid                QueryMode = "hybrid"
 )
 
 type QueryTrace struct {
+	Hybrid            *HybridTrace
 	Mode              string
 	CacheKey          string
 	CacheHit          bool
@@ -35,7 +37,7 @@ type QueryTrace struct {
 }
 
 func Query(ctx context.Context, pool *RetrieverPool, query string) ([]*schema.Document, QueryTrace, error) {
-	return QueryWithMode(ctx, pool, query, QueryModeRewriteRetrieveRerank)
+	return QueryWithMode(ctx, pool, query, DefaultQueryMode(ctx))
 }
 
 func ParseQueryMode(raw string) (QueryMode, error) {
@@ -46,6 +48,8 @@ func ParseQueryMode(raw string) (QueryMode, error) {
 		return QueryModeRewriteRetrieve, nil
 	case "retrieve", "retriever", "retrieve_only", "retrieve-only":
 		return QueryModeRetrieveOnly, nil
+	case "hybrid", "hybrid_retrieval", "hybrid-retrieval":
+		return QueryModeHybrid, nil
 	default:
 		return "", fmt.Errorf("unsupported query mode: %s", raw)
 	}
@@ -55,7 +59,34 @@ type rewriteFunc func(context.Context, string) string
 type rerankFunc func(context.Context, string, []*schema.Document, int) RerankResult
 
 func QueryWithMode(ctx context.Context, pool *RetrieverPool, query string, mode QueryMode) ([]*schema.Document, QueryTrace, error) {
+	if mode == QueryModeHybrid {
+		return hybridQueryWithMode(ctx, pool, query)
+	}
 	return queryWithMode(ctx, pool, query, mode, RewriteQuery, Rerank)
+}
+
+func hybridQueryWithMode(ctx context.Context, pool *RetrieverPool, query string) ([]*schema.Document, QueryTrace, error) {
+	if strings.TrimSpace(query) == "" {
+		return nil, QueryTrace{}, nil
+	}
+	trace := QueryTrace{
+		Mode:           string(QueryModeHybrid),
+		OriginalQuery:  query,
+		RewrittenQuery: query,
+	}
+
+	lexIdx := SharedBM25Index()
+	cfg := DefaultHybridConfig(ctx)
+
+	docs, hybridTrace, err := HybridRetrieve(ctx, pool, lexIdx, query, cfg)
+	trace.Hybrid = &hybridTrace
+	trace.RetrieveLatencyMs = hybridTrace.DenseLatencyMs
+	trace.RawResultCount = hybridTrace.FusedCount
+	trace.ResultCount = len(docs)
+	if err != nil {
+		return nil, trace, err
+	}
+	return docs, trace, nil
 }
 
 func queryWithMode(
@@ -70,7 +101,7 @@ func queryWithMode(
 		return nil, QueryTrace{}, nil
 	}
 	if mode == "" {
-		mode = QueryModeRewriteRetrieveRerank
+		mode = DefaultQueryMode(ctx)
 	}
 
 	trace := QueryTrace{

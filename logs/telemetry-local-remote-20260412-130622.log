@@ -1,0 +1,13 @@
+﻿[2026-04-12 13:06:22] repo_root=D:\Agent\OpsCaption
+[2026-04-12 13:06:22] dataset_root=D:\Agent\OpsCaption\aiopschallenge2025
+[2026-04-12 13:06:22] output_root=D:\Agent\OpsCaption\aiopschallenge2025\baseline
+[2026-04-12 13:06:22] ssh_host=tencent-opscaptain
+[2026-04-12 13:06:22] remote_workspace=/opt/opscaptain/baseline-workspace
+[2026-04-12 13:06:22] mode=full
+[2026-04-12 13:06:22] progress_seconds=5
+[2026-04-12 13:06:22] poll_seconds=5
+[2026-04-12 13:06:22] log_path=D:\Agent\OpsCaption\logs\telemetry-local-remote-20260412-130622.log
+[2026-04-12 13:06:22] DRYRUN ssh tencent-opscaptain echo connected
+[2026-04-12 13:06:23] stopping existing telemetry builder pid=364848
+[2026-04-12 13:06:23] stopping existing telemetry builder pid=364644
+[2026-04-12 13:06:23] cleaning previous telemetry output

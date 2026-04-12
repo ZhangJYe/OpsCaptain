@@ -54,6 +54,14 @@ func TestParseQueryMode(t *testing.T) {
 	}
 }
 
+func TestDefaultQueryModeDefaultsToRetrieve(t *testing.T) {
+	t.Parallel()
+
+	if got := DefaultQueryMode(context.Background()); got != QueryModeRetrieveOnly {
+		t.Fatalf("expected default query mode retrieve, got %q", got)
+	}
+}
+
 func TestQueryWithMode_RetrieveOnlySkipsRewriteAndRerank(t *testing.T) {
 	t.Parallel()
 
@@ -103,6 +111,43 @@ func TestQueryWithMode_RetrieveOnlySkipsRewriteAndRerank(t *testing.T) {
 	}
 	if len(docs) != 1 {
 		t.Fatalf("expected 1 doc, got %d", len(docs))
+	}
+}
+
+func TestQueryWithMode_EmptyModeUsesDefaultRetrieve(t *testing.T) {
+	t.Parallel()
+
+	retriever := &fakeQueryRetriever{docs: []*schema.Document{{ID: "doc-1", Content: "hello"}}}
+	pool := NewRetrieverPool(
+		func(context.Context) (retrieverapi.Retriever, error) { return retriever, nil },
+		func(context.Context) string { return "test" },
+		nil,
+	)
+
+	rewriteCalls := 0
+	rerankCalls := 0
+	_, trace, err := queryWithMode(
+		context.Background(),
+		pool,
+		"cpu high",
+		"",
+		func(ctx context.Context, query string) string {
+			rewriteCalls++
+			return "rewritten"
+		},
+		func(ctx context.Context, query string, docs []*schema.Document, topK int) RerankResult {
+			rerankCalls++
+			return RerankResult{Docs: docs, Enabled: true}
+		},
+	)
+	if err != nil {
+		t.Fatalf("queryWithMode returned error: %v", err)
+	}
+	if rewriteCalls != 0 || rerankCalls != 0 {
+		t.Fatalf("expected default empty mode to skip rewrite/rerank, got rewrite=%d rerank=%d", rewriteCalls, rerankCalls)
+	}
+	if trace.Mode != string(QueryModeRetrieveOnly) {
+		t.Fatalf("expected default trace mode retrieve, got %q", trace.Mode)
 	}
 }
 

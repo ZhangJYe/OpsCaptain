@@ -13,7 +13,10 @@ import (
 	"time"
 )
 
-const DefaultAIOPSEvalRatio = 0.2
+const (
+	DefaultAIOPSEvalRatio    = 0.2
+	MaxSymptomRelatedCaseIDs = 20
+)
 
 type AIOPSPrepOptions struct {
 	DatasetRoot string
@@ -22,17 +25,19 @@ type AIOPSPrepOptions struct {
 }
 
 type AIOPSPrepSummary struct {
-	Cases                   int    `json:"cases"`
-	EvidenceDocs            int    `json:"evidence_docs"`
-	HistoryDocs             int    `json:"history_docs"`
-	BuildEvidenceDocs       int    `json:"build_evidence_docs"`
-	BuildHistoryDocs        int    `json:"build_history_docs"`
-	EvalCases               int    `json:"eval_cases"`
-	HoldoutEvalCases        int    `json:"holdout_eval_cases"`
-	HoldoutRelatedEvalCases int    `json:"holdout_related_eval_cases"`
-	BuildCases              int    `json:"build_cases"`
-	HoldoutCases            int    `json:"holdout_cases"`
-	OutputRoot              string `json:"output_root"`
+	Cases                    int    `json:"cases"`
+	EvidenceDocs             int    `json:"evidence_docs"`
+	HistoryDocs              int    `json:"history_docs"`
+	BuildEvidenceDocs        int    `json:"build_evidence_docs"`
+	BuildHistoryDocs         int    `json:"build_history_docs"`
+	EvalCases                int    `json:"eval_cases"`
+	HoldoutEvalCases         int    `json:"holdout_eval_cases"`
+	HoldoutRelatedEvalCases  int    `json:"holdout_related_eval_cases"`
+	HoldoutSymptomEvalCases  int    `json:"holdout_symptom_eval_cases"`
+	HoldoutCombinedEvalCases int    `json:"holdout_combined_eval_cases"`
+	BuildCases               int    `json:"build_cases"`
+	HoldoutCases             int    `json:"holdout_cases"`
+	OutputRoot               string `json:"output_root"`
 }
 
 type AIOPSInputCase struct {
@@ -186,14 +191,32 @@ func GenerateAIOPSBaselineArtifacts(ctx context.Context, opts AIOPSPrepOptions) 
 
 	holdoutEvalCases := make([]EvalCase, 0, len(allEvalCases))
 	holdoutRelatedEvalCases := make([]EvalCase, 0, len(allEvalCases))
+	holdoutSymptomEvalCases := make([]EvalCase, 0, len(allEvalCases))
+	holdoutCombinedEvalCases := make([]EvalCase, 0, len(allEvalCases))
 	for _, item := range allEvalCases {
 		if hasRelevantID(item, holdoutSet) {
 			holdoutEvalCases = append(holdoutEvalCases, item)
-			if relatedIDs := relatedBuildCaseIDs(item, buildIDs, groundtruth); len(relatedIDs) > 0 {
+			faultIDs := relatedBuildCaseIDs(item, buildIDs, groundtruth)
+			if len(faultIDs) > 0 {
 				related := item
-				related.RelevantIDs = relatedIDs
-				related.Notes = strings.TrimSpace(item.Notes + "; relevant_ids derived from build split fault_type/fault_category matches")
+				related.RelevantIDs = faultIDs
+				related.Notes = appendEvalNotes(item.Notes, "relevant_ids derived from build split fault_type/fault_category matches")
 				holdoutRelatedEvalCases = append(holdoutRelatedEvalCases, related)
+			}
+
+			symptomIDs := relatedBuildCaseIDsBySymptom(item, buildIDs, groundtruth)
+			if len(symptomIDs) > 0 {
+				symptom := item
+				symptom.RelevantIDs = symptomIDs
+				symptom.Notes = appendEvalNotes(item.Notes, "relevant_ids derived from build split symptom matches")
+				holdoutSymptomEvalCases = append(holdoutSymptomEvalCases, symptom)
+			}
+
+			if combinedIDs := unionIDs(faultIDs, symptomIDs); len(combinedIDs) > 0 {
+				combined := item
+				combined.RelevantIDs = combinedIDs
+				combined.Notes = appendEvalNotes(item.Notes, "relevant_ids derived from combined fault_type/fault_category and symptom matches")
+				holdoutCombinedEvalCases = append(holdoutCombinedEvalCases, combined)
 			}
 		}
 	}
@@ -205,6 +228,12 @@ func GenerateAIOPSBaselineArtifacts(ctx context.Context, opts AIOPSPrepOptions) 
 		return AIOPSPrepSummary{}, err
 	}
 	if err := WriteEvalCasesJSONL(filepath.Join(evalDir, "eval_cases_holdout_related.jsonl"), holdoutRelatedEvalCases); err != nil {
+		return AIOPSPrepSummary{}, err
+	}
+	if err := WriteEvalCasesJSONL(filepath.Join(evalDir, "eval_cases_holdout_symptom.jsonl"), holdoutSymptomEvalCases); err != nil {
+		return AIOPSPrepSummary{}, err
+	}
+	if err := WriteEvalCasesJSONL(filepath.Join(evalDir, "eval_cases_holdout_combined.jsonl"), holdoutCombinedEvalCases); err != nil {
 		return AIOPSPrepSummary{}, err
 	}
 
@@ -225,17 +254,19 @@ func GenerateAIOPSBaselineArtifacts(ctx context.Context, opts AIOPSPrepOptions) 
 
 	_ = ctx
 	return AIOPSPrepSummary{
-		Cases:                   len(ids),
-		EvidenceDocs:            len(ids),
-		HistoryDocs:             len(ids),
-		BuildEvidenceDocs:       len(buildIDs),
-		BuildHistoryDocs:        len(buildIDs),
-		EvalCases:               len(allEvalCases),
-		HoldoutEvalCases:        len(holdoutEvalCases),
-		HoldoutRelatedEvalCases: len(holdoutRelatedEvalCases),
-		BuildCases:              len(buildIDs),
-		HoldoutCases:            len(holdoutIDs),
-		OutputRoot:              outputRoot,
+		Cases:                    len(ids),
+		EvidenceDocs:             len(ids),
+		HistoryDocs:              len(ids),
+		BuildEvidenceDocs:        len(buildIDs),
+		BuildHistoryDocs:         len(buildIDs),
+		EvalCases:                len(allEvalCases),
+		HoldoutEvalCases:         len(holdoutEvalCases),
+		HoldoutRelatedEvalCases:  len(holdoutRelatedEvalCases),
+		HoldoutSymptomEvalCases:  len(holdoutSymptomEvalCases),
+		HoldoutCombinedEvalCases: len(holdoutCombinedEvalCases),
+		BuildCases:               len(buildIDs),
+		HoldoutCases:             len(holdoutIDs),
+		OutputRoot:               outputRoot,
 	}, nil
 }
 
@@ -458,6 +489,119 @@ func relatedBuildCaseIDs(item EvalCase, buildIDs []string, groundtruth map[strin
 		return uniqueNonEmpty(typeMatches)
 	}
 	return uniqueNonEmpty(categoryMatches)
+}
+
+func relatedBuildCaseIDsBySymptom(item EvalCase, buildIDs []string, groundtruth map[string]AIOPSGroundTruth) []string {
+	if len(item.RelevantIDs) == 0 {
+		return nil
+	}
+	current, ok := groundtruth[item.RelevantIDs[0]]
+	if !ok {
+		return nil
+	}
+
+	currentService := strings.ToLower(strings.TrimSpace(fallback(current.Service, current.Instance.First())))
+	currentInstanceType := strings.ToLower(strings.TrimSpace(current.InstanceType))
+	currentKeywords := observationKeywordSet(current.KeyObservations)
+	currentSource := strings.ToLower(strings.TrimSpace(current.Source))
+	currentDestination := strings.ToLower(strings.TrimSpace(current.Destination))
+
+	type scored struct {
+		id    string
+		score int
+	}
+	var candidates []scored
+
+	for _, id := range buildIDs {
+		candidate, ok := groundtruth[id]
+		if !ok {
+			continue
+		}
+		s := 0
+		candidateService := strings.ToLower(strings.TrimSpace(fallback(candidate.Service, candidate.Instance.First())))
+		exactServiceMatch := currentService != "" && candidateService == currentService
+		if exactServiceMatch {
+			s += 3
+		}
+		if currentInstanceType != "" && strings.ToLower(strings.TrimSpace(candidate.InstanceType)) == currentInstanceType {
+			s += 1
+		}
+		if currentSource != "" && strings.ToLower(strings.TrimSpace(candidate.Source)) == currentSource {
+			s += 1
+		}
+		if currentDestination != "" && strings.ToLower(strings.TrimSpace(candidate.Destination)) == currentDestination {
+			s += 1
+		}
+		candidateKeywords := observationKeywordSet(candidate.KeyObservations)
+		overlap := keywordSetOverlap(currentKeywords, candidateKeywords)
+		s += overlap
+		if currentService != "" && candidateService != "" {
+			if !exactServiceMatch && (strings.Contains(candidateService, currentService) || strings.Contains(currentService, candidateService)) {
+				s += 1
+			}
+		}
+		pathMatch := (currentSource != "" && strings.ToLower(strings.TrimSpace(candidate.Source)) == currentSource) ||
+			(currentDestination != "" && strings.ToLower(strings.TrimSpace(candidate.Destination)) == currentDestination)
+		if s >= 3 && (overlap > 0 || pathMatch) {
+			candidates = append(candidates, scored{id: id, score: s})
+		}
+	}
+
+	sort.SliceStable(candidates, func(i, j int) bool {
+		return candidates[i].score > candidates[j].score
+	})
+	out := make([]string, 0, len(candidates))
+	for _, c := range candidates {
+		out = append(out, c.id)
+	}
+	if len(out) > MaxSymptomRelatedCaseIDs {
+		out = out[:MaxSymptomRelatedCaseIDs]
+	}
+	return uniqueNonEmpty(out)
+}
+
+func observationKeywordSet(observations []AIOPSKeyObservation) map[string]struct{} {
+	out := make(map[string]struct{})
+	for _, obs := range observations {
+		for _, kw := range obs.Keyword {
+			k := strings.ToLower(strings.TrimSpace(kw))
+			if k != "" {
+				out[k] = struct{}{}
+			}
+		}
+	}
+	return out
+}
+
+func keywordSetOverlap(a, b map[string]struct{}) int {
+	count := 0
+	for k := range a {
+		if _, ok := b[k]; ok {
+			count++
+		}
+	}
+	return count
+}
+
+func unionIDs(groups ...[]string) []string {
+	merged := make([]string, 0)
+	for _, group := range groups {
+		merged = append(merged, group...)
+	}
+	return uniqueNonEmpty(merged)
+}
+
+func appendEvalNotes(base string, extra string) string {
+	base = strings.TrimSpace(base)
+	extra = strings.TrimSpace(extra)
+	switch {
+	case base == "":
+		return extra
+	case extra == "":
+		return base
+	default:
+		return base + "; " + extra
+	}
 }
 
 func joinTopKeywords(keywords []string, limit int) string {

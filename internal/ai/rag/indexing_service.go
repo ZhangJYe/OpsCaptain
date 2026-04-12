@@ -76,12 +76,30 @@ func (s *IndexingService) IndexSource(ctx context.Context, path string) (IndexBu
 		return IndexBuildSummary{}, fmt.Errorf("invoke index graph failed: %w", err)
 	}
 
+	s.syncBM25Index(ctx, path)
+
 	return IndexBuildSummary{
 		SourcePath:      path,
 		ResolvedSource:  sourceValue,
 		DeletedExisting: deleted,
 		ChunkIDs:        ids,
 	}, nil
+}
+
+func (s *IndexingService) syncBM25Index(ctx context.Context, path string) {
+	loader, err := s.newLoader(ctx)
+	if err != nil {
+		return
+	}
+	docs, err := loader.Load(ctx, document.Source{URI: path})
+	if err != nil || len(docs) == 0 {
+		return
+	}
+	idx := SharedBM25Index()
+	for _, doc := range docs {
+		AddDocToBM25Index(idx, doc)
+	}
+	g.Log().Infof(ctx, "synced %d docs to BM25 index from: %s (total: %d)", len(docs), path, idx.Size())
 }
 
 func (s *IndexingService) deleteExistingSource(ctx context.Context, sourceValue string) (int, error) {
