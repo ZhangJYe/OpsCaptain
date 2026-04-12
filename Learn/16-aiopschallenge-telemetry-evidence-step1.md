@@ -126,7 +126,8 @@ python scripts/aiops/build_telemetry_evidence.py `
 
 这一步已经能生成“真实遥测摘要文档”，但还不是最终版：
 
-1. 还没有把这个目录接到 `knowledge_cmd` 和 `rag_online_eval_cmd` 的正式流程里
+1. 已经有远端一键脚本可以把这个目录接到 `knowledge_cmd` 和 `rag_online_eval_cmd`
+   入口见 [run_telemetry_baseline_remote.sh](/d:/Agent/OpsCaption/scripts/aiops/run_telemetry_baseline_remote.sh)
 2. 还没有在云端对完整 `11.9 GB parquet` 做全量运行
 3. metric 评分仍然是启发式，不是 RCA 特化 scoring
 4. log pattern 还是基于规则，不是模板挖掘
@@ -135,8 +136,8 @@ python scripts/aiops/build_telemetry_evidence.py `
 
 推荐顺序：
 
-1. 全量生成 `docs_evidence_telemetry_build`
-2. 单独建一个 collection，例如 `aiops_evidence_telemetry_build`
+1. 在云端全量生成 `docs_evidence_telemetry_build`
+2. 建 collection，例如 `aiops_evidence_telemetry_build`
 3. 用现有 [rag_online_eval_cmd](/d:/Agent/OpsCaption/internal/ai/cmd/rag_online_eval_cmd/main.go) 跑同一套 holdout 评测
 4. 把结果和当前 `evidence_build/history_build` 做三方对比
 
