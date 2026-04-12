@@ -181,9 +181,15 @@ container_path() {
 mkdir -p "$OUTPUT_ROOT" "$GO_MOD_CACHE" "$GO_BUILD_CACHE" "$PIP_CACHE"
 
 [[ -d "$WORKSPACE_ROOT" ]] || die "workspace root not found: $WORKSPACE_ROOT"
-[[ -f "$DATASET_ROOT/input.json" ]] || die "missing dataset file: $DATASET_ROOT/input.json"
-[[ -f "$DATASET_ROOT/groundtruth.jsonl" ]] || die "missing dataset file: $DATASET_ROOT/groundtruth.jsonl"
-[[ -d "$DATASET_ROOT/extracted" ]] || die "missing dataset directory: $DATASET_ROOT/extracted"
+
+if [[ "$SKIP_PREP" -eq 0 || "$SKIP_TELEMETRY" -eq 0 ]]; then
+  [[ -f "$DATASET_ROOT/input.json" ]] || die "missing dataset file: $DATASET_ROOT/input.json"
+  [[ -f "$DATASET_ROOT/groundtruth.jsonl" ]] || die "missing dataset file: $DATASET_ROOT/groundtruth.jsonl"
+fi
+
+if [[ "$SKIP_TELEMETRY" -eq 0 ]]; then
+  [[ -d "$DATASET_ROOT/extracted" ]] || die "missing dataset directory: $DATASET_ROOT/extracted"
+fi
 
 if [[ "$SKIP_INDEX" -eq 0 || "$SKIP_EVAL" -eq 0 ]]; then
   [[ -f "$ENV_FILE" ]] || die "missing env file: $ENV_FILE"
@@ -268,11 +274,13 @@ if [[ "$SKIP_TELEMETRY" -eq 0 ]]; then
 fi
 
 if [[ "$SKIP_INDEX" -eq 0 ]]; then
+  [[ -d "$OUTPUT_ROOT/docs_evidence_telemetry_build" ]] || die "missing docs dir for indexing: $OUTPUT_ROOT/docs_evidence_telemetry_build"
   log "indexing telemetry build docs into collection $COLLECTION"
   run_go "go run ./internal/ai/cmd/knowledge_cmd -dir $REL_DOCS_BUILD_DIR"
 fi
 
 if [[ "$SKIP_EVAL" -eq 0 ]]; then
+  [[ -f "$EVAL_PATH" ]] || die "missing eval file: $EVAL_PATH"
   log "running strict holdout evaluation"
   run_go "go run ./internal/ai/cmd/rag_online_eval_cmd -eval $REL_EVAL_PATH -mode $EVAL_MODE -ks $KS -timeout-ms $TIMEOUT_MS -out $REL_REPORT_PATH"
 fi
