@@ -2,13 +2,23 @@ package rag
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
 	"github.com/cloudwego/eino/schema"
 )
 
+type QueryMode string
+
+const (
+	QueryModeRetrieveOnly          QueryMode = "retrieve"
+	QueryModeRewriteRetrieve       QueryMode = "rewrite"
+	QueryModeRewriteRetrieveRerank QueryMode = "full"
+)
+
 type QueryTrace struct {
+	Mode              string
 	CacheKey          string
 	CacheHit          bool
 	InitFailureCached bool
@@ -24,16 +34,57 @@ type QueryTrace struct {
 }
 
 func Query(ctx context.Context, pool *RetrieverPool, query string) ([]*schema.Document, QueryTrace, error) {
+	return QueryWithMode(ctx, pool, query, QueryModeRewriteRetrieveRerank)
+}
+
+func ParseQueryMode(raw string) (QueryMode, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "full", "query", "rerank", "rewrite_retrieve_rerank", "rewrite-retrieve-rerank":
+		return QueryModeRewriteRetrieveRerank, nil
+	case "rewrite", "rewrite_retrieve", "rewrite-retrieve":
+		return QueryModeRewriteRetrieve, nil
+	case "retrieve", "retriever", "retrieve_only", "retrieve-only":
+		return QueryModeRetrieveOnly, nil
+	default:
+		return "", fmt.Errorf("unsupported query mode: %s", raw)
+	}
+}
+
+type rewriteFunc func(context.Context, string) string
+type rerankFunc func(context.Context, string, []*schema.Document, int) RerankResult
+
+func QueryWithMode(ctx context.Context, pool *RetrieverPool, query string, mode QueryMode) ([]*schema.Document, QueryTrace, error) {
+	return queryWithMode(ctx, pool, query, mode, RewriteQuery, Rerank)
+}
+
+func queryWithMode(
+	ctx context.Context,
+	pool *RetrieverPool,
+	query string,
+	mode QueryMode,
+	rewrite rewriteFunc,
+	rerank rerankFunc,
+) ([]*schema.Document, QueryTrace, error) {
 	if strings.TrimSpace(query) == "" {
 		return nil, QueryTrace{}, nil
 	}
+	if mode == "" {
+		mode = QueryModeRewriteRetrieveRerank
+	}
 
-	trace := QueryTrace{OriginalQuery: query}
+	trace := QueryTrace{
+		Mode:           string(mode),
+		OriginalQuery:  query,
+		RewrittenQuery: query,
+	}
 
-	rewriteStart := time.Now()
-	rewritten := RewriteQuery(ctx, query)
-	trace.RewriteLatencyMs = time.Since(rewriteStart).Milliseconds()
-	trace.RewrittenQuery = rewritten
+	rewritten := query
+	if mode != QueryModeRetrieveOnly {
+		rewriteStart := time.Now()
+		rewritten = rewrite(ctx, query)
+		trace.RewriteLatencyMs = time.Since(rewriteStart).Milliseconds()
+		trace.RewrittenQuery = rewritten
+	}
 
 	rr, acquisition, err := pool.GetOrCreate(ctx)
 	trace.CacheKey = acquisition.CacheKey
@@ -52,8 +103,14 @@ func Query(ctx context.Context, pool *RetrieverPool, query string) ([]*schema.Do
 		return nil, trace, err
 	}
 
+	if mode != QueryModeRewriteRetrieveRerank {
+		trace.ResultCount = len(docs)
+		trace.RerankEnabled = false
+		return docs, trace, nil
+	}
+
 	rerankStart := time.Now()
-	rerankResult := Rerank(ctx, query, docs, RetrieverTopK(ctx))
+	rerankResult := rerank(ctx, query, docs, RetrieverTopK(ctx))
 	trace.RerankLatencyMs = time.Since(rerankStart).Milliseconds()
 	trace.RerankEnabled = rerankResult.Enabled
 

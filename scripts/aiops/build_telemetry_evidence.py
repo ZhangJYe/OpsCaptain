@@ -182,6 +182,34 @@ class TelemetrySummary:
         }
 
 
+@dataclass
+class TelemetryDocMetadata:
+    case_id: str
+    doc_id: str
+    doc_kind: str
+    split: str
+    service: str
+    instance_type: str
+    instance: list[str]
+    source: str
+    destination: str
+    start_time: str
+    end_time: str
+    service_tokens: list[str]
+    pod_tokens: list[str]
+    node_tokens: list[str]
+    namespace_tokens: list[str]
+    metric_signal_count: int
+    log_signal_count: int
+    trace_signal_count: int
+    metric_names: list[str]
+    trace_services: list[str]
+    trace_operations: list[str]
+
+    def to_json(self) -> dict[str, Any]:
+        return self.__dict__
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build telemetry evidence docs from aiopschallenge2025 parquet.")
     parser.add_argument("--dataset-root", default="aiopschallenge2025", help="Path to aiopschallenge2025 dataset root")
@@ -218,6 +246,8 @@ def main() -> None:
 
     summaries: list[TelemetrySummary] = []
     build_summaries: list[TelemetrySummary] = []
+    metadata_rows: list[TelemetryDocMetadata] = []
+    build_metadata_rows: list[TelemetryDocMetadata] = []
     stats = {
         "cases": 0,
         "build_cases": 0,
@@ -231,8 +261,11 @@ def main() -> None:
     for case_id in all_ids:
         context = build_case_context(inputs[case_id], groundtruth[case_id])
         summary = summarize_case(dataset_root, context)
+        doc_metadata = build_doc_metadata(context, summary, split="all")
         write_text(docs_dir / f"{case_id}.md", render_telemetry_doc(context, summary))
+        write_json(docs_dir / f"{case_id}.metadata.json", doc_metadata.to_json())
         summaries.append(summary)
+        metadata_rows.append(doc_metadata)
         stats["cases"] += 1
         stats["metric_signals"] += len(summary.metric_signals)
         stats["log_signals"] += len(summary.log_signals)
@@ -241,18 +274,25 @@ def main() -> None:
             stats["empty_cases"] += 1
 
         if build_ids is not None and case_id in build_ids:
+            build_doc_metadata_row = build_doc_metadata(context, summary, split="build")
             write_text(docs_build_dir / f"{case_id}.md", render_telemetry_doc(context, summary))
+            write_json(docs_build_dir / f"{case_id}.metadata.json", build_doc_metadata_row.to_json())
             build_summaries.append(summary)
+            build_metadata_rows.append(build_doc_metadata_row)
             stats["build_cases"] += 1
 
     write_jsonl(telemetry_dir / "case_evidence_summary.jsonl", [item.to_json() for item in summaries])
     write_jsonl(telemetry_dir / "case_evidence_summary_build.jsonl", [item.to_json() for item in build_summaries])
+    write_jsonl(telemetry_dir / "doc_metadata.jsonl", [item.to_json() for item in metadata_rows])
+    write_jsonl(telemetry_dir / "doc_metadata_build.jsonl", [item.to_json() for item in build_metadata_rows])
     write_json(
         telemetry_dir / "telemetry_report.json",
         {
             **stats,
             "docs_dir": str(docs_dir),
             "docs_build_dir": str(docs_build_dir),
+            "doc_metadata_path": str(telemetry_dir / "doc_metadata.jsonl"),
+            "doc_metadata_build_path": str(telemetry_dir / "doc_metadata_build.jsonl"),
             "split_manifest": str(split_manifest) if split_manifest.exists() else "",
         },
     )
@@ -774,6 +814,32 @@ def render_telemetry_doc(case: CaseContext, summary: TelemetrySummary) -> str:
     lines.append(" ".join(keywords) if keywords else "none")
     lines.append("")
     return "\n".join(lines)
+
+
+def build_doc_metadata(case: CaseContext, summary: TelemetrySummary, split: str) -> TelemetryDocMetadata:
+    return TelemetryDocMetadata(
+        case_id=case.groundtruth.uuid,
+        doc_id=case.groundtruth.uuid,
+        doc_kind="telemetry_evidence",
+        split=split,
+        service=case.groundtruth.service or "unknown",
+        instance_type=case.groundtruth.instance_type or "unknown",
+        instance=list(case.groundtruth.instance),
+        source=case.groundtruth.source,
+        destination=case.groundtruth.destination,
+        start_time=case.groundtruth.start_time,
+        end_time=case.groundtruth.end_time,
+        service_tokens=list(case.service_tokens),
+        pod_tokens=list(case.pod_tokens),
+        node_tokens=list(case.node_tokens),
+        namespace_tokens=list(case.namespace_tokens),
+        metric_signal_count=len(summary.metric_signals),
+        log_signal_count=len(summary.log_signals),
+        trace_signal_count=len(summary.trace_signals),
+        metric_names=unique_non_empty(signal.metric for signal in summary.metric_signals[:8]),
+        trace_services=unique_non_empty(signal.service for signal in summary.trace_signals[:8] if signal.service),
+        trace_operations=unique_non_empty(signal.operation for signal in summary.trace_signals[:8] if signal.operation),
+    )
 
 
 def build_retrieval_keywords(case: CaseContext, summary: TelemetrySummary) -> list[str]:

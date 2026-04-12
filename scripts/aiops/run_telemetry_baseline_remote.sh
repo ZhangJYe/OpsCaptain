@@ -22,6 +22,7 @@ Options:
   --skip-eval             Skip rag_online_eval_cmd
   --limit N               Optional case limit passed to build_telemetry_evidence.py
   --ks CSV                K list for evaluation, default: 1,3,5
+  --mode NAME             Eval mode passed to rag_online_eval_cmd, default: full
   --timeout-ms N          Per-query eval timeout, default: 30000
   --collection NAME       Milvus collection, default: aiops_evidence_telemetry_build
   --dataset-root PATH     Dataset root under workspace, default: ./aiopschallenge2025
@@ -65,6 +66,7 @@ SKIP_EVAL=0
 LIMIT=0
 KS="1,3,5"
 TIMEOUT_MS=30000
+EVAL_MODE="full"
 COLLECTION=""
 DATASET_ROOT_RAW=""
 OUTPUT_ROOT_RAW=""
@@ -101,6 +103,11 @@ while [[ $# -gt 0 ]]; do
       shift
       [[ $# -gt 0 ]] || die "--timeout-ms requires a value"
       TIMEOUT_MS="$1"
+      ;;
+    --mode)
+      shift
+      [[ $# -gt 0 ]] || die "--mode requires a value"
+      EVAL_MODE="$1"
       ;;
     --collection)
       shift
@@ -267,7 +274,7 @@ fi
 
 if [[ "$SKIP_EVAL" -eq 0 ]]; then
   log "running strict holdout evaluation"
-  run_go "go run ./internal/ai/cmd/rag_online_eval_cmd -eval $REL_EVAL_PATH -ks $KS -timeout-ms $TIMEOUT_MS -out $REL_REPORT_PATH"
+  run_go "go run ./internal/ai/cmd/rag_online_eval_cmd -eval $REL_EVAL_PATH -mode $EVAL_MODE -ks $KS -timeout-ms $TIMEOUT_MS -out $REL_REPORT_PATH"
 fi
 
 log "final telemetry report"

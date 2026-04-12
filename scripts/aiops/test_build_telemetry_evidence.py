@@ -192,8 +192,16 @@ class BuildTelemetryEvidenceTest(unittest.TestCase):
                 case = mod.build_case_context(inputs[case_id], groundtruth[case_id])
                 summary = mod.summarize_case(root, case)
                 mod.write_text(output_root / "docs_evidence_telemetry" / f"{case_id}.md", mod.render_telemetry_doc(case, summary))
+                mod.write_json(
+                    output_root / "docs_evidence_telemetry" / f"{case_id}.metadata.json",
+                    mod.build_doc_metadata(case, summary, split="all").to_json(),
+                )
                 if case_id in build_ids:
                     mod.write_text(output_root / "docs_evidence_telemetry_build" / f"{case_id}.md", mod.render_telemetry_doc(case, summary))
+                    mod.write_json(
+                        output_root / "docs_evidence_telemetry_build" / f"{case_id}.metadata.json",
+                        mod.build_doc_metadata(case, summary, split="build").to_json(),
+                    )
                 summaries.append(summary.to_json())
             mod.write_jsonl(output_root / "telemetry" / "case_evidence_summary.jsonl", summaries)
 
@@ -203,7 +211,14 @@ class BuildTelemetryEvidenceTest(unittest.TestCase):
             self.assertIn("context canceled", doc)
             self.assertIn("CheckoutService/PlaceOrder", doc)
 
+            metadata = json.loads((output_root / "docs_evidence_telemetry" / "case-a.metadata.json").read_text(encoding="utf-8"))
+            self.assertEqual("case-a", metadata["case_id"])
+            self.assertEqual("telemetry_evidence", metadata["doc_kind"])
+            self.assertEqual("all", metadata["split"])
+            self.assertIn("checkoutservice", metadata["service_tokens"])
+
             self.assertTrue((output_root / "docs_evidence_telemetry_build" / "case-a.md").exists())
+            self.assertTrue((output_root / "docs_evidence_telemetry_build" / "case-a.metadata.json").exists())
             self.assertFalse((output_root / "docs_evidence_telemetry_build" / "case-b.md").exists())
 
     @staticmethod

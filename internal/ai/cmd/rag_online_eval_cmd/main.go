@@ -17,6 +17,7 @@ import (
 )
 
 type report struct {
+	Mode    string                 `json:"mode"`
 	Summary eval.QuerySummary      `json:"summary"`
 	Results []eval.QueryCaseResult `json:"results"`
 }
@@ -24,6 +25,7 @@ type report struct {
 func main() {
 	evalPath := flag.String("eval", filepath.Join(".", "aiopschallenge2025", "baseline", "eval", "eval_cases.jsonl"), "path to eval_cases.jsonl")
 	ksRaw := flag.String("ks", "1,3,5", "comma-separated k values, e.g. 1,3,5")
+	modeRaw := flag.String("mode", string(rag.QueryModeRewriteRetrieveRerank), "eval mode: retrieve, rewrite, or full")
 	limit := flag.Int("limit", 0, "optional limit on number of eval cases")
 	perQueryTimeoutMs := flag.Int("timeout-ms", 15000, "per-query timeout in milliseconds")
 	outPath := flag.String("out", "", "optional path to write full JSON report")
@@ -32,6 +34,11 @@ func main() {
 	ks, err := parseKs(*ksRaw)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse ks failed: %v\n", err)
+		os.Exit(1)
+	}
+	mode, err := rag.ParseQueryMode(*modeRaw)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "parse mode failed: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -55,7 +62,7 @@ func main() {
 		queryCtx, cancel := context.WithTimeout(ctx, time.Duration(*perQueryTimeoutMs)*time.Millisecond)
 		defer cancel()
 
-		docs, trace, err := rag.Query(queryCtx, rag.SharedPool(), query)
+		docs, trace, err := rag.QueryWithMode(queryCtx, rag.SharedPool(), query, mode)
 		metrics := eval.QueryMetrics{
 			CacheHit:          trace.CacheHit,
 			InitFailureCached: trace.InitFailureCached,
@@ -78,10 +85,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	printSummary(summary, ks)
+	printSummary(mode, summary, ks)
 
 	if strings.TrimSpace(*outPath) != "" {
-		raw, err := json.MarshalIndent(report{Summary: summary, Results: results}, "", "  ")
+		raw, err := json.MarshalIndent(report{Mode: string(mode), Summary: summary, Results: results}, "", "  ")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "marshal report failed: %v\n", err)
 			os.Exit(1)
@@ -119,10 +126,11 @@ func parseKs(raw string) ([]int, error) {
 	return ks, nil
 }
 
-func printSummary(summary eval.QuerySummary, ks []int) {
+func printSummary(mode rag.QueryMode, summary eval.QuerySummary, ks []int) {
 	fmt.Println("========================================")
 	fmt.Println("  RAG Online Baseline Report")
 	fmt.Println("========================================")
+	fmt.Printf("  Mode         : %s\n", mode)
 	fmt.Printf("  Cases        : %d\n", summary.Cases)
 	fmt.Printf("  Avg Init ms  : %.2f\n", summary.AvgInitLatencyMs)
 	fmt.Printf("  Avg Rewrite  : %.2f\n", summary.AvgRewriteLatencyMs)
