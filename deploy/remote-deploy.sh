@@ -40,6 +40,26 @@ normalize_path_prefix() {
   esac
 }
 
+ensure_prometheus_bind_files() {
+  if [ -d "./prometheus/prometheus.yml" ]; then
+    rm -rf "./prometheus/prometheus.yml"
+  fi
+
+  if [ -d "./prometheus/opscaptionai-cost-alerts.yml" ]; then
+    rm -rf "./prometheus/opscaptionai-cost-alerts.yml"
+  fi
+
+  if [ ! -f "./prometheus/prometheus.yml" ]; then
+    echo "missing file: ./prometheus/prometheus.yml"
+    exit 1
+  fi
+
+  if [ ! -f "./prometheus/opscaptionai-cost-alerts.yml" ]; then
+    echo "missing file: ./prometheus/opscaptionai-cost-alerts.yml"
+    exit 1
+  fi
+}
+
 write_site_block() {
   site_label="$1"
 
@@ -196,6 +216,8 @@ fi
 if [ -n "${ACR_PASSWORD_FILE:-}" ] && [ -f "./${ACR_PASSWORD_FILE}" ]; then
   docker login "$ACR_REGISTRY" -u "$ACR_USERNAME" --password-stdin < "./${ACR_PASSWORD_FILE}"
 fi
+
+ensure_prometheus_bind_files
 
 $COMPOSE pull
 if ! $COMPOSE up -d --wait --wait-timeout 180 --remove-orphans; then
