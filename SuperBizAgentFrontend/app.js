@@ -1695,19 +1695,19 @@ class SuperBizAgentApp {
     // 检查并设置居中样式
     applyStoredTheme() {
         const stored = localStorage.getItem('opscaptain-theme');
-        if (stored === 'light') {
-            document.documentElement.setAttribute('data-theme', 'light');
-            this.updateThemeIcons('light');
-        } else {
-            document.documentElement.removeAttribute('data-theme');
+        if (stored === 'dark') {
+            document.documentElement.setAttribute('data-theme', 'dark');
             this.updateThemeIcons('dark');
+            return;
         }
+        document.documentElement.setAttribute('data-theme', 'light');
+        this.updateThemeIcons('light');
     }
 
     toggleTheme() {
         const isLight = document.documentElement.getAttribute('data-theme') === 'light';
         if (isLight) {
-            document.documentElement.removeAttribute('data-theme');
+            document.documentElement.setAttribute('data-theme', 'dark');
             localStorage.setItem('opscaptain-theme', 'dark');
             this.updateThemeIcons('dark');
         } else {
@@ -1784,8 +1784,10 @@ class SuperBizAgentApp {
             const hasMessages = this.chatMessages.querySelectorAll('.message').length > 0;
             if (!hasMessages) {
                 this.chatContainer.classList.add('centered');
+                document.body.classList.add('landing-mode');
             } else {
                 this.chatContainer.classList.remove('centered');
+                document.body.classList.remove('landing-mode');
             }
         }
     }

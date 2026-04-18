@@ -14,14 +14,15 @@
 .input-wrapper {
     background: var(--bg-panel-strong);
     border: 1px solid var(--line-soft);
-    border-radius: 14px;
+    border-radius: 16px;
     box-shadow: var(--shadow-soft);
-    padding: 10px 10px 10px 12px;
+    padding: 11px 11px 11px 13px;
     backdrop-filter: blur(10px);
 }
 
 .input-wrapper:focus-within {
-    border-color: rgba(137, 171, 255, 0.4);
+    border-color: rgba(77, 120, 230, 0.42);
+    box-shadow: 0 14px 30px rgba(44, 72, 120, 0.14);
 }
 
 .message-input {
@@ -210,14 +211,14 @@
 }
 
 .send-btn-circle {
-    border: 1px solid rgba(137, 171, 255, 0.4);
-    background: rgba(137, 171, 255, 0.16);
+    border: 1px solid rgba(77, 120, 230, 0.36);
+    background: rgba(77, 120, 230, 0.14);
     color: var(--text-main);
 }
 
 .send-btn-circle:hover {
     transform: translateY(-1px);
-    background: rgba(137, 171, 255, 0.25);
+    background: rgba(77, 120, 230, 0.24);
 }
 
 .send-btn-circle.stop-mode {

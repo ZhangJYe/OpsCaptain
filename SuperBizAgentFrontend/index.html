@@ -162,16 +162,16 @@
                     <section class="landing-hero" id="landingProduct">
                         <div class="landing-hero-copy">
                             <p class="landing-kicker">SaaS for AIOps Teams</p>
-                            <h2>用一个克制且可执行的工作台，把排障流程从“经验驱动”升级为“系统驱动”。</h2>
-                            <p class="landing-summary">OpsCaption 将用户问题统一进入 triage，自动并行调度日志、指标和知识检索，最终交付可追溯、可执行、可沉淀的处置建议。</p>
+                            <h2>让每次故障响应，都有统一上下文与可执行动作。</h2>
+                            <p class="landing-summary">OpsCaption 用多 Agent 编排把告警定位、证据检索和处置建议放进同一条工作流，帮助团队在高压场景下依然稳定决策。</p>
                             <div class="landing-cta-row">
-                                <button class="prompt-card prompt-card-primary" data-prompt="请基于当前系统能力，给我一套 7 天落地试点计划。">生成 7 天试点计划</button>
-                                <button class="prompt-card" data-prompt="请演示一次典型告警从定位到处置的完整流程。">查看排障演示脚本</button>
+                                <button class="prompt-card prompt-card-primary" data-prompt="请基于当前系统能力，给我一套 7 天落地试点计划。">获取 7 天试点计划</button>
+                                <button class="prompt-card" data-prompt="请演示一次典型告警从定位到处置的完整流程。">查看一次完整演示</button>
                             </div>
                             <ul class="landing-meta-list">
-                                <li>统一上下文：history / memory / docs / tool outputs</li>
-                                <li>支持流式对话、知识入库、AI Ops 执行</li>
-                                <li>可无缝对接 Jaeger、Prometheus 与现有运维流程</li>
+                                <li>统一上下文层：history / memory / docs / tool outputs</li>
+                                <li>支持对话、流式分析、知识入库与 AI Ops 执行</li>
+                                <li>可接入 Jaeger、Prometheus 和现有运维体系</li>
                             </ul>
                         </div>
 
@@ -183,17 +183,42 @@
                                     <span class="preview-status">Live</span>
                                 </div>
                                 <div class="hero-preview-body">
-                                    <div class="preview-thread">
-                                        <div class="preview-line"><strong>Alert:</strong> paymentservice p95 latency +47%</div>
-                                        <div class="preview-line"><strong>Triage:</strong> route to metrics + logs + knowledge</div>
-                                        <div class="preview-line"><strong>Finding:</strong> error bursts after rollout v2026.04.18</div>
-                                        <div class="preview-line"><strong>Action:</strong> rollback + verify queue consumption</div>
+                                    <div class="preview-kpis">
+                                        <div class="preview-kpi">
+                                            <span>MTTD</span>
+                                            <strong>12 min</strong>
+                                            <em>-38%</em>
+                                        </div>
+                                        <div class="preview-kpi">
+                                            <span>Evidence Coverage</span>
+                                            <strong>94%</strong>
+                                            <em>+17%</em>
+                                        </div>
+                                        <div class="preview-kpi">
+                                            <span>Resolution Confidence</span>
+                                            <strong>0.87</strong>
+                                            <em>Stable</em>
+                                        </div>
                                     </div>
-                                    <div class="preview-timeline">
-                                        <div class="preview-step"><span>01</span><p>Signal intake</p></div>
-                                        <div class="preview-step"><span>02</span><p>Parallel evidence pull</p></div>
-                                        <div class="preview-step"><span>03</span><p>Cross-agent synthesis</p></div>
-                                        <div class="preview-step"><span>04</span><p>Executable report</p></div>
+                                    <div class="preview-events">
+                                        <div class="preview-event"><span>Alert</span><p>paymentservice p95 latency +47%</p></div>
+                                        <div class="preview-event"><span>Triage</span><p>route to metrics + logs + knowledge</p></div>
+                                        <div class="preview-event"><span>Action</span><p>rollback + verify queue consumption</p></div>
+                                    </div>
+                                    <div class="preview-chart" aria-hidden="true">
+                                        <div class="preview-chart-bars">
+                                            <i style="--h:34%"></i>
+                                            <i style="--h:48%"></i>
+                                            <i style="--h:42%"></i>
+                                            <i style="--h:67%"></i>
+                                            <i style="--h:73%"></i>
+                                            <i style="--h:58%"></i>
+                                            <i style="--h:39%"></i>
+                                            <i style="--h:44%"></i>
+                                            <i style="--h:31%"></i>
+                                            <i style="--h:28%"></i>
+                                        </div>
+                                        <div class="preview-chart-note">Post-action latency trend returning to baseline</div>
                                     </div>
                                 </div>
                             </div>
@@ -204,16 +229,16 @@
                         <p class="landing-section-title">Why Teams Choose OpsCaption</p>
                         <div class="landing-proof-grid">
                             <article>
-                                <h3>更短的响应链路</h3>
-                                <p>把多工具跳转压缩为单会话闭环，降低值班同学的上下文切换成本。</p>
+                                <h3>更短的响应时间</h3>
+                                <p>减少跨系统来回跳转，把分析和决策压缩在单会话闭环内完成。</p>
                             </article>
                             <article>
-                                <h3>更清晰的证据结构</h3>
-                                <p>实时信号、历史经验和知识文档分层处理，便于复盘与持续优化。</p>
+                                <h3>更稳的证据质量</h3>
+                                <p>实时信号与历史知识分层处理，保证结论可追溯、可验证、可复盘。</p>
                             </article>
                             <article>
-                                <h3>更稳定的执行质量</h3>
-                                <p>由 runtime 编排 specialist，保障流程一致性并保留 legacy fallback。</p>
+                                <h3>更一致的执行路径</h3>
+                                <p>由 runtime 统一编排 specialist，降低个人经验差异带来的处理偏差。</p>
                             </article>
                         </div>
                     </section>
@@ -239,7 +264,7 @@
                                 <span>03</span>
                                 <div>
                                     <h4>Parallel Specialists</h4>
-                                    <p>并发拉取 metrics、logs 与 knowledge evidence 并执行重排。</p>
+                                    <p>并发拉取 metrics、logs 和 knowledge evidence，并进行重排筛选。</p>
                                 </div>
                             </div>
                             <div class="workflow-item">
@@ -255,8 +280,8 @@
                     <section class="landing-detail" id="landingDetail">
                         <div class="landing-detail-copy">
                             <p class="landing-section-title">Built For Real Operations</p>
-                            <h3>不是营销化 Dashboard，而是能真正承接值班和故障处置的产品界面。</h3>
-                            <p>你可以在同一页面完成问题提问、流式分析、文档入库、trace 跳转、AI Ops 执行，并把结论沉淀为下一次可复用的经验。</p>
+                            <h3>不是展示型页面，而是能直接承接值班与故障处置的工作界面。</h3>
+                            <p>在同一页面完成提问、流式分析、文档入库、trace 跳转和 AI Ops 执行，并持续沉淀可复用的处理经验。</p>
                         </div>
                         <div class="landing-detail-list">
                             <div class="detail-line">
@@ -275,8 +300,8 @@
                     </section>
 
                     <section class="landing-final" id="landingPricing">
-                        <h3>把 incident 响应从个人英雄主义，升级为团队可复用系统能力。</h3>
-                        <p>现在就用真实告警场景跑一轮试点，验证路由策略、检索质量和报告可执行性。</p>
+                        <h3>把 Incident 响应从“个人经验”升级为“团队系统能力”。</h3>
+                        <p>用真实告警场景快速跑一轮试点，验证路由策略、检索质量与报告执行性。</p>
                         <div class="landing-final-actions">
                             <button class="prompt-card prompt-card-primary" data-prompt="请给我一份 OpsCaption 接入清单，包括数据源、权限和里程碑。">获取接入清单</button>
                             <button class="prompt-card" data-prompt="请模拟一次高优告警值班响应，并输出可执行报告。">模拟一次高优告警响应</button>

@@ -10,8 +10,8 @@
 
 .chat-container.centered {
     justify-content: flex-start;
-    gap: 22px;
-    padding: 10px 20px 28px;
+    gap: 26px;
+    padding: 18px 20px 28px;
     overflow-y: auto;
 }
 
@@ -24,16 +24,20 @@
 }
 
 .chat-container.centered .chat-input-container {
-    position: sticky;
-    bottom: 0;
-    z-index: 5;
-    padding-top: 16px;
-    background: linear-gradient(180deg, rgba(11, 18, 32, 0), rgba(11, 18, 32, 0.82) 35%, rgba(11, 18, 32, 0.95));
-    backdrop-filter: blur(8px);
+    position: relative;
+    z-index: 1;
+    padding-top: 2px;
+    background: transparent;
+    backdrop-filter: none;
+}
+
+.chat-container.centered .input-group-wrapper,
+.chat-container.centered .composer-footnote {
+    max-width: 920px;
 }
 
 [data-theme="light"] .chat-container.centered .chat-input-container {
-    background: linear-gradient(180deg, rgba(246, 248, 252, 0), rgba(246, 248, 252, 0.86) 35%, rgba(246, 248, 252, 0.96));
+    background: transparent;
 }
 
 .chat-messages {
@@ -297,7 +301,7 @@
 
 @media (max-width: 760px) {
     .chat-container.centered {
-        padding: 8px 12px 20px;
+        padding: 12px 12px 18px;
     }
 
     .chat-messages {
