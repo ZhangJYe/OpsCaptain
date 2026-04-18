@@ -1,6 +1,6 @@
 .chat-input-container {
     width: 100%;
-    padding: 0 28px 24px;
+    padding: 0 20px 18px;
     flex-shrink: 0;
 }
 
@@ -14,19 +14,14 @@
 .input-wrapper {
     background: var(--bg-panel-strong);
     border: 1px solid var(--line-soft);
-    border-radius: 30px;
+    border-radius: 14px;
     box-shadow: var(--shadow-soft);
-    padding: 10px 12px 10px 16px;
-    backdrop-filter: blur(18px);
+    padding: 10px 10px 10px 12px;
+    backdrop-filter: blur(10px);
 }
 
 .input-wrapper:focus-within {
-    border-color: rgba(203, 131, 69, 0.28);
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.24), 0 0 0 1px rgba(203, 131, 69, 0.08);
-}
-
-.composer-header {
-    display: none;
+    border-color: rgba(137, 171, 255, 0.4);
 }
 
 .message-input {
@@ -38,9 +33,9 @@
     outline: none;
     background: transparent;
     color: var(--text-main);
-    font-size: 1rem;
-    line-height: 1.7;
-    padding: 10px 6px 12px;
+    font-size: 0.96rem;
+    line-height: 1.65;
+    padding: 8px 6px 10px;
 }
 
 .message-input::placeholder {
@@ -51,7 +46,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: 10px;
 }
 
 .tools-btn-wrapper,
@@ -65,47 +60,47 @@
 
 .tools-btn,
 .send-btn-circle {
-    width: 40px;
-    height: 40px;
-    border: none;
-    border-radius: 999px;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.2s ease, transform 0.2s ease;
+    border: 1px solid var(--line-soft);
+    transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
 }
 
 .tools-btn {
-    background: var(--bg-muted);
+    background: var(--bg-soft);
     color: var(--text-main);
-    border: 1px solid var(--line-soft);
 }
 
 .tools-btn:hover {
+    border-color: var(--line-strong);
     background: var(--bg-user);
 }
 
 .tools-icon {
-    width: 18px;
-    height: 18px;
+    width: 17px;
+    height: 17px;
 }
 
 .mode-selector-btn {
-    min-height: 40px;
+    min-height: 36px;
     border: 1px solid var(--line-soft);
-    border-radius: 999px;
-    background: var(--bg-muted);
+    border-radius: 10px;
+    background: var(--bg-soft);
     color: var(--text-main);
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 0 14px;
-    font-size: 0.88rem;
+    padding: 0 12px;
+    font-size: 0.84rem;
     font-weight: 600;
 }
 
 .mode-selector-btn:hover {
-    background: var(--bg-user);
+    border-color: var(--line-strong);
 }
 
 .dropdown-arrow {
@@ -124,25 +119,25 @@
     bottom: calc(100% + 10px);
     background: var(--bg-panel-strong);
     border: 1px solid var(--line-soft);
-    border-radius: 18px;
+    border-radius: 12px;
     box-shadow: var(--shadow-soft);
     opacity: 0;
     visibility: hidden;
     transform: translateY(8px);
     transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s ease;
     z-index: 40;
-    backdrop-filter: blur(18px);
+    backdrop-filter: blur(10px);
 }
 
 .tools-menu {
     left: 0;
-    min-width: 210px;
+    min-width: 200px;
     padding: 8px;
 }
 
 .mode-dropdown {
     right: 0;
-    min-width: 220px;
+    min-width: 210px;
     padding: 6px;
 }
 
@@ -154,22 +149,22 @@
 }
 
 .dropdown-header {
-    padding: 10px 12px 8px;
+    padding: 8px 10px 7px;
     font-size: 0.72rem;
     color: var(--text-muted);
 }
 
 .tools-menu-item,
 .dropdown-item {
-    border-radius: 14px;
-    padding: 10px 12px;
+    border-radius: 9px;
+    padding: 9px 10px;
     transition: background 0.18s ease;
 }
 
 .tools-menu-item {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
 }
 
 .tools-menu-item:hover,
@@ -178,82 +173,79 @@
 }
 
 .tools-menu-item svg {
-    width: 17px;
-    height: 17px;
+    width: 16px;
+    height: 16px;
     color: var(--text-subtle);
 }
 
 .dropdown-item.active {
-    background: rgba(203, 131, 69, 0.12);
+    background: rgba(137, 171, 255, 0.16);
 }
 
 .dropdown-item-main {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
-    font-size: 0.9rem;
+    gap: 8px;
+    font-size: 0.86rem;
     font-weight: 600;
 }
 
 .dropdown-item-sub {
-    margin-top: 4px;
-    font-size: 0.82rem;
+    margin-top: 2px;
     color: var(--text-muted);
+    font-size: 0.76rem;
 }
 
 .badge-new {
+    min-height: 18px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: rgba(137, 171, 255, 0.2);
+    color: var(--accent-strong);
+    font-size: 0.68rem;
+    font-weight: 700;
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    padding: 2px 8px;
-    border-radius: 999px;
-    background: rgba(203, 131, 69, 0.14);
-    color: var(--accent-strong);
-    font-size: 0.7rem;
-    font-weight: 700;
 }
 
 .send-btn-circle {
-    background: linear-gradient(135deg, var(--accent), var(--accent-strong));
-    color: #fff;
-    box-shadow: 0 12px 24px rgba(203, 131, 69, 0.24);
+    border: 1px solid rgba(137, 171, 255, 0.4);
+    background: rgba(137, 171, 255, 0.16);
+    color: var(--text-main);
 }
 
 .send-btn-circle:hover {
     transform: translateY(-1px);
-    filter: brightness(1.04);
+    background: rgba(137, 171, 255, 0.25);
 }
 
 .send-btn-circle.stop-mode {
-    background: var(--text-muted);
-    box-shadow: none;
+    border-color: var(--line-soft);
+    background: var(--bg-soft);
+    color: var(--text-subtle);
 }
 
 .send-btn-circle svg {
-    width: 18px;
-    height: 18px;
+    width: 17px;
+    height: 17px;
 }
 
 .composer-footnote {
-    margin-top: 10px;
+    margin-top: 8px;
     text-align: center;
-    font-size: 0.8rem;
     color: var(--text-muted);
+    font-size: 0.76rem;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 760px) {
     .chat-input-container {
-        padding: 0 16px 18px;
+        padding: 0 12px 14px;
     }
 
     .input-wrapper {
-        border-radius: 24px;
+        border-radius: 12px;
         padding: 10px;
-    }
-
-    .input-bottom-bar {
-        flex-wrap: wrap;
     }
 
     .right-actions {
@@ -261,12 +253,12 @@
         justify-content: space-between;
     }
 
-    .mode-dropdown,
-    .tools-menu {
-        min-width: min(88vw, 240px);
+    .input-bottom-bar {
+        flex-wrap: wrap;
     }
 
-    .composer-footnote {
-        font-size: 0.76rem;
+    .mode-dropdown,
+    .tools-menu {
+        min-width: min(88vw, 220px);
     }
 }

@@ -10,8 +10,8 @@
 
 .chat-container.centered {
     justify-content: flex-start;
-    padding: 8px 28px 42px;
-    gap: 28px;
+    gap: 22px;
+    padding: 10px 20px 28px;
     overflow-y: auto;
 }
 
@@ -26,14 +26,14 @@
 .chat-container.centered .chat-input-container {
     position: sticky;
     bottom: 0;
-    z-index: 3;
-    padding-top: 20px;
-    background: linear-gradient(180deg, rgba(10, 13, 18, 0), rgba(10, 13, 18, 0.82) 28%, rgba(10, 13, 18, 0.96));
-    backdrop-filter: blur(14px);
+    z-index: 5;
+    padding-top: 16px;
+    background: linear-gradient(180deg, rgba(11, 18, 32, 0), rgba(11, 18, 32, 0.82) 35%, rgba(11, 18, 32, 0.95));
+    backdrop-filter: blur(8px);
 }
 
 [data-theme="light"] .chat-container.centered .chat-input-container {
-    background: linear-gradient(180deg, rgba(243, 237, 226, 0), rgba(243, 237, 226, 0.82) 28%, rgba(243, 237, 226, 0.96));
+    background: linear-gradient(180deg, rgba(246, 248, 252, 0), rgba(246, 248, 252, 0.86) 35%, rgba(246, 248, 252, 0.96));
 }
 
 .chat-messages {
@@ -42,7 +42,7 @@
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    padding: 8px 28px 22px;
+    padding: 8px 20px 20px;
 }
 
 .message {
@@ -50,9 +50,9 @@
     max-width: var(--content-width);
     margin: 0 auto;
     display: flex;
-    gap: 14px;
-    padding: 22px 0;
-    animation: surface-rise 0.36s ease both;
+    gap: 12px;
+    padding: 18px 0;
+    animation: rise-in 0.25s ease both;
 }
 
 .message + .message {
@@ -64,22 +64,22 @@
 }
 
 .message-avatar {
-    width: 32px;
-    height: 32px;
-    border-radius: 12px;
-    background: linear-gradient(135deg, rgba(203, 131, 69, 0.2), rgba(203, 131, 69, 0.08));
+    width: 30px;
+    height: 30px;
+    border-radius: 10px;
+    border: 1px solid rgba(137, 171, 255, 0.32);
+    background: rgba(137, 171, 255, 0.16);
     color: var(--accent-strong);
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
     margin-top: 4px;
-    border: 1px solid rgba(203, 131, 69, 0.16);
 }
 
 .message-avatar svg {
-    width: 16px;
-    height: 16px;
+    width: 15px;
+    height: 15px;
 }
 
 .message-content-wrapper {
@@ -91,7 +91,7 @@
 
 .message.user .message-content-wrapper {
     width: auto;
-    max-width: min(72%, 620px);
+    max-width: min(72%, 680px);
 }
 
 .message.assistant .message-content-wrapper {
@@ -100,17 +100,17 @@
 
 .message-content {
     width: 100%;
-    font-size: 0.98rem;
-    line-height: 1.82;
+    font-size: 0.96rem;
+    line-height: 1.78;
     color: var(--text-main);
     overflow-wrap: break-word;
 }
 
 .message.user .message-content {
-    background: linear-gradient(180deg, rgba(203, 131, 69, 0.12), rgba(203, 131, 69, 0.06));
-    border: 1px solid rgba(203, 131, 69, 0.14);
-    border-radius: 22px;
-    padding: 14px 18px;
+    background: rgba(137, 171, 255, 0.14);
+    border: 1px solid rgba(137, 171, 255, 0.26);
+    border-radius: 16px;
+    padding: 12px 14px;
 }
 
 .message.assistant .message-content {
@@ -123,11 +123,11 @@
 .message-content h4,
 .message-content h5,
 .message-content h6 {
-    margin: 22px 0 12px;
-    line-height: 1.25;
+    margin: 20px 0 10px;
+    line-height: 1.3;
     font-family: var(--font-display);
     font-weight: 700;
-    letter-spacing: -0.03em;
+    letter-spacing: -0.01em;
 }
 
 .message-content p,
@@ -136,7 +136,7 @@
 .message-content table,
 .message-content blockquote,
 .message-content pre {
-    margin-bottom: 14px;
+    margin-bottom: 12px;
 }
 
 .message-content ul,
@@ -145,7 +145,7 @@
 }
 
 .message-content li + li {
-    margin-top: 4px;
+    margin-top: 3px;
 }
 
 .message-content code {
@@ -158,14 +158,14 @@
 
 .message-content pre {
     overflow-x: auto;
-    padding: 16px 18px;
+    padding: 14px 16px;
     border: 1px solid var(--line-soft);
-    border-radius: 18px;
-    background: rgba(0, 0, 0, 0.22);
+    border-radius: 12px;
+    background: rgba(8, 13, 24, 0.6);
 }
 
 [data-theme="light"] .message-content pre {
-    background: rgba(32, 24, 15, 0.04);
+    background: rgba(15, 28, 52, 0.03);
 }
 
 .message-content pre code {
@@ -174,8 +174,8 @@
 }
 
 .message-content blockquote {
-    padding-left: 14px;
-    border-left: 3px solid rgba(203, 131, 69, 0.3);
+    padding-left: 12px;
+    border-left: 3px solid rgba(137, 171, 255, 0.45);
     color: var(--text-subtle);
 }
 
@@ -192,13 +192,12 @@
 }
 
 .message-content th {
-    background: var(--bg-muted);
-    font-weight: 600;
+    background: var(--bg-soft);
+    font-weight: 700;
 }
 
 .message-content a {
     color: var(--accent-strong);
-    text-decoration: none;
 }
 
 .message-content a:hover {
@@ -207,7 +206,7 @@
 
 .message-content img {
     max-width: 100%;
-    border-radius: 16px;
+    border-radius: 10px;
 }
 
 .message-actions {
@@ -218,27 +217,28 @@
 }
 
 .message-action-btn {
-    border: 1px solid var(--line-soft);
+    min-height: 30px;
+    padding: 0 10px;
     border-radius: 999px;
-    background: var(--bg-muted);
+    border: 1px solid var(--line-soft);
+    background: var(--bg-soft);
     color: var(--text-muted);
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 6px 10px;
-    font-size: 0.78rem;
-    transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+    font-size: 0.76rem;
+    transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
 }
 
 .message-action-btn:hover {
-    background: var(--bg-user);
     border-color: var(--line-strong);
     color: var(--text-main);
+    background: var(--bg-user);
 }
 
 .message-action-btn svg {
-    width: 14px;
-    height: 14px;
+    width: 13px;
+    height: 13px;
 }
 
 .streaming {
@@ -255,7 +255,7 @@
 .loading-message-content {
     display: inline-flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
 }
 
 .loading-spinner-icon {
@@ -295,17 +295,17 @@
     animation-delay: 0.32s;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 760px) {
     .chat-container.centered {
-        padding: 6px 16px 26px;
+        padding: 8px 12px 20px;
     }
 
     .chat-messages {
-        padding: 8px 16px 18px;
+        padding: 8px 12px 18px;
     }
 
     .message {
-        padding: 18px 0;
+        padding: 16px 0;
     }
 
     .message.user .message-content-wrapper {

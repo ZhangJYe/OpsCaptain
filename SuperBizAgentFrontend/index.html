@@ -6,7 +6,7 @@
     <title>OpsCaption</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;800&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="theme.css">
     <link rel="stylesheet" href="layout.css">
     <link rel="stylesheet" href="chat.css">
@@ -26,7 +26,7 @@
                     <div class="brand-mark">OC</div>
                     <div class="brand-copy">
                         <h2 class="sidebar-title">OpsCaption</h2>
-                        <p class="sidebar-subtitle">Agent runtime for incident command</p>
+                        <p class="sidebar-subtitle">AI Ops Command Workspace</p>
                     </div>
                 </div>
                 <button class="sidebar-close-btn" id="sidebarCloseBtn" title="关闭侧栏">
@@ -38,22 +38,22 @@
 
             <div class="sidebar-content">
                 <div class="sidebar-intro">
-                    <div class="sidebar-kicker">Control Room</div>
-                    <p>统一接入排障问答、知识检索、文档入库与 AI Ops 执行流。</p>
+                    <div class="sidebar-kicker">Workspace</div>
+                    <p>对话、知识检索、观测链路和 AI Ops 执行都在同一个控制面板内完成。</p>
                 </div>
 
                 <button class="new-chat-btn" id="newChatBtn">
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                     </svg>
-                    <span>发起新会话</span>
+                    <span>新建会话</span>
                 </button>
 
                 <div class="history-search">
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M21 21L16.65 16.65M18 10.5C18 14.6421 14.6421 18 10.5 18C6.35786 18 3 14.6421 3 10.5C3 6.35786 6.35786 3 10.5 3C14.6421 3 18 6.35786 18 10.5Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
-                    <input id="historySearchInput" type="text" placeholder="检索历史上下文">
+                    <input id="historySearchInput" type="text" placeholder="检索历史会话">
                 </div>
 
                 <div class="chat-history-section">
@@ -66,7 +66,7 @@
                 <section class="observability-section" id="observabilitySection">
                     <div class="observability-header">
                         <div>
-                            <div class="observability-title">Observability Links</div>
+                            <div class="observability-title">Observability</div>
                             <div class="observability-subtitle" id="observabilityLastCheck">Checking endpoints...</div>
                         </div>
                         <button class="observability-refresh-btn" id="refreshObservabilityBtn" type="button">Refresh</button>
@@ -108,163 +108,180 @@
 
         <main class="main-content">
             <header class="topbar">
-                <div class="topbar-left">
-                    <button class="sidebar-toggle-btn" id="sidebarToggleBtn" title="打开侧栏">
-                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M4 7H20M4 12H20M4 17H20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                        </svg>
-                    </button>
-                    <div class="topbar-copy">
-                        <div class="topbar-kicker">OpsCaption</div>
-                        <div>
-                            <h1 class="topbar-title">Agent-native AIOps Workspace</h1>
-                            <p class="topbar-subtitle">面向运维团队的故障协同、知识证据拼装与行动闭环</p>
+                <div class="topbar-shell">
+                    <div class="topbar-left">
+                        <button class="sidebar-toggle-btn" id="sidebarToggleBtn" title="打开侧栏">
+                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M4 7H20M4 12H20M4 17H20" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                        </button>
+
+                        <a class="brand-inline" href="#landingProduct" aria-label="OpsCaption 首页">
+                            <span class="brand-inline-mark">OC</span>
+                            <span class="brand-inline-copy">
+                                <strong>OpsCaption</strong>
+                                <small>Incident Intelligence Platform</small>
+                            </span>
+                        </a>
+
+                        <nav class="topbar-nav" aria-label="主页导航">
+                            <a href="#landingProduct">产品</a>
+                            <a href="#landingWorkflow">流程</a>
+                            <a href="#landingDetail">能力</a>
+                            <a href="#landingPricing">试点</a>
+                        </nav>
+                    </div>
+
+                    <div class="topbar-actions">
+                        <button class="theme-toggle-btn" id="themeToggleBtn" title="切换主题">
+                            <svg id="themeIconMoon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <svg id="themeIconSun" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:none">
+                                <circle cx="12" cy="12" r="5" stroke="currentColor" stroke-width="2"/>
+                                <path d="M12 1V3M12 21V23M4.22 4.22L5.64 5.64M18.36 18.36L19.78 19.78M1 12H3M21 12H23M4.22 19.78L5.64 18.36M18.36 5.64L19.78 4.22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                        </button>
+                        <div class="mode-chip">
+                            <span id="currentModeText">快速</span>
                         </div>
+                        <button class="ai-ops-top-btn" id="aiOpsSidebarBtn">
+                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <span>运行 AI Ops</span>
+                        </button>
                     </div>
-                </div>
-                <div class="topbar-actions">
-                    <button class="theme-toggle-btn" id="themeToggleBtn" title="切换主题">
-                        <svg id="themeIconMoon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                        <svg id="themeIconSun" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:none">
-                            <circle cx="12" cy="12" r="5" stroke="currentColor" stroke-width="2"/>
-                            <path d="M12 1V3M12 21V23M4.22 4.22L5.64 5.64M18.36 18.36L19.78 19.78M1 12H3M21 12H23M4.22 19.78L5.64 18.36M18.36 5.64L19.78 4.22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                        </svg>
-                    </button>
-                    <div class="mode-chip">
-                        <span id="currentModeText">快速</span>
-                    </div>
-                    <button class="ai-ops-top-btn" id="aiOpsSidebarBtn">
-                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                        <span>运行 AI Ops</span>
-                    </button>
                 </div>
             </header>
 
             <div class="chat-container">
                 <section class="welcome-greeting" id="welcomeGreeting">
-                    <div class="hero-stage">
-                        <div class="hero-copy">
-                            <div class="hero-badge">OpsCaption / Multi-Agent Runtime</div>
-                            <h2>让值班与排障不再像在多个工具之间失焦切换。</h2>
-                            <p class="hero-summary">从问题进入，先由 triage 判断任务类型，再由 specialist 并行拉取日志、指标和知识证据，最后把可执行结论落到同一个工作台里。</p>
-
-                            <div class="hero-flow">
-                                <div class="hero-flow-line">
-                                    <span class="hero-flow-step">01</span>
-                                    <span>识别任务和风险域</span>
-                                </div>
-                                <div class="hero-flow-line">
-                                    <span class="hero-flow-step">02</span>
-                                    <span>并行拉取 metrics、logs、knowledge</span>
-                                </div>
-                                <div class="hero-flow-line">
-                                    <span class="hero-flow-step">03</span>
-                                    <span>汇总证据并返回行动建议</span>
-                                </div>
+                    <section class="landing-hero" id="landingProduct">
+                        <div class="landing-hero-copy">
+                            <p class="landing-kicker">SaaS for AIOps Teams</p>
+                            <h2>用一个克制且可执行的工作台，把排障流程从“经验驱动”升级为“系统驱动”。</h2>
+                            <p class="landing-summary">OpsCaption 将用户问题统一进入 triage，自动并行调度日志、指标和知识检索，最终交付可追溯、可执行、可沉淀的处置建议。</p>
+                            <div class="landing-cta-row">
+                                <button class="prompt-card prompt-card-primary" data-prompt="请基于当前系统能力，给我一套 7 天落地试点计划。">生成 7 天试点计划</button>
+                                <button class="prompt-card" data-prompt="请演示一次典型告警从定位到处置的完整流程。">查看排障演示脚本</button>
                             </div>
-
-                            <div class="prompt-grid">
-                                <button class="prompt-card" data-prompt="请总结当前系统的核心能力，并告诉我适合从哪里开始使用。">
-                                    <span class="prompt-card-index">A</span>
-                                    <span class="prompt-card-body">
-                                        <span class="prompt-card-title">快速上手</span>
-                                        <span class="prompt-card-text">先了解这个 agent 工作台现在能做什么</span>
-                                    </span>
-                                </button>
-                                <button class="prompt-card" data-prompt="请基于现有知识库，给我一份常见告警的处理思路清单。">
-                                    <span class="prompt-card-index">B</span>
-                                    <span class="prompt-card-body">
-                                        <span class="prompt-card-title">告警排查</span>
-                                        <span class="prompt-card-text">拉出可复用的排障路径和判断顺序</span>
-                                    </span>
-                                </button>
-                                <button class="prompt-card" data-prompt="我准备上传一份内部运维文档，你建议知识库文档如何组织？">
-                                    <span class="prompt-card-index">C</span>
-                                    <span class="prompt-card-body">
-                                        <span class="prompt-card-title">知识库建设</span>
-                                        <span class="prompt-card-text">把手册、FAQ 和经验沉淀接到检索链路</span>
-                                    </span>
-                                </button>
-                                <button class="prompt-card" data-prompt="请模拟一次值班交接，列出今天最值得关注的风险点。">
-                                    <span class="prompt-card-index">D</span>
-                                    <span class="prompt-card-body">
-                                        <span class="prompt-card-title">值班交接</span>
-                                        <span class="prompt-card-text">生成今天最该盯住的风险摘要</span>
-                                    </span>
-                                </button>
-                            </div>
+                            <ul class="landing-meta-list">
+                                <li>统一上下文：history / memory / docs / tool outputs</li>
+                                <li>支持流式对话、知识入库、AI Ops 执行</li>
+                                <li>可无缝对接 Jaeger、Prometheus 与现有运维流程</li>
+                            </ul>
                         </div>
 
-                        <div class="hero-visual" aria-hidden="true">
-                            <div class="signal-stage">
-                                <div class="signal-ring signal-ring-outer"></div>
-                                <div class="signal-ring signal-ring-mid"></div>
-                                <div class="signal-ring signal-ring-inner"></div>
-                                <div class="signal-core">
-                                    <span>Supervisor</span>
+                        <div class="landing-hero-visual" aria-hidden="true">
+                            <div class="hero-preview">
+                                <div class="hero-preview-top">
+                                    <span class="preview-dot"></span>
+                                    <span>Incident Session Preview</span>
+                                    <span class="preview-status">Live</span>
                                 </div>
-                                <div class="signal-node signal-node-triage">
-                                    <strong>Triage</strong>
-                                    <span>route</span>
+                                <div class="hero-preview-body">
+                                    <div class="preview-thread">
+                                        <div class="preview-line"><strong>Alert:</strong> paymentservice p95 latency +47%</div>
+                                        <div class="preview-line"><strong>Triage:</strong> route to metrics + logs + knowledge</div>
+                                        <div class="preview-line"><strong>Finding:</strong> error bursts after rollout v2026.04.18</div>
+                                        <div class="preview-line"><strong>Action:</strong> rollback + verify queue consumption</div>
+                                    </div>
+                                    <div class="preview-timeline">
+                                        <div class="preview-step"><span>01</span><p>Signal intake</p></div>
+                                        <div class="preview-step"><span>02</span><p>Parallel evidence pull</p></div>
+                                        <div class="preview-step"><span>03</span><p>Cross-agent synthesis</p></div>
+                                        <div class="preview-step"><span>04</span><p>Executable report</p></div>
+                                    </div>
                                 </div>
-                                <div class="signal-node signal-node-metrics">
-                                    <strong>Metrics</strong>
-                                    <span>signals</span>
-                                </div>
-                                <div class="signal-node signal-node-log">
-                                    <strong>Log</strong>
-                                    <span>events</span>
-                                </div>
-                                <div class="signal-node signal-node-knowledge">
-                                    <strong>Knowledge</strong>
-                                    <span>evidence</span>
-                                </div>
-                                <div class="signal-node signal-node-reporter">
-                                    <strong>Reporter</strong>
-                                    <span>action</span>
-                                </div>
-                                <div class="signal-grid"></div>
                             </div>
                         </div>
-                    </div>
+                    </section>
 
-                    <div class="proof-band">
-                        <div class="proof-band-label">Why this surface works</div>
-                        <div class="proof-band-copy">
-                            <span>单一工作台聚合对话、流式分析、文档接入与 observability 跳转。</span>
-                            <span>不是仪表盘卡片墙，而是围绕一次 incident 的完整动作链。</span>
+                    <section class="landing-proof">
+                        <p class="landing-section-title">Why Teams Choose OpsCaption</p>
+                        <div class="landing-proof-grid">
+                            <article>
+                                <h3>更短的响应链路</h3>
+                                <p>把多工具跳转压缩为单会话闭环，降低值班同学的上下文切换成本。</p>
+                            </article>
+                            <article>
+                                <h3>更清晰的证据结构</h3>
+                                <p>实时信号、历史经验和知识文档分层处理，便于复盘与持续优化。</p>
+                            </article>
+                            <article>
+                                <h3>更稳定的执行质量</h3>
+                                <p>由 runtime 编排 specialist，保障流程一致性并保留 legacy fallback。</p>
+                            </article>
                         </div>
-                    </div>
+                    </section>
 
-                    <div class="story-grid">
-                        <section class="story-block">
-                            <div class="story-index">01</div>
-                            <div>
-                                <h3>从问题出发，不先让人挑工具</h3>
-                                <p>用户只需要描述现象，系统负责判断走对话、知识检索还是 AI Ops 协作链路。</p>
+                    <section class="landing-workflow" id="landingWorkflow">
+                        <p class="landing-section-title">From Alert To Action</p>
+                        <div class="workflow-track">
+                            <div class="workflow-item">
+                                <span>01</span>
+                                <div>
+                                    <h4>Signal Intake</h4>
+                                    <p>接收用户问题或告警上下文，建立 session 与任务边界。</p>
+                                </div>
                             </div>
-                        </section>
-                        <section class="story-block">
-                            <div class="story-index">02</div>
-                            <div>
-                                <h3>证据和结论严格分层</h3>
-                                <p>日志、指标、文档和历史经验保持可追溯，不把猜测和实时证据混在一起。</p>
+                            <div class="workflow-item">
+                                <span>02</span>
+                                <div>
+                                    <h4>Triage Routing</h4>
+                                    <p>通过规则驱动路由，判断是否进入多 Agent 协作模式。</p>
+                                </div>
                             </div>
-                        </section>
-                        <section class="story-block">
-                            <div class="story-index">03</div>
-                            <div>
-                                <h3>交互界面直接承接实际操作</h3>
-                                <p>欢迎页建立产品表达，进入会话后立刻切换为可工作的对话面板和执行轨迹。</p>
+                            <div class="workflow-item">
+                                <span>03</span>
+                                <div>
+                                    <h4>Parallel Specialists</h4>
+                                    <p>并发拉取 metrics、logs 与 knowledge evidence 并执行重排。</p>
+                                </div>
                             </div>
-                        </section>
-                    </div>
+                            <div class="workflow-item">
+                                <span>04</span>
+                                <div>
+                                    <h4>Reporter Output</h4>
+                                    <p>返回可执行建议、trace 线索和可回放细节，支持团队复盘。</p>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="landing-detail" id="landingDetail">
+                        <div class="landing-detail-copy">
+                            <p class="landing-section-title">Built For Real Operations</p>
+                            <h3>不是营销化 Dashboard，而是能真正承接值班和故障处置的产品界面。</h3>
+                            <p>你可以在同一页面完成问题提问、流式分析、文档入库、trace 跳转、AI Ops 执行，并把结论沉淀为下一次可复用的经验。</p>
+                        </div>
+                        <div class="landing-detail-list">
+                            <div class="detail-line">
+                                <h4>Context Budgeting</h4>
+                                <p>预算控制 history / memory / docs / tool outputs，减少噪音与上下文漂移。</p>
+                            </div>
+                            <div class="detail-line">
+                                <h4>RAG Chain</h4>
+                                <p>Rewrite + Retriever + Rerank + Evidence Assembly，提升证据质量与稳定性。</p>
+                            </div>
+                            <div class="detail-line">
+                                <h4>Runtime Reuse</h4>
+                                <p>按 dataDir 复用 AIOps runtime，避免请求级重建导致的波动和延迟。</p>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="landing-final" id="landingPricing">
+                        <h3>把 incident 响应从个人英雄主义，升级为团队可复用系统能力。</h3>
+                        <p>现在就用真实告警场景跑一轮试点，验证路由策略、检索质量和报告可执行性。</p>
+                        <div class="landing-final-actions">
+                            <button class="prompt-card prompt-card-primary" data-prompt="请给我一份 OpsCaption 接入清单，包括数据源、权限和里程碑。">获取接入清单</button>
+                            <button class="prompt-card" data-prompt="请模拟一次高优告警值班响应，并输出可执行报告。">模拟一次高优告警响应</button>
+                        </div>
+                    </section>
                 </section>
 
                 <div class="chat-messages" id="chatMessages"></div>
@@ -272,7 +289,7 @@
                 <div class="chat-input-container">
                     <div class="input-group-wrapper">
                         <div class="input-wrapper">
-                            <textarea id="messageInput" placeholder="有问题，尽管问" maxlength="1000" class="message-input" rows="1"></textarea>
+                            <textarea id="messageInput" placeholder="输入你的问题，直接开始一次真实运维对话" maxlength="1000" class="message-input" rows="1"></textarea>
                             <div class="input-bottom-bar">
                                 <div class="tools-btn-wrapper">
                                     <button class="tools-btn" id="toolsBtn" title="更多选项">
