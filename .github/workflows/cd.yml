@@ -125,9 +125,12 @@ jobs:
           }
 
           mkdir -p dist-deploy
+          mkdir -p dist-deploy/prometheus
           cp deploy/docker-compose.prod.yml dist-deploy/docker-compose.prod.yml
           cp deploy/config.prod.yaml dist-deploy/config.prod.yaml
           cp deploy/remote-deploy.sh dist-deploy/remote-deploy.sh
+          cp deploy/prometheus/prometheus.yml dist-deploy/prometheus/prometheus.yml
+          cp deploy/prometheus/opscaptionai-cost-alerts.yml dist-deploy/prometheus/opscaptionai-cost-alerts.yml
           printf '%s' "${PROD_ENV_FILE}" | tr -d '\r' > dist-deploy/.env.production
 
           domain_name="$(require_env_value DOMAIN_NAME)"
@@ -186,7 +189,7 @@ jobs:
           EOF
 
       - name: Create remote directory
-        run: ssh -p "${ECS_SSH_PORT}" "${ECS_USER}@${ECS_HOST}" "mkdir -p '${REMOTE_APP_DIR}'"
+        run: ssh -p "${ECS_SSH_PORT}" "${ECS_USER}@${ECS_HOST}" "mkdir -p '${REMOTE_APP_DIR}' '${REMOTE_APP_DIR}/prometheus'"
 
       - name: Upload deployment files
         run: |
@@ -196,6 +199,8 @@ jobs:
           scp -P "${ECS_SSH_PORT}" dist-deploy/.env.production "${ECS_USER}@${ECS_HOST}:${REMOTE_APP_DIR}/.env.production"
           scp -P "${ECS_SSH_PORT}" dist-deploy/.acr-password "${ECS_USER}@${ECS_HOST}:${REMOTE_APP_DIR}/.acr-password"
           scp -P "${ECS_SSH_PORT}" dist-deploy/release.env "${ECS_USER}@${ECS_HOST}:${REMOTE_APP_DIR}/release.env"
+          scp -P "${ECS_SSH_PORT}" dist-deploy/prometheus/prometheus.yml "${ECS_USER}@${ECS_HOST}:${REMOTE_APP_DIR}/prometheus/prometheus.yml"
+          scp -P "${ECS_SSH_PORT}" dist-deploy/prometheus/opscaptionai-cost-alerts.yml "${ECS_USER}@${ECS_HOST}:${REMOTE_APP_DIR}/prometheus/opscaptionai-cost-alerts.yml"
 
       - name: Deploy on ECS
         run: |
