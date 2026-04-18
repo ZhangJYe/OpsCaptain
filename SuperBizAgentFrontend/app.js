@@ -1767,7 +1767,7 @@ class SuperBizAgentApp {
     
     // 检查并设置居中样式
     applyStoredTheme() {
-        const stored = localStorage.getItem('opscaptain-theme-v2');
+        const stored = this.readStorage('opscaptain-theme-v2');
         if (stored === 'dark') {
             document.documentElement.setAttribute('data-theme', 'dark');
             this.updateThemeIcons('dark');
@@ -1781,12 +1781,31 @@ class SuperBizAgentApp {
         const isLight = document.documentElement.getAttribute('data-theme') === 'light';
         if (isLight) {
             document.documentElement.setAttribute('data-theme', 'dark');
-            localStorage.setItem('opscaptain-theme-v2', 'dark');
+            this.writeStorage('opscaptain-theme-v2', 'dark');
             this.updateThemeIcons('dark');
         } else {
             document.documentElement.setAttribute('data-theme', 'light');
-            localStorage.setItem('opscaptain-theme-v2', 'light');
+            this.writeStorage('opscaptain-theme-v2', 'light');
             this.updateThemeIcons('light');
+        }
+    }
+
+    readStorage(key) {
+        try {
+            return localStorage.getItem(key);
+        } catch (error) {
+            console.warn('读取本地存储失败:', key, error);
+            return null;
+        }
+    }
+
+    writeStorage(key, value) {
+        try {
+            localStorage.setItem(key, value);
+            return true;
+        } catch (error) {
+            console.warn('写入本地存储失败:', key, error);
+            return false;
         }
     }
 
@@ -2289,12 +2308,19 @@ function bootstrapSuperBizAgentApp() {
     if (window.__superBizAgentAppBooted) {
         return;
     }
-    window.__superBizAgentAppBooted = true;
-    window.__superBizAgentApp = new SuperBizAgentApp();
+    try {
+        const app = new SuperBizAgentApp();
+        window.__superBizAgentApp = app;
+        window.__superBizAgentAppBooted = true;
+    } catch (error) {
+        window.__superBizAgentAppBooted = false;
+        window.__superBizAgentApp = null;
+        console.error('SuperBizAgentApp 初始化失败:', error);
+    }
 }
 
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', bootstrapSuperBizAgentApp);
-} else {
+document.addEventListener('DOMContentLoaded', bootstrapSuperBizAgentApp);
+
+if (document.readyState !== 'loading') {
     bootstrapSuperBizAgentApp();
 }
