@@ -64,8 +64,7 @@ EOF
     }
 EOF
 
-    if [ -n "$prometheus_address" ]; then
-      cat <<EOF
+    cat <<EOF
 
     @prometheusRoot path ${app_base_path}/prometheus
     redir @prometheusRoot ${app_base_path}/prometheus/ 308
@@ -73,16 +72,6 @@ EOF
         reverse_proxy $prometheus_address
     }
 EOF
-    else
-      cat <<EOF
-
-    @prometheusRoot path ${app_base_path}/prometheus
-    redir @prometheusRoot ${app_base_path}/prometheus/ 308
-    handle ${app_base_path}/prometheus/* {
-        respond "Prometheus is not configured. Set PROMETHEUS_ADDRESS in .env.production." 503
-    }
-EOF
-    fi
 
     cat <<EOF
 
@@ -103,8 +92,7 @@ EOF
     }
 EOF
 
-  if [ -n "$prometheus_address" ]; then
-    cat <<EOF
+  cat <<EOF
 
     @prometheusRoot path /prometheus
     redir @prometheusRoot /prometheus/ 308
@@ -112,16 +100,6 @@ EOF
         reverse_proxy $prometheus_address
     }
 EOF
-  else
-    cat <<EOF
-
-    @prometheusRoot path /prometheus
-    redir @prometheusRoot /prometheus/ 308
-    handle /prometheus/* {
-        respond "Prometheus is not configured. Set PROMETHEUS_ADDRESS in .env.production." 503
-    }
-EOF
-  fi
 
   cat <<'EOF'
 
@@ -158,6 +136,10 @@ tls_email="$(normalize_optional_value "$(sed -n 's/^TLS_EMAIL=//p' ./.env.produc
 auth_secret="$(normalize_optional_value "$(sed -n 's/^AUTH_JWT_SECRET=//p' ./.env.production | head -n 1)")"
 prometheus_address="$(normalize_optional_value "$(sed -n 's/^PROMETHEUS_ADDRESS=//p' ./.env.production | head -n 1)")"
 app_base_path="$(normalize_path_prefix "$(sed -n 's/^APP_BASE_PATH=//p' ./.env.production | head -n 1)")"
+
+if [ -z "$prometheus_address" ]; then
+  prometheus_address="http://prometheus:9090"
+fi
 
 if [ -n "$app_base_path" ]; then
   jaeger_base_path="${app_base_path}/jaeger"
@@ -210,7 +192,7 @@ fi
 $COMPOSE pull
 if ! $COMPOSE up -d --wait --wait-timeout 180 --remove-orphans; then
   $COMPOSE ps || true
-  $COMPOSE logs --tail=120 backend frontend caddy || true
+  $COMPOSE logs --tail=120 backend frontend caddy jaeger prometheus || true
   echo "compose deployment failed"
   exit 1
 fi
@@ -229,7 +211,7 @@ until $COMPOSE exec -T backend wget -qO- http://127.0.0.1:8000/readyz >/dev/null
   attempt=$((attempt + 1))
   if [ "$attempt" -ge 15 ]; then
     $COMPOSE ps || true
-    $COMPOSE logs --tail=120 backend frontend caddy || true
+    $COMPOSE logs --tail=120 backend frontend caddy jaeger prometheus || true
     echo "backend readiness check failed"
     exit 1
   fi
