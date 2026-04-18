@@ -124,6 +124,29 @@ jobs:
             printf '%s' "$value"
           }
 
+          normalize_optional_env_value() {
+            key="$1"
+            fallback="$2"
+            value="$(trim_value "$(read_env_value "$key")")"
+            case "$value" in
+              ""|'${'*'}')
+                printf '%s' "$fallback"
+                ;;
+              *)
+                printf '%s' "$value"
+                ;;
+            esac
+          }
+
+          set_env_value() {
+            key="$1"
+            value="$2"
+            tmp_file="dist-deploy/.env.production.tmp"
+            grep -v "^${key}=" dist-deploy/.env.production > "$tmp_file" || true
+            printf '%s=%s\n' "$key" "$value" >> "$tmp_file"
+            mv "$tmp_file" dist-deploy/.env.production
+          }
+
           mkdir -p dist-deploy
           mkdir -p dist-deploy/prometheus
           cp deploy/docker-compose.prod.yml dist-deploy/docker-compose.prod.yml
@@ -132,6 +155,11 @@ jobs:
           cp deploy/prometheus/prometheus.yml dist-deploy/prometheus/prometheus.yml
           cp deploy/prometheus/opscaptionai-cost-alerts.yml dist-deploy/prometheus/opscaptionai-cost-alerts.yml
           printf '%s' "${PROD_ENV_FILE}" | tr -d '\r' > dist-deploy/.env.production
+
+          jaeger_endpoint="$(normalize_optional_env_value JAEGER_ENDPOINT http://jaeger:14268/api/traces)"
+          prometheus_address="$(normalize_optional_env_value PROMETHEUS_ADDRESS http://prometheus:9090)"
+          set_env_value JAEGER_ENDPOINT "$jaeger_endpoint"
+          set_env_value PROMETHEUS_ADDRESS "$prometheus_address"
 
           domain_name="$(require_env_value DOMAIN_NAME)"
           tls_email="$(require_env_value TLS_EMAIL)"

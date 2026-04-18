@@ -16,6 +16,19 @@ normalize_optional_value() {
   esac
 }
 
+read_env_value() {
+  key="$1"
+  awk -F= -v key="$key" '
+    $1 == key {
+      sub(/^[^=]*=/, "", $0)
+      value = $0
+    }
+    END {
+      print value
+    }
+  ' ./.env.production
+}
+
 normalize_path_prefix() {
   value="$(normalize_optional_value "${1:-}")"
   case "$value" in
@@ -151,12 +164,12 @@ set -a
 . ./release.env
 set +a
 
-domain_name="$(normalize_optional_value "$(sed -n 's/^DOMAIN_NAME=//p' ./.env.production | head -n 1)")"
-tls_email="$(normalize_optional_value "$(sed -n 's/^TLS_EMAIL=//p' ./.env.production | head -n 1)")"
-auth_secret="$(normalize_optional_value "$(sed -n 's/^AUTH_JWT_SECRET=//p' ./.env.production | head -n 1)")"
-jaeger_endpoint="$(normalize_optional_value "$(sed -n 's/^JAEGER_ENDPOINT=//p' ./.env.production | head -n 1)")"
-prometheus_address="$(normalize_optional_value "$(sed -n 's/^PROMETHEUS_ADDRESS=//p' ./.env.production | head -n 1)")"
-app_base_path="$(normalize_path_prefix "$(sed -n 's/^APP_BASE_PATH=//p' ./.env.production | head -n 1)")"
+domain_name="$(normalize_optional_value "$(read_env_value DOMAIN_NAME)")"
+tls_email="$(normalize_optional_value "$(read_env_value TLS_EMAIL)")"
+auth_secret="$(normalize_optional_value "$(read_env_value AUTH_JWT_SECRET)")"
+jaeger_endpoint="$(normalize_optional_value "$(read_env_value JAEGER_ENDPOINT)")"
+prometheus_address="$(normalize_optional_value "$(read_env_value PROMETHEUS_ADDRESS)")"
+app_base_path="$(normalize_path_prefix "$(read_env_value APP_BASE_PATH)")"
 
 if [ -z "$jaeger_endpoint" ]; then
   jaeger_endpoint="http://jaeger:14268/api/traces"
