@@ -9,25 +9,24 @@ on:
 permissions:
   contents: read
 
-env:
-  REGISTRY: ${{ secrets.ACR_REGISTRY }}
-  NAMESPACE: ${{ secrets.ACR_NAMESPACE }}
-  ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
-  ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
-  BACKEND_IMAGE: ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/opscaptain-backend
-  FRONTEND_IMAGE: ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/opscaptain-frontend
-  ECS_HOST: ${{ secrets.ECS_HOST }}
-  ECS_USER: ${{ secrets.ECS_USER }}
-  ECS_SSH_PORT: ${{ secrets.ECS_SSH_PORT }}
-  ECS_SSH_PRIVATE_KEY: ${{ secrets.ECS_SSH_PRIVATE_KEY }}
-  ECS_SSH_PRIVATE_KEY_BASE64: ${{ secrets.ECS_SSH_PRIVATE_KEY_BASE64 }}
-  REMOTE_APP_DIR: ${{ secrets.ECS_APP_DIR }}
-  PROD_ENV_FILE: ${{ secrets.PROD_ENV_FILE }}
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
     environment: production
+    env:
+      REGISTRY: ${{ secrets.ACR_REGISTRY }}
+      NAMESPACE: ${{ secrets.ACR_NAMESPACE }}
+      ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+      ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
+      BACKEND_IMAGE: ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/opscaptain-backend
+      FRONTEND_IMAGE: ${{ secrets.ACR_REGISTRY }}/${{ secrets.ACR_NAMESPACE }}/opscaptain-frontend
+      ECS_HOST: ${{ secrets.ECS_HOST }}
+      ECS_USER: ${{ secrets.ECS_USER }}
+      ECS_SSH_PORT: ${{ secrets.ECS_SSH_PORT }}
+      ECS_SSH_PRIVATE_KEY: ${{ secrets.ECS_SSH_PRIVATE_KEY }}
+      ECS_SSH_PRIVATE_KEY_BASE64: ${{ secrets.ECS_SSH_PRIVATE_KEY_BASE64 }}
+      REMOTE_APP_DIR: ${{ secrets.ECS_APP_DIR }}
+      PROD_ENV_FILE: ${{ secrets.PROD_ENV_FILE }}
 
     steps:
       - name: Checkout repository
