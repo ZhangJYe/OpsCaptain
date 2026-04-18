@@ -32,7 +32,7 @@ class SuperBizAgentApp {
             return configuredBase.replace(/\/+$/, '');
         }
 
-        return '/api';
+        return './api';
     }
 
     resolveAuthConfig() {
@@ -102,10 +102,10 @@ class SuperBizAgentApp {
         const configured = runtimeConfig.observability || {};
 
         return {
-            backendReadyUrl: (configured.backendReadyUrl || '/readyz').trim() || '/readyz',
-            jaegerUrl: (configured.jaegerUrl || '/jaeger/').trim() || '/jaeger/',
-            prometheusUrl: (configured.prometheusUrl || '/prometheus/').trim() || '/prometheus/',
-            prometheusHealthUrl: (configured.prometheusHealthUrl || '/prometheus/-/healthy').trim() || '/prometheus/-/healthy',
+            backendReadyUrl: (configured.backendReadyUrl || './readyz').trim() || './readyz',
+            jaegerUrl: (configured.jaegerUrl || './jaeger/').trim() || './jaeger/',
+            prometheusUrl: (configured.prometheusUrl || './prometheus/').trim() || './prometheus/',
+            prometheusHealthUrl: (configured.prometheusHealthUrl || './prometheus/-/healthy').trim() || './prometheus/-/healthy',
         };
     }
 

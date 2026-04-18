@@ -16,12 +16,76 @@ normalize_optional_value() {
   esac
 }
 
+normalize_path_prefix() {
+  value="$(normalize_optional_value "${1:-}")"
+  case "$value" in
+    "")
+      printf ''
+      ;;
+    "/")
+      printf ''
+      ;;
+    *)
+      case "$value" in
+        /*) ;;
+        *) value="/$value" ;;
+      esac
+      value="$(printf '%s' "$value" | sed 's#/\+$##')"
+      if [ "$value" = "/" ]; then
+        printf ''
+      else
+        printf '%s' "$value"
+      fi
+      ;;
+  esac
+}
+
 write_site_block() {
   site_label="$1"
 
   printf '%s {\n' "$site_label"
   cat <<EOF
     encode zstd gzip
+EOF
+
+  if [ -n "$app_base_path" ]; then
+    cat <<EOF
+
+    @siteRoot path /
+    redir @siteRoot ${app_base_path}/ 308
+
+    @appRoot path ${app_base_path}
+    redir @appRoot ${app_base_path}/ 308
+
+    @jaegerRoot path ${app_base_path}/jaeger
+    redir @jaegerRoot ${app_base_path}/jaeger/ 308
+    handle_path ${app_base_path}/jaeger/* {
+        reverse_proxy jaeger:16686
+    }
+EOF
+
+    if [ -n "$prometheus_address" ]; then
+      cat <<EOF
+
+    @prometheusRoot path ${app_base_path}/prometheus
+    redir @prometheusRoot ${app_base_path}/prometheus/ 308
+    handle_path ${app_base_path}/prometheus/* {
+        reverse_proxy $prometheus_address
+    }
+EOF
+    fi
+
+    cat <<EOF
+
+    handle_path ${app_base_path}/* {
+        reverse_proxy frontend:80
+    }
+}
+EOF
+    return
+  fi
+
+  cat <<EOF
 
     @jaegerRoot path /jaeger
     redir @jaegerRoot /jaeger/ 308
@@ -74,6 +138,7 @@ domain_name="$(normalize_optional_value "$(sed -n 's/^DOMAIN_NAME=//p' ./.env.pr
 tls_email="$(normalize_optional_value "$(sed -n 's/^TLS_EMAIL=//p' ./.env.production | head -n 1)")"
 auth_secret="$(normalize_optional_value "$(sed -n 's/^AUTH_JWT_SECRET=//p' ./.env.production | head -n 1)")"
 prometheus_address="$(normalize_optional_value "$(sed -n 's/^PROMETHEUS_ADDRESS=//p' ./.env.production | head -n 1)")"
+app_base_path="$(normalize_path_prefix "$(sed -n 's/^APP_BASE_PATH=//p' ./.env.production | head -n 1)")"
 
 case "$auth_secret" in
   ""|"replace-with-a-32-char-secret"|"your-jwt-secret"|replace-with*|your-*)
