@@ -29,7 +29,7 @@ func Init(ctx context.Context) (func(context.Context) error, error) {
 		return func(context.Context) error { return nil }, nil
 	}
 
-	endpoint := strings.TrimSpace(configString(ctx, "tracing.jaeger_endpoint"))
+	endpoint := normalizeOptionalEndpoint(configString(ctx, "tracing.jaeger_endpoint"))
 	if endpoint == "" {
 		otel.SetTracerProvider(oteltrace.NewNoopTracerProvider())
 		return func(context.Context) error { return nil }, nil
@@ -37,7 +37,9 @@ func Init(ctx context.Context) (func(context.Context) error, error) {
 
 	exporter, err := jaeger.New(jaeger.WithCollectorEndpoint(jaeger.WithEndpoint(endpoint)))
 	if err != nil {
-		return nil, err
+		g.Log().Warningf(ctx, "invalid tracing.jaeger_endpoint %q, tracing disabled: %v", endpoint, err)
+		otel.SetTracerProvider(oteltrace.NewNoopTracerProvider())
+		return func(context.Context) error { return nil }, nil
 	}
 
 	provider := sdktrace.NewTracerProvider(
@@ -117,6 +119,17 @@ func configString(ctx context.Context, key string) string {
 		return ""
 	}
 	return v.String()
+}
+
+func normalizeOptionalEndpoint(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if strings.Contains(value, "${") && strings.Contains(value, "}") {
+		return ""
+	}
+	return value
 }
 
 func environmentName() string {

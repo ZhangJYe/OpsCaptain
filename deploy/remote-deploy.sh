@@ -134,12 +134,20 @@ set +a
 domain_name="$(normalize_optional_value "$(sed -n 's/^DOMAIN_NAME=//p' ./.env.production | head -n 1)")"
 tls_email="$(normalize_optional_value "$(sed -n 's/^TLS_EMAIL=//p' ./.env.production | head -n 1)")"
 auth_secret="$(normalize_optional_value "$(sed -n 's/^AUTH_JWT_SECRET=//p' ./.env.production | head -n 1)")"
+jaeger_endpoint="$(normalize_optional_value "$(sed -n 's/^JAEGER_ENDPOINT=//p' ./.env.production | head -n 1)")"
 prometheus_address="$(normalize_optional_value "$(sed -n 's/^PROMETHEUS_ADDRESS=//p' ./.env.production | head -n 1)")"
 app_base_path="$(normalize_path_prefix "$(sed -n 's/^APP_BASE_PATH=//p' ./.env.production | head -n 1)")"
+
+if [ -z "$jaeger_endpoint" ]; then
+  jaeger_endpoint="http://jaeger:14268/api/traces"
+fi
 
 if [ -z "$prometheus_address" ]; then
   prometheus_address="http://prometheus:9090"
 fi
+
+export JAEGER_ENDPOINT="$jaeger_endpoint"
+export PROMETHEUS_ADDRESS="$prometheus_address"
 
 if [ -n "$app_base_path" ]; then
   jaeger_base_path="${app_base_path}/jaeger"
