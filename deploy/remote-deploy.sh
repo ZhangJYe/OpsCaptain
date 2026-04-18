@@ -114,6 +114,7 @@ EOF
 
 cleanup() {
   rm -f "./${ACR_PASSWORD_FILE:-.acr-password}"
+  rm -f "${caddyfile_tmp_path:-}"
 }
 
 trap cleanup EXIT
@@ -152,6 +153,7 @@ if [ "${#auth_secret}" -lt 32 ]; then
   exit 1
 fi
 
+caddyfile_tmp_path="$(mktemp "${TMPDIR:-/tmp}/opscaptain-caddy.XXXXXX")"
 {
   if [ -n "$tls_email" ]; then
     echo "{"
@@ -166,7 +168,15 @@ fi
     echo
     write_site_block "$domain_name"
   fi
-} > ./Caddyfile.generated
+} > "$caddyfile_tmp_path"
+
+caddy_config_changed=1
+if [ -f ./Caddyfile.generated ] && cmp -s "$caddyfile_tmp_path" ./Caddyfile.generated; then
+  caddy_config_changed=0
+else
+  mv "$caddyfile_tmp_path" ./Caddyfile.generated
+  caddyfile_tmp_path=''
+fi
 
 if [ -n "${ACR_PASSWORD_FILE:-}" ] && [ -f "./${ACR_PASSWORD_FILE}" ]; then
   docker login "$ACR_REGISTRY" -u "$ACR_USERNAME" --password-stdin < "./${ACR_PASSWORD_FILE}"
@@ -178,6 +188,15 @@ if ! $COMPOSE up -d --wait --wait-timeout 180 --remove-orphans; then
   $COMPOSE logs --tail=120 backend frontend caddy || true
   echo "compose deployment failed"
   exit 1
+fi
+
+if [ "$caddy_config_changed" -eq 1 ]; then
+  if ! $COMPOSE up -d --force-recreate --no-deps caddy; then
+    $COMPOSE ps || true
+    $COMPOSE logs --tail=120 caddy || true
+    echo "caddy reload failed"
+    exit 1
+  fi
 fi
 
 attempt=0

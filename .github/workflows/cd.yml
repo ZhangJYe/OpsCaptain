@@ -100,11 +100,83 @@ jobs:
 
       - name: Prepare deployment bundle
         run: |
+          trim_value() {
+            printf '%s' "${1:-}" | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
+          }
+
+          read_env_value() {
+            key="$1"
+            awk -F= -v key="$key" '
+              $1 == key {
+                sub(/^[^=]*=/, "", $0)
+                print $0
+                exit
+              }
+            ' dist-deploy/.env.production
+          }
+
+          require_env_value() {
+            key="$1"
+            value="$(trim_value "$(read_env_value "$key")")"
+            if [ -z "$value" ]; then
+              echo "::error::PROD_ENV_FILE is missing required key: $key"
+              exit 1
+            fi
+            printf '%s' "$value"
+          }
+
           mkdir -p dist-deploy
           cp deploy/docker-compose.prod.yml dist-deploy/docker-compose.prod.yml
           cp deploy/config.prod.yaml dist-deploy/config.prod.yaml
           cp deploy/remote-deploy.sh dist-deploy/remote-deploy.sh
           printf '%s' "${PROD_ENV_FILE}" | tr -d '\r' > dist-deploy/.env.production
+
+          domain_name="$(require_env_value DOMAIN_NAME)"
+          tls_email="$(require_env_value TLS_EMAIL)"
+          cors_allowed_origin="$(require_env_value CORS_ALLOWED_ORIGIN)"
+          app_base_path="$(trim_value "$(read_env_value APP_BASE_PATH)")"
+
+          if ! printf '%s' "$tls_email" | grep -Eq '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$'; then
+            echo "::error::TLS_EMAIL in PROD_ENV_FILE is invalid."
+            exit 1
+          fi
+
+          if ! printf '%s' "$cors_allowed_origin" | grep -Eq '^https?://'; then
+            echo "::error::CORS_ALLOWED_ORIGIN must start with http:// or https://."
+            exit 1
+          fi
+
+          cors_origin_host="$(printf '%s' "$cors_allowed_origin" | sed -E 's#^[a-zA-Z]+://([^/]+).*$#\1#')"
+          if [ "$cors_origin_host" != "$domain_name" ]; then
+            echo "::error::CORS_ALLOWED_ORIGIN host must exactly match DOMAIN_NAME."
+            exit 1
+          fi
+
+          if [ -n "$app_base_path" ] && ! printf '%s' "$app_base_path" | grep -Eq '^/[^[:space:]]*$'; then
+            echo "::error::APP_BASE_PATH must start with / and contain no spaces."
+            exit 1
+          fi
+
+          echo "Deploying DOMAIN_NAME=$domain_name"
+          if [ -n "$app_base_path" ]; then
+            echo "Deploying APP_BASE_PATH=$app_base_path"
+          else
+            echo "Deploying APP_BASE_PATH=<root>"
+          fi
+          echo "Deploying CORS_ALLOWED_ORIGIN=$cors_allowed_origin"
+
+          {
+            echo "### Deployment Target"
+            echo
+            printf -- "- DOMAIN_NAME: `%s`\n" "$domain_name"
+            if [ -n "$app_base_path" ]; then
+              printf -- "- APP_BASE_PATH: `%s`\n" "$app_base_path"
+            else
+              echo "- APP_BASE_PATH: `<root>`"
+            fi
+            printf -- "- CORS_ALLOWED_ORIGIN: `%s`\n" "$cors_allowed_origin"
+          } >> "$GITHUB_STEP_SUMMARY"
+
           printf '%s' "${ACR_PASSWORD}" > dist-deploy/.acr-password
           cat <<EOF > dist-deploy/release.env
           BACKEND_IMAGE=${BACKEND_IMAGE}:${GITHUB_SHA}
