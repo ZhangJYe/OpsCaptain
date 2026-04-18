@@ -2,6 +2,8 @@ services:
   jaeger:
     image: jaegertracing/all-in-one:1.57
     restart: unless-stopped
+    environment:
+      QUERY_BASE_PATH: ${JAEGER_BASE_PATH:-/jaeger}
     expose:
       - "14268"
     ports:

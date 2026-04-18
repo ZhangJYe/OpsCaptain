@@ -59,7 +59,7 @@ EOF
 
     @jaegerRoot path ${app_base_path}/jaeger
     redir @jaegerRoot ${app_base_path}/jaeger/ 308
-    handle_path ${app_base_path}/jaeger/* {
+    handle ${app_base_path}/jaeger/* {
         reverse_proxy jaeger:16686
     }
 EOF
@@ -71,6 +71,15 @@ EOF
     redir @prometheusRoot ${app_base_path}/prometheus/ 308
     handle_path ${app_base_path}/prometheus/* {
         reverse_proxy $prometheus_address
+    }
+EOF
+    else
+      cat <<EOF
+
+    @prometheusRoot path ${app_base_path}/prometheus
+    redir @prometheusRoot ${app_base_path}/prometheus/ 308
+    handle ${app_base_path}/prometheus/* {
+        respond "Prometheus is not configured. Set PROMETHEUS_ADDRESS in .env.production." 503
     }
 EOF
     fi
@@ -89,7 +98,7 @@ EOF
 
     @jaegerRoot path /jaeger
     redir @jaegerRoot /jaeger/ 308
-    handle_path /jaeger/* {
+    handle /jaeger/* {
         reverse_proxy jaeger:16686
     }
 EOF
@@ -101,6 +110,15 @@ EOF
     redir @prometheusRoot /prometheus/ 308
     handle_path /prometheus/* {
         reverse_proxy $prometheus_address
+    }
+EOF
+  else
+    cat <<EOF
+
+    @prometheusRoot path /prometheus
+    redir @prometheusRoot /prometheus/ 308
+    handle /prometheus/* {
+        respond "Prometheus is not configured. Set PROMETHEUS_ADDRESS in .env.production." 503
     }
 EOF
   fi
@@ -140,6 +158,13 @@ tls_email="$(normalize_optional_value "$(sed -n 's/^TLS_EMAIL=//p' ./.env.produc
 auth_secret="$(normalize_optional_value "$(sed -n 's/^AUTH_JWT_SECRET=//p' ./.env.production | head -n 1)")"
 prometheus_address="$(normalize_optional_value "$(sed -n 's/^PROMETHEUS_ADDRESS=//p' ./.env.production | head -n 1)")"
 app_base_path="$(normalize_path_prefix "$(sed -n 's/^APP_BASE_PATH=//p' ./.env.production | head -n 1)")"
+
+if [ -n "$app_base_path" ]; then
+  jaeger_base_path="${app_base_path}/jaeger"
+else
+  jaeger_base_path="/jaeger"
+fi
+export JAEGER_BASE_PATH="$jaeger_base_path"
 
 case "$auth_secret" in
   ""|"replace-with-a-32-char-secret"|"your-jwt-secret"|replace-with*|your-*)

@@ -426,7 +426,10 @@ class SuperBizAgentApp {
         this.toggleSidebar(false);
     }
 
-    async probeObservabilityEndpoint(url) {
+    async probeObservabilityEndpoint(url, options = {}) {
+        const requiredAll = Array.isArray(options.requiredAll) ? options.requiredAll : [];
+        const forbiddenAny = Array.isArray(options.forbiddenAny) ? options.forbiddenAny : [];
+        const expectedContentType = String(options.expectedContentType || '').toLowerCase();
         try {
             const response = await fetch(url, {
                 method: 'GET',
@@ -435,9 +438,25 @@ class SuperBizAgentApp {
                     'Cache-Control': 'no-cache',
                 },
             });
+            const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+            let bodyText = '';
+            if (requiredAll.length > 0 || forbiddenAny.length > 0 || expectedContentType) {
+                bodyText = (await response.text()).toLowerCase();
+            }
+            let ok = response.ok;
+            if (ok && expectedContentType) {
+                ok = contentType.includes(expectedContentType);
+            }
+            if (ok && requiredAll.length > 0) {
+                ok = requiredAll.every((keyword) => bodyText.includes(String(keyword).toLowerCase()));
+            }
+            if (ok && forbiddenAny.length > 0) {
+                ok = !forbiddenAny.some((keyword) => bodyText.includes(String(keyword).toLowerCase()));
+            }
             return {
-                ok: response.ok,
+                ok,
                 status: response.status,
+                contentType,
             };
         } catch (error) {
             return {
@@ -478,8 +497,16 @@ class SuperBizAgentApp {
 
         const [backend, jaeger, prometheus] = await Promise.all([
             this.probeObservabilityEndpoint(this.observability.backendReadyUrl),
-            this.probeObservabilityEndpoint(this.observability.jaegerUrl),
-            this.probeObservabilityEndpoint(this.observability.prometheusHealthUrl),
+            this.probeObservabilityEndpoint(this.observability.jaegerUrl, {
+                expectedContentType: 'text/html',
+                requiredAll: ['jaeger ui'],
+                forbiddenAny: ['opscaption'],
+            }),
+            this.probeObservabilityEndpoint(this.observability.prometheusHealthUrl, {
+                expectedContentType: 'text/plain',
+                requiredAll: ['prometheus', 'healthy'],
+                forbiddenAny: ['opscaption'],
+            }),
         ]);
 
         this.updateObservabilityCard(
