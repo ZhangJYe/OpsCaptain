@@ -1,6 +1,6 @@
 .chat-input-container {
     width: 100%;
-    padding: 0 24px 28px;
+    padding: 0 28px 24px;
     flex-shrink: 0;
 }
 
@@ -12,15 +12,17 @@
 }
 
 .input-wrapper {
-    background: var(--bg-elevated);
-    border: 1px solid var(--border-strong);
-    border-radius: 28px;
+    background: var(--bg-panel-strong);
+    border: 1px solid var(--line-soft);
+    border-radius: 30px;
     box-shadow: var(--shadow-soft);
-    padding: 10px 12px 10px 14px;
+    padding: 10px 12px 10px 16px;
+    backdrop-filter: blur(18px);
 }
 
 .input-wrapper:focus-within {
-    border-color: var(--accent);
+    border-color: rgba(203, 131, 69, 0.28);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.24), 0 0 0 1px rgba(203, 131, 69, 0.08);
 }
 
 .composer-header {
@@ -37,7 +39,7 @@
     background: transparent;
     color: var(--text-main);
     font-size: 1rem;
-    line-height: 1.6;
+    line-height: 1.7;
     padding: 10px 6px 12px;
 }
 
@@ -63,8 +65,8 @@
 
 .tools-btn,
 .send-btn-circle {
-    width: 38px;
-    height: 38px;
+    width: 40px;
+    height: 40px;
     border: none;
     border-radius: 999px;
     display: inline-flex;
@@ -74,12 +76,13 @@
 }
 
 .tools-btn {
-    background: var(--bg-user);
+    background: var(--bg-muted);
     color: var(--text-main);
+    border: 1px solid var(--line-soft);
 }
 
 .tools-btn:hover {
-    background: var(--bg-sidebar-hover);
+    background: var(--bg-user);
 }
 
 .tools-icon {
@@ -88,21 +91,21 @@
 }
 
 .mode-selector-btn {
-    height: 38px;
-    border: 1px solid var(--border-soft);
+    min-height: 40px;
+    border: 1px solid var(--line-soft);
     border-radius: 999px;
-    background: var(--bg-elevated);
+    background: var(--bg-muted);
     color: var(--text-main);
     display: inline-flex;
     align-items: center;
     gap: 6px;
     padding: 0 14px;
     font-size: 0.88rem;
-    font-weight: 500;
+    font-weight: 600;
 }
 
 .mode-selector-btn:hover {
-    background: var(--bg-sidebar-hover);
+    background: var(--bg-user);
 }
 
 .dropdown-arrow {
@@ -119,15 +122,16 @@
 .mode-dropdown {
     position: absolute;
     bottom: calc(100% + 10px);
-    background: var(--bg-elevated);
-    border: 1px solid var(--border-soft);
-    border-radius: 16px;
-    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
+    background: var(--bg-panel-strong);
+    border: 1px solid var(--line-soft);
+    border-radius: 18px;
+    box-shadow: var(--shadow-soft);
     opacity: 0;
     visibility: hidden;
     transform: translateY(8px);
     transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s ease;
     z-index: 40;
+    backdrop-filter: blur(18px);
 }
 
 .tools-menu {
@@ -157,7 +161,7 @@
 
 .tools-menu-item,
 .dropdown-item {
-    border-radius: 12px;
+    border-radius: 14px;
     padding: 10px 12px;
     transition: background 0.18s ease;
 }
@@ -170,7 +174,7 @@
 
 .tools-menu-item:hover,
 .dropdown-item:hover {
-    background: var(--bg-sidebar-hover);
+    background: var(--bg-user);
 }
 
 .tools-menu-item svg {
@@ -180,7 +184,7 @@
 }
 
 .dropdown-item.active {
-    background: rgba(16, 163, 127, 0.1);
+    background: rgba(203, 131, 69, 0.12);
 }
 
 .dropdown-item-main {
@@ -189,7 +193,7 @@
     justify-content: space-between;
     gap: 10px;
     font-size: 0.9rem;
-    font-weight: 500;
+    font-weight: 600;
 }
 
 .dropdown-item-sub {
@@ -204,24 +208,26 @@
     justify-content: center;
     padding: 2px 8px;
     border-radius: 999px;
-    background: rgba(16, 163, 127, 0.12);
+    background: rgba(203, 131, 69, 0.14);
     color: var(--accent-strong);
     font-size: 0.7rem;
-    font-weight: 600;
+    font-weight: 700;
 }
 
 .send-btn-circle {
-    background: var(--accent);
+    background: linear-gradient(135deg, var(--accent), var(--accent-strong));
     color: #fff;
+    box-shadow: 0 12px 24px rgba(203, 131, 69, 0.24);
 }
 
 .send-btn-circle:hover {
     transform: translateY(-1px);
-    filter: brightness(1.1);
+    filter: brightness(1.04);
 }
 
 .send-btn-circle.stop-mode {
     background: var(--text-muted);
+    box-shadow: none;
 }
 
 .send-btn-circle svg {
@@ -234,4 +240,33 @@
     text-align: center;
     font-size: 0.8rem;
     color: var(--text-muted);
+}
+
+@media (max-width: 720px) {
+    .chat-input-container {
+        padding: 0 16px 18px;
+    }
+
+    .input-wrapper {
+        border-radius: 24px;
+        padding: 10px;
+    }
+
+    .input-bottom-bar {
+        flex-wrap: wrap;
+    }
+
+    .right-actions {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .mode-dropdown,
+    .tools-menu {
+        min-width: min(88vw, 240px);
+    }
+
+    .composer-footnote {
+        font-size: 0.76rem;
+    }
 }

@@ -4,17 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>OpsCaption</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;800&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="theme.css">
     <link rel="stylesheet" href="layout.css">
     <link rel="stylesheet" href="chat.css">
     <link rel="stylesheet" href="input.css">
     <link rel="stylesheet" href="components.css">
-    <!-- Markdown 渲染库 -->
     <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
-    <!-- 代码高亮库（可选） -->
     <link rel="stylesheet" id="hljsTheme" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css">
     <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/es/highlight.min.js"></script>
-    <!-- XSS 防护库 -->
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.8/dist/purify.min.js"></script>
 </head>
 <body>
@@ -23,10 +23,10 @@
         <aside class="sidebar">
             <div class="sidebar-header">
                 <div class="sidebar-brand">
-                    <div class="brand-mark">O</div>
+                    <div class="brand-mark">OC</div>
                     <div class="brand-copy">
                         <h2 class="sidebar-title">OpsCaption</h2>
-                        <p class="sidebar-subtitle">面向排障、知识库与 AI Ops 的智能助手</p>
+                        <p class="sidebar-subtitle">Agent runtime for incident command</p>
                     </div>
                 </div>
                 <button class="sidebar-close-btn" id="sidebarCloseBtn" title="关闭侧栏">
@@ -37,32 +37,36 @@
             </div>
 
             <div class="sidebar-content">
+                <div class="sidebar-intro">
+                    <div class="sidebar-kicker">Control Room</div>
+                    <p>统一接入排障问答、知识检索、文档入库与 AI Ops 执行流。</p>
+                </div>
+
                 <button class="new-chat-btn" id="newChatBtn">
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M12 5V19M5 12H19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
                     </svg>
-                    <span>开启新对话</span>
+                    <span>发起新会话</span>
                 </button>
 
                 <div class="history-search">
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M21 21L16.65 16.65M18 10.5C18 14.6421 14.6421 18 10.5 18C6.35786 18 3 14.6421 3 10.5C3 6.35786 6.35786 3 10.5 3C14.6421 3 18 6.35786 18 10.5Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
-                    <input id="historySearchInput" type="text" placeholder="搜索历史会话">
+                    <input id="historySearchInput" type="text" placeholder="检索历史上下文">
                 </div>
 
                 <div class="chat-history-section">
                     <div class="history-header">
-                        <span>最近会话</span>
+                        <span>Session Ledger</span>
                     </div>
-                    <div class="chat-history-list" id="chatHistoryList">
-                    </div>
+                    <div class="chat-history-list" id="chatHistoryList"></div>
                 </div>
 
                 <section class="observability-section" id="observabilitySection">
                     <div class="observability-header">
                         <div>
-                            <div class="observability-title">Observability</div>
+                            <div class="observability-title">Observability Links</div>
                             <div class="observability-subtitle" id="observabilityLastCheck">Checking endpoints...</div>
                         </div>
                         <button class="observability-refresh-btn" id="refreshObservabilityBtn" type="button">Refresh</button>
@@ -96,8 +100,8 @@
                 </section>
 
                 <div class="sidebar-footer">
-                    <div class="sidebar-footer-label">当前能力</div>
-                    <div class="sidebar-footer-meta">对话 / 流式 / AI Ops / 文件入库</div>
+                    <div class="sidebar-footer-label">Runtime Surface</div>
+                    <div class="sidebar-footer-meta">Supervisor / Triage / Specialists / Reporter</div>
                 </div>
             </div>
         </aside>
@@ -111,8 +115,11 @@
                         </svg>
                     </button>
                     <div class="topbar-copy">
-                        <h1 class="topbar-title">OpsCaption</h1>
-                        <p class="topbar-subtitle">面向排障、知识库与 AI Ops 的智能助手，支持对话、流式分析和文档接入</p>
+                        <div class="topbar-kicker">OpsCaption</div>
+                        <div>
+                            <h1 class="topbar-title">Agent-native AIOps Workspace</h1>
+                            <p class="topbar-subtitle">面向运维团队的故障协同、知识证据拼装与行动闭环</p>
+                        </div>
                     </div>
                 </div>
                 <div class="topbar-actions">
@@ -134,37 +141,133 @@
                             <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                             <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
-                        <span>AI Ops</span>
+                        <span>运行 AI Ops</span>
                     </button>
                 </div>
             </header>
 
             <div class="chat-container">
-                <div class="welcome-greeting" id="welcomeGreeting">
-                    <div class="hero-badge">OpsCaption</div>
-                    <h2>欢迎使用 OpsCaption</h2>
-                    <p>你可以直接提问、排查告警、检索知识库、上传文档，或运行 AI Ops。</p>
-                    <div class="prompt-grid">
-                        <button class="prompt-card" data-prompt="请总结当前系统的核心能力，并告诉我适合从哪里开始使用。">
-                            <span class="prompt-card-title">快速上手</span>
-                            <span class="prompt-card-text">先了解这个助手现在能做什么</span>
-                        </button>
-                        <button class="prompt-card" data-prompt="请基于现有知识库，给我一份常见告警的处理思路清单。">
-                            <span class="prompt-card-title">告警排查</span>
-                            <span class="prompt-card-text">整理可复用的处理路径</span>
-                        </button>
-                        <button class="prompt-card" data-prompt="我准备上传一份内部运维文档，你建议知识库文档如何组织？">
-                            <span class="prompt-card-title">知识库建设</span>
-                            <span class="prompt-card-text">把手册、流程和 FAQ 接入对话</span>
-                        </button>
-                        <button class="prompt-card" data-prompt="请模拟一次值班交接，列出今天最值得关注的风险点。">
-                            <span class="prompt-card-title">值班交接</span>
-                            <span class="prompt-card-text">生成面向值班同学的重点摘要</span>
-                        </button>
+                <section class="welcome-greeting" id="welcomeGreeting">
+                    <div class="hero-stage">
+                        <div class="hero-copy">
+                            <div class="hero-badge">OpsCaption / Multi-Agent Runtime</div>
+                            <h2>让值班与排障不再像在多个工具之间失焦切换。</h2>
+                            <p class="hero-summary">从问题进入，先由 triage 判断任务类型，再由 specialist 并行拉取日志、指标和知识证据，最后把可执行结论落到同一个工作台里。</p>
+
+                            <div class="hero-flow">
+                                <div class="hero-flow-line">
+                                    <span class="hero-flow-step">01</span>
+                                    <span>识别任务和风险域</span>
+                                </div>
+                                <div class="hero-flow-line">
+                                    <span class="hero-flow-step">02</span>
+                                    <span>并行拉取 metrics、logs、knowledge</span>
+                                </div>
+                                <div class="hero-flow-line">
+                                    <span class="hero-flow-step">03</span>
+                                    <span>汇总证据并返回行动建议</span>
+                                </div>
+                            </div>
+
+                            <div class="prompt-grid">
+                                <button class="prompt-card" data-prompt="请总结当前系统的核心能力，并告诉我适合从哪里开始使用。">
+                                    <span class="prompt-card-index">A</span>
+                                    <span class="prompt-card-body">
+                                        <span class="prompt-card-title">快速上手</span>
+                                        <span class="prompt-card-text">先了解这个 agent 工作台现在能做什么</span>
+                                    </span>
+                                </button>
+                                <button class="prompt-card" data-prompt="请基于现有知识库，给我一份常见告警的处理思路清单。">
+                                    <span class="prompt-card-index">B</span>
+                                    <span class="prompt-card-body">
+                                        <span class="prompt-card-title">告警排查</span>
+                                        <span class="prompt-card-text">拉出可复用的排障路径和判断顺序</span>
+                                    </span>
+                                </button>
+                                <button class="prompt-card" data-prompt="我准备上传一份内部运维文档，你建议知识库文档如何组织？">
+                                    <span class="prompt-card-index">C</span>
+                                    <span class="prompt-card-body">
+                                        <span class="prompt-card-title">知识库建设</span>
+                                        <span class="prompt-card-text">把手册、FAQ 和经验沉淀接到检索链路</span>
+                                    </span>
+                                </button>
+                                <button class="prompt-card" data-prompt="请模拟一次值班交接，列出今天最值得关注的风险点。">
+                                    <span class="prompt-card-index">D</span>
+                                    <span class="prompt-card-body">
+                                        <span class="prompt-card-title">值班交接</span>
+                                        <span class="prompt-card-text">生成今天最该盯住的风险摘要</span>
+                                    </span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="hero-visual" aria-hidden="true">
+                            <div class="signal-stage">
+                                <div class="signal-ring signal-ring-outer"></div>
+                                <div class="signal-ring signal-ring-mid"></div>
+                                <div class="signal-ring signal-ring-inner"></div>
+                                <div class="signal-core">
+                                    <span>Supervisor</span>
+                                </div>
+                                <div class="signal-node signal-node-triage">
+                                    <strong>Triage</strong>
+                                    <span>route</span>
+                                </div>
+                                <div class="signal-node signal-node-metrics">
+                                    <strong>Metrics</strong>
+                                    <span>signals</span>
+                                </div>
+                                <div class="signal-node signal-node-log">
+                                    <strong>Log</strong>
+                                    <span>events</span>
+                                </div>
+                                <div class="signal-node signal-node-knowledge">
+                                    <strong>Knowledge</strong>
+                                    <span>evidence</span>
+                                </div>
+                                <div class="signal-node signal-node-reporter">
+                                    <strong>Reporter</strong>
+                                    <span>action</span>
+                                </div>
+                                <div class="signal-grid"></div>
+                            </div>
+                        </div>
                     </div>
-                </div>
-                <div class="chat-messages" id="chatMessages">
-                </div>
+
+                    <div class="proof-band">
+                        <div class="proof-band-label">Why this surface works</div>
+                        <div class="proof-band-copy">
+                            <span>单一工作台聚合对话、流式分析、文档接入与 observability 跳转。</span>
+                            <span>不是仪表盘卡片墙，而是围绕一次 incident 的完整动作链。</span>
+                        </div>
+                    </div>
+
+                    <div class="story-grid">
+                        <section class="story-block">
+                            <div class="story-index">01</div>
+                            <div>
+                                <h3>从问题出发，不先让人挑工具</h3>
+                                <p>用户只需要描述现象，系统负责判断走对话、知识检索还是 AI Ops 协作链路。</p>
+                            </div>
+                        </section>
+                        <section class="story-block">
+                            <div class="story-index">02</div>
+                            <div>
+                                <h3>证据和结论严格分层</h3>
+                                <p>日志、指标、文档和历史经验保持可追溯，不把猜测和实时证据混在一起。</p>
+                            </div>
+                        </section>
+                        <section class="story-block">
+                            <div class="story-index">03</div>
+                            <div>
+                                <h3>交互界面直接承接实际操作</h3>
+                                <p>欢迎页建立产品表达，进入会话后立刻切换为可工作的对话面板和执行轨迹。</p>
+                            </div>
+                        </section>
+                    </div>
+                </section>
+
+                <div class="chat-messages" id="chatMessages"></div>
 
                 <div class="chat-input-container">
                     <div class="input-group-wrapper">
