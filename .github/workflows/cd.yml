@@ -168,13 +168,13 @@ jobs:
           {
             echo "### Deployment Target"
             echo
-            printf -- "- DOMAIN_NAME: `%s`\n" "$domain_name"
+            printf -- "- DOMAIN_NAME: %s\n" "$domain_name"
             if [ -n "$app_base_path" ]; then
-              printf -- "- APP_BASE_PATH: `%s`\n" "$app_base_path"
+              printf -- "- APP_BASE_PATH: %s\n" "$app_base_path"
             else
-              echo "- APP_BASE_PATH: `<root>`"
+              echo "- APP_BASE_PATH: <root>"
             fi
-            printf -- "- CORS_ALLOWED_ORIGIN: `%s`\n" "$cors_allowed_origin"
+            printf -- "- CORS_ALLOWED_ORIGIN: %s\n" "$cors_allowed_origin"
           } >> "$GITHUB_STEP_SUMMARY"
 
           printf '%s' "${ACR_PASSWORD}" > dist-deploy/.acr-password
