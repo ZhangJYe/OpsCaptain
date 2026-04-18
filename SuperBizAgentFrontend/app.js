@@ -1694,7 +1694,7 @@ class SuperBizAgentApp {
     
     // 检查并设置居中样式
     applyStoredTheme() {
-        const stored = localStorage.getItem('opscaptain-theme');
+        const stored = localStorage.getItem('opscaptain-theme-v2');
         if (stored === 'dark') {
             document.documentElement.setAttribute('data-theme', 'dark');
             this.updateThemeIcons('dark');
@@ -1708,11 +1708,11 @@ class SuperBizAgentApp {
         const isLight = document.documentElement.getAttribute('data-theme') === 'light';
         if (isLight) {
             document.documentElement.setAttribute('data-theme', 'dark');
-            localStorage.setItem('opscaptain-theme', 'dark');
+            localStorage.setItem('opscaptain-theme-v2', 'dark');
             this.updateThemeIcons('dark');
         } else {
             document.documentElement.setAttribute('data-theme', 'light');
-            localStorage.setItem('opscaptain-theme', 'light');
+            localStorage.setItem('opscaptain-theme-v2', 'light');
             this.updateThemeIcons('light');
         }
     }

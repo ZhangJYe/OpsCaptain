@@ -10,8 +10,8 @@
 
 .chat-container.centered {
     justify-content: flex-start;
-    gap: 26px;
-    padding: 18px 20px 28px;
+    gap: 30px;
+    padding: 20px 20px 30px;
     overflow-y: auto;
 }
 
@@ -71,8 +71,8 @@
     width: 30px;
     height: 30px;
     border-radius: 10px;
-    border: 1px solid rgba(137, 171, 255, 0.32);
-    background: rgba(137, 171, 255, 0.16);
+    border: 1px solid rgba(26, 115, 232, 0.22);
+    background: linear-gradient(140deg, rgba(26, 115, 232, 0.14), rgba(52, 168, 83, 0.08));
     color: var(--accent-strong);
     display: flex;
     align-items: center;
@@ -111,8 +111,8 @@
 }
 
 .message.user .message-content {
-    background: rgba(137, 171, 255, 0.14);
-    border: 1px solid rgba(137, 171, 255, 0.26);
+    background: rgba(26, 115, 232, 0.1);
+    border: 1px solid rgba(26, 115, 232, 0.22);
     border-radius: 16px;
     padding: 12px 14px;
 }
@@ -164,12 +164,12 @@
     overflow-x: auto;
     padding: 14px 16px;
     border: 1px solid var(--line-soft);
-    border-radius: 12px;
-    background: rgba(8, 13, 24, 0.6);
+    border-radius: 14px;
+    background: rgba(60, 64, 67, 0.05);
 }
 
-[data-theme="light"] .message-content pre {
-    background: rgba(15, 28, 52, 0.03);
+[data-theme="dark"] .message-content pre {
+    background: rgba(8, 13, 24, 0.6);
 }
 
 .message-content pre code {
@@ -179,7 +179,7 @@
 
 .message-content blockquote {
     padding-left: 12px;
-    border-left: 3px solid rgba(137, 171, 255, 0.45);
+    border-left: 3px solid rgba(26, 115, 232, 0.4);
     color: var(--text-subtle);
 }
 

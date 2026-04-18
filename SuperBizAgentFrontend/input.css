@@ -14,15 +14,15 @@
 .input-wrapper {
     background: var(--bg-panel-strong);
     border: 1px solid var(--line-soft);
-    border-radius: 16px;
+    border-radius: 22px;
     box-shadow: var(--shadow-soft);
     padding: 11px 11px 11px 13px;
     backdrop-filter: blur(10px);
 }
 
 .input-wrapper:focus-within {
-    border-color: rgba(77, 120, 230, 0.42);
-    box-shadow: 0 14px 30px rgba(44, 72, 120, 0.14);
+    border-color: rgba(26, 115, 232, 0.4);
+    box-shadow: 0 14px 30px rgba(26, 115, 232, 0.16);
 }
 
 .message-input {
@@ -63,7 +63,7 @@
 .send-btn-circle {
     width: 36px;
     height: 36px;
-    border-radius: 10px;
+    border-radius: 999px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -89,7 +89,7 @@
 .mode-selector-btn {
     min-height: 36px;
     border: 1px solid var(--line-soft);
-    border-radius: 10px;
+    border-radius: 999px;
     background: var(--bg-soft);
     color: var(--text-main);
     display: inline-flex;
@@ -180,7 +180,7 @@
 }
 
 .dropdown-item.active {
-    background: rgba(137, 171, 255, 0.16);
+    background: rgba(26, 115, 232, 0.12);
 }
 
 .dropdown-item-main {
@@ -202,7 +202,7 @@
     min-height: 18px;
     padding: 0 6px;
     border-radius: 999px;
-    background: rgba(137, 171, 255, 0.2);
+    background: rgba(26, 115, 232, 0.14);
     color: var(--accent-strong);
     font-size: 0.68rem;
     font-weight: 700;
@@ -211,14 +211,14 @@
 }
 
 .send-btn-circle {
-    border: 1px solid rgba(77, 120, 230, 0.36);
-    background: rgba(77, 120, 230, 0.14);
+    border: 1px solid rgba(26, 115, 232, 0.34);
+    background: rgba(26, 115, 232, 0.16);
     color: var(--text-main);
 }
 
 .send-btn-circle:hover {
     transform: translateY(-1px);
-    background: rgba(77, 120, 230, 0.24);
+    background: rgba(26, 115, 232, 0.24);
 }
 
 .send-btn-circle.stop-mode {
@@ -245,7 +245,7 @@
     }
 
     .input-wrapper {
-        border-radius: 12px;
+        border-radius: 16px;
         padding: 10px;
     }
 
