@@ -123,6 +123,10 @@ body.sidebar-open .sidebar-backdrop {
     flex-direction: column;
     gap: 14px;
     padding: 0 18px 18px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
 }
 
 .sidebar-intro {
@@ -211,10 +215,11 @@ body.sidebar-open .sidebar-backdrop {
 }
 
 .chat-history-section {
-    flex: 1;
-    min-height: 0;
+    flex: 0 1 auto;
+    max-height: min(220px, 28vh);
     overflow-y: auto;
     padding-right: 4px;
+    overscroll-behavior: contain;
 }
 
 .history-header {
