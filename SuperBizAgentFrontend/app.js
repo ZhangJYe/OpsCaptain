@@ -102,11 +102,46 @@ class SuperBizAgentApp {
         const configured = runtimeConfig.observability || {};
 
         return {
-            backendReadyUrl: (configured.backendReadyUrl || './readyz').trim() || './readyz',
-            jaegerUrl: (configured.jaegerUrl || './jaeger/').trim() || './jaeger/',
-            prometheusUrl: (configured.prometheusUrl || './prometheus/').trim() || './prometheus/',
-            prometheusHealthUrl: (configured.prometheusHealthUrl || './prometheus/-/healthy').trim() || './prometheus/-/healthy',
+            backendReadyUrl: this.resolveObservabilityUrl(configured.backendReadyUrl, '/ai/readyz'),
+            jaegerUrl: this.resolveObservabilityUrl(configured.jaegerUrl, '/ai/jaeger/'),
+            prometheusUrl: this.resolveObservabilityUrl(configured.prometheusUrl, '/ai/prometheus/'),
+            prometheusHealthUrl: this.resolveObservabilityUrl(configured.prometheusHealthUrl, '/ai/prometheus/-/healthy'),
         };
+    }
+
+    resolveObservabilityUrl(value, fallback) {
+        const raw = String(value || '').trim();
+        const target = raw || fallback;
+        if (!target) {
+            return '';
+        }
+        if (/^https?:\/\//i.test(target) || target.startsWith('/')) {
+            return target;
+        }
+        const basePath = this.resolveFrontendBasePath();
+        if (target.startsWith('./')) {
+            return `${basePath}${target.slice(2)}`;
+        }
+        try {
+            return new URL(target, window.location.href).toString();
+        } catch (error) {
+            return `${basePath}${target.replace(/^\/+/, '')}`;
+        }
+    }
+
+    resolveFrontendBasePath() {
+        const path = window.location.pathname || '/';
+        if (path === '/ai' || path.startsWith('/ai/')) {
+            return '/ai/';
+        }
+        if (path.endsWith('/')) {
+            return path;
+        }
+        const lastSlashIndex = path.lastIndexOf('/');
+        if (lastSlashIndex < 0) {
+            return '/';
+        }
+        return path.slice(0, lastSlashIndex + 1);
     }
 
     // 初始化Markdown配置

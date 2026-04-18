@@ -3,9 +3,9 @@ window.SUPERBIZAGENT_CONFIG = window.SUPERBIZAGENT_CONFIG || {
     authToken: '',
     authTokenStorageKey: 'opscaptain-auth-token',
     observability: {
-        backendReadyUrl: './readyz',
-        jaegerUrl: './jaeger/',
-        prometheusUrl: './prometheus/',
-        prometheusHealthUrl: './prometheus/-/healthy',
+        backendReadyUrl: '/ai/readyz',
+        jaegerUrl: '/ai/jaeger/',
+        prometheusUrl: '/ai/prometheus/',
+        prometheusHealthUrl: '/ai/prometheus/-/healthy',
     },
 };
