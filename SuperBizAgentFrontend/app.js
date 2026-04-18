@@ -317,6 +317,7 @@ class SuperBizAgentApp {
         if (this.refreshObservabilityBtn) {
             this.refreshObservabilityBtn.addEventListener('click', () => this.refreshObservabilityStatus(true));
         }
+        this.bindObservabilityLinkActions();
 
         if (this.promptCards) {
             this.promptCards.forEach((card) => {
@@ -512,6 +513,40 @@ class SuperBizAgentApp {
             this.refreshObservabilityBtn.disabled = false;
             this.refreshObservabilityBtn.textContent = 'Refresh';
         }
+    }
+
+    bindObservabilityLinkActions() {
+        const links = [
+            this.backendObservabilityLink,
+            this.jaegerObservabilityLink,
+            this.prometheusObservabilityLink,
+        ];
+        links.forEach((link) => {
+            if (!link) {
+                return;
+            }
+            link.addEventListener('click', (event) => {
+                if (link.classList.contains('is-disabled')) {
+                    event.preventDefault();
+                    return;
+                }
+                const targetUrl = (link.href || '').trim();
+                if (!targetUrl) {
+                    return;
+                }
+                event.preventDefault();
+                const opened = window.open(targetUrl, '_blank', 'noopener,noreferrer');
+                if (opened) {
+                    try {
+                        opened.opener = null;
+                    } catch (error) {
+                        // ignore cross-origin opener assignment failures
+                    }
+                    return;
+                }
+                window.location.assign(targetUrl);
+            });
+        });
     }
 
     applyPrompt(prompt) {
@@ -2250,6 +2285,16 @@ style.textContent = `
 document.head.appendChild(style);
 
 // 初始化应用
-document.addEventListener('DOMContentLoaded', () => {
-    new SuperBizAgentApp();
-});
+function bootstrapSuperBizAgentApp() {
+    if (window.__superBizAgentAppBooted) {
+        return;
+    }
+    window.__superBizAgentAppBooted = true;
+    window.__superBizAgentApp = new SuperBizAgentApp();
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootstrapSuperBizAgentApp);
+} else {
+    bootstrapSuperBizAgentApp();
+}
