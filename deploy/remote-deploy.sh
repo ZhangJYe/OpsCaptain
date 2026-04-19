@@ -104,6 +104,9 @@ EOF
     handle_path ${app_base_path}/prometheus/* {
         reverse_proxy $prometheus_address
     }
+
+    @prometheusLegacy path /graph /alerts /query /rules /targets /service-discovery /status /tsdb-status /config /flags /runtimeinfo
+    redir @prometheusLegacy ${app_base_path}/prometheus{uri} 308
 EOF
 
     cat <<EOF
@@ -184,10 +187,13 @@ export PROMETHEUS_ADDRESS="$prometheus_address"
 
 if [ -n "$app_base_path" ]; then
   jaeger_base_path="${app_base_path}/jaeger"
+  prometheus_external_url="${app_base_path}/prometheus/"
 else
   jaeger_base_path="/jaeger"
+  prometheus_external_url="/prometheus/"
 fi
 export JAEGER_BASE_PATH="$jaeger_base_path"
+export PROMETHEUS_EXTERNAL_URL="$prometheus_external_url"
 
 case "$auth_secret" in
   ""|"replace-with-a-32-char-secret"|"your-jwt-secret"|replace-with*|your-*)
