@@ -3,6 +3,7 @@ package sse
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"SuperBizAgent/utility/middleware"
@@ -48,10 +49,20 @@ func (s *Service) Create(ctx context.Context, r *ghttp.Request) (*Client, error)
 }
 
 func (c *Client) SendToClient(eventType, data string) bool {
-	msg := fmt.Sprintf(
-		"id: %d\nevent: %s\ndata: %s\n\n",
-		time.Now().UnixNano(), eventType, data,
-	)
+	lines := strings.Split(strings.ReplaceAll(data, "\r\n", "\n"), "\n")
+	if len(lines) == 0 {
+		lines = []string{""}
+	}
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("id: %d\n", time.Now().UnixNano()))
+	b.WriteString(fmt.Sprintf("event: %s\n", eventType))
+	for _, line := range lines {
+		b.WriteString("data: ")
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
+	msg := b.String()
 	c.Request.Response.Write(msg)
 	c.Request.Response.Flush()
 	return true

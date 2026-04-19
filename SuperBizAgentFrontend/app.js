@@ -1189,6 +1189,40 @@ class SuperBizAgentApp {
             let responseMeta = { mode: '', traceId: '', details: [] };
             let streamError = '';
             let switchedToQuickFallback = false;
+            let hasStartedAnswering = false;
+            const streamThoughts = [];
+
+            const appendThought = (text) => {
+                const normalized = String(text || '').trim();
+                if (!normalized) {
+                    return;
+                }
+                if (streamThoughts.includes(normalized)) {
+                    return;
+                }
+                streamThoughts.push(normalized);
+            };
+
+            const renderStreamThoughts = (isAnswering = false) => {
+                if (!assistantMessageElement) {
+                    return;
+                }
+                const messageContentWrapper = assistantMessageElement.querySelector('.message-content-wrapper');
+                if (!messageContentWrapper) {
+                    return;
+                }
+                this.renderAssistantDetails(
+                    assistantMessageElement,
+                    messageContentWrapper,
+                    streamThoughts,
+                    isAnswering ? '思考过程' : '思考中',
+                    {
+                        expanded: true,
+                        variant: 'thinking',
+                        stepLabel: '思考'
+                    }
+                );
+            };
 
             const finalizeStream = () => {
                 if (isFinalized) {
@@ -1196,6 +1230,11 @@ class SuperBizAgentApp {
                 }
                 isFinalized = true;
                 const finalResponse = fullResponse.trim() || (streamError ? `流式输出中断：${streamError}` : '未收到可展示的流式文本输出。');
+                const mergedDetails = streamThoughts.length > 0 ? streamThoughts.slice() : (responseMeta.details || []);
+                responseMeta = {
+                    ...responseMeta,
+                    details: mergedDetails
+                };
                 if (assistantMessageElement) {
                     assistantMessageElement.classList.remove('streaming');
                     const messageContent = assistantMessageElement.querySelector('.message-content');
@@ -1207,8 +1246,13 @@ class SuperBizAgentApp {
                         this.renderAssistantDetails(
                             assistantMessageElement,
                             messageContentWrapper,
-                            responseMeta.details || [],
-                            responseMeta.mode === 'aiops' ? '查看详细步骤' : '查看执行步骤'
+                            mergedDetails,
+                            '思考过程',
+                            {
+                                expanded: false,
+                                variant: 'thinking',
+                                stepLabel: '思考'
+                            }
                         );
                         this.appendMessageActions(messageContentWrapper, 'assistant', finalResponse);
                     }
@@ -1260,12 +1304,28 @@ class SuperBizAgentApp {
                 if (eventName === 'meta') {
                     try {
                         responseMeta = this.normalizeAssistantMeta(JSON.parse(data));
+                        if (Array.isArray(responseMeta.details)) {
+                            responseMeta.details.forEach((item) => appendThought(item));
+                            renderStreamThoughts(false);
+                        }
                     } catch (error) {
                         console.warn('解析stream meta失败:', error);
                     }
                     return false;
                 }
+                if (eventName === 'thought' || eventName === 'reasoning') {
+                    appendThought(data);
+                    renderStreamThoughts(false);
+                    return false;
+                }
                 if (eventName === 'message') {
+                    if (!hasStartedAnswering) {
+                        hasStartedAnswering = true;
+                        if (streamThoughts.length === 0) {
+                            appendThought('正在生成最终回答');
+                        }
+                        renderStreamThoughts(true);
+                    }
                     if (data === '') {
                         fullResponse += '\n';
                     } else {
@@ -1282,6 +1342,7 @@ class SuperBizAgentApp {
                 }
                 if (eventName === 'error') {
                     streamError = data || 'stream error';
+                    appendThought(`流式中断：${streamError}`);
                     return true;
                 }
                 if (eventName === 'done' || data === '[DONE]') {
@@ -1625,7 +1686,13 @@ class SuperBizAgentApp {
         metaContainer.appendChild(traceButton);
     }
 
-    renderAssistantDetails(messageElement, messageContentWrapper, details = [], title = '查看执行步骤') {
+    renderAssistantDetails(messageElement, messageContentWrapper, details = [], title = '查看执行步骤', options = {}) {
+        const opts = {
+            expanded: false,
+            variant: 'default',
+            stepLabel: '步骤',
+            ...options
+        };
         let detailsContainer = messageElement.querySelector('.aiops-details');
         const messageContent = messageContentWrapper.querySelector('.message-content');
 
@@ -1643,6 +1710,10 @@ class SuperBizAgentApp {
         } else {
             detailsContainer.innerHTML = '';
         }
+        detailsContainer.className = 'aiops-details';
+        if (opts.variant && opts.variant !== 'default') {
+            detailsContainer.classList.add(`aiops-details-${opts.variant}`);
+        }
 
         const detailsToggle = document.createElement('div');
         detailsToggle.className = 'details-toggle';
@@ -1659,7 +1730,14 @@ class SuperBizAgentApp {
         details.forEach((detail, index) => {
             const detailItem = document.createElement('div');
             detailItem.className = 'detail-item';
-            detailItem.innerHTML = `<strong>步骤 ${index + 1}:</strong> ${this.escapeHtml(detail)}`;
+            if (opts.variant === 'thinking') {
+                detailItem.classList.add('detail-item-thinking');
+            }
+            if (opts.stepLabel) {
+                detailItem.innerHTML = `<strong>${this.escapeHtml(opts.stepLabel)} ${index + 1}:</strong> ${this.escapeHtml(detail)}`;
+            } else {
+                detailItem.textContent = String(detail || '');
+            }
             detailsContent.appendChild(detailItem);
         });
 
@@ -1667,6 +1745,11 @@ class SuperBizAgentApp {
             detailsContent.classList.toggle('expanded');
             detailsToggle.classList.toggle('expanded');
         });
+
+        if (opts.expanded) {
+            detailsContent.classList.add('expanded');
+            detailsToggle.classList.add('expanded');
+        }
 
         detailsContainer.appendChild(detailsToggle);
         detailsContainer.appendChild(detailsContent);

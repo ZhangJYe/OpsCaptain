@@ -46,7 +46,9 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 		return nil, err
 	}
 	if decision := getDegradationDecision(ctx, "chat_stream"); decision.Enabled {
-		sendChatStreamMeta(client, "degraded", "", []string{decision.Reason}, true, decision.Reason)
+		_, filteredReason := filterAssistantPayload(ctx, "", []string{decision.Reason})
+		sendChatStreamMeta(client, "degraded", "", filteredReason, true, decision.Reason)
+		streamDetailsToClient(client, filteredReason)
 		streamTextToClient(client, decision.Message)
 		client.SendToClient("done", "Stream completed")
 		return &v1.ChatStreamRes{}, nil
@@ -59,7 +61,9 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 		response, execErr := runChatMultiAgent(ctx, id, msg)
 		if execErr != nil {
 			if fallback := userFacingChatError(ctx, execErr); fallback != nil {
-				sendChatStreamMeta(client, fallback.Mode, fallback.TraceID, fallback.Detail, fallback.Degraded, fallback.DegradationReason)
+				_, filteredDetail := filterAssistantPayload(ctx, "", fallback.Detail)
+				sendChatStreamMeta(client, fallback.Mode, fallback.TraceID, filteredDetail, fallback.Degraded, fallback.DegradationReason)
+				streamDetailsToClient(client, filteredDetail)
 				streamTextToClient(client, fallback.Answer)
 				client.SendToClient("done", "Stream completed")
 				return &v1.ChatStreamRes{}, nil
@@ -70,6 +74,7 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 		}
 		_, filteredDetail := filterAssistantPayload(ctx, "", response.Detail)
 		sendChatStreamMeta(client, "multi_agent", response.TraceID, filteredDetail, response.Degraded(), response.DegradationReason)
+		streamDetailsToClient(client, filteredDetail)
 		filteredContent, _ := filterAssistantPayload(ctx, response.Content, nil)
 		streamTextToClient(client, filteredContent)
 		client.SendToClient("done", "Stream completed")
@@ -91,7 +96,9 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 	runner, err := buildChatAgent(ctx, msg)
 	if err != nil {
 		if fallback := userFacingChatError(ctx, err); fallback != nil {
-			sendChatStreamMeta(client, fallback.Mode, "", fallback.Detail, fallback.Degraded, fallback.DegradationReason)
+			_, filteredDetail := filterAssistantPayload(ctx, "", fallback.Detail)
+			sendChatStreamMeta(client, fallback.Mode, "", filteredDetail, fallback.Degraded, fallback.DegradationReason)
+			streamDetailsToClient(client, filteredDetail)
 			streamTextToClient(client, fallback.Answer)
 			client.SendToClient("done", "Stream completed")
 			return &v1.ChatStreamRes{}, nil
@@ -103,10 +110,13 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 	}
 	_, filteredDetail := filterAssistantPayload(ctx, "", contextDetail)
 	sendChatStreamMeta(client, "chat", "", filteredDetail, false, "")
+	streamDetailsToClient(client, filteredDetail)
 	sr, err := runner.Stream(ctx, userMessage, compose.WithCallbacks(log_call_back.LogCallback(nil)))
 	if err != nil {
 		if fallback := userFacingChatError(ctx, err); fallback != nil {
-			sendChatStreamMeta(client, fallback.Mode, "", fallback.Detail, fallback.Degraded, fallback.DegradationReason)
+			_, detailFiltered := filterAssistantPayload(ctx, "", fallback.Detail)
+			sendChatStreamMeta(client, fallback.Mode, "", detailFiltered, fallback.Degraded, fallback.DegradationReason)
+			streamDetailsToClient(client, detailFiltered)
 			streamTextToClient(client, fallback.Answer)
 			client.SendToClient("done", "Stream completed")
 			return &v1.ChatStreamRes{}, nil
@@ -138,6 +148,7 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 		if err != nil {
 			g.Log().Errorf(ctx, "[session:%s][req:%s] Stream recv error: %v", id, requestID, err)
 			client.SendToClient("error", err.Error())
+			client.SendToClient("done", "Stream completed")
 			return &v1.ChatStreamRes{}, nil
 		}
 		filteredChunk, _ := filterAssistantPayload(ctx, chunk.Content, nil)
@@ -149,6 +160,16 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 func streamTextToClient(client *sse.Client, text string) {
 	for _, chunk := range splitStreamChunks(text, 160) {
 		client.SendToClient("message", chunk)
+	}
+}
+
+func streamDetailsToClient(client *sse.Client, details []string) {
+	for _, detail := range details {
+		trimmed := strings.TrimSpace(detail)
+		if trimmed == "" {
+			continue
+		}
+		client.SendToClient("thought", trimmed)
 	}
 }
 

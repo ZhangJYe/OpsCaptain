@@ -695,6 +695,33 @@
     margin-top: 8px;
 }
 
+.aiops-details-thinking .details-toggle {
+    background: rgba(26, 115, 232, 0.08);
+    border-color: rgba(26, 115, 232, 0.2);
+    color: var(--accent-strong);
+}
+
+.aiops-details-thinking .details-content {
+    background: rgba(26, 115, 232, 0.04);
+    border-color: rgba(26, 115, 232, 0.14);
+}
+
+.detail-item-thinking {
+    position: relative;
+    padding-left: 14px;
+}
+
+.detail-item-thinking::before {
+    content: "";
+    position: absolute;
+    left: 7px;
+    top: 14px;
+    width: 5px;
+    height: 5px;
+    border-radius: 999px;
+    background: var(--accent);
+}
+
 .approval-panel {
     margin-bottom: 12px;
     padding: 14px 16px;
