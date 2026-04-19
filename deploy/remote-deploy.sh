@@ -172,6 +172,11 @@ tls_email="$(normalize_optional_value "$(read_env_value TLS_EMAIL)")"
 auth_secret="$(normalize_optional_value "$(read_env_value AUTH_JWT_SECRET)")"
 jaeger_endpoint="$(normalize_optional_value "$(read_env_value JAEGER_ENDPOINT)")"
 prometheus_address="$(normalize_optional_value "$(read_env_value PROMETHEUS_ADDRESS)")"
+redis_address="$(normalize_optional_value "$(read_env_value REDIS_ADDRESS)")"
+redis_password="$(normalize_optional_value "$(read_env_value REDIS_PASSWORD)")"
+rabbitmq_url="$(normalize_optional_value "$(read_env_value RABBITMQ_URL)")"
+rabbitmq_username="$(normalize_optional_value "$(read_env_value RABBITMQ_USERNAME)")"
+rabbitmq_password="$(normalize_optional_value "$(read_env_value RABBITMQ_PASSWORD)")"
 app_base_path="$(normalize_path_prefix "$(read_env_value APP_BASE_PATH)")"
 
 if [ -z "$jaeger_endpoint" ]; then
@@ -182,8 +187,27 @@ if [ -z "$prometheus_address" ]; then
   prometheus_address="http://prometheus:9090"
 fi
 
+if [ -z "$redis_address" ]; then
+  redis_address="redis:6379"
+fi
+
+if [ -z "$rabbitmq_username" ]; then
+  rabbitmq_username="guest"
+fi
+
+if [ -z "$rabbitmq_password" ]; then
+  rabbitmq_password="guest"
+fi
+
+if [ -z "$rabbitmq_url" ]; then
+  rabbitmq_url="amqp://${rabbitmq_username}:${rabbitmq_password}@rabbitmq:5672/"
+fi
+
 export JAEGER_ENDPOINT="$jaeger_endpoint"
 export PROMETHEUS_ADDRESS="$prometheus_address"
+export REDIS_ADDRESS="$redis_address"
+export REDIS_PASSWORD="$redis_password"
+export RABBITMQ_URL="$rabbitmq_url"
 
 if [ -n "$app_base_path" ]; then
   jaeger_base_path="${app_base_path}/jaeger"
