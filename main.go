@@ -48,6 +48,9 @@ func main() {
 	if err := aiservice.ValidateMemoryExtractionPipelineConfig(ctx); err != nil {
 		panic(err)
 	}
+	if err := aiservice.ValidateChatTaskPipelineConfig(ctx); err != nil {
+		panic(err)
+	}
 
 	authEnabled, _ := g.Cfg().Get(ctx, "auth.enabled")
 	if authEnabled.Bool() {
@@ -73,6 +76,12 @@ func main() {
 		g.Log().Warningf(ctx, "memory extraction pipeline init failed: %v", startErr)
 	} else {
 		memoryPipelineShutdown = shutdownFn
+	}
+	chatTaskPipelineShutdown := func(context.Context) error { return nil }
+	if shutdownFn, startErr := aiservice.StartChatTaskPipeline(ctx); startErr != nil {
+		g.Log().Warningf(ctx, "chat task pipeline init failed: %v", startErr)
+	} else {
+		chatTaskPipelineShutdown = shutdownFn
 	}
 
 	var shuttingDown atomic.Bool
@@ -103,7 +112,7 @@ func main() {
 		panic(err)
 	}
 
-	waitForShutdown(ctx, s, &shuttingDown, pprofServer, traceShutdown, memoryPipelineShutdown)
+	waitForShutdown(ctx, s, &shuttingDown, pprofServer, traceShutdown, memoryPipelineShutdown, chatTaskPipelineShutdown)
 }
 
 func waitForShutdown(
@@ -113,6 +122,7 @@ func waitForShutdown(
 	pprofServer *http.Server,
 	traceShutdown func(context.Context) error,
 	memoryPipelineShutdown func(context.Context) error,
+	chatTaskPipelineShutdown func(context.Context) error,
 ) {
 	sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -138,6 +148,11 @@ func waitForShutdown(
 	if memoryPipelineShutdown != nil {
 		if err := memoryPipelineShutdown(context.Background()); err != nil {
 			g.Log().Warningf(ctx, "memory extraction pipeline shutdown failed: %v", err)
+		}
+	}
+	if chatTaskPipelineShutdown != nil {
+		if err := chatTaskPipelineShutdown(context.Background()); err != nil {
+			g.Log().Warningf(ctx, "chat task pipeline shutdown failed: %v", err)
 		}
 	}
 

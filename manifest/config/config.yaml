@@ -88,6 +88,12 @@ memory:
   long_term_max_entries: 1000
   long_term_max_entries_per_session: 100
 
+chat_async:
+  enabled: false
+  task_ttl_seconds: 86400
+  execute_timeout_ms: 120000
+  redis_key_prefix: "opscaptionai:chat_task"
+
 context:
   chat_max_history_messages: 10
   chat_max_memory_items: 5
@@ -137,6 +143,11 @@ rabbitmq:
   retry_delay_ms: 2000
   reconnect_delay_ms: 2000
   publish_timeout_ms: 2000
+  chat_task_queue: "opscaption.chat.task"
+  chat_task_consumer_enabled: true
+  chat_task_prefetch: 4
+  chat_task_max_retries: 3
+  chat_task_retry_delay_ms: 2000
   memory_extract_dedup_ttl_ms: 600000
   memory_extract_dedup_max_entries: 20000
 

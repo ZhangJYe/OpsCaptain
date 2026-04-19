@@ -100,6 +100,13 @@ var (
 		},
 		[]string{"mode", "status"},
 	)
+	chatTaskEventsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "opscaptionai_chat_task_events_total",
+			Help: "Total number of asynchronous chat task events by status.",
+		},
+		[]string{"status"},
+	)
 )
 
 func Handler() http.Handler {
@@ -176,6 +183,11 @@ func ObserveMemoryExtraction(mode, status string) {
 	memoryExtractionTotal.WithLabelValues(mode, status).Inc()
 }
 
+func ObserveChatTask(status string) {
+	ensureRegistered()
+	chatTaskEventsTotal.WithLabelValues(fallbackLabel(status, "unknown")).Inc()
+}
+
 func ensureRegistered() {
 	registerMetricsOnce.Do(func() {
 		prometheus.MustRegister(
@@ -191,6 +203,7 @@ func ensureRegistered() {
 			cacheMissesTotal,
 			sessionTokensTotal,
 			memoryExtractionTotal,
+			chatTaskEventsTotal,
 		)
 	})
 }

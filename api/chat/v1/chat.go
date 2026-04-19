@@ -20,6 +20,42 @@ type ChatRes struct {
 	DegradationReason string   `json:"degradation_reason,omitempty"`
 }
 
+type ChatSubmitReq struct {
+	g.Meta   `path:"/chat_submit" method:"post" summary:"提交异步对话任务"`
+	Id       string `json:"Id" v:"required|max-length:128#会话ID不能为空|会话ID长度不能超过128"`
+	Question string `json:"Question" v:"required|max-length:8000#问题不能为空|问题长度不能超过8000"`
+}
+
+type ChatSubmitRes struct {
+	TaskID    string `json:"task_id"`
+	Status    string `json:"status"`
+	CreatedAt int64  `json:"created_at"`
+}
+
+type ChatTaskReq struct {
+	g.Meta  `path:"/chat_task" method:"get" summary:"查询异步对话任务状态"`
+	TaskID  string `json:"task_id" v:"required|max-length:128#任务ID不能为空|任务ID长度不能超过128"`
+	Session string `json:"session_id,omitempty" v:"max-length:128#会话ID长度不能超过128"`
+}
+
+type ChatTaskRes struct {
+	TaskID            string   `json:"task_id"`
+	SessionID         string   `json:"session_id"`
+	Query             string   `json:"query"`
+	Status            string   `json:"status"`
+	Answer            string   `json:"answer,omitempty"`
+	TraceID           string   `json:"trace_id,omitempty"`
+	Detail            []string `json:"detail,omitempty"`
+	Mode              string   `json:"mode,omitempty"`
+	Degraded          bool     `json:"degraded,omitempty"`
+	DegradationReason string   `json:"degradation_reason,omitempty"`
+	Error             string   `json:"error,omitempty"`
+	CreatedAt         int64    `json:"created_at"`
+	UpdatedAt         int64    `json:"updated_at"`
+	StartedAt         int64    `json:"started_at,omitempty"`
+	FinishedAt        int64    `json:"finished_at,omitempty"`
+}
+
 type ChatStreamReq struct {
 	g.Meta   `path:"/chat_stream" method:"post" summary:"流式对话"`
 	Id       string `json:"Id" v:"required|max-length:128#会话ID不能为空|会话ID长度不能超过128"`
