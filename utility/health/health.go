@@ -14,6 +14,7 @@ import (
 	_ "github.com/gogf/gf/contrib/nosql/redis/v2"
 	"github.com/gogf/gf/v2/frame/g"
 	milvusclient "github.com/milvus-io/milvus-sdk-go/v2/client"
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 const dependencyCheckTimeout = 3 * time.Second
@@ -32,8 +33,9 @@ type ReadinessReport struct {
 }
 
 var (
-	redisReadyCheck  = defaultRedisReadyCheck
-	milvusReadyCheck = defaultMilvusReadyCheck
+	redisReadyCheck    = defaultRedisReadyCheck
+	milvusReadyCheck   = defaultMilvusReadyCheck
+	rabbitMQReadyCheck = defaultRabbitMQReadyCheck
 )
 
 func BuildReadinessReport(ctx context.Context, shuttingDown bool) (ReadinessReport, int) {
@@ -54,6 +56,7 @@ func BuildReadinessReport(ctx context.Context, shuttingDown bool) (ReadinessRepo
 	}{
 		{name: "redis", fn: redisReadyCheck},
 		{name: "milvus", fn: milvusReadyCheck},
+		{name: "rabbitmq", fn: rabbitMQReadyCheck},
 	} {
 		err := probe.fn(ctx)
 		switch {
@@ -145,6 +148,33 @@ func defaultMilvusReadyCheck(parent context.Context) error {
 	return nil
 }
 
+func defaultRabbitMQReadyCheck(parent context.Context) error {
+	if !rabbitMQEnabled(parent) {
+		return errCheckSkipped
+	}
+
+	url, ok := rabbitMQURL(parent)
+	if !ok {
+		return fmt.Errorf("rabbitmq.url is not configured")
+	}
+
+	conn, err := amqp.DialConfig(url, amqp.Config{
+		Dial: amqp.DefaultDial(dependencyCheckTimeout),
+	})
+	if err != nil {
+		return fmt.Errorf("connect failed: %w", err)
+	}
+	defer conn.Close()
+
+	ch, err := conn.Channel()
+	if err != nil {
+		return fmt.Errorf("open channel failed: %w", err)
+	}
+	defer ch.Close()
+
+	return nil
+}
+
 func hasRedisConfig(ctx context.Context) bool {
 	v, err := g.Cfg().Get(ctx, "redis.default.address")
 	if err != nil {
@@ -165,6 +195,22 @@ func hasMySQLConfig(ctx context.Context) bool {
 
 func milvusAddress(ctx context.Context) (string, bool) {
 	v, err := g.Cfg().Get(ctx, "milvus.address")
+	if err != nil {
+		return "", false
+	}
+	return common.ResolveOptionalEnv(v.String())
+}
+
+func rabbitMQEnabled(ctx context.Context) bool {
+	v, err := g.Cfg().Get(ctx, "rabbitmq.enabled")
+	if err != nil {
+		return false
+	}
+	return v.Bool()
+}
+
+func rabbitMQURL(ctx context.Context) (string, bool) {
+	v, err := g.Cfg().Get(ctx, "rabbitmq.url")
 	if err != nil {
 		return "", false
 	}

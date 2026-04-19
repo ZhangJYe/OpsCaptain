@@ -65,6 +65,13 @@ func main() {
 	s.BindMiddlewareDefault(middleware.TracingMiddleware)
 	s.BindMiddlewareDefault(middleware.MetricsMiddleware)
 
+	memoryPipelineShutdown := func(context.Context) error { return nil }
+	if shutdownFn, startErr := aiservice.StartMemoryExtractionPipeline(ctx); startErr != nil {
+		g.Log().Warningf(ctx, "memory extraction pipeline init failed: %v", startErr)
+	} else {
+		memoryPipelineShutdown = shutdownFn
+	}
+
 	var shuttingDown atomic.Bool
 	pprofServer := startPprofServer(ctx)
 
@@ -93,7 +100,7 @@ func main() {
 		panic(err)
 	}
 
-	waitForShutdown(ctx, s, &shuttingDown, pprofServer, traceShutdown)
+	waitForShutdown(ctx, s, &shuttingDown, pprofServer, traceShutdown, memoryPipelineShutdown)
 }
 
 func waitForShutdown(
@@ -102,6 +109,7 @@ func waitForShutdown(
 	shuttingDown *atomic.Bool,
 	pprofServer *http.Server,
 	traceShutdown func(context.Context) error,
+	memoryPipelineShutdown func(context.Context) error,
 ) {
 	sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -121,6 +129,12 @@ func waitForShutdown(
 	if pprofServer != nil {
 		if err := pprofServer.Shutdown(context.Background()); err != nil {
 			g.Log().Warningf(ctx, "pprof server shutdown failed: %v", err)
+		}
+	}
+
+	if memoryPipelineShutdown != nil {
+		if err := memoryPipelineShutdown(context.Background()); err != nil {
+			g.Log().Warningf(ctx, "memory extraction pipeline shutdown failed: %v", err)
 		}
 	}
 

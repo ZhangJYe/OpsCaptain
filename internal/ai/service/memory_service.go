@@ -12,6 +12,7 @@ import (
 	"SuperBizAgent/internal/ai/protocol"
 	"SuperBizAgent/internal/consts"
 	"SuperBizAgent/utility/mem"
+	"SuperBizAgent/utility/metrics"
 
 	"github.com/cloudwego/eino/schema"
 	"github.com/gogf/gf/v2/frame/g"
@@ -26,6 +27,7 @@ var (
 	memoryExtractionTimeout = loadMemoryExtractionTimeout
 	memoryExtractionMaxJobs = loadMemoryExtractionMaxJobs
 	memoryExtractionWait    = loadMemoryExtractionWait
+	enqueueMemoryExtraction = enqueueMemoryExtractionDefault
 )
 
 const (
@@ -110,8 +112,16 @@ func (s *MemoryService) PersistOutcome(ctx context.Context, sessionID, query, su
 	}
 	sessionMem := mem.GetSimpleMemory(sessionID)
 	sessionMem.AddUserAssistantPair(query, summary)
+	enqueued, err := enqueueMemoryExtraction(ctx, sessionID, query, summary)
+	if err != nil {
+		g.Log().Warningf(ctx, "[memory] enqueue extraction failed for session %s: %v", sessionID, err)
+	}
+	if enqueued {
+		return
+	}
 	release, err := acquireMemoryExtractionSlot(ctx)
 	if err != nil {
+		metrics.ObserveMemoryExtraction("local", "queue_timeout")
 		g.Log().Debugf(ctx, "[memory] skip extraction for session %s: %v", sessionID, err)
 		return
 	}
@@ -120,6 +130,7 @@ func (s *MemoryService) PersistOutcome(ctx context.Context, sessionID, query, su
 		extractCtx, cancel := boundedMemoryContext(parent)
 		defer cancel()
 		report := extractMemoriesFunc(extractCtx, sessionID, query, summary)
+		metrics.ObserveMemoryExtraction("local", "consumed")
 		if report != nil && len(report.Dropped) > 0 {
 			g.Log().Debugf(parent, "[memory] dropped %d memory candidates for session %s", len(report.Dropped), sessionID)
 		}

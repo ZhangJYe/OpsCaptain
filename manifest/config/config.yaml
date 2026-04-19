@@ -126,6 +126,20 @@ mysql:
 prometheus:
   address: ""
 
+rabbitmq:
+  enabled: false
+  url: "amqp://guest:guest@127.0.0.1:5672/"
+  exchange: "opscaption.events"
+  memory_extract_queue: "opscaption.memory.extract"
+  memory_extract_consumer_enabled: true
+  prefetch: 8
+  max_retries: 3
+  retry_delay_ms: 2000
+  reconnect_delay_ms: 2000
+  publish_timeout_ms: 2000
+  memory_extract_dedup_ttl_ms: 600000
+  memory_extract_dedup_max_entries: 20000
+
 redis:
   default:
     address: "127.0.0.1:6379"

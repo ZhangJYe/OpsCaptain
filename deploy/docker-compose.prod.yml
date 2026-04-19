@@ -31,6 +31,23 @@ services:
       backend:
         condition: service_healthy
 
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    ports:
+      - "127.0.0.1:15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
   backend:
     image: ${BACKEND_IMAGE:?BACKEND_IMAGE is required}
     restart: unless-stopped
@@ -38,11 +55,14 @@ services:
     depends_on:
       jaeger:
         condition: service_started
+      rabbitmq:
+        condition: service_healthy
     env_file:
       - .env.production
     environment:
       JAEGER_ENDPOINT: ${JAEGER_ENDPOINT:-http://jaeger:14268/api/traces}
       PROMETHEUS_ADDRESS: ${PROMETHEUS_ADDRESS:-http://prometheus:9090}
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://${RABBITMQ_USERNAME:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/}
     volumes:
       - docs-data:/app/docs
       - runtime-data:/app/var/runtime
@@ -85,5 +105,6 @@ volumes:
   docs-data:
   runtime-data:
   prometheus-data:
+  rabbitmq-data:
   caddy-data:
   caddy-config:

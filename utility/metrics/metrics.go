@@ -93,6 +93,13 @@ var (
 		},
 		[]string{"user_id"},
 	)
+	memoryExtractionTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "opscaptionai_memory_extraction_events_total",
+			Help: "Total number of memory extraction events by mode and status.",
+		},
+		[]string{"mode", "status"},
+	)
 )
 
 func Handler() http.Handler {
@@ -162,6 +169,13 @@ func AddSessionTokens(_ string, userID string, count int) {
 	).Add(float64(count))
 }
 
+func ObserveMemoryExtraction(mode, status string) {
+	ensureRegistered()
+	mode = fallbackLabel(mode, "unknown")
+	status = fallbackLabel(status, "unknown")
+	memoryExtractionTotal.WithLabelValues(mode, status).Inc()
+}
+
 func ensureRegistered() {
 	registerMetricsOnce.Do(func() {
 		prometheus.MustRegister(
@@ -176,6 +190,7 @@ func ensureRegistered() {
 			cacheHitsTotal,
 			cacheMissesTotal,
 			sessionTokensTotal,
+			memoryExtractionTotal,
 		)
 	})
 }

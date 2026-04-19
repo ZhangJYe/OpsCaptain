@@ -16,14 +16,19 @@ func TestPersistOutcomeUsesBoundedContext(t *testing.T) {
 	oldTimeout := memoryExtractionTimeout
 	oldMaxJobs := memoryExtractionMaxJobs
 	oldWait := memoryExtractionWait
+	oldEnqueue := enqueueMemoryExtraction
 	defer func() {
 		extractMemoriesFunc = oldExtract
 		memoryExtractionTimeout = oldTimeout
 		memoryExtractionMaxJobs = oldMaxJobs
 		memoryExtractionWait = oldWait
+		enqueueMemoryExtraction = oldEnqueue
 		resetMemoryExtractionSemaphoreForTest()
 	}()
 	resetMemoryExtractionSemaphoreForTest()
+	enqueueMemoryExtraction = func(context.Context, string, string, string) (bool, error) {
+		return false, nil
+	}
 
 	ctxCh := make(chan context.Context, 1)
 	extractMemoriesFunc = func(ctx context.Context, sessionID, userMsg, assistantMsg string) *mem.MemoryExtractionReport {
@@ -67,14 +72,19 @@ func TestPersistOutcomeDropsWhenExtractionQueueBusy(t *testing.T) {
 	oldTimeout := memoryExtractionTimeout
 	oldMaxJobs := memoryExtractionMaxJobs
 	oldWait := memoryExtractionWait
+	oldEnqueue := enqueueMemoryExtraction
 	defer func() {
 		extractMemoriesFunc = oldExtract
 		memoryExtractionTimeout = oldTimeout
 		memoryExtractionMaxJobs = oldMaxJobs
 		memoryExtractionWait = oldWait
+		enqueueMemoryExtraction = oldEnqueue
 		resetMemoryExtractionSemaphoreForTest()
 	}()
 	resetMemoryExtractionSemaphoreForTest()
+	enqueueMemoryExtraction = func(context.Context, string, string, string) (bool, error) {
+		return false, nil
+	}
 
 	var calls int32
 	started := make(chan struct{}, 1)
@@ -112,6 +122,40 @@ func TestPersistOutcomeDropsWhenExtractionQueueBusy(t *testing.T) {
 		t.Fatalf("expected exactly one extraction call while queue is busy, got %d", got)
 	}
 	close(release)
+}
+
+func TestPersistOutcomeEnqueuedSkipsLocalExtraction(t *testing.T) {
+	oldExtract := extractMemoriesFunc
+	oldTimeout := memoryExtractionTimeout
+	oldMaxJobs := memoryExtractionMaxJobs
+	oldWait := memoryExtractionWait
+	oldEnqueue := enqueueMemoryExtraction
+	defer func() {
+		extractMemoriesFunc = oldExtract
+		memoryExtractionTimeout = oldTimeout
+		memoryExtractionMaxJobs = oldMaxJobs
+		memoryExtractionWait = oldWait
+		enqueueMemoryExtraction = oldEnqueue
+		resetMemoryExtractionSemaphoreForTest()
+	}()
+	resetMemoryExtractionSemaphoreForTest()
+
+	var calls int32
+	extractMemoriesFunc = func(context.Context, string, string, string) *mem.MemoryExtractionReport {
+		atomic.AddInt32(&calls, 1)
+		return &mem.MemoryExtractionReport{}
+	}
+	enqueueMemoryExtraction = func(context.Context, string, string, string) (bool, error) {
+		return true, nil
+	}
+
+	svc := NewMemoryService()
+	svc.PersistOutcome(context.Background(), "session-enqueued", "q", "a")
+	time.Sleep(50 * time.Millisecond)
+
+	if got := atomic.LoadInt32(&calls); got != 0 {
+		t.Fatalf("expected local extraction not to run when event is enqueued, got %d", got)
+	}
 }
 
 func TestBuildChatPackageReturnsContextTraceDetails(t *testing.T) {

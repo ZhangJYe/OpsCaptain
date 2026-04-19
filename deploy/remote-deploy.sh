@@ -241,7 +241,7 @@ ensure_prometheus_bind_files
 $COMPOSE pull
 if ! $COMPOSE up -d --wait --wait-timeout 180 --remove-orphans; then
   $COMPOSE ps || true
-  $COMPOSE logs --tail=120 backend frontend caddy jaeger prometheus || true
+  $COMPOSE logs --tail=120 backend frontend caddy jaeger prometheus rabbitmq || true
   echo "compose deployment failed"
   exit 1
 fi
@@ -260,7 +260,7 @@ until $COMPOSE exec -T backend wget -qO- http://127.0.0.1:8000/readyz >/dev/null
   attempt=$((attempt + 1))
   if [ "$attempt" -ge 15 ]; then
     $COMPOSE ps || true
-    $COMPOSE logs --tail=120 backend frontend caddy jaeger prometheus || true
+    $COMPOSE logs --tail=120 backend frontend caddy jaeger prometheus rabbitmq || true
     echo "backend readiness check failed"
     exit 1
   fi

@@ -10,13 +10,16 @@ import (
 func TestBuildReadinessReportHealthy(t *testing.T) {
 	oldRedis := redisReadyCheck
 	oldMilvus := milvusReadyCheck
+	oldRabbitMQ := rabbitMQReadyCheck
 	defer func() {
 		redisReadyCheck = oldRedis
 		milvusReadyCheck = oldMilvus
+		rabbitMQReadyCheck = oldRabbitMQ
 	}()
 
 	redisReadyCheck = func(context.Context) error { return nil }
 	milvusReadyCheck = func(context.Context) error { return errCheckSkipped }
+	rabbitMQReadyCheck = func(context.Context) error { return errCheckSkipped }
 
 	report, status := BuildReadinessReport(context.Background(), false)
 	if status != http.StatusOK {
@@ -31,18 +34,24 @@ func TestBuildReadinessReportHealthy(t *testing.T) {
 	if !report.Checks["milvus"].Skipped {
 		t.Fatalf("expected milvus check to be skipped: %#v", report.Checks["milvus"])
 	}
+	if !report.Checks["rabbitmq"].Skipped {
+		t.Fatalf("expected rabbitmq check to be skipped: %#v", report.Checks["rabbitmq"])
+	}
 }
 
 func TestBuildReadinessReportFailedDependency(t *testing.T) {
 	oldRedis := redisReadyCheck
 	oldMilvus := milvusReadyCheck
+	oldRabbitMQ := rabbitMQReadyCheck
 	defer func() {
 		redisReadyCheck = oldRedis
 		milvusReadyCheck = oldMilvus
+		rabbitMQReadyCheck = oldRabbitMQ
 	}()
 
 	redisReadyCheck = func(context.Context) error { return errors.New("redis down") }
 	milvusReadyCheck = func(context.Context) error { return nil }
+	rabbitMQReadyCheck = func(context.Context) error { return nil }
 
 	report, status := BuildReadinessReport(context.Background(), false)
 	if status != http.StatusServiceUnavailable {
@@ -59,13 +68,16 @@ func TestBuildReadinessReportFailedDependency(t *testing.T) {
 func TestBuildReadinessReportShutdown(t *testing.T) {
 	oldRedis := redisReadyCheck
 	oldMilvus := milvusReadyCheck
+	oldRabbitMQ := rabbitMQReadyCheck
 	defer func() {
 		redisReadyCheck = oldRedis
 		milvusReadyCheck = oldMilvus
+		rabbitMQReadyCheck = oldRabbitMQ
 	}()
 
 	redisReadyCheck = func(context.Context) error { return nil }
 	milvusReadyCheck = func(context.Context) error { return nil }
+	rabbitMQReadyCheck = func(context.Context) error { return nil }
 
 	report, status := BuildReadinessReport(context.Background(), true)
 	if status != http.StatusServiceUnavailable {
