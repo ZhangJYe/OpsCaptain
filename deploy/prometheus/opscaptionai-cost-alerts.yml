@@ -20,3 +20,45 @@ groups:
         annotations:
           summary: "OpsCaptionAI daily token consumption exceeded user threshold"
           description: "User {{ $labels.user_id }} consumed {{ $value }} tokens in the last 24h."
+
+  - name: opscaptionai-rabbitmq
+    rules:
+      - alert: OpsCaptionAIMemoryMQPublishFailures
+        expr: sum(increase(opscaptionai_memory_extraction_events_total{mode="rabbitmq",status="publish_failed"}[10m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: opscaptionai
+        annotations:
+          summary: "OpsCaptionAI memory extraction publish failures detected"
+          description: "RabbitMQ publish failures occurred {{ $value }} times in the last 10 minutes."
+
+      - alert: OpsCaptionAIMemoryMQDLQIncreased
+        expr: sum(increase(opscaptionai_memory_extraction_events_total{mode="rabbitmq",status="dlq"}[10m])) > 0
+        for: 2m
+        labels:
+          severity: critical
+          service: opscaptionai
+        annotations:
+          summary: "OpsCaptionAI memory extraction events moved to DLQ"
+          description: "DLQ events increased by {{ $value }} in the last 10 minutes. Check rabbitmq queue health and consumer logs."
+
+      - alert: OpsCaptionAIMemoryMQBootstrapFailed
+        expr: sum(increase(opscaptionai_memory_extraction_events_total{mode="rabbitmq",status="bootstrap_failed"}[10m])) >= 5
+        for: 3m
+        labels:
+          severity: warning
+          service: opscaptionai
+        annotations:
+          summary: "OpsCaptionAI memory extraction pipeline bootstrap repeatedly failed"
+          description: "RabbitMQ bootstrap failed at least {{ $value }} times in the last 10 minutes."
+
+      - alert: OpsCaptionAIMemoryMQConsumerStalled
+        expr: sum(increase(opscaptionai_memory_extraction_events_total{mode="rabbitmq",status="published"}[15m])) >= 20 and sum(increase(opscaptionai_memory_extraction_events_total{mode="rabbitmq",status=~"consumed|deduped|retried|dlq"}[15m])) == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: opscaptionai
+        annotations:
+          summary: "OpsCaptionAI memory extraction consumer appears stalled"
+          description: "Publish events keep increasing but no consume/retry/dlq progress in the last 15 minutes."
