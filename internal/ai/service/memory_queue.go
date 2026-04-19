@@ -116,6 +116,9 @@ var (
 
 func StartMemoryExtractionPipeline(ctx context.Context) (func(context.Context) error, error) {
 	cfg := loadRabbitMQMemoryConfig(ctx)
+	if err := validateRabbitMQMemoryConfig(cfg); err != nil {
+		return func(context.Context) error { return nil }, err
+	}
 	if !cfg.Enabled {
 		_ = stopMemoryQueueInitLoop(context.Background())
 		closeAndSwapMemoryQueueClient(nil)
@@ -920,6 +923,35 @@ func loadRabbitMQMemoryConfig(ctx context.Context) rabbitMQMemoryConfig {
 		cfg.MemoryExtractDLQ = cfg.MemoryExtractQueue + ".dlq"
 	}
 	return cfg
+}
+
+func ValidateMemoryExtractionPipelineConfig(ctx context.Context) error {
+	return validateRabbitMQMemoryConfig(loadRabbitMQMemoryConfig(ctx))
+}
+
+func validateRabbitMQMemoryConfig(cfg rabbitMQMemoryConfig) error {
+	if !cfg.Enabled {
+		return nil
+	}
+	if strings.TrimSpace(cfg.URL) == "" {
+		return fmt.Errorf("rabbitmq.enabled=true but rabbitmq.url is empty")
+	}
+	if cfg.MemoryExtractRetryDelay < 0 {
+		return fmt.Errorf("rabbitmq.retry_delay_ms must be >= 0")
+	}
+	if cfg.MemoryExtractReconnectDelay < 0 {
+		return fmt.Errorf("rabbitmq.reconnect_delay_ms must be >= 0")
+	}
+	if cfg.MemoryExtractPublishTimeout < 0 {
+		return fmt.Errorf("rabbitmq.publish_timeout_ms must be >= 0")
+	}
+	if cfg.MemoryExtractMaxRetries < 0 {
+		return fmt.Errorf("rabbitmq.max_retries must be >= 0")
+	}
+	if cfg.MemoryExtractPrefetch <= 0 {
+		return fmt.Errorf("rabbitmq.prefetch must be > 0")
+	}
+	return nil
 }
 
 func resolveRabbitMQString(raw, fallback string) string {

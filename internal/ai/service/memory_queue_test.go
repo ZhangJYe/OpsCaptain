@@ -290,3 +290,32 @@ func TestStopMemoryQueueInitLoopStopsRetry(t *testing.T) {
 		t.Fatalf("expected no more attempts after stop, before=%d after=%d", before, after)
 	}
 }
+
+func TestValidateRabbitMQMemoryConfig(t *testing.T) {
+	if err := validateRabbitMQMemoryConfig(rabbitMQMemoryConfig{Enabled: false}); err != nil {
+		t.Fatalf("disabled config should pass validation, got %v", err)
+	}
+
+	if err := validateRabbitMQMemoryConfig(rabbitMQMemoryConfig{
+		Enabled:               true,
+		URL:                   "amqp://guest:guest@127.0.0.1:5672/",
+		MemoryExtractPrefetch: 8,
+	}); err != nil {
+		t.Fatalf("valid config should pass validation, got %v", err)
+	}
+
+	if err := validateRabbitMQMemoryConfig(rabbitMQMemoryConfig{
+		Enabled:               true,
+		MemoryExtractPrefetch: 8,
+	}); err == nil {
+		t.Fatal("expected empty url validation error")
+	}
+
+	if err := validateRabbitMQMemoryConfig(rabbitMQMemoryConfig{
+		Enabled:               true,
+		URL:                   "amqp://guest:guest@127.0.0.1:5672/",
+		MemoryExtractPrefetch: 0,
+	}); err == nil {
+		t.Fatal("expected prefetch validation error")
+	}
+}

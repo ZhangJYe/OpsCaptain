@@ -45,6 +45,9 @@ func main() {
 	if err := common.ValidateStartupSecrets(ctx); err != nil {
 		panic(err)
 	}
+	if err := aiservice.ValidateMemoryExtractionPipelineConfig(ctx); err != nil {
+		panic(err)
+	}
 
 	authEnabled, _ := g.Cfg().Get(ctx, "auth.enabled")
 	if authEnabled.Bool() {
