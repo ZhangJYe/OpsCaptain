@@ -91,9 +91,13 @@ type ttlSet struct {
 }
 
 var (
-	memoryQueueMu      sync.RWMutex
-	memoryQueueClient  *rabbitMQMemoryClient
-	consumeMemoryEvent = func(c *rabbitMQMemoryClient, event memoryExtractionEvent) error {
+	memoryQueueMu        sync.RWMutex
+	memoryQueueClient    *rabbitMQMemoryClient
+	memoryQueueInitMu    sync.Mutex
+	memoryQueueInitStop  context.CancelFunc
+	memoryQueueInitDone  chan struct{}
+	newMemoryQueueClient = newRabbitMQMemoryClient
+	consumeMemoryEvent   = func(c *rabbitMQMemoryClient, event memoryExtractionEvent) error {
 		return c.consumeEvent(event)
 	}
 	publishMemoryEvent = func(c *rabbitMQMemoryClient, ctx context.Context, event memoryExtractionEvent, routingKey string) error {
@@ -113,35 +117,16 @@ var (
 func StartMemoryExtractionPipeline(ctx context.Context) (func(context.Context) error, error) {
 	cfg := loadRabbitMQMemoryConfig(ctx)
 	if !cfg.Enabled {
+		_ = stopMemoryQueueInitLoop(context.Background())
+		closeAndSwapMemoryQueueClient(nil)
 		return func(context.Context) error { return nil }, nil
 	}
-	client, err := newRabbitMQMemoryClient(cfg)
-	if err != nil {
-		return func(context.Context) error { return nil }, err
-	}
-	if cfg.MemoryExtractConsumerEnabled {
-		if err := client.startConsumer(); err != nil {
-			_ = client.Close(context.Background())
-			return func(context.Context) error { return nil }, err
-		}
-	}
-
-	memoryQueueMu.Lock()
-	previous := memoryQueueClient
-	memoryQueueClient = client
-	memoryQueueMu.Unlock()
-
-	if previous != nil {
-		_ = previous.Close(context.Background())
-	}
+	startMemoryQueueInitLoop(cfg)
 
 	return func(stopCtx context.Context) error {
-		memoryQueueMu.Lock()
-		if memoryQueueClient == client {
-			memoryQueueClient = nil
-		}
-		memoryQueueMu.Unlock()
-		return client.Close(stopCtx)
+		err := stopMemoryQueueInitLoop(stopCtx)
+		closeAndSwapMemoryQueueClient(nil)
+		return err
 	}, nil
 }
 
@@ -163,6 +148,112 @@ func getMemoryQueueClient() *rabbitMQMemoryClient {
 	memoryQueueMu.RLock()
 	defer memoryQueueMu.RUnlock()
 	return memoryQueueClient
+}
+
+func startMemoryQueueInitLoop(cfg rabbitMQMemoryConfig) {
+	delay := cfg.MemoryExtractReconnectDelay
+	if delay <= 0 {
+		delay = defaultMemoryExtractReconnectDelay
+	}
+
+	initCtx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+
+	memoryQueueInitMu.Lock()
+	previousCancel := memoryQueueInitStop
+	previousDone := memoryQueueInitDone
+	memoryQueueInitStop = cancel
+	memoryQueueInitDone = done
+	memoryQueueInitMu.Unlock()
+
+	if previousCancel != nil {
+		previousCancel()
+		waitMemoryQueueInitStopped(previousDone, 2*time.Second)
+	}
+
+	go func() {
+		defer close(done)
+		for {
+			select {
+			case <-initCtx.Done():
+				return
+			default:
+			}
+
+			client, err := newMemoryQueueClient(cfg)
+			if err == nil {
+				if cfg.MemoryExtractConsumerEnabled {
+					if err = client.startConsumer(); err != nil {
+						_ = client.Close(context.Background())
+					}
+				}
+				if err == nil {
+					closeAndSwapMemoryQueueClient(client)
+					metrics.ObserveMemoryExtraction("rabbitmq", "bootstrap_connected")
+					g.Log().Info(context.Background(), "[memory] rabbitmq memory extraction pipeline connected")
+					return
+				}
+				g.Log().Warningf(context.Background(), "[memory] rabbitmq memory extraction consumer start failed: %v", err)
+			} else {
+				g.Log().Warningf(context.Background(), "[memory] rabbitmq memory extraction init failed: %v", err)
+			}
+
+			metrics.ObserveMemoryExtraction("rabbitmq", "bootstrap_failed")
+			if !sleepMemoryReconnect(initCtx, delay) {
+				return
+			}
+		}
+	}()
+}
+
+func stopMemoryQueueInitLoop(ctx context.Context) error {
+	memoryQueueInitMu.Lock()
+	cancel := memoryQueueInitStop
+	done := memoryQueueInitDone
+	memoryQueueInitStop = nil
+	memoryQueueInitDone = nil
+	memoryQueueInitMu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+	if done != nil {
+		waitCtx := ctx
+		if waitCtx == nil {
+			waitCtx = context.Background()
+		}
+		select {
+		case <-done:
+		case <-waitCtx.Done():
+			return waitCtx.Err()
+		case <-time.After(2 * time.Second):
+		}
+	}
+	return nil
+}
+
+func waitMemoryQueueInitStopped(done chan struct{}, timeout time.Duration) {
+	if done == nil {
+		return
+	}
+	if timeout <= 0 {
+		timeout = 2 * time.Second
+	}
+	select {
+	case <-done:
+	case <-time.After(timeout):
+	}
+}
+
+func closeAndSwapMemoryQueueClient(next *rabbitMQMemoryClient) {
+	memoryQueueMu.Lock()
+	previous := memoryQueueClient
+	memoryQueueClient = next
+	memoryQueueMu.Unlock()
+
+	if previous != nil && previous != next {
+		_ = previous.Close(context.Background())
+	}
 }
 
 func newRabbitMQMemoryClient(cfg rabbitMQMemoryConfig) (*rabbitMQMemoryClient, error) {

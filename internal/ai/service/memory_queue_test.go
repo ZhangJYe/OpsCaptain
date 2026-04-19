@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -210,5 +211,82 @@ func TestHandleDeliveryDecodeFailureNackWhenDLQFailed(t *testing.T) {
 	}
 	if nackCount != 1 {
 		t.Fatalf("expected nack once, got %d", nackCount)
+	}
+}
+
+func TestStartMemoryQueueInitLoopRetriesUntilConnected(t *testing.T) {
+	oldFactory := newMemoryQueueClient
+	defer func() {
+		newMemoryQueueClient = oldFactory
+		_ = stopMemoryQueueInitLoop(context.Background())
+		closeAndSwapMemoryQueueClient(nil)
+	}()
+	_ = stopMemoryQueueInitLoop(context.Background())
+	closeAndSwapMemoryQueueClient(nil)
+
+	var attempts int32
+	newMemoryQueueClient = func(cfg rabbitMQMemoryConfig) (*rabbitMQMemoryClient, error) {
+		if atomic.AddInt32(&attempts, 1) < 3 {
+			return nil, errors.New("rabbitmq unavailable")
+		}
+		return &rabbitMQMemoryClient{
+			cfg:       cfg,
+			completed: newTTLSet(time.Minute, 32),
+		}, nil
+	}
+
+	startMemoryQueueInitLoop(rabbitMQMemoryConfig{
+		Enabled:                      true,
+		MemoryExtractConsumerEnabled: false,
+		MemoryExtractReconnectDelay:  5 * time.Millisecond,
+		MemoryExtractDedupTTL:        time.Minute,
+		MemoryExtractDedupMaxEntries: 32,
+	})
+
+	deadline := time.After(500 * time.Millisecond)
+	for getMemoryQueueClient() == nil {
+		select {
+		case <-deadline:
+			t.Fatalf("expected memory queue client to be initialized, attempts=%d", atomic.LoadInt32(&attempts))
+		default:
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+	if got := atomic.LoadInt32(&attempts); got < 3 {
+		t.Fatalf("expected at least 3 attempts, got %d", got)
+	}
+}
+
+func TestStopMemoryQueueInitLoopStopsRetry(t *testing.T) {
+	oldFactory := newMemoryQueueClient
+	defer func() {
+		newMemoryQueueClient = oldFactory
+		_ = stopMemoryQueueInitLoop(context.Background())
+		closeAndSwapMemoryQueueClient(nil)
+	}()
+	_ = stopMemoryQueueInitLoop(context.Background())
+	closeAndSwapMemoryQueueClient(nil)
+
+	var attempts int32
+	newMemoryQueueClient = func(rabbitMQMemoryConfig) (*rabbitMQMemoryClient, error) {
+		atomic.AddInt32(&attempts, 1)
+		return nil, errors.New("always fail")
+	}
+
+	startMemoryQueueInitLoop(rabbitMQMemoryConfig{
+		Enabled:                      true,
+		MemoryExtractConsumerEnabled: false,
+		MemoryExtractReconnectDelay:  10 * time.Millisecond,
+	})
+
+	time.Sleep(30 * time.Millisecond)
+	if err := stopMemoryQueueInitLoop(context.Background()); err != nil {
+		t.Fatalf("expected stop loop success, got %v", err)
+	}
+	before := atomic.LoadInt32(&attempts)
+	time.Sleep(30 * time.Millisecond)
+	after := atomic.LoadInt32(&attempts)
+	if after != before {
+		t.Fatalf("expected no more attempts after stop, before=%d after=%d", before, after)
 	}
 }
