@@ -48,6 +48,19 @@ services:
       retries: 10
       start_period: 20s
 
+  redis:
+    image: redis:7.2-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
   backend:
     image: ${BACKEND_IMAGE:?BACKEND_IMAGE is required}
     restart: unless-stopped
@@ -57,12 +70,16 @@ services:
         condition: service_started
       rabbitmq:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     env_file:
       - .env.production
     environment:
       JAEGER_ENDPOINT: ${JAEGER_ENDPOINT:-http://jaeger:14268/api/traces}
       PROMETHEUS_ADDRESS: ${PROMETHEUS_ADDRESS:-http://prometheus:9090}
       RABBITMQ_URL: ${RABBITMQ_URL:-amqp://${RABBITMQ_USERNAME:-guest}:${RABBITMQ_PASSWORD:-guest}@rabbitmq:5672/}
+      REDIS_ADDRESS: ${REDIS_ADDRESS:-redis:6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     volumes:
       - docs-data:/app/docs
       - runtime-data:/app/var/runtime
@@ -106,5 +123,6 @@ volumes:
   runtime-data:
   prometheus-data:
   rabbitmq-data:
+  redis-data:
   caddy-data:
   caddy-config:
