@@ -46,21 +46,21 @@
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    padding: 8px 20px 20px;
+    padding: 14px 26px 24px;
 }
 
 .message {
     width: 100%;
-    max-width: var(--content-width);
+    max-width: min(var(--content-width), 100%);
     margin: 0 auto;
     display: flex;
-    gap: 12px;
-    padding: 18px 0;
+    gap: 14px;
+    padding: 14px 0;
     animation: rise-in 0.25s ease both;
 }
 
 .message + .message {
-    border-top: 1px solid var(--line-soft);
+    border-top: none;
 }
 
 .message.user {
@@ -100,12 +100,13 @@
 
 .message.assistant .message-content-wrapper {
     flex: 1;
+    max-width: min(900px, 100%);
 }
 
 .message-content {
     width: 100%;
     font-size: 0.96rem;
-    line-height: 1.78;
+    line-height: 1.84;
     color: var(--text-main);
     overflow-wrap: break-word;
 }
@@ -217,7 +218,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-top: 10px;
+    margin-top: 12px;
 }
 
 .message-action-btn {
@@ -305,7 +306,7 @@
     }
 
     .chat-messages {
-        padding: 8px 12px 18px;
+        padding: 10px 12px 18px;
     }
 
     .message {

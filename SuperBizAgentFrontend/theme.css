@@ -23,7 +23,7 @@
     --danger: #c5221f;
     --shadow-soft: 0 8px 22px rgba(60, 64, 67, 0.09);
     --shadow-panel: 0 22px 48px rgba(60, 64, 67, 0.1);
-    --content-width: 1120px;
+    --content-width: 980px;
 }
 
 [data-theme="light"] {

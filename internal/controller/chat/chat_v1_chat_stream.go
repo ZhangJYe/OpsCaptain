@@ -65,7 +65,8 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 				return &v1.ChatStreamRes{}, nil
 			}
 			client.SendToClient("error", execErr.Error())
-			return nil, execErr
+			client.SendToClient("done", "Stream completed")
+			return &v1.ChatStreamRes{}, nil
 		}
 		_, filteredDetail := filterAssistantPayload(ctx, "", response.Detail)
 		sendChatStreamMeta(client, "multi_agent", response.TraceID, filteredDetail, response.Degraded(), response.DegradationReason)
@@ -97,7 +98,8 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 		}
 		g.Log().Errorf(ctx, "[session:%s][req:%s] BuildChatAgent failed: %v", id, requestID, err)
 		client.SendToClient("error", err.Error())
-		return nil, err
+		client.SendToClient("done", "Stream completed")
+		return &v1.ChatStreamRes{}, nil
 	}
 	_, filteredDetail := filterAssistantPayload(ctx, "", contextDetail)
 	sendChatStreamMeta(client, "chat", "", filteredDetail, false, "")
@@ -111,7 +113,8 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 		}
 		g.Log().Errorf(ctx, "[session:%s][req:%s] Agent stream failed: %v", id, requestID, err)
 		client.SendToClient("error", err.Error())
-		return nil, err
+		client.SendToClient("done", "Stream completed")
+		return &v1.ChatStreamRes{}, nil
 	}
 	defer sr.Close()
 

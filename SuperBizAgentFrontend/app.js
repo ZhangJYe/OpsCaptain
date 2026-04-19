@@ -1176,24 +1176,32 @@ class SuperBizAgentApp {
             if (!response.ok) {
                 throw new Error(`HTTP错误: ${response.status}`);
             }
+
+            const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+            if (!contentType.includes('text/event-stream') || !response.body) {
+                return this.sendQuickMessage(message);
+            }
             
             const assistantMessageElement = this.addMessage('assistant', '', true);
             this.removeThinkingBubble();
             let fullResponse = '';
             let isFinalized = false;
             let responseMeta = { mode: '', traceId: '', details: [] };
+            let streamError = '';
+            let switchedToQuickFallback = false;
 
             const finalizeStream = () => {
                 if (isFinalized) {
                     return;
                 }
                 isFinalized = true;
+                const finalResponse = fullResponse.trim() || (streamError ? `流式输出中断：${streamError}` : '未收到可展示的流式文本输出。');
                 if (assistantMessageElement) {
                     assistantMessageElement.classList.remove('streaming');
                     const messageContent = assistantMessageElement.querySelector('.message-content');
                     const messageContentWrapper = assistantMessageElement.querySelector('.message-content-wrapper');
                     if (messageContent) {
-                        messageContent.innerHTML = this.renderMarkdown(fullResponse);
+                        messageContent.innerHTML = this.renderMarkdown(finalResponse);
                         this.highlightCodeBlocks(messageContent);
                         this.renderAssistantMeta(assistantMessageElement, messageContentWrapper, responseMeta);
                         this.renderAssistantDetails(
@@ -1202,11 +1210,11 @@ class SuperBizAgentApp {
                             responseMeta.details || [],
                             responseMeta.mode === 'aiops' ? '查看详细步骤' : '查看执行步骤'
                         );
-                        this.appendMessageActions(messageContentWrapper, 'assistant', fullResponse);
+                        this.appendMessageActions(messageContentWrapper, 'assistant', finalResponse);
                     }
                 }
-                if (fullResponse) {
-                    this.persistAssistantHistory(fullResponse, responseMeta);
+                if (finalResponse) {
+                    this.persistAssistantHistory(finalResponse, responseMeta);
                     if (this.isCurrentChatFromHistory) {
                         this.updateCurrentChatHistory();
                         this.renderChatHistory();
@@ -1217,69 +1225,137 @@ class SuperBizAgentApp {
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '';
-            let currentEvent = '';
+
+            const parseSseBlock = (rawBlock) => {
+                const block = String(rawBlock || '').replace(/\r/g, '');
+                const lines = block.split('\n');
+                let eventName = '';
+                const dataLines = [];
+                for (const rawLine of lines) {
+                    const line = rawLine || '';
+                    if (!line) {
+                        continue;
+                    }
+                    if (line.startsWith(':')) {
+                        continue;
+                    }
+                    if (line.startsWith('event:')) {
+                        eventName = line.slice(6).trim();
+                        continue;
+                    }
+                    if (line.startsWith('data:')) {
+                        dataLines.push(line.slice(5).replace(/^\s/, ''));
+                    }
+                }
+                return {
+                    eventName: eventName || 'message',
+                    data: dataLines.join('\n')
+                };
+            };
+
+            const applySseEvent = async (eventName, data) => {
+                if (eventName === 'connected') {
+                    return false;
+                }
+                if (eventName === 'meta') {
+                    try {
+                        responseMeta = this.normalizeAssistantMeta(JSON.parse(data));
+                    } catch (error) {
+                        console.warn('解析stream meta失败:', error);
+                    }
+                    return false;
+                }
+                if (eventName === 'message') {
+                    if (data === '') {
+                        fullResponse += '\n';
+                    } else {
+                        fullResponse += data;
+                    }
+                    if (assistantMessageElement) {
+                        const messageContent = assistantMessageElement.querySelector('.message-content');
+                        if (messageContent) {
+                            messageContent.textContent = fullResponse;
+                            this.scrollToBottom();
+                        }
+                    }
+                    return false;
+                }
+                if (eventName === 'error') {
+                    streamError = data || 'stream error';
+                    return true;
+                }
+                if (eventName === 'done' || data === '[DONE]') {
+                    finalizeStream();
+                    return true;
+                }
+                return false;
+            };
+
+            const switchToQuickFallback = async () => {
+                if (switchedToQuickFallback) {
+                    return;
+                }
+                switchedToQuickFallback = true;
+                if (assistantMessageElement && assistantMessageElement.parentNode) {
+                    assistantMessageElement.parentNode.removeChild(assistantMessageElement);
+                }
+                this.showNotification('流式输出中断，已自动切换到快速回答', 'warning');
+                await this.sendQuickMessage(message);
+            };
 
             try {
+                let shouldStop = false;
                 while (true) {
                     const { done, value } = await reader.read();
                     
                     if (done) {
-                        finalizeStream();
+                        if (buffer.trim()) {
+                            const parsed = parseSseBlock(buffer);
+                            shouldStop = await applySseEvent(parsed.eventName, parsed.data);
+                        }
+                        if (streamError && !fullResponse.trim()) {
+                            await switchToQuickFallback();
+                        } else if (!switchedToQuickFallback) {
+                            finalizeStream();
+                        }
                         break;
                     }
 
                     buffer += decoder.decode(value, { stream: true });
-                    
-                    const lines = buffer.split('\n');
-                    buffer = lines.pop() || '';
-                    
-                    for (const line of lines) {
-                        if (line.trim() === '') continue;
-                        
-                        if (line.startsWith('id: ')) {
-                            continue;
-                        } else if (line.startsWith('event: ')) {
-                            currentEvent = line.substring(7);
-                            if (currentEvent === 'connected') {
-                                console.log('流式连接确认');
-                            } else if (currentEvent === 'done') {
-                                finalizeStream();
-                                return;
-                            }
-                            continue;
-                        } else if (line.startsWith('data: ')) {
-                            const data = line.substring(6);
-                            if (data === '[DONE]') {
-                                finalizeStream();
-                                return;
-                            }
-                            
-                            if (currentEvent === 'meta') {
-                                try {
-                                    const parsed = JSON.parse(data);
-                                    responseMeta = this.normalizeAssistantMeta(parsed);
-                                } catch (error) {
-                                    console.warn('解析stream meta失败:', error);
-                                }
-                            } else if (currentEvent === 'message') {
-                                if (data === '') {
-                                    fullResponse += '\n';
-                                } else {
-                                    fullResponse += data;
-                                }
-                                
-                                if (assistantMessageElement) {
-                                    const messageContent = assistantMessageElement.querySelector('.message-content');
-                                    messageContent.textContent = fullResponse;
-                                    this.scrollToBottom();
-                                }
-                            }
+
+                    while (true) {
+                        const match = buffer.match(/\r?\n\r?\n/);
+                        if (!match || match.index === undefined) {
+                            break;
                         }
+                        const splitIndex = match.index;
+                        const block = buffer.slice(0, splitIndex);
+                        buffer = buffer.slice(splitIndex + match[0].length);
+                        if (!block.trim()) {
+                            continue;
+                        }
+                        const parsed = parseSseBlock(block);
+                        shouldStop = await applySseEvent(parsed.eventName, parsed.data);
+                        if (shouldStop) {
+                            break;
+                        }
+                    }
+                    if (shouldStop) {
+                        if (streamError && !fullResponse.trim()) {
+                            await switchToQuickFallback();
+                        } else if (!switchedToQuickFallback) {
+                            finalizeStream();
+                        }
+                        break;
                     }
                 }
             } catch (error) {
                 if (this.isAbortError(error)) {
                     finalizeStream();
+                    return;
+                }
+                if (streamError && !fullResponse.trim()) {
+                    await switchToQuickFallback();
                     return;
                 }
                 throw error;
