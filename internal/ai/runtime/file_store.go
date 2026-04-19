@@ -64,9 +64,6 @@ func (l *FileLedger) AppendResult(ctx context.Context, taskID string, result *pr
 }
 
 func (l *FileLedger) AppendEvent(ctx context.Context, event *protocol.TaskEvent) error {
-	if err := l.inner.AppendEvent(ctx, event); err != nil {
-		return err
-	}
 	traceFile := filepath.Join(l.dir, "traces", event.TraceID+".jsonl")
 	f, err := os.OpenFile(traceFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {

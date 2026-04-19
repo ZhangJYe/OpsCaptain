@@ -16,3 +16,6 @@ scrape_configs:
     static_configs:
       - targets:
           - backend:8000
+    metric_relabel_configs:
+      - action: labeldrop
+        regex: session_id

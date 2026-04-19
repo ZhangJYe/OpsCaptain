@@ -12,9 +12,13 @@ services:
   prometheus:
     image: prom/prometheus:v2.54.1
     restart: unless-stopped
+    mem_limit: ${PROMETHEUS_MEM_LIMIT:-4g}
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.wal-compression
+      - --storage.tsdb.retention.time=${PROMETHEUS_RETENTION_TIME:-3d}
+      - --storage.tsdb.retention.size=${PROMETHEUS_RETENTION_SIZE:-6GB}
       - --web.external-url=${PROMETHEUS_EXTERNAL_URL:-/prometheus/}
       - --web.route-prefix=/
     volumes:

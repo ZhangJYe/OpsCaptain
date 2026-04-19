@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"SuperBizAgent/internal/ai/contextengine"
@@ -22,9 +24,23 @@ type MemoryService struct {
 var (
 	extractMemoriesFunc     = mem.ExtractMemoriesWithReport
 	memoryExtractionTimeout = loadMemoryExtractionTimeout
+	memoryExtractionMaxJobs = loadMemoryExtractionMaxJobs
+	memoryExtractionWait    = loadMemoryExtractionWait
 )
 
-const defaultExtractTimeout = 1500 * time.Millisecond
+const (
+	defaultExtractTimeout = 1500 * time.Millisecond
+	defaultExtractMaxJobs = 8
+	defaultExtractWait    = 50 * time.Millisecond
+)
+
+var ErrMemoryExtractionLimited = errors.New("memory extraction concurrency queue timeout")
+
+var (
+	memoryExtractSemaphoreMu sync.Mutex
+	memoryExtractSemaphore   chan struct{}
+	memoryExtractSemaphoreN  int
+)
 
 func NewMemoryService() *MemoryService {
 	return &MemoryService{
@@ -94,7 +110,13 @@ func (s *MemoryService) PersistOutcome(ctx context.Context, sessionID, query, su
 	}
 	sessionMem := mem.GetSimpleMemory(sessionID)
 	sessionMem.AddUserAssistantPair(query, summary)
+	release, err := acquireMemoryExtractionSlot(ctx)
+	if err != nil {
+		g.Log().Debugf(ctx, "[memory] skip extraction for session %s: %v", sessionID, err)
+		return
+	}
 	go func(parent context.Context) {
+		defer release()
 		extractCtx, cancel := boundedMemoryContext(parent)
 		defer cancel()
 		report := extractMemoriesFunc(extractCtx, sessionID, query, summary)
@@ -118,6 +140,63 @@ func loadMemoryExtractionTimeout(ctx context.Context) time.Duration {
 		return time.Duration(v.Int64()) * time.Millisecond
 	}
 	return defaultExtractTimeout
+}
+
+func loadMemoryExtractionMaxJobs(ctx context.Context) int {
+	v, err := g.Cfg().Get(ctx, "memory.extract_max_concurrency")
+	if err == nil && v.Int() > 0 {
+		return v.Int()
+	}
+	return defaultExtractMaxJobs
+}
+
+func loadMemoryExtractionWait(ctx context.Context) time.Duration {
+	v, err := g.Cfg().Get(ctx, "memory.extract_wait_timeout_ms")
+	if err == nil && v.Int64() >= 0 {
+		return time.Duration(v.Int64()) * time.Millisecond
+	}
+	return defaultExtractWait
+}
+
+func acquireMemoryExtractionSlot(ctx context.Context) (func(), error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	maxJobs := memoryExtractionMaxJobs(ctx)
+	if maxJobs <= 0 {
+		return func() {}, nil
+	}
+
+	sem := getOrCreateMemoryExtractionSemaphore(maxJobs)
+	waitCtx, cancel := context.WithTimeout(ctx, memoryExtractionWait(ctx))
+	defer cancel()
+
+	select {
+	case sem <- struct{}{}:
+		return func() {
+			select {
+			case <-sem:
+			default:
+			}
+		}, nil
+	case <-waitCtx.Done():
+		if errors.Is(waitCtx.Err(), context.DeadlineExceeded) {
+			return nil, ErrMemoryExtractionLimited
+		}
+		return nil, waitCtx.Err()
+	}
+}
+
+func getOrCreateMemoryExtractionSemaphore(size int) chan struct{} {
+	memoryExtractSemaphoreMu.Lock()
+	defer memoryExtractSemaphoreMu.Unlock()
+
+	if memoryExtractSemaphore != nil && memoryExtractSemaphoreN == size {
+		return memoryExtractSemaphore
+	}
+	memoryExtractSemaphore = make(chan struct{}, size)
+	memoryExtractSemaphoreN = size
+	return memoryExtractSemaphore
 }
 
 func refsFromContextItems(items []contextengine.ContextItem) []protocol.MemoryRef {

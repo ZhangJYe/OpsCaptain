@@ -91,7 +91,7 @@ var (
 			Name: "opscaptionai_session_tokens_total",
 			Help: "Per-session token consumption for auditing and alerting.",
 		},
-		[]string{"session_id", "user_id"},
+		[]string{"user_id"},
 	)
 )
 
@@ -152,13 +152,12 @@ func IncCacheMiss(cacheType string) {
 	cacheMissesTotal.WithLabelValues(fallbackLabel(cacheType, "unknown")).Inc()
 }
 
-func AddSessionTokens(sessionID, userID string, count int) {
+func AddSessionTokens(_ string, userID string, count int) {
 	if count <= 0 {
 		return
 	}
 	ensureRegistered()
 	sessionTokensTotal.WithLabelValues(
-		fallbackLabel(sessionID, "unknown"),
 		fallbackLabel(userID, "anonymous"),
 	).Add(float64(count))
 }

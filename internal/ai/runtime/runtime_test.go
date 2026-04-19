@@ -158,3 +158,78 @@ func TestRuntimeDetailMessagesOmitVerboseSummaryBodies(t *testing.T) {
 		t.Fatalf("expected verbose report body to be omitted from details, got:\n%s", joined)
 	}
 }
+
+func TestInMemoryLedgerPrunesLimits(t *testing.T) {
+	ledger := NewInMemoryLedgerWithLimits(2, 2, 3)
+	ctx := context.Background()
+
+	task1 := protocol.NewRootTask("s1", "goal1", "agent")
+	task2 := protocol.NewRootTask("s2", "goal2", "agent")
+	task3 := protocol.NewRootTask("s3", "goal3", "agent")
+
+	if err := ledger.CreateTask(ctx, task1); err != nil {
+		t.Fatalf("create task1: %v", err)
+	}
+	if err := ledger.CreateTask(ctx, task2); err != nil {
+		t.Fatalf("create task2: %v", err)
+	}
+	if err := ledger.CreateTask(ctx, task3); err != nil {
+		t.Fatalf("create task3: %v", err)
+	}
+
+	if err := ledger.AppendResult(ctx, task1.TaskID, &protocol.TaskResult{TaskID: task1.TaskID, Agent: "agent", Status: protocol.ResultStatusSucceeded}); err != nil {
+		t.Fatalf("append result1: %v", err)
+	}
+	if err := ledger.AppendResult(ctx, task2.TaskID, &protocol.TaskResult{TaskID: task2.TaskID, Agent: "agent", Status: protocol.ResultStatusSucceeded}); err != nil {
+		t.Fatalf("append result2: %v", err)
+	}
+	if err := ledger.AppendResult(ctx, task3.TaskID, &protocol.TaskResult{TaskID: task3.TaskID, Agent: "agent", Status: protocol.ResultStatusSucceeded}); err != nil {
+		t.Fatalf("append result3: %v", err)
+	}
+
+	for i := 1; i <= 5; i++ {
+		if err := ledger.AppendEvent(ctx, &protocol.TaskEvent{
+			TraceID:   "trace-test",
+			TaskID:    task3.TaskID,
+			Type:      "task_info",
+			CreatedAt: int64(i),
+		}); err != nil {
+			t.Fatalf("append event %d: %v", i, err)
+		}
+	}
+
+	ledger.mu.RLock()
+	taskCount := len(ledger.tasks)
+	resultCount := len(ledger.results)
+	eventsCount := len(ledger.events)
+	_, task1Exists := ledger.tasks[task1.TaskID]
+	_, result1Exists := ledger.results[task1.TaskID]
+	ledger.mu.RUnlock()
+
+	if taskCount != 2 {
+		t.Fatalf("expected 2 tasks after prune, got %d", taskCount)
+	}
+	if resultCount != 2 {
+		t.Fatalf("expected 2 results after prune, got %d", resultCount)
+	}
+	if eventsCount != 3 {
+		t.Fatalf("expected 3 events after prune, got %d", eventsCount)
+	}
+	if task1Exists {
+		t.Fatalf("expected oldest task %s to be pruned", task1.TaskID)
+	}
+	if result1Exists {
+		t.Fatalf("expected oldest result %s to be pruned", task1.TaskID)
+	}
+
+	events, err := ledger.EventsByTrace(ctx, "trace-test")
+	if err != nil {
+		t.Fatalf("events by trace: %v", err)
+	}
+	if len(events) != 3 {
+		t.Fatalf("expected 3 trace events, got %d", len(events))
+	}
+	if events[0].CreatedAt != 3 {
+		t.Fatalf("expected oldest retained event created_at=3, got %d", events[0].CreatedAt)
+	}
+}

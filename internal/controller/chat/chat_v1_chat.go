@@ -12,13 +12,23 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/cloudwego/eino/compose"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/util/guid"
 )
 
-var sessionLocks sync.Map
+type sessionLockEntry struct {
+	mu       sync.Mutex
+	refCount int
+	lastUsed time.Time
+}
+
+var (
+	sessionLocks   = make(map[string]*sessionLockEntry)
+	sessionLocksMu sync.Mutex
+)
 var (
 	buildChatAgent          = chat_pipeline.BuildChatAgentWithQuery
 	getDegradationDecision  = aiservice.GetDegradationDecision
@@ -26,15 +36,38 @@ var (
 	runChatMultiAgent       = aiservice.RunChatMultiAgent
 )
 
-func acquireSessionLock(id string) *sync.Mutex {
-	val, _ := sessionLocks.LoadOrStore(id, &sync.Mutex{})
-	mu := val.(*sync.Mutex)
-	mu.Lock()
-	return mu
+func acquireSessionLock(id string) *sessionLockEntry {
+	sessionLocksMu.Lock()
+	entry, ok := sessionLocks[id]
+	if !ok {
+		entry = &sessionLockEntry{}
+		sessionLocks[id] = entry
+	}
+	entry.refCount++
+	entry.lastUsed = time.Now()
+	sessionLocksMu.Unlock()
+	entry.mu.Lock()
+	return entry
 }
 
-func releaseSessionLock(id string, mu *sync.Mutex) {
-	mu.Unlock()
+func releaseSessionLock(id string, entry *sessionLockEntry) {
+	if entry == nil {
+		return
+	}
+	entry.mu.Unlock()
+	sessionLocksMu.Lock()
+	defer sessionLocksMu.Unlock()
+	current, ok := sessionLocks[id]
+	if !ok || current != entry {
+		return
+	}
+	if entry.refCount > 0 {
+		entry.refCount--
+	}
+	entry.lastUsed = time.Now()
+	if entry.refCount == 0 {
+		delete(sessionLocks, id)
+	}
 }
 
 func (c *ControllerV1) Chat(ctx context.Context, req *v1.ChatReq) (res *v1.ChatRes, err error) {

@@ -2,7 +2,9 @@ package chat
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	v1 "SuperBizAgent/api/chat/v1"
 	"SuperBizAgent/internal/ai/agent/chat_pipeline"
@@ -160,5 +162,67 @@ func TestChatRoutesToMultiAgentWhenQueryMatches(t *testing.T) {
 	}
 	if res.TraceID != "trace-123" {
 		t.Fatalf("expected trace id, got %q", res.TraceID)
+	}
+}
+
+func TestSessionLockReferenceCountCleanup(t *testing.T) {
+	sessionLocksMu.Lock()
+	sessionLocks = make(map[string]*sessionLockEntry)
+	sessionLocksMu.Unlock()
+
+	sessionID := "session-lock-test"
+	entry1 := acquireSessionLock(sessionID)
+
+	acquiredSecond := make(chan *sessionLockEntry, 1)
+	go func() {
+		acquiredSecond <- acquireSessionLock(sessionID)
+	}()
+
+	deadline := time.Now().Add(300 * time.Millisecond)
+	for {
+		sessionLocksMu.Lock()
+		entry, ok := sessionLocks[sessionID]
+		refCount := 0
+		if ok {
+			refCount = entry.refCount
+		}
+		sessionLocksMu.Unlock()
+
+		if ok && refCount == 2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting refCount=2, found=%v refCount=%d", ok, refCount)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	releaseSessionLock(sessionID, entry1)
+
+	entry2 := waitForSecondSessionLock(t, acquiredSecond)
+	sessionLocksMu.Lock()
+	_, existsAfterFirstRelease := sessionLocks[sessionID]
+	sessionLocksMu.Unlock()
+	if !existsAfterFirstRelease {
+		t.Fatal("session lock should still exist after first release")
+	}
+
+	releaseSessionLock(sessionID, entry2)
+	sessionLocksMu.Lock()
+	_, existsAfterSecondRelease := sessionLocks[sessionID]
+	sessionLocksMu.Unlock()
+	if existsAfterSecondRelease {
+		t.Fatal("session lock should be removed after final release")
+	}
+}
+
+func waitForSecondSessionLock(t *testing.T, ch <-chan *sessionLockEntry) *sessionLockEntry {
+	t.Helper()
+	select {
+	case entry := <-ch:
+		return entry
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal(fmt.Errorf("timed out waiting second lock acquisition"))
+		return nil
 	}
 }

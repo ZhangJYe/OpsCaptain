@@ -11,12 +11,12 @@ groups:
           summary: "OpsCaptionAI hourly token consumption exceeded threshold"
           description: "Hourly token consumption is {{ $value }}. Check hot sessions and agent mix."
 
-      - alert: OpsCaptionAISessionDailyTokenSpike
-        expr: sum by (session_id, user_id) (increase(opscaptionai_session_tokens_total[24h])) > 50000
+      - alert: OpsCaptionAIUserDailyTokenSpike
+        expr: sum by (user_id) (increase(opscaptionai_session_tokens_total[24h])) > 50000
         for: 10m
         labels:
           severity: warning
           service: opscaptionai
         annotations:
-          summary: "OpsCaptionAI daily token consumption exceeded session threshold"
-          description: "Session {{ $labels.session_id }} for user {{ $labels.user_id }} consumed {{ $value }} tokens in the last 24h."
+          summary: "OpsCaptionAI daily token consumption exceeded user threshold"
+          description: "User {{ $labels.user_id }} consumed {{ $value }} tokens in the last 24h."
