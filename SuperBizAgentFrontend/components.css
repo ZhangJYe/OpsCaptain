@@ -2597,6 +2597,177 @@ body[data-theme="light"] {
     flex: 0 0 auto;
 }
 
+.main-content {
+    background:
+        radial-gradient(760px 360px at 48% 18%, rgba(31, 91, 189, 0.045), transparent 68%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(250, 252, 255, 0.94));
+}
+
+.topbar {
+    background: transparent;
+}
+
+.operator-brief-card {
+    position: relative;
+    display: grid;
+    grid-template-columns: 46px minmax(0, 1fr) auto;
+    gap: 12px;
+    align-items: center;
+    min-height: 74px;
+    padding: 13px;
+    border: 1px solid rgba(31, 91, 189, 0.08);
+    border-radius: 24px;
+    background:
+        linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(241, 246, 255, 0.78)),
+        radial-gradient(160px 120px at 100% 0%, rgba(31, 91, 189, 0.14), transparent 70%);
+    box-shadow: 0 18px 44px rgba(31, 91, 189, 0.08);
+}
+
+.operator-brief-avatar {
+    width: 46px;
+    height: 46px;
+    border-radius: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.operator-brief-avatar .operator-person svg {
+    width: 21px;
+    height: 21px;
+}
+
+.operator-brief-copy {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+}
+
+.operator-brief-copy span {
+    color: #8a929d;
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.operator-brief-copy strong {
+    color: #20242a;
+    font-family: var(--font-display);
+    font-size: 1rem;
+    letter-spacing: -0.01em;
+}
+
+.operator-brief-copy small {
+    color: #6b7280;
+    font-size: 0.68rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.operator-brief-card em {
+    align-self: start;
+    min-height: 22px;
+    padding: 0 8px;
+    border-radius: 999px;
+    background: rgba(34, 151, 79, 0.1);
+    color: #1d7f45;
+    display: inline-flex;
+    align-items: center;
+    font-style: normal;
+    font-size: 0.62rem;
+    font-weight: 800;
+}
+
+.agent-market-card,
+.capability-card {
+    border-radius: 22px;
+    box-shadow: 0 14px 34px rgba(36, 44, 56, 0.055);
+}
+
+.agent-market-card {
+    padding: 17px;
+}
+
+.capability-card {
+    padding: 16px 15px;
+}
+
+.market-tabs {
+    border: 1px solid rgba(32, 42, 54, 0.04);
+}
+
+.market-tab {
+    letter-spacing: -0.01em;
+}
+
+.skill-choice {
+    border-color: rgba(32, 42, 54, 0.075);
+    background: rgba(249, 251, 254, 0.82);
+}
+
+.skill-choice:not(.active) {
+    color: #8a929d;
+}
+
+.history-search {
+    border-color: rgba(32, 42, 54, 0.06);
+    background: rgba(255, 255, 255, 0.72);
+}
+
+.chat-history-section {
+    padding-right: 0;
+}
+
+.history-header {
+    color: #87909d;
+    font-size: 0.72rem;
+    letter-spacing: 0.05em;
+}
+
+.history-item {
+    border: 1px solid rgba(32, 42, 54, 0.035);
+    background: rgba(255, 255, 255, 0.44);
+}
+
+.history-item + .history-item {
+    margin-top: 6px;
+}
+
+.history-item.active {
+    border-color: rgba(31, 91, 189, 0.13);
+}
+
+.reference-chat-stage {
+    gap: 48px;
+}
+
+.reference-user-note {
+    width: min(620px, 100%);
+    font-size: 0.95rem;
+}
+
+.reference-agent-message {
+    width: min(700px, 64vw);
+    padding: 0 0 0 2px;
+}
+
+.reference-agent-copy {
+    font-size: 0.92rem;
+}
+
+.floating-action {
+    border-radius: 12px;
+    box-shadow: 0 14px 26px rgba(31, 91, 189, 0.18);
+}
+
+.input-wrapper {
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 18px 44px rgba(33, 44, 61, 0.075);
+}
+
 @media (max-width: 980px) {
     .app-layout {
         width: 100vw;

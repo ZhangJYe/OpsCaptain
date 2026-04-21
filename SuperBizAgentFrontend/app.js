@@ -271,6 +271,8 @@ class SuperBizAgentApp {
 
         this.applyStoredTheme();
         this.welcomeGreeting = document.getElementById('welcomeGreeting');
+        this.sidebarOperatorAvatar = document.getElementById('sidebarOperatorAvatar');
+        this.sidebarOperatorName = document.getElementById('sidebarOperatorName');
         this.welcomeOperatorAvatar = document.getElementById('welcomeOperatorAvatar');
         this.welcomeOperatorName = document.getElementById('welcomeOperatorName');
         this.chatHistoryList = document.getElementById('chatHistoryList');
@@ -1217,6 +1219,15 @@ class SuperBizAgentApp {
     }
 
     syncOperatorUI() {
+        if (this.sidebarOperatorAvatar) {
+            const tone = this.currentOperator && this.currentOperator.tone ? this.currentOperator.tone : 'blue';
+            this.sidebarOperatorAvatar.className = `operator-brief-avatar operator-avatar operator-tone-${tone}`;
+            this.sidebarOperatorAvatar.innerHTML = this.operatorAvatarInnerHtml(this.currentOperator);
+            this.sidebarOperatorAvatar.title = this.currentOperator.name;
+        }
+        if (this.sidebarOperatorName) {
+            this.sidebarOperatorName.textContent = this.currentOperator.name;
+        }
         if (this.welcomeOperatorAvatar) {
             const tone = this.currentOperator && this.currentOperator.tone ? this.currentOperator.tone : 'blue';
             this.welcomeOperatorAvatar.className = `reference-agent-avatar operator-avatar operator-tone-${tone}`;
