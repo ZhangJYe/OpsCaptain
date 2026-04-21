@@ -29,6 +29,54 @@ read_env_value() {
   ' ./.env.production
 }
 
+read_config_section_value() {
+  section="$1"
+  key="$2"
+  awk -v section="$section" -v key="$key" '
+    function trim(s) {
+      sub(/^[[:space:]]+/, "", s)
+      sub(/[[:space:]]+$/, "", s)
+      return s
+    }
+    function unquote(s) {
+      s = trim(s)
+      if ((substr(s, 1, 1) == "\"" && substr(s, length(s), 1) == "\"") || (substr(s, 1, 1) == "\047" && substr(s, length(s), 1) == "\047")) {
+        s = substr(s, 2, length(s) - 2)
+      }
+      return s
+    }
+    $0 ~ "^[[:space:]]*" section ":[[:space:]]*($|#)" {
+      in_section = 1
+      next
+    }
+    in_section && $0 ~ "^[^[:space:]#][^:]*:" {
+      in_section = 0
+    }
+    in_section {
+      pattern = "^[[:space:]]+" key ":[[:space:]]*"
+      if ($0 ~ pattern) {
+        value = $0
+        sub(pattern, "", value)
+        sub(/[[:space:]]+#.*$/, "", value)
+        print unquote(value)
+        exit
+      }
+    }
+  ' ./config.prod.yaml
+}
+
+is_truthy() {
+  value="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+  case "$value" in
+    true|1|yes|y|on|enabled)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 normalize_path_prefix() {
   value="$(normalize_optional_value "${1:-}")"
   case "$value" in
@@ -163,12 +211,18 @@ if [ ! -f "./.env.production" ]; then
   exit 1
 fi
 
+if [ ! -f "./config.prod.yaml" ]; then
+  echo "config.prod.yaml is required"
+  exit 1
+fi
+
 set -a
 . ./release.env
 set +a
 
 domain_name="$(normalize_optional_value "$(read_env_value DOMAIN_NAME)")"
 tls_email="$(normalize_optional_value "$(read_env_value TLS_EMAIL)")"
+auth_enabled="$(normalize_optional_value "$(read_config_section_value auth enabled)")"
 auth_secret="$(normalize_optional_value "$(read_env_value AUTH_JWT_SECRET)")"
 jaeger_endpoint="$(normalize_optional_value "$(read_env_value JAEGER_ENDPOINT)")"
 prometheus_address="$(normalize_optional_value "$(read_env_value PROMETHEUS_ADDRESS)")"
@@ -219,16 +273,22 @@ fi
 export JAEGER_BASE_PATH="$jaeger_base_path"
 export PROMETHEUS_EXTERNAL_URL="$prometheus_external_url"
 
-case "$auth_secret" in
-  ""|"replace-with-a-32-char-secret"|"your-jwt-secret"|replace-with*|your-*)
-    echo "AUTH_JWT_SECRET must be set to a strong non-placeholder value"
-    exit 1
-    ;;
-esac
+if [ -z "$auth_enabled" ]; then
+  auth_enabled="$(normalize_optional_value "$(read_env_value AUTH_ENABLED)")"
+fi
 
-if [ "${#auth_secret}" -lt 32 ]; then
-  echo "AUTH_JWT_SECRET must be at least 32 characters"
-  exit 1
+if is_truthy "$auth_enabled"; then
+  case "$auth_secret" in
+    ""|"replace-with-a-32-char-secret"|"your-jwt-secret"|replace-with*|your-*)
+      echo "AUTH_JWT_SECRET must be set to a strong non-placeholder value when auth.enabled is true"
+      exit 1
+      ;;
+  esac
+
+  if [ "${#auth_secret}" -lt 32 ]; then
+    echo "AUTH_JWT_SECRET must be at least 32 characters when auth.enabled is true"
+    exit 1
+  fi
 fi
 
 caddyfile_tmp_path="$(mktemp "${TMPDIR:-/tmp}/opscaptain-caddy.XXXXXX")"
