@@ -6,6 +6,17 @@ class SuperBizAgentApp {
         this.observability = this.resolveObservabilityConfig();
         this.currentMode = 'quick'; // 'quick' 或 'stream'
         this.sessionId = this.generateSessionId();
+        this.operatorRoster = [
+            { name: '林澈', tone: 'blue' },
+            { name: '许知安', tone: 'green' },
+            { name: '周望', tone: 'amber' },
+            { name: '陈序', tone: 'slate' },
+            { name: '沈宁', tone: 'blue' },
+            { name: '陆遥', tone: 'green' },
+            { name: '顾川', tone: 'amber' },
+            { name: '叶岚', tone: 'slate' }
+        ];
+        this.currentOperator = this.createSessionOperator(this.sessionId);
         this.isStreaming = false;
         this.currentChatHistory = []; // 当前对话的消息历史
         this.chatHistories = this.loadChatHistories(); // 所有历史对话
@@ -16,6 +27,7 @@ class SuperBizAgentApp {
         this.abortController = null;
         
         this.initializeElements();
+        this.syncOperatorUI();
         this.bindEvents();
         this.updateUI();
         this.initMarkdown();
@@ -259,6 +271,8 @@ class SuperBizAgentApp {
 
         this.applyStoredTheme();
         this.welcomeGreeting = document.getElementById('welcomeGreeting');
+        this.welcomeOperatorAvatar = document.getElementById('welcomeOperatorAvatar');
+        this.welcomeOperatorName = document.getElementById('welcomeOperatorName');
         this.chatHistoryList = document.getElementById('chatHistoryList');
         this.observabilityLastCheck = document.getElementById('observabilityLastCheck');
         this.refreshObservabilityBtn = document.getElementById('refreshObservabilityBtn');
@@ -787,6 +801,8 @@ class SuperBizAgentApp {
         
         // 生成新的会话ID
         this.sessionId = this.generateSessionId();
+        this.currentOperator = this.createSessionOperator(this.sessionId);
+        this.syncOperatorUI();
         
         // 重置模式为快速
         this.currentMode = 'quick';
@@ -828,6 +844,8 @@ class SuperBizAgentApp {
         const chatHistory = {
             id: this.sessionId,
             title: title,
+            operatorName: this.currentOperator.name,
+            operatorTone: this.currentOperator.tone,
             messages: [...this.currentChatHistory],
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
@@ -860,6 +878,9 @@ class SuperBizAgentApp {
         
         // 更新现有的历史记录
         const history = this.chatHistories[existingIndex];
+        const operator = this.currentOperator || this.resolveHistoryOperator(history);
+        history.operatorName = operator.name;
+        history.operatorTone = operator.tone;
         history.messages = [...this.currentChatHistory];
         history.updatedAt = new Date().toISOString();
         
@@ -924,8 +945,10 @@ class SuperBizAgentApp {
             if (!this.historySearchTerm) {
                 return true;
             }
+            const operator = this.resolveHistoryOperator(history);
             const searchableText = [
                 history.title,
+                operator.name,
                 ...(history.messages || []).map((message) => message.content || '')
             ].join(' ').toLowerCase();
             return searchableText.includes(this.historySearchTerm);
@@ -940,6 +963,7 @@ class SuperBizAgentApp {
         }
         
         filteredHistories.forEach((history, index) => {
+            const operator = this.resolveHistoryOperator(history);
             const historyItem = document.createElement('div');
             historyItem.className = 'history-item';
             if (history.id === this.sessionId) {
@@ -948,7 +972,11 @@ class SuperBizAgentApp {
             historyItem.dataset.historyId = history.id;
             
             historyItem.innerHTML = `
+                <div class="history-item-avatar operator-avatar operator-tone-${this.escapeHtml(operator.tone || 'blue')}">
+                    ${this.operatorAvatarInnerHtml(operator)}
+                </div>
                 <div class="history-item-content">
+                    <span class="history-item-operator">${this.escapeHtml(operator.name)}</span>
                     <span class="history-item-title">${this.escapeHtml(history.title)}</span>
                 </div>
                 <button class="history-item-delete" data-history-id="${history.id}" title="删除">
@@ -996,6 +1024,8 @@ class SuperBizAgentApp {
         
         // 加载历史对话
         this.sessionId = history.id;
+        this.currentOperator = this.resolveHistoryOperator(history);
+        this.syncOperatorUI();
         this.currentChatHistory = [...history.messages];
         this.isCurrentChatFromHistory = true; // 标记为从历史记录加载
         
@@ -1030,6 +1060,8 @@ class SuperBizAgentApp {
                 this.chatMessages.innerHTML = '';
             }
             this.sessionId = this.generateSessionId();
+            this.currentOperator = this.createSessionOperator(this.sessionId);
+            this.syncOperatorUI();
             this.checkAndSetCentered();
         }
     }
@@ -1130,6 +1162,70 @@ class SuperBizAgentApp {
     // 生成随机会话ID
     generateSessionId() {
         return 'session_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+    }
+
+    hashString(value) {
+        return Array.from(String(value || '')).reduce((hash, char) => {
+            return ((hash << 5) - hash) + char.charCodeAt(0);
+        }, 0);
+    }
+
+    createSessionOperator(seed = '', randomize = true) {
+        if (!Array.isArray(this.operatorRoster) || this.operatorRoster.length === 0) {
+            return { name: '林澈', tone: 'blue' };
+        }
+        const shouldUseRandom = randomize || !seed;
+        const index = shouldUseRandom
+            ? Math.floor(Math.random() * this.operatorRoster.length)
+            : Math.abs(this.hashString(seed)) % this.operatorRoster.length;
+        return { ...this.operatorRoster[index] };
+    }
+
+    resolveHistoryOperator(history = {}) {
+        if (history.operatorName) {
+            return {
+                name: history.operatorName,
+                tone: history.operatorTone || this.createSessionOperator(history.id || history.title, false).tone || 'blue'
+            };
+        }
+        const operator = this.createSessionOperator(history.id || history.title || '', false);
+        history.operatorName = operator.name;
+        history.operatorTone = operator.tone;
+        return operator;
+    }
+
+    operatorAvatarInnerHtml(operator = this.currentOperator) {
+        const name = operator && operator.name ? operator.name : '值班助手';
+        return `
+            <span class="operator-person" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="12" cy="8" r="4" fill="currentColor"/>
+                    <path d="M5.5 20C6.4 15.9 8.72 14 12 14C15.28 14 17.6 15.9 18.5 20" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+                </svg>
+            </span>
+            <span class="sr-only">${this.escapeHtml(name)}</span>
+        `;
+    }
+
+    createOperatorAvatar(className = 'message-avatar', operator = this.currentOperator) {
+        const avatar = document.createElement('div');
+        const tone = operator && operator.tone ? operator.tone : 'blue';
+        avatar.className = `${className} operator-avatar operator-tone-${tone}`;
+        avatar.title = operator && operator.name ? operator.name : '值班助手';
+        avatar.innerHTML = this.operatorAvatarInnerHtml(operator);
+        return avatar;
+    }
+
+    syncOperatorUI() {
+        if (this.welcomeOperatorAvatar) {
+            const tone = this.currentOperator && this.currentOperator.tone ? this.currentOperator.tone : 'blue';
+            this.welcomeOperatorAvatar.className = `reference-agent-avatar operator-avatar operator-tone-${tone}`;
+            this.welcomeOperatorAvatar.innerHTML = this.operatorAvatarInnerHtml(this.currentOperator);
+            this.welcomeOperatorAvatar.title = this.currentOperator.name;
+        }
+        if (this.welcomeOperatorName) {
+            this.welcomeOperatorName.textContent = this.currentOperator.name;
+        }
     }
 
     // 发送消息
@@ -1514,14 +1610,7 @@ class SuperBizAgentApp {
 
         // 如果是assistant消息，添加头像图标
         if (type === 'assistant') {
-            const messageAvatar = document.createElement('div');
-            messageAvatar.className = 'message-avatar';
-            messageAvatar.innerHTML = `
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" fill="white"/>
-                </svg>
-            `;
-            messageDiv.appendChild(messageAvatar);
+            messageDiv.appendChild(this.createOperatorAvatar());
         }
 
         // 创建消息内容包装器
@@ -1920,14 +2009,7 @@ class SuperBizAgentApp {
         const messageDiv = document.createElement('div');
         messageDiv.className = `message assistant${normalizedMeta.mode === 'aiops' ? ' aiops-message' : ''}`;
 
-        const messageAvatar = document.createElement('div');
-        messageAvatar.className = 'message-avatar';
-        messageAvatar.innerHTML = `
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" fill="white"/>
-            </svg>
-        `;
-        messageDiv.appendChild(messageAvatar);
+        messageDiv.appendChild(this.createOperatorAvatar());
 
         const messageContentWrapper = document.createElement('div');
         messageContentWrapper.className = 'message-content-wrapper';
@@ -1967,14 +2049,7 @@ class SuperBizAgentApp {
         messageDiv.className = 'message assistant';
 
         // 添加头像图标
-        const messageAvatar = document.createElement('div');
-        messageAvatar.className = 'message-avatar';
-        messageAvatar.innerHTML = `
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" fill="white"/>
-            </svg>
-        `;
-        messageDiv.appendChild(messageAvatar);
+        messageDiv.appendChild(this.createOperatorAvatar());
 
         // 创建消息内容包装器
         const messageContentWrapper = document.createElement('div');
@@ -2081,14 +2156,7 @@ class SuperBizAgentApp {
         messageDiv.className = 'message assistant';
         messageDiv.id = 'thinking-bubble';
 
-        const messageAvatar = document.createElement('div');
-        messageAvatar.className = 'message-avatar';
-        messageAvatar.innerHTML = `
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" fill="white"/>
-            </svg>
-        `;
-        messageDiv.appendChild(messageAvatar);
+        messageDiv.appendChild(this.createOperatorAvatar());
 
         const messageContentWrapper = document.createElement('div');
         messageContentWrapper.className = 'message-content-wrapper';

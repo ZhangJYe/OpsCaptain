@@ -208,8 +208,9 @@
                         <button class="floating-action prompt-card prompt-card-primary" data-prompt="请模拟一次 paymentservice 延迟升高的线上故障诊断，输出影响判断、证据检查、可能原因和处理建议。">开始诊断</button>
 
                         <article class="reference-agent-message">
-                            <div class="reference-agent-avatar reference-agent-photo"></div>
+                            <div class="reference-agent-avatar operator-avatar operator-tone-blue" id="welcomeOperatorAvatar"></div>
                             <div class="reference-agent-copy">
+                                <p class="reference-agent-byline"><span id="welcomeOperatorName">林澈</span> 正在值班</p>
                                 <p class="reference-agent-title">如果你问的是 <strong>paymentservice p95 为什么突然升高</strong>，我的判断是：</p>
                                 <blockquote>先看 Redis timeout 和下游重试是否同时抬升，再判断是否需要回滚。</blockquote>
                                 <h3>为什么不先重启</h3>
