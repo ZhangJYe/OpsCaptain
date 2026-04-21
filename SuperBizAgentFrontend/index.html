@@ -41,7 +41,7 @@
                     <div class="brand-mark">OC</div>
                     <div class="brand-copy">
                         <h2 class="sidebar-title">OpsCaption</h2>
-                        <p class="sidebar-subtitle">Agent workspace</p>
+                        <p class="sidebar-subtitle">AI Agent workspace</p>
                     </div>
                 </div>
                 <button class="sidebar-close-btn" id="sidebarCloseBtn" title="关闭侧栏">
@@ -52,53 +52,112 @@
             </div>
 
             <div class="sidebar-content">
-                <div class="sidebar-intro">
-                    <div class="sidebar-kicker">Workspace</div>
-                    <p>和参考图一样，把会话、任务与 Agent 状态放在左侧工作区。</p>
-                </div>
-
                 <nav class="sidebar-nav" aria-label="Agent 工作区">
                     <a class="sidebar-nav-item active" href="#landingProduct">
                         <span class="nav-glyph">⌂</span>
                         <span>
                             <strong>人才市场</strong>
-                            <small>Agent discovery</small>
                         </span>
                     </a>
                     <a class="sidebar-nav-item" href="#landingProduct">
                         <span class="nav-glyph">♙</span>
                         <span>
                             <strong>人力库</strong>
-                            <small>Specialist pool</small>
                         </span>
                     </a>
                     <a class="sidebar-nav-item" href="#observabilitySection">
                         <span class="nav-glyph">▦</span>
                         <span>
                             <strong>任务看板</strong>
-                            <small>Runtime board</small>
                         </span>
                     </a>
                 </nav>
 
-                <section class="agent-roster" aria-label="Agent 状态">
-                    <div class="agent-roster-title">Active Agents</div>
-                    <div class="agent-roster-row">
-                        <span class="agent-avatar">S</span>
-                        <div><strong>Supervisor</strong><small>编排任务</small></div>
-                        <em>Ready</em>
-                    </div>
-                    <div class="agent-roster-row">
-                        <span class="agent-avatar agent-avatar-green">K</span>
-                        <div><strong>Knowledge</strong><small>RAG evidence</small></div>
-                        <em>Online</em>
-                    </div>
-                    <div class="agent-roster-row">
-                        <span class="agent-avatar agent-avatar-orange">R</span>
-                        <div><strong>Reporter</strong><small>聚合报告</small></div>
-                        <em>Standby</em>
-                    </div>
+                <section class="reference-people-list" aria-label="会话人员列表">
+                    <article class="person-row person-row-active">
+                        <span class="person-avatar person-avatar-photo"></span>
+                        <div class="person-main">
+                            <div class="person-title-line">
+                                <strong>Elon ...</strong>
+                                <span>Leader Chat</span>
+                                <em>刚刚</em>
+                            </div>
+                            <div class="person-sub-line"><i></i><span>0</span></div>
+                        </div>
+                    </article>
+                    <article class="person-row">
+                        <span class="person-avatar">内</span>
+                        <div class="person-main">
+                            <div class="person-title-line">
+                                <strong>内容创作者</strong>
+                                <em>2小时前</em>
+                            </div>
+                            <div class="person-sub-line"><i></i><span>0</span></div>
+                        </div>
+                    </article>
+                    <article class="person-row">
+                        <span class="person-avatar">M</span>
+                        <div class="person-main">
+                            <div class="person-title-line">
+                                <strong>Main</strong>
+                                <em>3小时前</em>
+                            </div>
+                            <div class="person-sub-line"><i></i><span>0</span></div>
+                        </div>
+                    </article>
+                    <article class="person-row">
+                        <span class="person-avatar">M</span>
+                        <div class="person-main">
+                            <div class="person-title-line">
+                                <strong>Main</strong>
+                                <em>4小时前</em>
+                            </div>
+                            <div class="person-sub-line"><i></i><span>0</span></div>
+                        </div>
+                    </article>
+                    <article class="person-row">
+                        <span class="person-avatar">张</span>
+                        <div class="person-main">
+                            <div class="person-title-line">
+                                <strong>张蓝心</strong>
+                                <em>10小时前</em>
+                            </div>
+                            <div class="person-sub-line"><i></i><span>0</span></div>
+                        </div>
+                    </article>
+                    <article class="person-row">
+                        <span class="person-avatar">傅</span>
+                        <div class="person-main">
+                            <div class="person-title-line">
+                                <strong>傅盛</strong>
+                            </div>
+                            <div class="person-sub-line"><i></i><span>0</span></div>
+                        </div>
+                    </article>
+                    <article class="person-row">
+                        <span class="person-avatar">C</span>
+                        <div class="person-main">
+                            <div class="person-title-line">
+                                <strong>Chaos</strong>
+                            </div>
+                            <div class="person-sub-line"><i></i><span>0</span></div>
+                        </div>
+                    </article>
                 </section>
+
+                <div class="history-search">
+                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M21 21L16.65 16.65M18 10.5C18 14.6421 14.6421 18 10.5 18C6.35786 18 3 14.6421 3 10.5C3 6.35786 6.35786 3 10.5 3C14.6421 3 18 6.35786 18 10.5Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <input id="historySearchInput" type="text" placeholder="搜索">
+                </div>
+
+                <div class="chat-history-section">
+                    <div class="history-header">
+                        <span>历史会话</span>
+                    </div>
+                    <div class="chat-history-list" id="chatHistoryList"></div>
+                </div>
 
                 <button class="new-chat-btn" id="newChatBtn">
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -106,20 +165,6 @@
                     </svg>
                     <span>新建会话</span>
                 </button>
-
-                <div class="history-search">
-                    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M21 21L16.65 16.65M18 10.5C18 14.6421 14.6421 18 10.5 18C6.35786 18 3 14.6421 3 10.5C3 6.35786 6.35786 3 10.5 3C14.6421 3 18 6.35786 18 10.5Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                    <input id="historySearchInput" type="text" placeholder="检索历史会话">
-                </div>
-
-                <div class="chat-history-section">
-                    <div class="history-header">
-                        <span>Session Ledger</span>
-                    </div>
-                    <div class="chat-history-list" id="chatHistoryList"></div>
-                </div>
 
                 <section class="observability-section" id="observabilitySection">
                     <div class="observability-header">
@@ -176,10 +221,9 @@
                         </button>
 
                         <a class="brand-inline" href="#landingProduct" aria-label="OpsCaption Agent">
-                            <span class="brand-inline-mark">A</span>
+                            <span class="brand-inline-mark brand-inline-photo"></span>
                             <span class="brand-inline-copy">
-                                <strong>OpsCaptain Agent</strong>
-                                <small>Supervisor session</small>
+                                <strong>Elon Musk</strong>
                             </span>
                             <span class="brand-chevron">⌄</span>
                         </a>
@@ -221,27 +265,31 @@
                         <div class="reference-user-note">
                             <p>如果你愿意，我下一条可以直接给你一个：</p>
                             <ol>
-                                <li>Supervisor 当前路由结果</li>
-                                <li>Metrics、Logs、Knowledge 三路证据对比</li>
-                                <li>Reporter 汇总出的处置步骤</li>
+                                <li>NVDA 当前多空分析表</li>
+                                <li>适合你的买入策略（保守 / 平衡 / 激进）</li>
+                                <li>和 AMD、TSM、AVGO 对比，哪只更值得现在买</li>
                             </ol>
-                            <p>你回复一句：<strong>开始诊断</strong>，我就按生产值班格式输出。</p>
+                            <p>你回我一句：“做个对比”，我就直接给你表格化结论。</p>
                         </div>
 
-                        <button class="floating-action prompt-card prompt-card-primary" data-prompt="请模拟一次线上故障诊断，按 Supervisor、Triage、Specialists、Reporter 的顺序输出。">社会舆情上报</button>
+                        <button class="floating-action prompt-card prompt-card-primary" data-prompt="请模拟一次线上故障诊断，按 Supervisor、Triage、Specialists、Reporter 的顺序输出。">什么时候上火星</button>
 
                         <article class="reference-agent-message">
-                            <div class="reference-agent-avatar">A</div>
+                            <div class="reference-agent-avatar reference-agent-photo"></div>
                             <div class="reference-agent-copy">
-                                <p class="reference-agent-title">如果你的目标是 <strong>什么都像真正运维人员</strong>，我的判断是：</p>
-                                <blockquote>展示层可以很轻，但 Agent 的执行链路必须清楚。</blockquote>
-                                <h3>为什么不是宽卡片</h3>
-                                <p>参考图的重点不是装饰，而是一个安静的工作界面：左侧负责人和会话，右侧只保留当前任务上下文。</p>
+                                <p class="reference-agent-title">如果你问的是 <strong>人类什么时候真正登陆火星</strong>，我的判断是：</p>
+                                <blockquote>最乐观 2030 年代前半，更现实一点是 2030 年代中后期</blockquote>
+                                <h3>为什么不是更快</h3>
+                                <p>去火星不是一次“火箭够大”就行，真正卡脖子的有 5 件事：</p>
                                 <ul>
-                                    <li>最小导航：把入口收进侧栏。</li>
-                                    <li>长期会话列表：像同事列表一样持续存在。</li>
-                                    <li>主画布留白：让报告、证据和执行结果成为视觉中心。</li>
+                                    <li>重返可靠性</li>
+                                    <li>在轨加注</li>
+                                    <li>长期生命保障系统</li>
+                                    <li>火星着陆与起飞</li>
+                                    <li>地球火星发射窗口（大约 26 个月一次）</li>
                                 </ul>
+                                <h3>一个比较现实的节奏</h3>
+                                <p>这几年：先把星舰做成真正可重复使用、可稳定入轨、可返回。接下来：完成在轨加注、深空长期飞行验证、月球任务验证。</p>
                             </div>
                         </article>
                     </section>
@@ -252,7 +300,7 @@
                 <div class="chat-input-container">
                     <div class="input-group-wrapper">
                         <div class="input-wrapper">
-                            <textarea id="messageInput" placeholder="给 OpsCaptain Agent 发消息" maxlength="1000" class="message-input" rows="1"></textarea>
+                            <textarea id="messageInput" placeholder="给 Elon Musk 发消息..." maxlength="1000" class="message-input" rows="1"></textarea>
                             <div class="input-bottom-bar">
                                 <div class="tools-btn-wrapper">
                                     <button class="tools-btn" id="toolsBtn" title="更多选项">
