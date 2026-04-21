@@ -1853,6 +1853,105 @@ class SuperBizAgentApp {
         metaContainer.appendChild(traceButton);
     }
 
+    detailStatusLabel(kind) {
+        const labels = {
+            ok: '已完成',
+            info: '已记录',
+            muted: '已跳过',
+            warning: '需关注'
+        };
+        return labels[kind] || labels.info;
+    }
+
+    extractDetailMetric(detail, key) {
+        const match = String(detail || '').match(new RegExp(`${key}=([^\\s\\)\\]]+)`, 'i'));
+        return match ? match[1] : '';
+    }
+
+    summarizeDetailMetrics(detail) {
+        const keys = ['selected', 'dropped', 'cache_hit', 'init_ms', 'retrieve_ms', 'rerank_ms', 'hits'];
+        return keys
+            .map((key) => {
+                const value = this.extractDetailMetric(detail, key);
+                return value ? `${key}=${value}` : '';
+            })
+            .filter(Boolean)
+            .slice(0, 5);
+    }
+
+    humanizeAssistantDetail(detail, index) {
+        const raw = String(detail || '').trim();
+        const text = raw.toLowerCase();
+        const result = {
+            title: `处理阶段 ${index + 1}`,
+            description: '系统已完成该处理阶段。',
+            status: 'info',
+            metrics: this.summarizeDetailMetrics(raw),
+            raw
+        };
+
+        if (text.includes('context profile')) {
+            const profile = this.extractDetailMetric(raw, 'profile') || raw.split('=').pop() || 'default';
+            return {
+                ...result,
+                title: '确定分析模式',
+                description: `已使用 ${profile} 上下文配置，适合当前对话和快速诊断。`,
+                status: 'ok'
+            };
+        }
+
+        if (text.includes('context sources')) {
+            const selected = raw.match(/selected=([0-9]+)\/([0-9]+)/i);
+            const picked = selected ? selected[1] : this.extractDetailMetric(raw, 'selected');
+            const total = selected ? selected[2] : '';
+            return {
+                ...result,
+                title: '选择上下文来源',
+                description: picked === '0'
+                    ? '没有命中额外上下文来源，本次主要依据你的问题和当前会话进行分析。'
+                    : `已选择 ${picked}${total ? `/${total}` : ''} 个上下文来源参与分析。`,
+                status: picked === '0' ? 'muted' : 'ok'
+            };
+        }
+
+        if (text.includes('memory')) {
+            return {
+                ...result,
+                title: '读取历史记忆',
+                description: text.includes('disabled') || text.includes('empty') || text.includes('selected=0')
+                    ? '没有可用历史记忆，已自动跳过，不影响本轮基础诊断。'
+                    : '已读取相关历史记忆，用于补充当前判断。',
+                status: text.includes('selected=0') || text.includes('disabled') || text.includes('empty') ? 'muted' : 'ok'
+            };
+        }
+
+        if (text.includes('documents')) {
+            const selected = this.extractDetailMetric(raw, 'selected');
+            const unavailable = text.includes('unavailable') || text.includes('failed') || text.includes('deadline') || text.includes('timeout');
+            return {
+                ...result,
+                title: '检索知识库证据',
+                description: unavailable
+                    ? '知识库暂时不可用，系统已降级继续回答；建议稍后检查数据库连接或重试检索。'
+                    : selected && selected !== '0'
+                        ? `已选取 ${selected} 条知识库证据参与回答。`
+                        : '未检索到可用文档证据，本轮回答不会引用知识库内容。',
+                status: unavailable ? 'warning' : selected && selected !== '0' ? 'ok' : 'muted'
+            };
+        }
+
+        if (text.includes('tool')) {
+            return {
+                ...result,
+                title: '调用辅助工具',
+                description: '系统已完成必要的工具调用，并将结果纳入回答。',
+                status: text.includes('failed') || text.includes('error') ? 'warning' : 'ok'
+            };
+        }
+
+        return result;
+    }
+
     renderAssistantDetails(messageElement, messageContentWrapper, details = [], title = '查看执行步骤', options = {}) {
         const opts = {
             expanded: false,
@@ -1882,29 +1981,54 @@ class SuperBizAgentApp {
             detailsContainer.classList.add(`aiops-details-${opts.variant}`);
         }
 
+        const readableDetails = details.map((detail, index) => this.humanizeAssistantDetail(detail, index));
+        const warningCount = readableDetails.filter((detail) => detail.status === 'warning').length;
+        const displayTitle = opts.variant === 'thinking' ? '思考过程' : '诊断过程';
+        const summaryText = warningCount > 0
+            ? `${readableDetails.length} 个阶段，${warningCount} 项需关注`
+            : `${readableDetails.length} 个阶段已整理`;
+
         const detailsToggle = document.createElement('div');
         detailsToggle.className = 'details-toggle';
         detailsToggle.innerHTML = `
-            <svg class="toggle-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <span>${this.escapeHtml(title)} (${details.length}条)</span>
+            <span class="details-toggle-mark">
+                <svg class="toggle-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </span>
+            <span class="details-toggle-copy">
+                <strong>${this.escapeHtml(displayTitle)}</strong>
+                <small>${this.escapeHtml(summaryText)}</small>
+            </span>
         `;
 
         const detailsContent = document.createElement('div');
-        detailsContent.className = 'details-content';
+        detailsContent.className = 'details-content readable-steps';
 
-        details.forEach((detail, index) => {
+        readableDetails.forEach((detail, index) => {
             const detailItem = document.createElement('div');
-            detailItem.className = 'detail-item';
+            detailItem.className = `detail-item detail-step detail-step-${this.escapeHtml(detail.status)}`;
             if (opts.variant === 'thinking') {
                 detailItem.classList.add('detail-item-thinking');
             }
-            if (opts.stepLabel) {
-                detailItem.innerHTML = `<strong>${this.escapeHtml(opts.stepLabel)} ${index + 1}:</strong> ${this.escapeHtml(detail)}`;
-            } else {
-                detailItem.textContent = String(detail || '');
-            }
+            const metricsHtml = detail.metrics.length > 0
+                ? `<div class="detail-step-metrics">${detail.metrics.map((metric) => `<span>${this.escapeHtml(metric)}</span>`).join('')}</div>`
+                : '';
+            const rawHtml = detail.raw
+                ? `<details class="detail-step-raw"><summary>技术细节</summary><code>${this.escapeHtml(detail.raw)}</code></details>`
+                : '';
+            detailItem.innerHTML = `
+                <div class="detail-step-index">${String(index + 1).padStart(2, '0')}</div>
+                <div class="detail-step-body">
+                    <div class="detail-step-head">
+                        <strong>${this.escapeHtml(detail.title)}</strong>
+                        <span>${this.escapeHtml(this.detailStatusLabel(detail.status))}</span>
+                    </div>
+                    <p>${this.escapeHtml(detail.description)}</p>
+                    ${metricsHtml}
+                    ${rawHtml}
+                </div>
+            `;
             detailsContent.appendChild(detailItem);
         });
 
