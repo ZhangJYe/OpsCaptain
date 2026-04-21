@@ -32,6 +32,10 @@ func main() {
 	}
 	ctx := gctx.New()
 
+	if err := common.ConfigureRedis(ctx); err != nil {
+		panic(err)
+	}
+
 	if err := logging.Configure(ctx); err != nil {
 		panic(err)
 	}
