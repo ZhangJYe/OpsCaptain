@@ -54,13 +54,41 @@
             </div>
 
             <div class="sidebar-content">
-                <nav class="sidebar-nav" aria-label="Agent 工作区">
-                    <a class="sidebar-nav-item active" href="#landingProduct">
+                <section class="agent-market-card" aria-label="Agent 市场 Skill 选择">
+                    <div class="agent-market-head">
                         <span class="nav-glyph">⌂</span>
-                        <span>
+                        <div>
                             <strong>Agent 市场</strong>
-                        </span>
-                    </a>
+                            <small>按场景组合 Skills</small>
+                        </div>
+                    </div>
+                    <div class="market-tabs" role="tablist" aria-label="Agent 市场">
+                        <button class="market-tab active" type="button" data-market-tab="incident" aria-selected="true">故障响应</button>
+                        <button class="market-tab" type="button" data-market-tab="release" aria-selected="false">发布护航</button>
+                        <button class="market-tab" type="button" data-market-tab="capacity" aria-selected="false">容量巡检</button>
+                    </div>
+                    <div class="skill-market-panel active" data-skill-panel="incident">
+                        <button class="skill-choice active" type="button" data-skill-choice aria-pressed="true">Metrics Triage</button>
+                        <button class="skill-choice active" type="button" data-skill-choice aria-pressed="true">Error Logs</button>
+                        <button class="skill-choice active" type="button" data-skill-choice aria-pressed="true">Runbook RAG</button>
+                    </div>
+                    <div class="skill-market-panel" data-skill-panel="release">
+                        <button class="skill-choice active" type="button" data-skill-choice aria-pressed="true">Release Guard</button>
+                        <button class="skill-choice" type="button" data-skill-choice aria-pressed="false">Rollback SOP</button>
+                        <button class="skill-choice active" type="button" data-skill-choice aria-pressed="true">Change Diff</button>
+                    </div>
+                    <div class="skill-market-panel" data-skill-panel="capacity">
+                        <button class="skill-choice active" type="button" data-skill-choice aria-pressed="true">Capacity Snapshot</button>
+                        <button class="skill-choice active" type="button" data-skill-choice aria-pressed="true">SLO Evidence</button>
+                        <button class="skill-choice" type="button" data-skill-choice aria-pressed="false">Cost Guard</button>
+                    </div>
+                    <div class="agent-market-foot">
+                        <span id="selectedSkillCount">3 Skills 已启用</span>
+                        <em>Auto routed</em>
+                    </div>
+                </section>
+
+                <nav class="sidebar-nav sidebar-nav-compact" aria-label="Agent 工作区">
                     <a class="sidebar-nav-item" href="#landingProduct">
                         <span class="nav-glyph">♙</span>
                         <span>

@@ -232,6 +232,10 @@ class SuperBizAgentApp {
         this.sidebarBackdrop = document.getElementById('sidebarBackdrop');
         this.promptCards = document.querySelectorAll('.prompt-card');
         this.historySearchInput = document.getElementById('historySearchInput');
+        this.marketTabs = document.querySelectorAll('[data-market-tab]');
+        this.skillMarketPanels = document.querySelectorAll('[data-skill-panel]');
+        this.skillChoiceButtons = document.querySelectorAll('[data-skill-choice]');
+        this.selectedSkillCount = document.getElementById('selectedSkillCount');
         
         // 输入区域元素
         this.messageInput = document.getElementById('messageInput');
@@ -337,6 +341,19 @@ class SuperBizAgentApp {
                 this.historySearchTerm = e.target.value.trim().toLowerCase();
                 this.renderChatHistory();
             });
+        }
+
+        if (this.marketTabs) {
+            this.marketTabs.forEach((tab) => {
+                tab.addEventListener('click', () => this.selectAgentMarket(tab.getAttribute('data-market-tab')));
+            });
+        }
+
+        if (this.skillChoiceButtons) {
+            this.skillChoiceButtons.forEach((button) => {
+                button.addEventListener('click', () => this.toggleSkillChoice(button));
+            });
+            this.updateSelectedSkillCount();
         }
         
         // 模式选择下拉菜单
@@ -578,6 +595,41 @@ class SuperBizAgentApp {
                 window.location.assign(targetUrl);
             });
         });
+    }
+
+    selectAgentMarket(marketId) {
+        if (!marketId) {
+            return;
+        }
+        this.marketTabs.forEach((tab) => {
+            const isActive = tab.getAttribute('data-market-tab') === marketId;
+            tab.classList.toggle('active', isActive);
+            tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+        });
+        this.skillMarketPanels.forEach((panel) => {
+            panel.classList.toggle('active', panel.getAttribute('data-skill-panel') === marketId);
+        });
+        this.updateSelectedSkillCount();
+    }
+
+    toggleSkillChoice(button) {
+        if (!button) {
+            return;
+        }
+        button.classList.toggle('active');
+        button.setAttribute('aria-pressed', button.classList.contains('active') ? 'true' : 'false');
+        this.updateSelectedSkillCount();
+    }
+
+    updateSelectedSkillCount() {
+        if (!this.selectedSkillCount) {
+            return;
+        }
+        const activePanel = document.querySelector('[data-skill-panel].active');
+        const selected = activePanel
+            ? activePanel.querySelectorAll('[data-skill-choice].active').length
+            : document.querySelectorAll('[data-skill-choice].active').length;
+        this.selectedSkillCount.textContent = `${selected} Skills 已启用`;
     }
 
     applyPrompt(prompt) {
