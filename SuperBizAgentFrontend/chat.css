@@ -11,7 +11,7 @@
 .chat-container.centered {
     justify-content: flex-start;
     gap: 30px;
-    padding: 20px 20px 30px;
+    padding: 22px 24px 30px;
     overflow-y: auto;
 }
 
@@ -46,7 +46,7 @@
     overflow-y: auto;
     display: flex;
     flex-direction: column;
-    padding: 14px 26px 24px;
+    padding: 20px 28px 24px;
 }
 
 .message {
@@ -55,7 +55,7 @@
     margin: 0 auto;
     display: flex;
     gap: 14px;
-    padding: 14px 0;
+    padding: 16px 0;
     animation: rise-in 0.25s ease both;
 }
 
@@ -68,11 +68,11 @@
 }
 
 .message-avatar {
-    width: 30px;
-    height: 30px;
-    border-radius: 10px;
-    border: 1px solid rgba(26, 115, 232, 0.22);
-    background: linear-gradient(140deg, rgba(26, 115, 232, 0.14), rgba(52, 168, 83, 0.08));
+    width: 32px;
+    height: 32px;
+    border-radius: 12px;
+    border: 1px solid rgba(27, 92, 106, 0.22);
+    background: linear-gradient(140deg, rgba(27, 92, 106, 0.14), rgba(47, 124, 87, 0.08));
     color: var(--accent-strong);
     display: flex;
     align-items: center;
@@ -112,14 +112,14 @@
 }
 
 .message.user .message-content {
-    background: rgba(26, 115, 232, 0.1);
-    border: 1px solid rgba(26, 115, 232, 0.22);
-    border-radius: 16px;
+    background: rgba(27, 92, 106, 0.12);
+    border: 1px solid rgba(27, 92, 106, 0.22);
+    border-radius: 16px 16px 4px 16px;
     padding: 12px 14px;
 }
 
 .message.assistant .message-content {
-    padding: 0;
+    padding: 2px 0 0;
 }
 
 .message-content h1,
@@ -180,7 +180,7 @@
 
 .message-content blockquote {
     padding-left: 12px;
-    border-left: 3px solid rgba(26, 115, 232, 0.4);
+    border-left: 3px solid rgba(27, 92, 106, 0.4);
     color: var(--text-subtle);
 }
 
