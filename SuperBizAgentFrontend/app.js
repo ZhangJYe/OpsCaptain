@@ -319,6 +319,10 @@ class SuperBizAgentApp {
         }
         this.bindObservabilityLinkActions();
 
+        window.addEventListener('beforeunload', () => {
+            this.persistCurrentChat();
+        });
+
         if (this.promptCards) {
             this.promptCards.forEach((card) => {
                 card.addEventListener('click', () => {
@@ -819,6 +823,22 @@ class SuperBizAgentApp {
         // 保存到localStorage
         this.saveChatHistories();
     }
+
+    persistCurrentChat() {
+        if (!Array.isArray(this.currentChatHistory) || this.currentChatHistory.length === 0) {
+            return false;
+        }
+
+        if (this.isCurrentChatFromHistory) {
+            this.updateCurrentChatHistory();
+        } else {
+            this.saveCurrentChat();
+            this.isCurrentChatFromHistory = true;
+        }
+
+        this.renderChatHistory();
+        return true;
+    }
     
     // 加载历史对话列表
     loadChatHistories() {
@@ -1109,12 +1129,7 @@ class SuperBizAgentApp {
             this.isStreaming = false;
             this.clearAbortController();
             this.updateUI();
-            
-            // 如果当前对话是从历史记录加载的，更新历史记录
-            if (this.isCurrentChatFromHistory && this.currentChatHistory.length > 0) {
-                this.updateCurrentChatHistory();
-                this.renderChatHistory(); // 更新历史对话列表显示
-            }
+            this.persistCurrentChat();
         }
     }
 
