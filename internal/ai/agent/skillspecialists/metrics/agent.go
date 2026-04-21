@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	agentcontracts "SuperBizAgent/internal/ai/agent/contracts"
 	"SuperBizAgent/internal/ai/protocol"
 	"SuperBizAgent/internal/ai/runtime"
 	"SuperBizAgent/internal/ai/skills"
@@ -55,7 +56,7 @@ func (a *Agent) Name() string {
 }
 
 func (a *Agent) Capabilities() []string {
-	return skills.PrefixedCapabilities([]string{"prometheus-alerts"}, a.registry.SkillNames())
+	return skills.PrefixedCapabilities([]string{"prometheus-alerts", agentcontracts.Capability(AgentName)}, a.registry.SkillNames())
 }
 
 func (a *Agent) Handle(ctx context.Context, task *protocol.TaskEnvelope) (*protocol.TaskResult, error) {
@@ -69,7 +70,7 @@ func (a *Agent) Handle(ctx context.Context, task *protocol.TaskEnvelope) (*proto
 			"skill_description": execution.Skill.Description(),
 		})
 	}
-	return execution.Result, nil
+	return agentcontracts.AttachMetadata(execution.Result, AgentName), nil
 }
 
 func (s *metricsSkill) Name() string {

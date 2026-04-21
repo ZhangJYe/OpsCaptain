@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	agentcontracts "SuperBizAgent/internal/ai/agent/contracts"
 	"SuperBizAgent/internal/ai/protocol"
 )
 
@@ -59,7 +60,7 @@ func (a *Agent) Name() string {
 }
 
 func (a *Agent) Capabilities() []string {
-	return []string{"intent-classification", "routing"}
+	return []string{"intent-classification", "routing", agentcontracts.Capability(AgentName)}
 }
 
 func (a *Agent) Handle(_ context.Context, task *protocol.TaskEnvelope) (*protocol.TaskResult, error) {
@@ -83,7 +84,7 @@ func (a *Agent) Handle(_ context.Context, task *protocol.TaskEnvelope) (*protoco
 		selected.priority = "high"
 	}
 
-	return &protocol.TaskResult{
+	return agentcontracts.AttachMetadata(&protocol.TaskResult{
 		TaskID:     task.TaskID,
 		Agent:      a.Name(),
 		Status:     protocol.ResultStatusSucceeded,
@@ -94,7 +95,7 @@ func (a *Agent) Handle(_ context.Context, task *protocol.TaskEnvelope) (*protoco
 			"domains":  selected.domains,
 			"priority": selected.priority,
 		},
-	}, nil
+	}, AgentName), nil
 }
 
 func matchesRule(query string, keywords []string) bool {

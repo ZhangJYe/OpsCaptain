@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	agentcontracts "SuperBizAgent/internal/ai/agent/contracts"
 	"SuperBizAgent/internal/ai/protocol"
 )
 
@@ -24,5 +25,8 @@ func TestTriageAlertAnalysis(t *testing.T) {
 	domains, _ := result.Metadata["domains"].([]string)
 	if len(domains) != 3 {
 		t.Fatalf("expected 3 routed domains, got %v", domains)
+	}
+	if result.Metadata["agent_contract_id"] != "triage:"+agentcontracts.Version {
+		t.Fatalf("expected triage contract metadata, got %#v", result.Metadata)
 	}
 }

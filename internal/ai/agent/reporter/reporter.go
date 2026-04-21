@@ -7,6 +7,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	agentcontracts "SuperBizAgent/internal/ai/agent/contracts"
 	"SuperBizAgent/internal/ai/contextengine"
 	"SuperBizAgent/internal/ai/protocol"
 	"SuperBizAgent/internal/ai/runtime"
@@ -25,7 +26,7 @@ func (a *Agent) Name() string {
 }
 
 func (a *Agent) Capabilities() []string {
-	return []string{"aggregation", "reporting"}
+	return []string{"aggregation", "reporting", agentcontracts.Capability(AgentName)}
 }
 
 func (a *Agent) Handle(ctx context.Context, task *protocol.TaskEnvelope) (*protocol.TaskResult, error) {
@@ -48,7 +49,7 @@ func (a *Agent) Handle(ctx context.Context, task *protocol.TaskEnvelope) (*proto
 		})
 		result.Status = status
 		result.DegradationReason = degradationReason
-		return result, nil
+		return agentcontracts.AttachMetadata(result, AgentName), nil
 	}
 
 	text := reporterText(english)
@@ -90,7 +91,7 @@ func (a *Agent) Handle(ctx context.Context, task *protocol.TaskEnvelope) (*proto
 		sections = append(sections, strings.Join(prefixEach(conclusionLines, "- "), "\n"))
 	}
 
-	return &protocol.TaskResult{
+	return agentcontracts.AttachMetadata(&protocol.TaskResult{
 		TaskID:            task.TaskID,
 		Agent:             a.Name(),
 		Status:            status,
@@ -103,7 +104,7 @@ func (a *Agent) Handle(ctx context.Context, task *protocol.TaskEnvelope) (*proto
 			"tool_item_count":     len(contextPkg.ToolItems),
 			"degradation_reasons": degradationReasons,
 		},
-	}, nil
+	}, AgentName), nil
 }
 
 func buildChatResponse(task *protocol.TaskEnvelope, raw []*protocol.TaskResult, query, intent string, contextPkg *contextengine.ContextPackage, english bool) *protocol.TaskResult {

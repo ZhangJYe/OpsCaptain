@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	agentcontracts "SuperBizAgent/internal/ai/agent/contracts"
 	"SuperBizAgent/internal/ai/protocol"
 	"SuperBizAgent/internal/ai/runtime"
 )
@@ -50,6 +51,9 @@ func TestReporterBuildsToolItemContextAndEmitsTrace(t *testing.T) {
 	}
 	if got, _ := result.Metadata["tool_item_count"].(int); got != 1 {
 		t.Fatalf("expected tool_item_count=1, got %v", result.Metadata["tool_item_count"])
+	}
+	if result.Metadata["agent_contract_id"] != "reporter:"+agentcontracts.Version {
+		t.Fatalf("expected reporter contract metadata, got %#v", result.Metadata)
 	}
 
 	detail := rt.DetailMessages(context.Background(), task.TraceID)
