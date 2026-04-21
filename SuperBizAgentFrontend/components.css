@@ -3,9 +3,92 @@
     width: min(var(--content-width), 100%);
     margin: 0 auto;
     flex-direction: column;
-    gap: 34px;
-    padding-bottom: 38px;
+    gap: 24px;
+    padding: 18px 0 26px;
     animation: rise-in 0.5s ease both;
+}
+
+.reference-chat-stage {
+    min-height: min(520px, 64vh);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 54px;
+    padding: 20px 6px 32px;
+}
+
+.reference-user-note {
+    width: min(560px, 100%);
+    margin: 0 auto;
+    color: var(--text-main);
+    font-size: 0.92rem;
+    line-height: 1.86;
+}
+
+.reference-user-note ol {
+    margin: 8px 0 8px 24px;
+}
+
+.reference-user-note strong {
+    font-weight: 700;
+}
+
+.floating-action {
+    position: absolute;
+    right: max(16px, 2vw);
+    top: 31%;
+}
+
+.reference-agent-message {
+    width: min(680px, 100%);
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 13px;
+    align-items: start;
+}
+
+.reference-agent-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(31, 91, 189, 0.12);
+    color: var(--accent-strong);
+    font-family: var(--font-display);
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+
+.reference-agent-copy {
+    color: var(--text-main);
+    font-size: 0.9rem;
+    line-height: 1.82;
+}
+
+.reference-agent-title {
+    margin-bottom: 8px;
+}
+
+.reference-agent-copy blockquote {
+    margin: 8px 0 14px;
+    padding: 6px 0 6px 12px;
+    border-left: 3px solid var(--accent);
+    color: var(--text-main);
+    font-weight: 700;
+}
+
+.reference-agent-copy h3 {
+    margin: 12px 0 4px;
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+}
+
+.reference-agent-copy ul {
+    margin: 8px 0 0 18px;
 }
 
 .landing-hero {

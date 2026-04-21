@@ -21,12 +21,27 @@
     <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
     <div class="app-layout">
         <aside class="sidebar">
+            <div class="sidebar-rail" aria-label="窗口导航">
+                <div class="window-controls" aria-hidden="true">
+                    <span class="control-dot control-close"></span>
+                    <span class="control-dot control-minimize"></span>
+                    <span class="control-dot control-zoom"></span>
+                </div>
+                <button class="rail-icon active" type="button" title="工作区">⌘</button>
+                <button class="rail-icon" type="button" title="市场">⌁</button>
+                <button class="rail-icon" type="button" title="团队">◎</button>
+                <button class="rail-icon" type="button" title="看板">▦</button>
+                <div class="rail-spacer"></div>
+                <button class="rail-user" type="button" title="Administrator">A</button>
+            </div>
+
+            <div class="sidebar-panel">
             <div class="sidebar-header">
                 <div class="sidebar-brand">
                     <div class="brand-mark">OC</div>
                     <div class="brand-copy">
                         <h2 class="sidebar-title">OpsCaption</h2>
-                        <p class="sidebar-subtitle">AI Ops Command Workspace</p>
+                        <p class="sidebar-subtitle">Agent workspace</p>
                     </div>
                 </div>
                 <button class="sidebar-close-btn" id="sidebarCloseBtn" title="关闭侧栏">
@@ -38,30 +53,30 @@
 
             <div class="sidebar-content">
                 <div class="sidebar-intro">
-                    <div class="sidebar-kicker">Agent Dock</div>
-                    <p>把 Supervisor、Triage、Specialists 和 Reporter 收进一个值班工作台。</p>
+                    <div class="sidebar-kicker">Workspace</div>
+                    <p>和参考图一样，把会话、任务与 Agent 状态放在左侧工作区。</p>
                 </div>
 
                 <nav class="sidebar-nav" aria-label="Agent 工作区">
                     <a class="sidebar-nav-item active" href="#landingProduct">
-                        <span class="nav-glyph">⌁</span>
+                        <span class="nav-glyph">⌂</span>
                         <span>
-                            <strong>对话中枢</strong>
-                            <small>Supervisor Runtime</small>
+                            <strong>人才市场</strong>
+                            <small>Agent discovery</small>
                         </span>
                     </a>
-                    <a class="sidebar-nav-item" href="#landingWorkflow">
-                        <span class="nav-glyph">◎</span>
+                    <a class="sidebar-nav-item" href="#landingProduct">
+                        <span class="nav-glyph">♙</span>
                         <span>
-                            <strong>任务编排</strong>
-                            <small>Triage + Specialists</small>
+                            <strong>人力库</strong>
+                            <small>Specialist pool</small>
                         </span>
                     </a>
                     <a class="sidebar-nav-item" href="#observabilitySection">
-                        <span class="nav-glyph">▵</span>
+                        <span class="nav-glyph">▦</span>
                         <span>
-                            <strong>观测链路</strong>
-                            <small>Trace / Metrics / Health</small>
+                            <strong>任务看板</strong>
+                            <small>Runtime board</small>
                         </span>
                     </a>
                 </nav>
@@ -147,6 +162,7 @@
                     <div class="sidebar-footer-meta">Supervisor / Triage / Specialists / Reporter</div>
                 </div>
             </div>
+            </div>
         </aside>
 
         <main class="main-content">
@@ -159,19 +175,18 @@
                             </svg>
                         </button>
 
-                        <a class="brand-inline" href="#landingProduct" aria-label="OpsCaption 工作台">
-                            <span class="brand-inline-mark">OC</span>
+                        <a class="brand-inline" href="#landingProduct" aria-label="OpsCaption Agent">
+                            <span class="brand-inline-mark">A</span>
                             <span class="brand-inline-copy">
-                                <strong>OpsCaption</strong>
-                                <small>Agent Command Workspace</small>
+                                <strong>OpsCaptain Agent</strong>
+                                <small>Supervisor session</small>
                             </span>
+                            <span class="brand-chevron">⌄</span>
                         </a>
 
                         <nav class="topbar-nav" aria-label="工作台导航">
-                            <a href="#landingProduct">指挥台</a>
-                            <a href="#landingWorkflow">运行链路</a>
-                            <a href="#landingDetail">上下文</a>
-                            <a href="#landingPricing">演练</a>
+                            <a href="#landingProduct">文件</a>
+                            <a href="#observabilitySection">Agent</a>
                         </nav>
                     </div>
 
@@ -202,153 +217,33 @@
 
             <div class="chat-container">
                 <section class="welcome-greeting" id="welcomeGreeting">
-                    <section class="landing-hero" id="landingProduct">
-                        <div class="landing-hero-copy">
-                            <p class="landing-kicker">Agent Runtime Console</p>
-                            <h2>让运维 Agent 像值班同事一样接住问题。</h2>
-                            <p class="landing-summary">OpsCaption 把对话、知识检索、观测证据和 AI Ops 执行放进同一个桌面级工作区。你负责提出目标，Agent 负责拆解、检索、验证和汇报。</p>
-                            <div class="landing-cta-row">
-                                <button class="prompt-card prompt-card-primary" data-prompt="请模拟一次 paymentservice 延迟升高的故障诊断，按 triage、evidence、action 输出。">启动故障诊断</button>
-                                <button class="prompt-card" data-prompt="请介绍 OpsCaption 的多 Agent 运行链路，并说明每个 specialist 的职责。">查看 Agent 链路</button>
-                            </div>
-                            <ul class="landing-meta-list">
-                                <li>Supervisor 编排 triage、specialists 与 reporter</li>
-                                <li>上下文层统一管理 history / memory / docs / tool outputs</li>
-                                <li>观测入口联动 Jaeger、Prometheus 与 readiness 探针</li>
-                            </ul>
+                    <section class="reference-chat-stage" id="landingProduct">
+                        <div class="reference-user-note">
+                            <p>如果你愿意，我下一条可以直接给你一个：</p>
+                            <ol>
+                                <li>Supervisor 当前路由结果</li>
+                                <li>Metrics、Logs、Knowledge 三路证据对比</li>
+                                <li>Reporter 汇总出的处置步骤</li>
+                            </ol>
+                            <p>你回复一句：<strong>开始诊断</strong>，我就按生产值班格式输出。</p>
                         </div>
 
-                        <div class="landing-hero-visual" aria-hidden="true">
-                            <div class="hero-preview">
-                                <div class="hero-preview-top">
-                                    <span class="preview-dot"></span>
-                                    <span>Live Agent Session</span>
-                                    <span class="preview-status">Live</span>
-                                </div>
-                                <div class="hero-preview-body">
-                                    <div class="preview-kpis">
-                                        <div class="preview-kpi">
-                                            <span>Route</span>
-                                            <strong>Triage</strong>
-                                            <em>Rule hit</em>
-                                        </div>
-                                        <div class="preview-kpi">
-                                            <span>Evidence</span>
-                                            <strong>7 docs</strong>
-                                            <em>Reranked</em>
-                                        </div>
-                                        <div class="preview-kpi">
-                                            <span>Confidence</span>
-                                            <strong>0.87</strong>
-                                            <em>Stable</em>
-                                        </div>
-                                    </div>
-                                    <div class="preview-events">
-                                        <div class="preview-event"><span>User</span><p>paymentservice p95 延迟突然升高，帮我定位。</p></div>
-                                        <div class="preview-event"><span>Agent</span><p>已路由到 metrics、logs、knowledge specialists。</p></div>
-                                        <div class="preview-event"><span>Report</span><p>建议先验证 redis timeout 与下游重试放大。</p></div>
-                                    </div>
-                                    <div class="preview-chart" aria-hidden="true">
-                                        <div class="preview-chart-bars">
-                                            <i style="--h:34%"></i>
-                                            <i style="--h:48%"></i>
-                                            <i style="--h:42%"></i>
-                                            <i style="--h:67%"></i>
-                                            <i style="--h:73%"></i>
-                                            <i style="--h:58%"></i>
-                                            <i style="--h:39%"></i>
-                                            <i style="--h:44%"></i>
-                                            <i style="--h:31%"></i>
-                                            <i style="--h:28%"></i>
-                                        </div>
-                                        <div class="preview-chart-note">Latency trend after evidence assembly and action plan</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
+                        <button class="floating-action prompt-card prompt-card-primary" data-prompt="请模拟一次线上故障诊断，按 Supervisor、Triage、Specialists、Reporter 的顺序输出。">社会舆情上报</button>
 
-                    <section class="landing-proof">
-                        <p class="landing-section-title">Command Surface</p>
-                        <div class="landing-proof-grid">
-                            <article>
-                                <h3>像桌面应用一样稳定</h3>
-                                <p>侧栏常驻会话与 Agent 状态，主区专注对话和执行结果。</p>
-                            </article>
-                            <article>
-                                <h3>像运行时一样透明</h3>
-                                <p>把路由、证据、观测和报告状态放在同一张工作台上。</p>
-                            </article>
-                            <article>
-                                <h3>像同事一样协作</h3>
-                                <p>你给出目标，Agent 负责拆解步骤并沉淀为可复用会话。</p>
-                            </article>
-                        </div>
-                    </section>
-
-                    <section class="landing-workflow" id="landingWorkflow">
-                        <p class="landing-section-title">From Alert To Action</p>
-                        <div class="workflow-track">
-                            <div class="workflow-item">
-                                <span>01</span>
-                                <div>
-                                    <h4>Signal Intake</h4>
-                                    <p>接收用户问题或告警上下文，建立 session 与任务边界。</p>
-                                </div>
+                        <article class="reference-agent-message">
+                            <div class="reference-agent-avatar">A</div>
+                            <div class="reference-agent-copy">
+                                <p class="reference-agent-title">如果你的目标是 <strong>什么都像真正运维人员</strong>，我的判断是：</p>
+                                <blockquote>展示层可以很轻，但 Agent 的执行链路必须清楚。</blockquote>
+                                <h3>为什么不是宽卡片</h3>
+                                <p>参考图的重点不是装饰，而是一个安静的工作界面：左侧负责人和会话，右侧只保留当前任务上下文。</p>
+                                <ul>
+                                    <li>最小导航：把入口收进侧栏。</li>
+                                    <li>长期会话列表：像同事列表一样持续存在。</li>
+                                    <li>主画布留白：让报告、证据和执行结果成为视觉中心。</li>
+                                </ul>
                             </div>
-                            <div class="workflow-item">
-                                <span>02</span>
-                                <div>
-                                    <h4>Triage Routing</h4>
-                                    <p>通过规则驱动路由，判断是否进入多 Agent 协作模式。</p>
-                                </div>
-                            </div>
-                            <div class="workflow-item">
-                                <span>03</span>
-                                <div>
-                                    <h4>Parallel Specialists</h4>
-                                    <p>并发拉取 metrics、logs 和 knowledge evidence，并进行重排筛选。</p>
-                                </div>
-                            </div>
-                            <div class="workflow-item">
-                                <span>04</span>
-                                <div>
-                                    <h4>Reporter Output</h4>
-                                    <p>返回可执行建议、trace 线索和可回放细节，支持团队复盘。</p>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
-
-                    <section class="landing-detail" id="landingDetail">
-                        <div class="landing-detail-copy">
-                            <p class="landing-section-title">Built For Real Operations</p>
-                            <h3>不是展示型页面，而是能直接承接值班与故障处置的工作界面。</h3>
-                            <p>在同一页面完成提问、流式分析、文档入库、trace 跳转和 AI Ops 执行，并持续沉淀可复用的处理经验。</p>
-                        </div>
-                        <div class="landing-detail-list">
-                            <div class="detail-line">
-                                <h4>Context Budgeting</h4>
-                                <p>预算控制 history / memory / docs / tool outputs，减少噪音与上下文漂移。</p>
-                            </div>
-                            <div class="detail-line">
-                                <h4>RAG Chain</h4>
-                                <p>Rewrite + Retriever + Rerank + Evidence Assembly，提升证据质量与稳定性。</p>
-                            </div>
-                            <div class="detail-line">
-                                <h4>Runtime Reuse</h4>
-                                <p>按 dataDir 复用 AIOps runtime，避免请求级重建导致的波动和延迟。</p>
-                            </div>
-                        </div>
-                    </section>
-
-                    <section class="landing-final" id="landingPricing">
-                        <h3>把 Incident 响应从“个人经验”升级为“团队系统能力”。</h3>
-                        <p>用真实告警场景快速跑一轮试点，验证路由策略、检索质量与报告执行性。</p>
-                        <div class="landing-final-actions">
-                            <button class="prompt-card prompt-card-primary" data-prompt="请给我一份 OpsCaption 接入清单，包括数据源、权限和里程碑。">获取接入清单</button>
-                            <button class="prompt-card" data-prompt="请模拟一次高优告警值班响应，并输出可执行报告。">模拟一次高优告警响应</button>
-                        </div>
+                        </article>
                     </section>
                 </section>
 
@@ -357,7 +252,7 @@
                 <div class="chat-input-container">
                     <div class="input-group-wrapper">
                         <div class="input-wrapper">
-                            <textarea id="messageInput" placeholder="输入你的问题，直接开始一次真实运维对话" maxlength="1000" class="message-input" rows="1"></textarea>
+                            <textarea id="messageInput" placeholder="给 OpsCaptain Agent 发消息" maxlength="1000" class="message-input" rows="1"></textarea>
                             <div class="input-bottom-bar">
                                 <div class="tools-btn-wrapper">
                                     <button class="tools-btn" id="toolsBtn" title="更多选项">

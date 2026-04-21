@@ -1,6 +1,6 @@
 .chat-input-container {
     width: 100%;
-    padding: 0 24px 22px;
+    padding: 0 42px 20px;
     flex-shrink: 0;
 }
 
@@ -12,31 +12,31 @@
 }
 
 .input-wrapper {
-    background: var(--bg-panel-strong);
-    border: 1px solid var(--line-soft);
-    border-radius: 22px;
-    box-shadow: var(--shadow-soft);
-    padding: 11px 11px 11px 13px;
-    backdrop-filter: blur(10px);
+    background: rgba(246, 247, 249, 0.92);
+    border: 1px solid rgba(31, 35, 41, 0.1);
+    border-radius: 18px;
+    box-shadow: 0 12px 36px rgba(20, 24, 31, 0.07);
+    padding: 10px 10px 10px 12px;
+    backdrop-filter: blur(12px);
 }
 
 .input-wrapper:focus-within {
-    border-color: rgba(27, 92, 106, 0.4);
-    box-shadow: 0 16px 34px rgba(27, 92, 106, 0.16);
+    border-color: rgba(31, 91, 189, 0.28);
+    box-shadow: 0 16px 38px rgba(31, 91, 189, 0.12);
 }
 
 .message-input {
     width: 100%;
-    min-height: 28px;
+    min-height: 26px;
     max-height: 200px;
     resize: none;
     border: none;
     outline: none;
     background: transparent;
     color: var(--text-main);
-    font-size: 0.96rem;
+    font-size: 0.9rem;
     line-height: 1.65;
-    padding: 8px 6px 10px;
+    padding: 7px 6px 9px;
 }
 
 .message-input::placeholder {
@@ -61,8 +61,8 @@
 
 .tools-btn,
 .send-btn-circle {
-    width: 36px;
-    height: 36px;
+    width: 34px;
+    height: 34px;
     border-radius: 999px;
     display: inline-flex;
     align-items: center;
@@ -87,7 +87,7 @@
 }
 
 .mode-selector-btn {
-    min-height: 36px;
+    min-height: 34px;
     border: 1px solid var(--line-soft);
     border-radius: 12px;
     background: var(--bg-soft);
@@ -211,14 +211,14 @@
 }
 
 .send-btn-circle {
-    border: 1px solid rgba(27, 92, 106, 0.34);
-    background: rgba(27, 92, 106, 0.16);
-    color: var(--text-main);
+    border: 1px solid rgba(31, 91, 189, 0.26);
+    background: rgba(31, 91, 189, 0.12);
+    color: var(--accent-strong);
 }
 
 .send-btn-circle:hover {
     transform: translateY(-1px);
-    background: rgba(27, 92, 106, 0.24);
+    background: rgba(31, 91, 189, 0.18);
 }
 
 .send-btn-circle.stop-mode {
@@ -233,10 +233,10 @@
 }
 
 .composer-footnote {
-    margin-top: 8px;
+    margin-top: 7px;
     text-align: center;
     color: var(--text-muted);
-    font-size: 0.76rem;
+    font-size: 0.72rem;
 }
 
 @media (max-width: 760px) {
