@@ -58,13 +58,13 @@
                     <a class="sidebar-nav-item active" href="#landingProduct">
                         <span class="nav-glyph">⌂</span>
                         <span>
-                            <strong>人才市场</strong>
+                            <strong>Agent 市场</strong>
                         </span>
                     </a>
                     <a class="sidebar-nav-item" href="#landingProduct">
                         <span class="nav-glyph">♙</span>
                         <span>
-                            <strong>人力库</strong>
+                            <strong>专家库</strong>
                         </span>
                     </a>
                     <a class="sidebar-nav-item" href="#observabilitySection">
@@ -80,7 +80,7 @@
                         <span class="person-avatar person-avatar-photo"></span>
                         <div class="person-main">
                             <div class="person-title-line">
-                                <strong>Elon ...</strong>
+                                <strong>Incident Lead</strong>
                                 <span>Leader Chat</span>
                                 <em>刚刚</em>
                             </div>
@@ -88,10 +88,10 @@
                         </div>
                     </article>
                     <article class="person-row">
-                        <span class="person-avatar">内</span>
+                        <span class="person-avatar">S</span>
                         <div class="person-main">
                             <div class="person-title-line">
-                                <strong>内容创作者</strong>
+                                <strong>Supervisor</strong>
                                 <em>2小时前</em>
                             </div>
                             <div class="person-sub-line"><i></i><span>0</span></div>
@@ -101,46 +101,46 @@
                         <span class="person-avatar">M</span>
                         <div class="person-main">
                             <div class="person-title-line">
-                                <strong>Main</strong>
+                                <strong>Metrics</strong>
                                 <em>3小时前</em>
                             </div>
                             <div class="person-sub-line"><i></i><span>0</span></div>
                         </div>
                     </article>
                     <article class="person-row">
-                        <span class="person-avatar">M</span>
+                        <span class="person-avatar">L</span>
                         <div class="person-main">
                             <div class="person-title-line">
-                                <strong>Main</strong>
+                                <strong>Log Agent</strong>
                                 <em>4小时前</em>
                             </div>
                             <div class="person-sub-line"><i></i><span>0</span></div>
                         </div>
                     </article>
                     <article class="person-row">
-                        <span class="person-avatar">张</span>
+                        <span class="person-avatar">K</span>
                         <div class="person-main">
                             <div class="person-title-line">
-                                <strong>张蓝心</strong>
+                                <strong>Knowledge</strong>
                                 <em>10小时前</em>
                             </div>
                             <div class="person-sub-line"><i></i><span>0</span></div>
                         </div>
                     </article>
                     <article class="person-row">
-                        <span class="person-avatar">傅</span>
+                        <span class="person-avatar">R</span>
                         <div class="person-main">
                             <div class="person-title-line">
-                                <strong>傅盛</strong>
+                                <strong>Reporter</strong>
                             </div>
                             <div class="person-sub-line"><i></i><span>0</span></div>
                         </div>
                     </article>
                     <article class="person-row">
-                        <span class="person-avatar">C</span>
+                        <span class="person-avatar">O</span>
                         <div class="person-main">
                             <div class="person-title-line">
-                                <strong>Chaos</strong>
+                                <strong>On-call</strong>
                             </div>
                             <div class="person-sub-line"><i></i><span>0</span></div>
                         </div>
@@ -222,10 +222,10 @@
                             </svg>
                         </button>
 
-                        <a class="brand-inline" href="#landingProduct" aria-label="OpsCaption Agent">
+                        <a class="brand-inline" href="#landingProduct" aria-label="OpsCaptain Agent">
                             <span class="brand-inline-mark brand-inline-photo"></span>
                             <span class="brand-inline-copy">
-                                <strong>Elon Musk</strong>
+                                <strong>Incident Lead</strong>
                             </span>
                             <span class="brand-chevron">⌄</span>
                         </a>
@@ -267,31 +267,31 @@
                         <div class="reference-user-note">
                             <p>如果你愿意，我下一条可以直接给你一个：</p>
                             <ol>
-                                <li>NVDA 当前多空分析表</li>
-                                <li>适合你的买入策略（保守 / 平衡 / 激进）</li>
-                                <li>和 AMD、TSM、AVGO 对比，哪只更值得现在买</li>
+                                <li>当前告警的影响面和优先级判断</li>
+                                <li>Metrics、Logs、Knowledge 三路证据对照</li>
+                                <li>回滚、限流、验证的执行步骤</li>
                             </ol>
-                            <p>你回我一句：“做个对比”，我就直接给你表格化结论。</p>
+                            <p>你回我一句：“开始诊断”，我就按生产值班格式输出。</p>
                         </div>
 
-                        <button class="floating-action prompt-card prompt-card-primary" data-prompt="请模拟一次线上故障诊断，按 Supervisor、Triage、Specialists、Reporter 的顺序输出。">什么时候上火星</button>
+                        <button class="floating-action prompt-card prompt-card-primary" data-prompt="请模拟一次 paymentservice 延迟升高的线上故障诊断，按 Supervisor、Triage、Specialists、Reporter 的顺序输出。">开始诊断</button>
 
                         <article class="reference-agent-message">
                             <div class="reference-agent-avatar reference-agent-photo"></div>
                             <div class="reference-agent-copy">
-                                <p class="reference-agent-title">如果你问的是 <strong>人类什么时候真正登陆火星</strong>，我的判断是：</p>
-                                <blockquote>最乐观 2030 年代前半，更现实一点是 2030 年代中后期</blockquote>
-                                <h3>为什么不是更快</h3>
-                                <p>去火星不是一次“火箭够大”就行，真正卡脖子的有 5 件事：</p>
+                                <p class="reference-agent-title">如果你问的是 <strong>paymentservice p95 为什么突然升高</strong>，我的判断是：</p>
+                                <blockquote>先看 Redis timeout 和下游重试是否同时抬升，再判断是否需要回滚。</blockquote>
+                                <h3>为什么不先重启</h3>
+                                <p>重启只能消除表象，真正影响恢复时间的通常是下面 5 件事：</p>
                                 <ul>
-                                    <li>重返可靠性</li>
-                                    <li>在轨加注</li>
-                                    <li>长期生命保障系统</li>
-                                    <li>火星着陆与起飞</li>
-                                    <li>地球火星发射窗口（大约 26 个月一次）</li>
+                                    <li>错误率是否同步上升</li>
+                                    <li>队列堆积是否扩大</li>
+                                    <li>Redis / DB timeout 是否集中出现</li>
+                                    <li>最近发布是否改变调用路径</li>
+                                    <li>下游重试是否放大流量</li>
                                 </ul>
-                                <h3>一个比较现实的节奏</h3>
-                                <p>这几年：先把星舰做成真正可重复使用、可稳定入轨、可返回。接下来：完成在轨加注、深空长期飞行验证、月球任务验证。</p>
+                                <h3>一个比较稳的节奏</h3>
+                                <p>先确认影响面，再拉取 metrics 和 error logs，最后把历史相似案例作为辅助证据，不把历史标签当实时事实。</p>
                             </div>
                         </article>
                     </section>
@@ -302,7 +302,7 @@
                 <div class="chat-input-container">
                     <div class="input-group-wrapper">
                         <div class="input-wrapper">
-                            <textarea id="messageInput" placeholder="给 Elon Musk 发消息..." maxlength="1000" class="message-input" rows="1"></textarea>
+                            <textarea id="messageInput" placeholder="给 Incident Lead 发消息..." maxlength="1000" class="message-input" rows="1"></textarea>
                             <div class="input-bottom-bar">
                                 <div class="tools-btn-wrapper">
                                     <button class="tools-btn" id="toolsBtn" title="更多选项">
