@@ -23,27 +23,13 @@
     <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
     <div class="app-layout">
         <aside class="sidebar">
-            <div class="sidebar-rail" aria-label="窗口导航">
-                <div class="window-controls" aria-hidden="true">
-                    <span class="control-dot control-close"></span>
-                    <span class="control-dot control-minimize"></span>
-                    <span class="control-dot control-zoom"></span>
-                </div>
-                <button class="rail-icon active" type="button" title="工作区">⌘</button>
-                <button class="rail-icon" type="button" title="市场">⌁</button>
-                <button class="rail-icon" type="button" title="团队">◎</button>
-                <button class="rail-icon" type="button" title="看板">▦</button>
-                <div class="rail-spacer"></div>
-                <button class="rail-user" type="button" title="Administrator">A</button>
-            </div>
-
             <div class="sidebar-panel">
             <div class="sidebar-header">
                 <div class="sidebar-brand">
                     <div class="brand-mark">OC</div>
                     <div class="brand-copy">
                         <h2 class="sidebar-title">OpsCaption</h2>
-                        <p class="sidebar-subtitle">AI Agent workspace</p>
+                        <p class="sidebar-subtitle">运维诊断工作台</p>
                     </div>
                 </div>
                 <button class="sidebar-close-btn" id="sidebarCloseBtn" title="关闭侧栏">
@@ -54,132 +40,50 @@
             </div>
 
             <div class="sidebar-content">
-                <section class="agent-market-card" aria-label="Agent 市场 Skill 选择">
+                <section class="agent-market-card" aria-label="工作模式选择">
                     <div class="agent-market-head">
-                        <span class="nav-glyph">⌂</span>
                         <div>
-                            <strong>Agent 市场</strong>
-                            <small>按场景组合 Skills</small>
+                            <strong>工作模式</strong>
+                            <small>选择这次要解决的问题类型</small>
                         </div>
                     </div>
-                    <div class="market-tabs" role="tablist" aria-label="Agent 市场">
+                    <div class="market-tabs" role="tablist" aria-label="工作模式">
                         <button class="market-tab active" type="button" data-market-tab="incident" aria-selected="true">故障响应</button>
                         <button class="market-tab" type="button" data-market-tab="release" aria-selected="false">发布护航</button>
                         <button class="market-tab" type="button" data-market-tab="capacity" aria-selected="false">容量巡检</button>
                     </div>
-                    <div class="skill-market-panel active" data-skill-panel="incident">
-                        <button class="skill-choice active" type="button" data-skill-choice aria-pressed="true">Metrics Triage</button>
-                        <button class="skill-choice active" type="button" data-skill-choice aria-pressed="true">Error Logs</button>
-                        <button class="skill-choice active" type="button" data-skill-choice aria-pressed="true">Runbook RAG</button>
-                    </div>
-                    <div class="skill-market-panel" data-skill-panel="release">
-                        <button class="skill-choice active" type="button" data-skill-choice aria-pressed="true">Release Guard</button>
-                        <button class="skill-choice" type="button" data-skill-choice aria-pressed="false">Rollback SOP</button>
-                        <button class="skill-choice active" type="button" data-skill-choice aria-pressed="true">Change Diff</button>
-                    </div>
-                    <div class="skill-market-panel" data-skill-panel="capacity">
-                        <button class="skill-choice active" type="button" data-skill-choice aria-pressed="true">Capacity Snapshot</button>
-                        <button class="skill-choice active" type="button" data-skill-choice aria-pressed="true">SLO Evidence</button>
-                        <button class="skill-choice" type="button" data-skill-choice aria-pressed="false">Cost Guard</button>
-                    </div>
-                    <div class="agent-market-foot">
-                        <span id="selectedSkillCount">3 Skills 已启用</span>
-                        <em>Auto routed</em>
-                    </div>
                 </section>
 
-                <nav class="sidebar-nav sidebar-nav-compact" aria-label="Agent 工作区">
-                    <a class="sidebar-nav-item" href="#landingProduct">
-                        <span class="nav-glyph">♙</span>
-                        <span>
-                            <strong>专家库</strong>
-                        </span>
-                    </a>
-                    <a class="sidebar-nav-item" href="#observabilitySection">
-                        <span class="nav-glyph">▦</span>
-                        <span>
-                            <strong>任务看板</strong>
-                        </span>
-                    </a>
-                </nav>
-
-                <section class="reference-people-list" aria-label="会话人员列表">
-                    <article class="person-row person-row-active">
-                        <span class="person-avatar person-avatar-photo"></span>
-                        <div class="person-main">
-                            <div class="person-title-line">
-                                <strong>Incident Lead</strong>
-                                <span>Leader Chat</span>
-                                <em>刚刚</em>
-                            </div>
-                            <div class="person-sub-line"><i></i><span>0</span></div>
-                        </div>
-                    </article>
-                    <article class="person-row">
-                        <span class="person-avatar">S</span>
-                        <div class="person-main">
-                            <div class="person-title-line">
-                                <strong>Supervisor</strong>
-                                <em>2小时前</em>
-                            </div>
-                            <div class="person-sub-line"><i></i><span>0</span></div>
-                        </div>
-                    </article>
-                    <article class="person-row">
-                        <span class="person-avatar">M</span>
-                        <div class="person-main">
-                            <div class="person-title-line">
-                                <strong>Metrics</strong>
-                                <em>3小时前</em>
-                            </div>
-                            <div class="person-sub-line"><i></i><span>0</span></div>
-                        </div>
-                    </article>
-                    <article class="person-row">
-                        <span class="person-avatar">L</span>
-                        <div class="person-main">
-                            <div class="person-title-line">
-                                <strong>Log Agent</strong>
-                                <em>4小时前</em>
-                            </div>
-                            <div class="person-sub-line"><i></i><span>0</span></div>
-                        </div>
-                    </article>
-                    <article class="person-row">
-                        <span class="person-avatar">K</span>
-                        <div class="person-main">
-                            <div class="person-title-line">
-                                <strong>Knowledge</strong>
-                                <em>10小时前</em>
-                            </div>
-                            <div class="person-sub-line"><i></i><span>0</span></div>
-                        </div>
-                    </article>
-                    <article class="person-row">
-                        <span class="person-avatar">R</span>
-                        <div class="person-main">
-                            <div class="person-title-line">
-                                <strong>Reporter</strong>
-                            </div>
-                            <div class="person-sub-line"><i></i><span>0</span></div>
-                        </div>
-                    </article>
-                    <article class="person-row">
-                        <span class="person-avatar">O</span>
-                        <div class="person-main">
-                            <div class="person-title-line">
-                                <strong>On-call</strong>
-                            </div>
-                            <div class="person-sub-line"><i></i><span>0</span></div>
-                        </div>
-                    </article>
+                <section class="capability-card" aria-label="启用能力">
+                    <div class="capability-card-head">
+                        <strong>启用能力</strong>
+                        <span id="selectedSkillCount">3 项已开启</span>
+                    </div>
+                    <div class="skill-market-panel active" data-skill-panel="incident">
+                        <button class="skill-choice active" type="button" data-skill-choice aria-pressed="true">指标分析</button>
+                        <button class="skill-choice active" type="button" data-skill-choice aria-pressed="true">日志排查</button>
+                        <button class="skill-choice active" type="button" data-skill-choice aria-pressed="true">知识库检索</button>
+                        <button class="skill-choice" type="button" data-skill-choice aria-pressed="false">回滚建议</button>
+                    </div>
+                    <div class="skill-market-panel" data-skill-panel="release">
+                        <button class="skill-choice active" type="button" data-skill-choice aria-pressed="true">变更检查</button>
+                        <button class="skill-choice active" type="button" data-skill-choice aria-pressed="true">发布风险</button>
+                        <button class="skill-choice" type="button" data-skill-choice aria-pressed="false">回滚预案</button>
+                        <button class="skill-choice active" type="button" data-skill-choice aria-pressed="true">验证清单</button>
+                    </div>
+                    <div class="skill-market-panel" data-skill-panel="capacity">
+                        <button class="skill-choice active" type="button" data-skill-choice aria-pressed="true">容量快照</button>
+                        <button class="skill-choice active" type="button" data-skill-choice aria-pressed="true">SLO 证据</button>
+                        <button class="skill-choice" type="button" data-skill-choice aria-pressed="false">成本风险</button>
+                        <button class="skill-choice active" type="button" data-skill-choice aria-pressed="true">趋势预测</button>
+                    </div>
                 </section>
 
                 <div class="history-search">
                     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M21 21L16.65 16.65M18 10.5C18 14.6421 14.6421 18 10.5 18C6.35786 18 3 14.6421 3 10.5C3 6.35786 6.35786 3 10.5 3C14.6421 3 18 6.35786 18 10.5Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
-                    <input id="historySearchInput" type="text" placeholder="搜索">
+                    <input id="historySearchInput" type="text" placeholder="搜索历史会话">
                 </div>
 
                 <div class="chat-history-section">
@@ -233,8 +137,8 @@
                 </section>
 
                 <div class="sidebar-footer">
-                    <div class="sidebar-footer-label">Runtime Surface</div>
-                    <div class="sidebar-footer-meta">Supervisor / Triage / Specialists / Reporter</div>
+                    <div class="sidebar-footer-label">当前目标</div>
+                    <div class="sidebar-footer-meta">把告警、日志和知识库证据整理成可执行建议</div>
                 </div>
             </div>
             </div>
@@ -250,18 +154,14 @@
                             </svg>
                         </button>
 
-                        <a class="brand-inline" href="#landingProduct" aria-label="OpsCaptain Agent">
+                        <a class="brand-inline" href="#landingProduct" aria-label="OpsCaptain">
                             <span class="brand-inline-mark brand-inline-photo"></span>
                             <span class="brand-inline-copy">
-                                <strong>Incident Lead</strong>
+                                <strong>OpsCaption</strong>
                             </span>
                             <span class="brand-chevron">⌄</span>
                         </a>
 
-                        <nav class="topbar-nav" aria-label="工作台导航">
-                            <a href="#landingProduct">文件</a>
-                            <a href="#observabilitySection">Agent</a>
-                        </nav>
                     </div>
 
                     <div class="topbar-actions">
@@ -283,7 +183,7 @@
                                 <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                                 <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                             </svg>
-                            <span>运行 AI Ops</span>
+                            <span>开始分析</span>
                         </button>
                     </div>
                 </div>
@@ -296,13 +196,13 @@
                             <p>如果你愿意，我下一条可以直接给你一个：</p>
                             <ol>
                                 <li>当前告警的影响面和优先级判断</li>
-                                <li>Metrics、Logs、Knowledge 三路证据对照</li>
+                                <li>指标、日志、知识库三路证据对照</li>
                                 <li>回滚、限流、验证的执行步骤</li>
                             </ol>
                             <p>你回我一句：“开始诊断”，我就按生产值班格式输出。</p>
                         </div>
 
-                        <button class="floating-action prompt-card prompt-card-primary" data-prompt="请模拟一次 paymentservice 延迟升高的线上故障诊断，按 Supervisor、Triage、Specialists、Reporter 的顺序输出。">开始诊断</button>
+                        <button class="floating-action prompt-card prompt-card-primary" data-prompt="请模拟一次 paymentservice 延迟升高的线上故障诊断，输出影响判断、证据检查、可能原因和处理建议。">开始诊断</button>
 
                         <article class="reference-agent-message">
                             <div class="reference-agent-avatar reference-agent-photo"></div>
@@ -330,7 +230,7 @@
                 <div class="chat-input-container">
                     <div class="input-group-wrapper">
                         <div class="input-wrapper">
-                            <textarea id="messageInput" placeholder="给 Incident Lead 发消息..." maxlength="1000" class="message-input" rows="1"></textarea>
+                            <textarea id="messageInput" placeholder="描述告警、日志或系统现象..." maxlength="1000" class="message-input" rows="1"></textarea>
                             <div class="input-bottom-bar">
                                 <div class="tools-btn-wrapper">
                                     <button class="tools-btn" id="toolsBtn" title="更多选项">

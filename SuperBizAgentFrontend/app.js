@@ -629,7 +629,7 @@ class SuperBizAgentApp {
         const selected = activePanel
             ? activePanel.querySelectorAll('[data-skill-choice].active').length
             : document.querySelectorAll('[data-skill-choice].active').length;
-        this.selectedSkillCount.textContent = `${selected} Skills 已启用`;
+        this.selectedSkillCount.textContent = `${selected} 项已开启`;
     }
 
     applyPrompt(prompt) {
@@ -1123,7 +1123,7 @@ class SuperBizAgentApp {
             this.messageInput.disabled = this.isStreaming;
             this.messageInput.placeholder = this.currentMode === 'stream'
                 ? '继续提问，实时查看生成过程'
-                : '有问题，尽管问';
+                : '描述告警、日志或系统现象';
         }
     }
 
