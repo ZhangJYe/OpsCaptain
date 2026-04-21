@@ -2341,6 +2341,117 @@ body[data-theme="light"] {
     font-size: 0.9rem;
 }
 
+.sidebar {
+    background:
+        linear-gradient(180deg, rgba(247, 249, 252, 0.96), rgba(239, 243, 248, 0.92)),
+        radial-gradient(260px 180px at 18% 0%, rgba(31, 91, 189, 0.08), transparent 68%);
+}
+
+.agent-market-card,
+.capability-card {
+    position: relative;
+    overflow: hidden;
+    border-color: rgba(32, 42, 54, 0.07);
+    background: rgba(255, 255, 255, 0.78);
+}
+
+.agent-market-card::before,
+.capability-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(135deg, rgba(31, 91, 189, 0.055), transparent 42%);
+}
+
+.agent-market-head,
+.market-tabs,
+.capability-card-head,
+.skill-market-panel {
+    position: relative;
+    z-index: 1;
+}
+
+.capability-card {
+    padding: 17px 16px 16px;
+}
+
+.capability-card-head strong {
+    font-family: var(--font-display);
+    font-size: 1.02rem;
+    letter-spacing: -0.01em;
+}
+
+.capability-card-head small {
+    display: block;
+    margin-top: 3px;
+    color: #8a929d;
+    font-size: 0.68rem;
+    font-weight: 700;
+}
+
+.capability-card-head > span {
+    min-height: 24px;
+    padding: 0 9px;
+    border-radius: 999px;
+    background: rgba(31, 91, 189, 0.08);
+    color: #174ea6;
+    display: inline-flex;
+    align-items: center;
+    white-space: nowrap;
+}
+
+.skill-market-panel {
+    display: none;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.skill-market-panel.active {
+    display: grid;
+}
+
+.skill-choice {
+    justify-content: flex-start;
+    min-height: 36px;
+    padding: 0 10px;
+    border-radius: 13px;
+    background: rgba(244, 247, 251, 0.74);
+    color: #667085;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    text-align: left;
+}
+
+.skill-choice::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: #c4ccd8;
+    flex: 0 0 auto;
+}
+
+.skill-choice.active {
+    border-color: rgba(31, 91, 189, 0.2);
+    background: linear-gradient(180deg, rgba(31, 91, 189, 0.12), rgba(31, 91, 189, 0.07));
+    color: #174ea6;
+}
+
+.skill-choice.active::before {
+    background: #1f5bbd;
+    box-shadow: 0 0 0 4px rgba(31, 91, 189, 0.1);
+}
+
+.history-search {
+    box-shadow: inset 0 0 0 1px rgba(32, 42, 54, 0.045);
+}
+
+.new-chat-btn {
+    border-radius: 15px;
+}
+
 @media (max-width: 980px) {
     .app-layout {
         width: 100vw;
