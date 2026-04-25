@@ -29,6 +29,7 @@ func (s *stubAIOpsMemory) PersistOutcome(_ context.Context, _ string, query, sum
 }
 
 func TestRunAIOpsMultiAgentApprovalDenialReturnsReason(t *testing.T) {
+	enableMultiAgentForTest(t)
 	response, err := RunAIOpsMultiAgent(context.Background(), "delete production history")
 	if err != nil {
 		t.Fatalf("run aiops: %v", err)
@@ -41,7 +42,26 @@ func TestRunAIOpsMultiAgentApprovalDenialReturnsReason(t *testing.T) {
 	}
 }
 
+func TestRunAIOpsMultiAgentDisabledByConfig(t *testing.T) {
+	oldConfigBool := multiAgentConfigBool
+	multiAgentConfigBool = func(context.Context, string) (bool, bool) {
+		return false, true
+	}
+	t.Cleanup(func() {
+		multiAgentConfigBool = oldConfigBool
+	})
+
+	response, err := RunAIOpsMultiAgent(context.Background(), "check alerts")
+	if err != nil {
+		t.Fatalf("run aiops: %v", err)
+	}
+	if response.Status != protocol.ResultStatusDegraded || response.DegradationReason != "multi_agent_disabled" {
+		t.Fatalf("expected disabled degraded response, got %+v", response)
+	}
+}
+
 func TestRunAIOpsCallsBuildPlanAgent(t *testing.T) {
+	enableMultiAgentForTest(t)
 	oldBuild := buildPlanAgent
 	oldMemoryFactory := newMemoryService
 	oldCfgBool := degradationConfigBool
@@ -104,6 +124,7 @@ func TestRunAIOpsCallsBuildPlanAgent(t *testing.T) {
 }
 
 func TestRunAIOpsWithEmptyMemoryContext(t *testing.T) {
+	enableMultiAgentForTest(t)
 	oldBuild := buildPlanAgent
 	oldMemoryFactory := newMemoryService
 	oldCfgBool := degradationConfigBool
@@ -147,6 +168,7 @@ func TestRunAIOpsWithEmptyMemoryContext(t *testing.T) {
 }
 
 func TestGetAIOpsTraceReturnsRuntimeEvents(t *testing.T) {
+	enableMultiAgentForTest(t)
 	oldBuild := buildPlanAgent
 	oldMemoryFactory := newMemoryService
 	oldCfgBool := degradationConfigBool
@@ -190,6 +212,7 @@ func TestGetAIOpsTraceReturnsRuntimeEvents(t *testing.T) {
 }
 
 func TestApproveQueuedAIOpsRequestRestoresOriginalUserID(t *testing.T) {
+	enableMultiAgentForTest(t)
 	oldApprove := approveApprovalRequest
 	oldMarkExecuted := markApprovalRequestExecuted
 	oldBuild := buildPlanAgent

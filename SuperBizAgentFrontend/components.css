@@ -4209,3 +4209,103 @@ body[data-theme="light"] {
         display: none;
     }
 }
+
+/* Sidebar containment fix: keep every control readable on short screens. */
+.sidebar {
+    min-height: 0;
+}
+
+.sidebar-panel {
+    min-height: 0;
+}
+
+.sidebar-content {
+    min-height: 0;
+    overflow-y: auto;
+    padding-bottom: 18px;
+}
+
+.operator-brief-card,
+.agent-market-card,
+.capability-card,
+.history-search,
+.new-chat-btn,
+.sidebar-footer {
+    flex: 0 0 auto;
+}
+
+.capability-card {
+    overflow: visible;
+}
+
+.skill-market-panel {
+    align-items: stretch;
+}
+
+.skill-choice {
+    min-width: 0;
+    overflow: hidden;
+}
+
+.skill-choice::before {
+    flex: 0 0 auto;
+}
+
+.chat-history-section {
+    flex: 1 1 auto;
+    min-height: 86px;
+    max-height: none;
+    overflow-y: auto;
+    padding-bottom: 2px;
+}
+
+.sidebar-footer {
+    margin-top: 0;
+}
+
+@media (max-height: 760px) and (min-width: 981px) {
+    .sidebar-content {
+        gap: 9px;
+    }
+
+    .operator-brief-card {
+        min-height: 54px;
+    }
+
+    .agent-market-card,
+    .capability-card {
+        padding: 10px;
+    }
+
+    .market-tabs {
+        margin-top: 8px;
+    }
+
+    .market-tab {
+        min-height: 28px;
+        font-size: 0.66rem;
+    }
+
+    .skill-market-panel {
+        gap: 6px;
+        margin-top: 9px;
+    }
+
+    .skill-choice {
+        min-height: 29px;
+        padding: 0 8px;
+        font-size: 0.66rem;
+    }
+
+    .history-search {
+        min-height: 34px;
+    }
+
+    .history-item {
+        min-height: 40px;
+    }
+
+    .new-chat-btn {
+        min-height: 34px;
+    }
+}

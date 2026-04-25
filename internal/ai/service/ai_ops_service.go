@@ -49,6 +49,9 @@ type aiOpsMemory interface {
 }
 
 func RunAIOpsMultiAgent(ctx context.Context, query string) (ExecutionResponse, error) {
+	if !aiOpsMultiAgentEnabled(ctx) {
+		return multiAgentDisabledResponse(), nil
+	}
 	approval := NewApprovalGate()
 	if decision := approval.Check(ctx, query); !decision.Approved {
 		if decision.Queued && decision.ApprovalRequest != nil {

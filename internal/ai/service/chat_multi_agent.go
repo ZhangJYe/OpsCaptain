@@ -24,6 +24,13 @@ var (
 	chatRuntimes         = make(map[string]*runtime.Runtime)
 	newPersistentRuntime = runtime.NewPersistent
 	registerChatAgentsFn = registerChatAgents
+	multiAgentConfigBool = func(ctx context.Context, key string) (bool, bool) {
+		v, err := g.Cfg().Get(ctx, key)
+		if err != nil || strings.TrimSpace(v.String()) == "" {
+			return false, false
+		}
+		return v.Bool(), true
+	}
 )
 
 var chatMultiAgentKeywords = []string{
@@ -33,8 +40,7 @@ var chatMultiAgentKeywords = []string{
 }
 
 func ShouldUseMultiAgentForChat(ctx context.Context, query string) bool {
-	v, err := g.Cfg().Get(ctx, "multi_agent.chat_route_enabled")
-	if err == nil && v.String() != "" && !v.Bool() {
+	if !chatMultiAgentEnabled(ctx) {
 		return false
 	}
 
@@ -51,6 +57,9 @@ func ShouldUseMultiAgentForChat(ctx context.Context, query string) bool {
 }
 
 func RunChatMultiAgent(ctx context.Context, sessionID, query string) (ExecutionResponse, error) {
+	if !chatMultiAgentEnabled(ctx) {
+		return multiAgentDisabledResponse(), nil
+	}
 	if decision := GetDegradationDecision(ctx, "chat"); decision.Enabled {
 		return NewDegradedExecutionResponse(decision), nil
 	}
@@ -130,4 +139,43 @@ func chatRuntimeDataDir(ctx context.Context) string {
 		return v.String()
 	}
 	return filepath.Join(".", "var", "runtime")
+}
+
+func chatMultiAgentEnabled(ctx context.Context) bool {
+	if !multiAgentEnabled(ctx) {
+		return false
+	}
+	enabled, configured := multiAgentConfigBool(ctx, "multi_agent.chat_route_enabled")
+	if configured {
+		return enabled
+	}
+	return true
+}
+
+func aiOpsMultiAgentEnabled(ctx context.Context) bool {
+	if !multiAgentEnabled(ctx) {
+		return false
+	}
+	enabled, configured := multiAgentConfigBool(ctx, "multi_agent.ai_ops_enabled")
+	if configured {
+		return enabled
+	}
+	return true
+}
+
+func multiAgentEnabled(ctx context.Context) bool {
+	enabled, configured := multiAgentConfigBool(ctx, "multi_agent.enabled")
+	if configured {
+		return enabled
+	}
+	return true
+}
+
+func multiAgentDisabledResponse() ExecutionResponse {
+	return ExecutionResponse{
+		Content:           "Multi-agent runtime is disabled; use the Chat/RAG baseline route.",
+		Detail:            []string{"multi_agent.enabled=false"},
+		Status:            protocol.ResultStatusDegraded,
+		DegradationReason: "multi_agent_disabled",
+	}
 }

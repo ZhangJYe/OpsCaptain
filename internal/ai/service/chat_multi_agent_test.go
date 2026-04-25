@@ -9,6 +9,17 @@ import (
 	"SuperBizAgent/internal/ai/runtime"
 )
 
+func enableMultiAgentForTest(t *testing.T) {
+	t.Helper()
+	oldConfigBool := multiAgentConfigBool
+	multiAgentConfigBool = func(context.Context, string) (bool, bool) {
+		return true, true
+	}
+	t.Cleanup(func() {
+		multiAgentConfigBool = oldConfigBool
+	})
+}
+
 type captureSupervisorAgent struct {
 	lastTask *protocol.TaskEnvelope
 }
@@ -21,6 +32,7 @@ func (a *captureSupervisorAgent) Handle(_ context.Context, task *protocol.TaskEn
 }
 
 func TestShouldUseMultiAgentForChat(t *testing.T) {
+	enableMultiAgentForTest(t)
 	if !ShouldUseMultiAgentForChat(context.Background(), "analyze current Prometheus alerts") {
 		t.Fatal("expected ops query to route to multi-agent")
 	}
@@ -29,7 +41,22 @@ func TestShouldUseMultiAgentForChat(t *testing.T) {
 	}
 }
 
+func TestShouldUseMultiAgentForChatDisabledByConfig(t *testing.T) {
+	oldConfigBool := multiAgentConfigBool
+	multiAgentConfigBool = func(context.Context, string) (bool, bool) {
+		return false, true
+	}
+	t.Cleanup(func() {
+		multiAgentConfigBool = oldConfigBool
+	})
+
+	if ShouldUseMultiAgentForChat(context.Background(), "analyze current Prometheus alerts") {
+		t.Fatal("expected multi-agent route to stay disabled")
+	}
+}
+
 func TestRunChatMultiAgentUsesChatMode(t *testing.T) {
+	enableMultiAgentForTest(t)
 	oldFactory := newPersistentRuntime
 	oldRegister := registerChatAgentsFn
 	oldMemoryFactory := newMemoryService
