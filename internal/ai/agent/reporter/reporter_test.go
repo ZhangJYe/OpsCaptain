@@ -2,6 +2,7 @@ package reporter
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -101,5 +102,93 @@ func TestReporterUsesEnglishOnlyWhenRequested(t *testing.T) {
 	}
 	if strings.Contains(result.Summary, "问题：") {
 		t.Fatalf("expected no Chinese question label in English mode, got %q", result.Summary)
+	}
+}
+
+func TestReporterLLMModeUsesSynthesizedReport(t *testing.T) {
+	oldMode := reporterMode
+	oldSynthesize := synthesizeReportWithLLM
+	defer func() {
+		reporterMode = oldMode
+		synthesizeReportWithLLM = oldSynthesize
+	}()
+	reporterMode = func(context.Context) string { return "llm" }
+	synthesizeReportWithLLM = func(context.Context, string, string, []*protocol.TaskResult) (string, error) {
+		return "## 诊断结论\ncheckout 504 需要继续排查下游超时。", nil
+	}
+
+	task := protocol.NewRootTask("sess-reporter-llm", "用户反馈 checkout 偶发 504", AgentName)
+	task.Input = map[string]any{
+		"query":  "用户反馈 checkout 偶发 504",
+		"intent": "incident_analysis",
+		"results": []*protocol.TaskResult{
+			{
+				TaskID:     "logs-task",
+				Agent:      "logs",
+				Status:     protocol.ResultStatusSucceeded,
+				Summary:    "found gateway timeout",
+				Confidence: 0.8,
+			},
+			{
+				TaskID:     "knowledge-task",
+				Agent:      "knowledge",
+				Status:     protocol.ResultStatusSucceeded,
+				Summary:    "check downstream dependency latency",
+				Confidence: 0.8,
+			},
+		},
+	}
+
+	result, err := New().Handle(context.Background(), task)
+	if err != nil {
+		t.Fatalf("handle reporter: %v", err)
+	}
+	if !strings.Contains(result.Summary, "诊断结论") {
+		t.Fatalf("expected synthesized report, got %q", result.Summary)
+	}
+	if result.Metadata["reporter_source"] != "llm" {
+		t.Fatalf("expected llm source metadata, got %#v", result.Metadata)
+	}
+}
+
+func TestReporterLLMModeFallsBackToTemplate(t *testing.T) {
+	oldMode := reporterMode
+	oldSynthesize := synthesizeReportWithLLM
+	defer func() {
+		reporterMode = oldMode
+		synthesizeReportWithLLM = oldSynthesize
+	}()
+	reporterMode = func(context.Context) string { return "llm" }
+	synthesizeReportWithLLM = func(context.Context, string, string, []*protocol.TaskResult) (string, error) {
+		return "", errors.New("llm timeout")
+	}
+
+	task := protocol.NewRootTask("sess-reporter-fallback", "分析当前告警", AgentName)
+	task.Input = map[string]any{
+		"query":  "分析当前告警",
+		"intent": "alert_analysis",
+		"results": []*protocol.TaskResult{
+			{
+				TaskID:     "metrics-task",
+				Agent:      "metrics",
+				Status:     protocol.ResultStatusSucceeded,
+				Summary:    "found 1 alert",
+				Confidence: 0.8,
+			},
+		},
+	}
+
+	result, err := New().Handle(context.Background(), task)
+	if err != nil {
+		t.Fatalf("handle reporter: %v", err)
+	}
+	if !strings.Contains(result.Summary, "# 告警分析报告") {
+		t.Fatalf("expected template fallback report, got %q", result.Summary)
+	}
+	if result.Metadata["reporter_source"] != "template_fallback" {
+		t.Fatalf("expected template fallback metadata, got %#v", result.Metadata)
+	}
+	if result.Metadata["reporter_llm_error"] != "llm timeout" {
+		t.Fatalf("expected llm error metadata, got %#v", result.Metadata)
 	}
 }

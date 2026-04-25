@@ -89,31 +89,45 @@ var (
 
 var triageRules = []rule{
 	{
+		intent:   "kb_qa",
+		domains:  nil,
+		priority: "low",
+		keywords: []string{"你好", "天气", "hello", "介绍一下你自己"},
+		summary:  "已识别为非运维多智能体任务，不需要调用专业代理。",
+	},
+	{
 		intent:   "alert_analysis",
 		domains:  []string{"metrics", "logs", "knowledge"},
 		priority: "high",
-		keywords: []string{"告警", "alert", "prometheus"},
+		keywords: []string{"告警", "alert", "prometheus", "cpu", "使用率", "连接数", "飙升", "p95", "延迟超过", "内存", "健康状态", "慢查询", "指标", "metric", "metrics"},
 		summary:  "已识别为告警分析任务，优先查询告警、日志和知识库。",
+	},
+	{
+		intent:   "incident_analysis",
+		domains:  []string{"metrics", "logs", "knowledge"},
+		priority: "high",
+		keywords: []string{"5xx", "crashloopbackoff", "错误率"},
+		summary:  "已识别为故障影响分析任务，优先关联指标、日志和知识库。",
 	},
 	{
 		intent:   "kb_qa",
 		domains:  []string{"knowledge"},
 		priority: "medium",
-		keywords: []string{"文档", "知识库", "runbook", "sop"},
+		keywords: []string{"文档", "知识库", "runbook", "sop", "什么是", "怎么配置", "请解释", "错误码", "readinessprobe", "hpa", "kubernetes", "熔断", "服务降级"},
 		summary:  "已识别为知识检索任务，优先查询内部文档。",
 	},
 	{
 		intent:   "data_query",
 		domains:  []string{"knowledge"},
 		priority: "medium",
-		keywords: []string{"sql", "mysql", "数据库"},
+		keywords: []string{"sql", "select ", "查询表", "查表", "表数据", "数据库查询", "数据查询"},
 		summary:  "已识别为数据查询任务，当前优先返回知识和操作建议。",
 	},
 	{
 		intent:   "incident_analysis",
 		domains:  []string{"logs", "knowledge"},
 		priority: "medium",
-		keywords: []string{"日志", "log"},
+		keywords: []string{"日志", "log", "context deadline exceeded", "超时", "connection refused", "unauthorized", "504", "重启", "排查", "故障", "失败率"},
 		summary:  "已识别为故障排查任务，优先查询日志和知识库。",
 	},
 }

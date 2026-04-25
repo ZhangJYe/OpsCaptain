@@ -65,8 +65,8 @@ multi_agent:
 
 | 文件 | 变更 |
 |---|---|
-| `internal/ai/agent/triage/triage.go` | 增加 `rule / hybrid / llm` 三种模式；LLM JSON 分类；超时兜底；输出 `triage_source`、`triage_fallback`、`use_multi_agent` 等 metadata |
-| `internal/ai/agent/triage/triage_test.go` | 覆盖规则快路径、规则未命中走 LLM、LLM 失败回退、LLM 输出归一化 |
+| `internal/ai/agent/triage/triage.go` | 增加 `rule / hybrid / llm` 三种模式；LLM JSON 分类；超时兜底；补充高频运维规则；输出 `triage_source`、`triage_fallback`、`use_multi_agent` 等 metadata |
+| `internal/ai/agent/triage/triage_test.go` | 覆盖规则快路径、规则未命中走 LLM、LLM 失败回退、LLM 输出归一化、高频规则命中 |
 | `internal/ai/agent/supervisor/supervisor.go` | 尊重 `use_multi_agent=false`，避免空 domains 被错误默认全量 fan-out；向最终结果透传 Triage metadata |
 | `internal/ai/agent/supervisor/supervisor_context_test.go` | 增加 Supervisor 不 fan-out 的回归测试 |
 | `manifest/config/config.yaml` | 增加 Hybrid Triage 配置项 |
@@ -98,6 +98,35 @@ failed=0
 ```powershell
 go test ./internal/ai/agent/triage ./internal/ai/agent/supervisor ./internal/ai/agent/eval
 ```
+
+### 4.1 小步推进：补齐高频规则
+
+为避免过度设计，第二步没有直接推进 Staged Execution 或 LLM Reporter，而是先补齐当前 golden cases 中暴露出的高频规则缺口：
+
+- 告警类：`CPU`、`使用率`、`连接数`、`p95`、`内存`、`慢查询`、`健康状态`
+- 故障类：`5xx`、`CrashLoopBackOff`、`504`、`connection refused`、`context deadline exceeded`、`unauthorized`
+- 知识类：`什么是`、`怎么配置`、`错误码`、`readinessProbe`、`HPA`、`服务降级`、`熔断`
+- 非多智能体类：问候、天气等不需要 specialist fan-out 的输入
+
+复测命令：
+
+```powershell
+go run ./internal/ai/cmd/agent_eval_cmd -mode routing -runner triage -format json -name rule-triage-expanded-rules
+```
+
+复测结果：
+
+```text
+cases=20
+intent_accuracy=1.00
+domain_precision=1.00
+domain_recall=1.00
+domain_f1=1.00
+fallback_rate=0.00
+failed=0
+```
+
+这个结果只说明当前 20 条 baseline case 的规则覆盖已补齐，不代表规则路由具备完整语义泛化能力。后续仍需要扩大 holdout case，再判断是否把默认模式从 `rule` 切到 `hybrid`。
 
 ---
 
@@ -156,3 +185,86 @@ go run ./internal/ai/cmd/agent_eval_cmd -mode routing -runner triage -format jso
 - Hybrid 的真实收益需要在 DeepSeek 配置可用的环境跑 A/B，不能只看单测。
 - 如果 Hybrid 指标稳定提升，再考虑把 `triage_mode` 默认值从 `rule` 切到 `hybrid`。
 - 后续 P1 可以继续做 Staged Execution 或 LLM Reporter，但要沿用这套 baseline 方法先测再改。
+
+---
+
+## 八、框架推进：P1/P2 骨架先落地
+
+> 日期：2026-04-26
+> 原则：先把大体框架打通，不抠策略细节；所有新能力默认关闭或保持原行为。
+
+### 8.1 新增配置
+
+```yaml
+multi_agent:
+  execution_mode: "parallel"        # parallel | staged
+  reporter_mode: "template"         # template | llm | auto
+  reporter_llm_timeout_ms: 10000
+  self_reflect_enabled: false
+```
+
+### 8.2 Staged Execution 骨架
+
+Supervisor 现在支持两种执行模式：
+
+```text
+parallel:
+  保持原有并行 fan-out，默认模式。
+
+staged:
+  按 Triage 返回的 domains 顺序串行执行 specialist。
+  后执行的 specialist 会收到 prior_results 和追加到 goal 的“上游专业代理结果”。
+```
+
+当前只实现信息传递框架，不做复杂动态重排。后续如果要优化质量，可以让 Triage 输出 `primary_domain/execution_order`，或让前一个 specialist 的结构化结果生成更精细的 focus hints。
+
+### 8.3 LLM Reporter 骨架
+
+Reporter 现在支持三种模式：
+
+```text
+template:
+  保持原模板拼接，默认模式。
+
+llm:
+  调 DeepSeek quick 把 specialist 结果合成为 Markdown 诊断报告。
+  LLM 初始化、超时或调用失败时回退 template。
+
+auto:
+  当前简单规则：当 specialist 结果数 >= 2 时走 LLM，否则走 template。
+```
+
+这一步只解决“框架可切换 + 失败可回退”，不在 prompt 上继续细调。
+
+### 8.4 Self-Reflect 骨架
+
+Self-Reflect 目前是 audit-only：
+
+```text
+self_reflect_enabled=false:
+  不产生 reflection metadata。
+
+self_reflect_enabled=true:
+  在最终 metadata 中写入 reflection_status / reflection_reason / reflection_missing_domains。
+```
+
+当前不会自动二次调度，避免过早引入重试循环导致成本和状态管理复杂化。后续可以基于这些 metadata 再加一次补查。
+
+### 8.5 当前验收
+
+已覆盖单测：
+
+- Staged Execution 会把前序 specialist summary 传给后续 specialist。
+- LLM Reporter 成功时使用合成报告。
+- LLM Reporter 失败时回退模板。
+- Self-Reflect 打开后输出 audit metadata。
+
+已运行：
+
+```powershell
+go test ./internal/ai/agent/supervisor ./internal/ai/agent/reporter ./internal/ai/agent/triage ./internal/ai/agent/eval
+```
+
+面试讲解时可以这样说：
+
+> 我没有一次性把多智能体链路改成复杂的 ReAct/Replan 系统，而是先把三个关键扩展点用 feature flag 打出来：执行模式、报告模式、自省状态。默认值完全保持原行为，所以风险可控；后续每个点都可以独立 A/B 和灰度。

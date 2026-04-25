@@ -7,6 +7,7 @@ import (
 
 	"SuperBizAgent/internal/ai/agent/reporter"
 	"SuperBizAgent/internal/ai/agent/skillspecialists/knowledge"
+	"SuperBizAgent/internal/ai/agent/skillspecialists/logs"
 	"SuperBizAgent/internal/ai/agent/triage"
 	"SuperBizAgent/internal/ai/protocol"
 	"SuperBizAgent/internal/ai/runtime"
@@ -63,6 +64,31 @@ func (a *captureKnowledgeAgent) Handle(_ context.Context, task *protocol.TaskEnv
 		Agent:      a.Name(),
 		Status:     protocol.ResultStatusSucceeded,
 		Summary:    "knowledge ok",
+		Confidence: 1,
+	}, nil
+}
+
+type captureSpecialistAgent struct {
+	name      string
+	lastPrior []string
+}
+
+func (a *captureSpecialistAgent) Name() string {
+	return a.name
+}
+
+func (a *captureSpecialistAgent) Capabilities() []string {
+	return []string{"test"}
+}
+
+func (a *captureSpecialistAgent) Handle(_ context.Context, task *protocol.TaskEnvelope) (*protocol.TaskResult, error) {
+	prior, _ := task.Input["prior_results"].([]string)
+	a.lastPrior = append([]string(nil), prior...)
+	return &protocol.TaskResult{
+		TaskID:     task.TaskID,
+		Agent:      a.name,
+		Status:     protocol.ResultStatusSucceeded,
+		Summary:    a.name + " ok",
 		Confidence: 1,
 	}, nil
 }
@@ -176,5 +202,57 @@ func TestSupervisorHonorsTriageUseMultiAgentFalse(t *testing.T) {
 	domains, _ := result.Metadata["domains"].([]string)
 	if len(domains) != 0 {
 		t.Fatalf("expected empty routed domains, got %#v", domains)
+	}
+}
+
+func TestSupervisorStagedExecutionPassesPriorResults(t *testing.T) {
+	oldMode := supervisorExecutionMode
+	oldReflect := supervisorSelfReflectEnabled
+	defer func() {
+		supervisorExecutionMode = oldMode
+		supervisorSelfReflectEnabled = oldReflect
+	}()
+	supervisorExecutionMode = func(context.Context) string { return "staged" }
+	supervisorSelfReflectEnabled = func(context.Context) bool { return true }
+
+	rt := runtime.New()
+	triageAgent := &captureTriageAgent{
+		metadata: map[string]any{
+			"intent":  "incident_analysis",
+			"domains": []string{"logs", "knowledge"},
+		},
+	}
+	logsAgent := &captureSpecialistAgent{name: logs.AgentName}
+	knowledgeAgent := &captureSpecialistAgent{name: knowledge.AgentName}
+	reporterAgent := &fakeReporterAgent{}
+
+	for _, agent := range []runtime.Agent{
+		New(),
+		triageAgent,
+		logsAgent,
+		knowledgeAgent,
+		reporterAgent,
+	} {
+		if err := rt.Register(agent); err != nil {
+			t.Fatalf("register %s: %v", agent.Name(), err)
+		}
+	}
+
+	task := protocol.NewRootTask("session-test", "排查 checkout 504", AgentName)
+	result, err := rt.Dispatch(context.Background(), task)
+	if err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	if result.Metadata["execution_mode"] != "staged" {
+		t.Fatalf("expected staged metadata, got %#v", result.Metadata)
+	}
+	if len(logsAgent.lastPrior) != 0 {
+		t.Fatalf("expected first specialist to have no prior results, got %#v", logsAgent.lastPrior)
+	}
+	if len(knowledgeAgent.lastPrior) != 1 || !strings.Contains(knowledgeAgent.lastPrior[0], logs.AgentName) {
+		t.Fatalf("expected knowledge to receive logs prior result, got %#v", knowledgeAgent.lastPrior)
+	}
+	if result.Metadata["reflection_status"] != "complete" {
+		t.Fatalf("expected complete reflection, got %#v", result.Metadata)
 	}
 }

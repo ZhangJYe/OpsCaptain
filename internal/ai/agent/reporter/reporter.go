@@ -2,20 +2,60 @@ package reporter
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
 	agentcontracts "SuperBizAgent/internal/ai/agent/contracts"
 	"SuperBizAgent/internal/ai/contextengine"
+	"SuperBizAgent/internal/ai/models"
 	"SuperBizAgent/internal/ai/protocol"
 	"SuperBizAgent/internal/ai/runtime"
+
+	"github.com/cloudwego/eino/schema"
+	"github.com/gogf/gf/v2/frame/g"
 )
 
 const AgentName = "reporter"
 
+const (
+	defaultReporterLLMTimeout = 10 * time.Second
+	reporterModeTemplate      = "template"
+	reporterModeLLM           = "llm"
+	reporterModeAuto          = "auto"
+	reporterPrompt            = `你是 AIOps 多智能体诊断报告生成器。请基于用户问题和各专业代理结果，输出中文 Markdown 报告。
+
+要求：
+- 先给诊断结论，再列关键依据，最后给建议动作
+- 只基于输入中的结果，不要编造不存在的实时证据
+- 如果证据不足，明确写出证据不足和下一步需要补充什么
+
+输入：
+%s`
+)
+
 type Agent struct{}
+
+var (
+	reporterMode = func(ctx context.Context) string {
+		v, err := g.Cfg().Get(ctx, "multi_agent.reporter_mode")
+		if err == nil && strings.TrimSpace(v.String()) != "" {
+			return strings.ToLower(strings.TrimSpace(v.String()))
+		}
+		return reporterModeTemplate
+	}
+	reporterLLMTimeout = func(ctx context.Context) time.Duration {
+		v, err := g.Cfg().Get(ctx, "multi_agent.reporter_llm_timeout_ms")
+		if err == nil && v.Int64() > 0 {
+			return time.Duration(v.Int64()) * time.Millisecond
+		}
+		return defaultReporterLLMTimeout
+	}
+	synthesizeReportWithLLM = defaultSynthesizeReportWithLLM
+)
 
 func New() *Agent {
 	return &Agent{}
@@ -52,6 +92,36 @@ func (a *Agent) Handle(ctx context.Context, task *protocol.TaskEnvelope) (*proto
 		return agentcontracts.AttachMetadata(result, AgentName), nil
 	}
 
+	result := buildTemplateReportResponse(task, raw, query, intent, contextDetail, contextPkg, degradationReasons, status, degradationReason, english)
+	mode := normalizeReporterMode(reporterMode(ctx), raw)
+	if mode == reporterModeLLM {
+		if summary, err := synthesizeReportWithLLM(ctx, query, intent, raw); err == nil && strings.TrimSpace(summary) != "" {
+			result.Summary = strings.TrimSpace(summary)
+			result.Metadata = mergeMetadata(result.Metadata, map[string]any{
+				"reporter_mode":   mode,
+				"reporter_source": "llm",
+			})
+		} else {
+			llmErr := ""
+			if err != nil {
+				llmErr = err.Error()
+			}
+			result.Metadata = mergeMetadata(result.Metadata, map[string]any{
+				"reporter_mode":      mode,
+				"reporter_source":    "template_fallback",
+				"reporter_llm_error": llmErr,
+			})
+		}
+	} else {
+		result.Metadata = mergeMetadata(result.Metadata, map[string]any{
+			"reporter_mode":   mode,
+			"reporter_source": "template",
+		})
+	}
+	return agentcontracts.AttachMetadata(result, AgentName), nil
+}
+
+func buildTemplateReportResponse(task *protocol.TaskEnvelope, raw []*protocol.TaskResult, query, intent string, contextDetail []string, contextPkg *contextengine.ContextPackage, degradationReasons []string, status protocol.ResultStatus, degradationReason string, english bool) *protocol.TaskResult {
 	text := reporterText(english)
 	sections := make([]string, 0, len(raw)+6)
 	sections = append(sections, text.reportTitle)
@@ -91,9 +161,9 @@ func (a *Agent) Handle(ctx context.Context, task *protocol.TaskEnvelope) (*proto
 		sections = append(sections, strings.Join(prefixEach(conclusionLines, "- "), "\n"))
 	}
 
-	return agentcontracts.AttachMetadata(&protocol.TaskResult{
+	return &protocol.TaskResult{
 		TaskID:            task.TaskID,
-		Agent:             a.Name(),
+		Agent:             AgentName,
 		Status:            status,
 		Summary:           strings.Join(sections, "\n\n"),
 		Confidence:        deriveConfidence(raw),
@@ -104,7 +174,7 @@ func (a *Agent) Handle(ctx context.Context, task *protocol.TaskEnvelope) (*proto
 			"tool_item_count":     len(contextPkg.ToolItems),
 			"degradation_reasons": degradationReasons,
 		},
-	}, AgentName), nil
+	}
 }
 
 func buildChatResponse(task *protocol.TaskEnvelope, raw []*protocol.TaskResult, query, intent string, contextPkg *contextengine.ContextPackage, english bool) *protocol.TaskResult {
@@ -185,6 +255,64 @@ func buildReporterContext(ctx context.Context, task *protocol.TaskEnvelope, raw 
 		}
 	}
 	return pkg, detail
+}
+
+func defaultSynthesizeReportWithLLM(ctx context.Context, query, intent string, raw []*protocol.TaskResult) (string, error) {
+	callCtx, cancel := context.WithTimeout(ctx, reporterLLMTimeout(ctx))
+	defer cancel()
+
+	payload, err := json.Marshal(map[string]any{
+		"query":   query,
+		"intent":  intent,
+		"results": compactReportResults(raw),
+	})
+	if err != nil {
+		return "", err
+	}
+	chatModel, err := models.OpenAIForDeepSeekV3Quick(callCtx)
+	if err != nil {
+		return "", err
+	}
+	resp, err := chatModel.Generate(callCtx, []*schema.Message{
+		{Role: schema.System, Content: "你只输出诊断报告正文，不输出额外解释。"},
+		{Role: schema.User, Content: fmt.Sprintf(reporterPrompt, string(payload))},
+	})
+	if err != nil {
+		return "", err
+	}
+	return resp.Content, nil
+}
+
+func compactReportResults(raw []*protocol.TaskResult) []map[string]any {
+	out := make([]map[string]any, 0, len(raw))
+	for _, result := range raw {
+		if result == nil {
+			continue
+		}
+		out = append(out, map[string]any{
+			"agent":              result.Agent,
+			"status":             result.Status,
+			"summary":            result.Summary,
+			"confidence":         result.Confidence,
+			"degradation_reason": result.DegradationReason,
+			"evidence":           chatEvidenceSnippets(result.Evidence, 3),
+		})
+	}
+	return out
+}
+
+func normalizeReporterMode(mode string, raw []*protocol.TaskResult) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case reporterModeLLM:
+		return reporterModeLLM
+	case reporterModeAuto:
+		if len(raw) >= 2 {
+			return reporterModeLLM
+		}
+		return reporterModeTemplate
+	default:
+		return reporterModeTemplate
+	}
 }
 
 func mergeMetadata(left, right map[string]any) map[string]any {

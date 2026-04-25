@@ -60,6 +60,74 @@ func TestHybridTriageUsesRuleFastPath(t *testing.T) {
 	}
 }
 
+func TestTriageExpandedRuleCoverage(t *testing.T) {
+	cases := []struct {
+		name              string
+		query             string
+		wantIntent        string
+		wantDomains       []string
+		wantUseMultiAgent bool
+	}{
+		{
+			name:              "hpa knowledge",
+			query:             "什么是 Kubernetes HPA？怎么配置？",
+			wantIntent:        "kb_qa",
+			wantDomains:       []string{"knowledge"},
+			wantUseMultiAgent: true,
+		},
+		{
+			name:              "5xx incident",
+			query:             "orderservice 5xx 错误率从 1% 升到 12%",
+			wantIntent:        "incident_analysis",
+			wantDomains:       []string{"metrics", "logs", "knowledge"},
+			wantUseMultiAgent: true,
+		},
+		{
+			name:              "mysql connection alert",
+			query:             "MySQL 连接数突然飙升到 500",
+			wantIntent:        "alert_analysis",
+			wantDomains:       []string{"metrics", "logs", "knowledge"},
+			wantUseMultiAgent: true,
+		},
+		{
+			name:              "generic greeting",
+			query:             "你好，今天天气怎么样",
+			wantIntent:        "kb_qa",
+			wantDomains:       nil,
+			wantUseMultiAgent: false,
+		},
+	}
+
+	agent := New()
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			task := protocol.NewRootTask("session-test", tc.query, agent.Name())
+			result, err := agent.Handle(context.Background(), task)
+			if err != nil {
+				t.Fatalf("handle: %v", err)
+			}
+			if result.Metadata["intent"] != tc.wantIntent {
+				t.Fatalf("expected intent %q, got %#v", tc.wantIntent, result.Metadata)
+			}
+			if result.Metadata["use_multi_agent"] != tc.wantUseMultiAgent {
+				t.Fatalf("expected use_multi_agent=%t, got %#v", tc.wantUseMultiAgent, result.Metadata)
+			}
+			domains, _ := result.Metadata["domains"].([]string)
+			if len(domains) != len(tc.wantDomains) {
+				t.Fatalf("expected domains %#v, got %#v", tc.wantDomains, domains)
+			}
+			for i := range tc.wantDomains {
+				if domains[i] != tc.wantDomains[i] {
+					t.Fatalf("expected domains %#v, got %#v", tc.wantDomains, domains)
+				}
+			}
+			if result.Metadata["triage_fallback"] != false {
+				t.Fatalf("expected rule hit without fallback, got %#v", result.Metadata)
+			}
+		})
+	}
+}
+
 func TestHybridTriageUsesLLMOnRuleMiss(t *testing.T) {
 	oldMode := triageMode
 	oldClassifier := classifyTriageWithLLM
@@ -82,7 +150,7 @@ func TestHybridTriageUsesLLMOnRuleMiss(t *testing.T) {
 	}
 
 	agent := New()
-	task := protocol.NewRootTask("session-test", "HPA 怎么配置", agent.Name())
+	task := protocol.NewRootTask("session-test", "服务最近有点不稳定", agent.Name())
 	result, err := agent.Handle(context.Background(), task)
 	if err != nil {
 		t.Fatalf("handle: %v", err)
@@ -113,7 +181,7 @@ func TestHybridTriageFallsBackWhenLLMFails(t *testing.T) {
 	}
 
 	agent := New()
-	task := protocol.NewRootTask("session-test", "HPA 怎么配置", agent.Name())
+	task := protocol.NewRootTask("session-test", "服务最近有点不稳定", agent.Name())
 	result, err := agent.Handle(context.Background(), task)
 	if err != nil {
 		t.Fatalf("handle: %v", err)

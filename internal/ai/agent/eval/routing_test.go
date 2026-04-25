@@ -27,17 +27,17 @@ func TestEvaluateRouting(t *testing.T) {
 	if report.Summary.Cases != 2 {
 		t.Fatalf("expected 2 cases, got %#v", report.Summary)
 	}
-	if report.Summary.IntentCorrect != 1 {
-		t.Fatalf("expected one intent hit, got %#v", report.Summary)
+	if report.Summary.IntentCorrect != 2 {
+		t.Fatalf("expected two intent hits, got %#v", report.Summary)
 	}
-	if report.Summary.FallbackCount != 1 {
-		t.Fatalf("expected one fallback, got %#v", report.Summary)
+	if report.Summary.FallbackCount != 0 {
+		t.Fatalf("expected no fallback, got %#v", report.Summary)
 	}
 	if report.Results[0].DomainRecall != 1 {
 		t.Fatalf("expected first case full domain recall, got %#v", report.Results[0])
 	}
-	if !report.Results[1].Fallback {
-		t.Fatalf("expected second case fallback, got %#v", report.Results[1])
+	if report.Results[1].Fallback {
+		t.Fatalf("expected second case to hit rule, got %#v", report.Results[1])
 	}
 }
 

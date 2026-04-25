@@ -116,6 +116,10 @@ multi_agent:
   ai_ops_enabled: false
   triage_mode: "rule"
   triage_llm_timeout_ms: 1000
+  execution_mode: "parallel"
+  reporter_mode: "template"
+  reporter_llm_timeout_ms: 10000
+  self_reflect_enabled: false
   agent_timeout_ms: 30000
   metrics_query_timeout_ms: 5000
   knowledge_query_timeout_ms: 5000
