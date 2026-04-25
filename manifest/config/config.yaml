@@ -82,6 +82,9 @@ doubao_embedding_model:
 memory:
   max_window_size: 20
   max_context_tokens: 4096
+  agent_mode: "llm"
+  project_id: "opscaption"
+  long_term_store_path: ""
   extract_timeout_ms: 1500
   extract_max_concurrency: 8
   extract_wait_timeout_ms: 50
@@ -99,6 +102,7 @@ context:
   chat_max_memory_items: 5
   aiops_max_memory_items: 5
   reporter_max_tool_items: 8
+  min_memory_confidence: 0.50
   docs_query_timeout_ms: 5000
   docs_init_failure_ttl_ms: 15000
 
@@ -106,8 +110,10 @@ retriever:
   top_k: 5
 
 multi_agent:
+  enabled: false
   data_dir: "./var/runtime"
-  chat_route_enabled: true
+  chat_route_enabled: false
+  ai_ops_enabled: false
   agent_timeout_ms: 30000
   metrics_query_timeout_ms: 5000
   knowledge_query_timeout_ms: 5000

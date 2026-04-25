@@ -8,6 +8,9 @@ import (
 	"SuperBizAgent/utility/log_call_back"
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/cloudwego/eino/components/document"
@@ -76,7 +79,7 @@ func (s *IndexingService) IndexSource(ctx context.Context, path string) (IndexBu
 		return IndexBuildSummary{}, fmt.Errorf("invoke index graph failed: %w", err)
 	}
 
-	s.syncBM25Index(ctx, path)
+	s.SyncBM25Index(ctx)
 
 	return IndexBuildSummary{
 		SourcePath:      path,
@@ -86,20 +89,35 @@ func (s *IndexingService) IndexSource(ctx context.Context, path string) (IndexBu
 	}, nil
 }
 
-func (s *IndexingService) syncBM25Index(ctx context.Context, path string) {
+func (s *IndexingService) SyncBM25Index(ctx context.Context) {
 	loader, err := s.newLoader(ctx)
 	if err != nil {
 		return
 	}
-	docs, err := loader.Load(ctx, document.Source{URI: path})
-	if err != nil || len(docs) == 0 {
+
+	paths, err := collectBM25SourcePaths(common.FileDir)
+	if err != nil {
+		g.Log().Warningf(ctx, "collect bm25 source paths failed: %v", err)
 		return
 	}
-	idx := SharedBM25Index()
-	for _, doc := range docs {
-		AddDocToBM25Index(idx, doc)
+
+	idx := NewBM25Index()
+	totalDocs := 0
+	for _, path := range paths {
+		docs, err := loader.Load(ctx, document.Source{URI: path})
+		if err != nil || len(docs) == 0 {
+			if err != nil {
+				g.Log().Warningf(ctx, "load bm25 source failed: %s, err=%v", path, err)
+			}
+			continue
+		}
+		for _, doc := range docs {
+			AddDocToBM25Index(idx, doc)
+			totalDocs++
+		}
 	}
-	g.Log().Infof(ctx, "synced %d docs to BM25 index from: %s (total: %d)", len(docs), path, idx.Size())
+	SetSharedBM25Index(idx)
+	g.Log().Infof(ctx, "rebuilt BM25 index from %d files, docs=%d, total=%d", len(paths), totalDocs, idx.Size())
 }
 
 func (s *IndexingService) deleteExistingSource(ctx context.Context, sourceValue string) (int, error) {
@@ -145,4 +163,44 @@ func resolveDocumentSource(path string, doc *schema.Document) string {
 		}
 	}
 	return path
+}
+
+func collectBM25SourcePaths(root string) ([]string, error) {
+	if strings.TrimSpace(root) == "" {
+		return nil, nil
+	}
+	if _, err := os.Stat(root); err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	paths := make([]string, 0)
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			if path != root && filepath.Base(path) == quarantineDirName() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		name := d.Name()
+		if strings.HasSuffix(name, ".metadata.json") {
+			return nil
+		}
+		paths = append(paths, path)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(paths)
+	return paths, nil
+}
+
+func quarantineDirName() string {
+	return "quarantine"
 }

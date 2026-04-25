@@ -10,9 +10,14 @@ import (
 )
 
 type MemoryCandidate struct {
-	Type    MemoryType
-	Content string
-	Source  string
+	Type        MemoryType
+	Content     string
+	Source      string
+	Scope       MemoryScope
+	ScopeID     string
+	Confidence  float64
+	SafetyLabel string
+	Provenance  string
 }
 
 type DroppedMemoryCandidate struct {
@@ -21,9 +26,11 @@ type DroppedMemoryCandidate struct {
 }
 
 type MemoryExtractionReport struct {
-	Candidates []MemoryCandidate
-	StoredIDs  []string
-	Dropped    []DroppedMemoryCandidate
+	Candidates   []MemoryCandidate
+	StoredIDs    []string
+	Dropped      []DroppedMemoryCandidate
+	Actions      []MemoryAction
+	AuditRecords []MemoryAuditRecord
 }
 
 func ExtractMemories(ctx context.Context, sessionID string, userMsg string, assistantMsg string) {
@@ -31,28 +38,11 @@ func ExtractMemories(ctx context.Context, sessionID string, userMsg string, assi
 }
 
 func ExtractMemoriesWithReport(ctx context.Context, sessionID string, userMsg string, assistantMsg string) *MemoryExtractionReport {
-	if ctx != nil && ctx.Err() != nil {
-		return &MemoryExtractionReport{}
-	}
-	ltm := GetLongTermMemory()
-	report := &MemoryExtractionReport{}
-
-	for _, candidate := range ExtractMemoryCandidates(userMsg, assistantMsg) {
-		if ctx != nil && ctx.Err() != nil {
-			return report
-		}
-		report.Candidates = append(report.Candidates, candidate)
-		if ok, reason := ValidateMemoryCandidate(candidate); !ok {
-			report.Dropped = append(report.Dropped, DroppedMemoryCandidate{
-				Candidate: candidate,
-				Reason:    reason,
-			})
-			continue
-		}
-		id := ltm.Store(ctx, sessionID, candidate.Type, candidate.Content, candidate.Source)
-		report.StoredIDs = append(report.StoredIDs, id)
-	}
-	return report
+	return ProcessMemoryEventWithReport(ctx, MemoryEvent{
+		SessionID: sessionID,
+		Query:     userMsg,
+		Answer:    assistantMsg,
+	})
 }
 
 func ExtractMemoryCandidates(userMsg string, assistantMsg string) []MemoryCandidate {
@@ -61,28 +51,26 @@ func ExtractMemoryCandidates(userMsg string, assistantMsg string) []MemoryCandid
 	facts := extractFacts(userMsg, assistantMsg)
 	for _, fact := range facts {
 		candidates = append(candidates, MemoryCandidate{
-			Type:    MemoryTypeFact,
-			Content: fact,
-			Source:  "conversation",
+			Type:        MemoryTypeFact,
+			Content:     fact,
+			Source:      "conversation",
+			Scope:       MemoryScopeSession,
+			Confidence:  0.70,
+			SafetyLabel: "internal",
+			Provenance:  "extractor:rule_fact",
 		})
 	}
 
 	prefs := extractPreferences(userMsg)
 	for _, pref := range prefs {
 		candidates = append(candidates, MemoryCandidate{
-			Type:    MemoryTypePreference,
-			Content: pref,
-			Source:  "user_input",
-		})
-	}
-
-	if len(assistantMsg) > 100 {
-		episode := fmt.Sprintf("用户问: %s -> 系统回答了关于此问题的详细信息",
-			truncate(userMsg, 100))
-		candidates = append(candidates, MemoryCandidate{
-			Type:    MemoryTypeEpisode,
-			Content: episode,
-			Source:  "conversation",
+			Type:        MemoryTypePreference,
+			Content:     pref,
+			Source:      "user_input",
+			Scope:       MemoryScopeSession,
+			Confidence:  0.85,
+			SafetyLabel: "internal",
+			Provenance:  "extractor:rule_preference",
 		})
 	}
 
@@ -112,6 +100,14 @@ func ValidateMemoryCandidate(candidate MemoryCandidate) (bool, string) {
 	} {
 		if strings.Contains(lower, marker) {
 			return false, "assistant_boilerplate"
+		}
+	}
+	for _, marker := range []string{
+		"api_key", "apikey", "access_key", "secret_key", "password", "passwd",
+		"authorization:", "bearer ", "token=", "token:",
+	} {
+		if strings.Contains(lower, marker) {
+			return false, "contains_secret_marker"
 		}
 	}
 	return true, ""

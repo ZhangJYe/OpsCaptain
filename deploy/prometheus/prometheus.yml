@@ -4,6 +4,7 @@ global:
 
 rule_files:
   - /etc/prometheus/rules/opscaptionai-cost-alerts.yml
+  - /etc/prometheus/rules/freeexchanged-alerts.yml
 
 scrape_configs:
   - job_name: prometheus
@@ -19,3 +20,93 @@ scrape_configs:
     metric_relabel_configs:
       - action: labeldrop
         regex: session_id
+
+  - job_name: freeexchanged-gateway
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - host.docker.internal:31901
+        labels:
+          app: freeexchanged
+          service: gateway
+
+  - job_name: freeexchanged-user-rpc
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - host.docker.internal:31902
+        labels:
+          app: freeexchanged
+          service: user-rpc
+
+  - job_name: freeexchanged-interaction-rpc
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - host.docker.internal:31903
+        labels:
+          app: freeexchanged
+          service: interaction-rpc
+
+  - job_name: freeexchanged-ranking-rpc
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - host.docker.internal:31904
+        labels:
+          app: freeexchanged
+          service: ranking-rpc
+
+  - job_name: freeexchanged-rate-rpc
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - host.docker.internal:31905
+        labels:
+          app: freeexchanged
+          service: rate-rpc
+
+  - job_name: freeexchanged-article-rpc
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - host.docker.internal:31906
+        labels:
+          app: freeexchanged
+          service: article-rpc
+
+  - job_name: freeexchanged-watchlist-rpc
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - host.docker.internal:31907
+        labels:
+          app: freeexchanged
+          service: watchlist-rpc
+
+  - job_name: freeexchanged-ranking-stream
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - host.docker.internal:31908
+        labels:
+          app: freeexchanged
+          service: ranking-stream
+
+  - job_name: freeexchanged-article-outbox
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - host.docker.internal:31909
+        labels:
+          app: freeexchanged
+          service: article-outbox
+
+  - job_name: freeexchanged-interaction-outbox
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - host.docker.internal:31910
+        labels:
+          app: freeexchanged
+          service: interaction-outbox

@@ -62,8 +62,11 @@ func (a *Assembler) Assemble(ctx context.Context, req ContextRequest, history []
 		if retrieveLimit < 1 {
 			retrieveLimit = 1
 		}
-		entries := mem.GetLongTermMemory().Retrieve(ctx, req.SessionID, req.Query, retrieveLimit*2)
-		selectedMemory, droppedMemory, usedMemory, memoryNotes := selectMemories(entries, profile)
+		entries := mem.GetLongTermMemory().RetrieveScoped(ctx, req.Query, retrieveLimit*3, mem.MemoryRetrievePolicy{
+			ReadOnly:  true,
+			ScopeRefs: memoryScopeRefs(req),
+		})
+		selectedMemory, droppedMemory, usedMemory, memoryNotes := selectMemories(entries, profile, a.now())
 		pkg.MemoryItems = selectedMemory
 		trace.SourcesConsidered += len(entries)
 		trace.SourcesSelected += len(selectedMemory)
@@ -126,6 +129,20 @@ func MemoryContext(pkg *ContextPackage) string {
 		parts = append(parts, fmt.Sprintf("- [%s] %s", item.Title, item.Content))
 	}
 	return strings.Join(parts, "\n")
+}
+
+func memoryScopeRefs(req ContextRequest) []mem.MemoryScopeRef {
+	refs := []mem.MemoryScopeRef{
+		{Scope: mem.MemoryScopeSession, ScopeID: req.SessionID},
+		{Scope: mem.MemoryScopeGlobal, ScopeID: "global"},
+	}
+	if strings.TrimSpace(req.UserID) != "" {
+		refs = append(refs, mem.MemoryScopeRef{Scope: mem.MemoryScopeUser, ScopeID: strings.TrimSpace(req.UserID)})
+	}
+	if strings.TrimSpace(req.ProjectID) != "" {
+		refs = append(refs, mem.MemoryScopeRef{Scope: mem.MemoryScopeProject, ScopeID: strings.TrimSpace(req.ProjectID)})
+	}
+	return refs
 }
 
 func selectToolItems(items []ContextItem, profile ContextProfile) ([]ContextItem, []ContextItem, int, []string) {
@@ -272,7 +289,7 @@ func selectHistory(history []*schema.Message, profile ContextProfile) ([]*schema
 	return selected, dropped, used, notes
 }
 
-func selectMemories(entries []*mem.MemoryEntry, profile ContextProfile) ([]ContextItem, []ContextItem, int, []string) {
+func selectMemories(entries []*mem.MemoryEntry, profile ContextProfile, now time.Time) ([]ContextItem, []ContextItem, int, []string) {
 	if len(entries) == 0 || profile.MaxMemoryItems == 0 || profile.Budget.MemoryTokens == 0 {
 		return nil, nil, 0, []string{"memory disabled or empty"}
 	}
@@ -281,9 +298,30 @@ func selectMemories(entries []*mem.MemoryEntry, profile ContextProfile) ([]Conte
 	selected := make([]ContextItem, 0, minInt(len(entries), profile.MaxMemoryItems))
 	dropped := make([]ContextItem, 0)
 	used := 0
-	for idx, entry := range entries {
+	selectedCount := 0
+	for _, entry := range entries {
 		item := newMemoryItem(entry)
-		if idx >= profile.MaxMemoryItems {
+		if memoryItemExpired(item, now) {
+			item.DroppedReason = "memory_expired"
+			dropped = append(dropped, item)
+			continue
+		}
+		if !memoryScopeAllowed(item.Scope, profile.AllowedMemoryScopes) {
+			item.DroppedReason = "memory_scope"
+			dropped = append(dropped, item)
+			continue
+		}
+		if item.Confidence < profile.MinMemoryConfidence {
+			item.DroppedReason = "memory_confidence"
+			dropped = append(dropped, item)
+			continue
+		}
+		if !memorySafetyAllowed(item.SafetyLabel) {
+			item.DroppedReason = "memory_safety"
+			dropped = append(dropped, item)
+			continue
+		}
+		if selectedCount >= profile.MaxMemoryItems {
 			item.DroppedReason = "memory_window"
 			dropped = append(dropped, item)
 			continue
@@ -295,11 +333,15 @@ func selectMemories(entries []*mem.MemoryEntry, profile ContextProfile) ([]Conte
 		}
 		item.Selected = true
 		selected = append(selected, item)
+		selectedCount++
 		remaining -= item.TokenEstimate
 		used += item.TokenEstimate
 	}
 
-	notes := []string{fmt.Sprintf("tokens=%d/%d", used, profile.Budget.MemoryTokens)}
+	notes := []string{
+		fmt.Sprintf("tokens=%d/%d", used, profile.Budget.MemoryTokens),
+		fmt.Sprintf("min_confidence=%.2f", profile.MinMemoryConfidence),
+	}
 	return selected, dropped, used, notes
 }
 
@@ -314,13 +356,52 @@ func newMemoryItem(entry *mem.MemoryEntry) ContextItem {
 		Title:          string(entry.Type),
 		Content:        entry.Content,
 		Score:          entry.Relevance,
-		TrustLevel:     "internal",
+		TrustLevel:     memoryTrustLevel(entry),
 		TokenEstimate:  mem.EstimateTokens(entry.Content),
 		Timestamp:      entry.UpdatedAt.UnixMilli(),
 		FreshnessScore: freshness,
-		SafetyLabel:    "trusted_internal",
-		UpdatePolicy:   "reinforce_or_evict",
+		SafetyLabel:    entry.SafetyLabel,
+		UpdatePolicy:   entry.UpdatePolicy,
+		Scope:          string(entry.Scope),
+		Confidence:     entry.Confidence,
+		Provenance:     entry.Provenance,
+		ExpiresAt:      entry.ExpiresAt,
 	}
+}
+
+func memoryItemExpired(item ContextItem, now time.Time) bool {
+	return item.ExpiresAt > 0 && item.ExpiresAt <= now.UnixMilli()
+}
+
+func memoryScopeAllowed(scope string, allowed []string) bool {
+	if scope == "" {
+		scope = string(mem.MemoryScopeSession)
+	}
+	if len(allowed) == 0 {
+		return true
+	}
+	for _, candidate := range allowed {
+		if candidate == scope {
+			return true
+		}
+	}
+	return false
+}
+
+func memorySafetyAllowed(label string) bool {
+	switch strings.TrimSpace(strings.ToLower(label)) {
+	case "", "internal", "trusted_internal", "safe":
+		return true
+	default:
+		return false
+	}
+}
+
+func memoryTrustLevel(entry *mem.MemoryEntry) string {
+	if entry.SafetyLabel != "" {
+		return entry.SafetyLabel
+	}
+	return "internal"
 }
 
 func memoryItemsAsMessages(items []ContextItem) []*schema.Message {

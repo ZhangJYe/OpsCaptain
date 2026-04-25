@@ -55,17 +55,19 @@ func (idx *BM25Index) AddDocument(id string, content string, meta map[string]str
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
 
-	idx.docs = append(idx.docs, doc)
-	seen := make(map[string]struct{})
-	for _, t := range tokens {
-		if _, ok := seen[t]; ok {
+	replaced := false
+	for i := range idx.docs {
+		if idx.docs[i].id != id {
 			continue
 		}
-		seen[t] = struct{}{}
-		idx.df[t]++
+		idx.docs[i] = doc
+		replaced = true
+		break
 	}
-	idx.totalDoc++
-	idx.avgDL = (idx.avgDL*float64(idx.totalDoc-1) + float64(doc.tokenLen)) / float64(idx.totalDoc)
+	if !replaced {
+		idx.docs = append(idx.docs, doc)
+	}
+	idx.rebuildStatsLocked()
 }
 
 func (idx *BM25Index) Search(query string, topK int) []BM25Hit {
@@ -140,6 +142,29 @@ func (idx *BM25Index) Size() int {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	return idx.totalDoc
+}
+
+func (idx *BM25Index) rebuildStatsLocked() {
+	idx.df = make(map[string]int)
+	idx.totalDoc = len(idx.docs)
+	if idx.totalDoc == 0 {
+		idx.avgDL = 0
+		return
+	}
+
+	totalLen := 0
+	for _, doc := range idx.docs {
+		totalLen += doc.tokenLen
+		seen := make(map[string]struct{})
+		for _, t := range doc.tokens {
+			if _, ok := seen[t]; ok {
+				continue
+			}
+			seen[t] = struct{}{}
+			idx.df[t]++
+		}
+	}
+	idx.avgDL = float64(totalLen) / float64(idx.totalDoc)
 }
 
 func bm25Tokenize(text string) []string {

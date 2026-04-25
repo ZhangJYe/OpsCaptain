@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"SuperBizAgent/internal/consts"
+
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -23,6 +25,18 @@ func TestBuildMemoryExtractionEventIDDeterministic(t *testing.T) {
 	}
 	if id1 == id3 {
 		t.Fatalf("expected different requested_at to produce different id, got %q", id1)
+	}
+}
+
+func TestNewMemoryExtractionEventCarriesContextMetadata(t *testing.T) {
+	ctx := context.WithValue(context.Background(), consts.CtxKeyUserID, "queue-user")
+	ctx = context.WithValue(ctx, consts.CtxKeyTraceID, "queue-trace")
+	event := newMemoryExtractionEvent(ctx, "queue-session", "q", "a", 2)
+	if event.UserID != "queue-user" || event.TraceID != "queue-trace" {
+		t.Fatalf("expected context metadata, got %+v", event)
+	}
+	if event.SessionID != "queue-session" || event.Query != "q" || event.Summary != "a" || event.Attempt != 2 {
+		t.Fatalf("unexpected event payload: %+v", event)
 	}
 }
 

@@ -5,12 +5,18 @@ import (
 	"SuperBizAgent/internal/ai/rag"
 	"SuperBizAgent/utility/common"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io"
 	"mime"
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
+	"time"
 
 	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
@@ -21,6 +27,8 @@ import (
 const (
 	defaultMaxUploadSize = 20 * 1024 * 1024
 	quarantineDir        = "quarantine"
+	uploadSourceKind     = "chat_upload"
+	uploadSourcePrefix   = "upload://"
 )
 
 var (
@@ -41,6 +49,22 @@ var (
 
 	safeFilenameRe = regexp.MustCompile(`[^a-zA-Z0-9_\-\.]`)
 )
+
+type uploadFileRecord struct {
+	SourceKind       string `json:"source_kind"`
+	SourceKey        string `json:"source_key"`
+	Source           string `json:"_source"`
+	OriginalFilename string `json:"original_filename"`
+	StoredFilename   string `json:"stored_filename"`
+	ContentHash      string `json:"content_hash"`
+	UploadedAt       string `json:"uploaded_at"`
+	Version          int    `json:"version"`
+	FileSize         int64  `json:"file_size"`
+	MIMEType         string `json:"mime_type,omitempty"`
+
+	filePath     string
+	metadataPath string
+}
 
 func sanitizeFilename(name string) string {
 	name = filepath.Base(name)
@@ -103,6 +127,7 @@ func (c *ControllerV1) FileUpload(ctx context.Context, req *v1.FileUploadReq) (r
 	}
 
 	safeName := sanitizeFilename(uploadFile.Filename)
+	sourceKey := buildUploadSourceKey(safeName)
 	uniqueName := fmt.Sprintf("%s_%s", uuid.New().String()[:8], safeName)
 
 	uploadFile.Filename = uniqueName
@@ -117,15 +142,50 @@ func (c *ControllerV1) FileUpload(ctx context.Context, req *v1.FileUploadReq) (r
 		return nil, gerror.Wrapf(err, "获取文件信息失败")
 	}
 
+	contentHash, err := computeFileSHA256(quarantinePath)
+	if err != nil {
+		return nil, gerror.Wrapf(err, "计算文件哈希失败")
+	}
+
 	if !gfile.Exists(common.FileDir) {
 		if err := gfile.Mkdir(common.FileDir); err != nil {
 			return nil, gerror.Wrapf(err, "创建目录失败: %s", common.FileDir)
 		}
 	}
 
+	existingRecords, err := listUploadRecordsBySourceKey(common.FileDir, sourceKey)
+	if err != nil {
+		return nil, gerror.Wrapf(err, "读取上传记录失败")
+	}
+	if duplicate, ok := findDuplicateUploadRecord(existingRecords, contentHash); ok {
+		_ = os.Remove(quarantinePath)
+		return &v1.FileUploadRes{
+			FileName: safeName,
+			FileSize: duplicate.FileSize,
+			FileID:   duplicate.StoredFilename,
+		}, nil
+	}
+
 	finalPath := filepath.Join(common.FileDir, uniqueName)
 	if err := os.Rename(quarantinePath, finalPath); err != nil {
 		return nil, gerror.Wrapf(err, "移动文件失败")
+	}
+
+	record := uploadFileRecord{
+		SourceKind:       uploadSourceKind,
+		SourceKey:        sourceKey,
+		Source:           sourceKey,
+		OriginalFilename: safeName,
+		StoredFilename:   uniqueName,
+		ContentHash:      contentHash,
+		UploadedAt:       time.Now().UTC().Format(time.RFC3339),
+		Version:          nextUploadVersion(existingRecords),
+		FileSize:         fileInfo.Size(),
+		MIMEType:         mimeType,
+	}
+	if err := writeUploadMetadata(finalPath, record); err != nil {
+		_ = os.Remove(finalPath)
+		return nil, gerror.Wrapf(err, "写入上传记录失败")
 	}
 
 	res = &v1.FileUploadRes{
@@ -136,7 +196,14 @@ func (c *ControllerV1) FileUpload(ctx context.Context, req *v1.FileUploadReq) (r
 
 	err = buildIntoIndex(ctx, finalPath)
 	if err != nil {
+		_ = cleanupUploadRecord(record)
 		return nil, gerror.Wrapf(err, "构建知识库失败")
+	}
+	if err := cleanupReplacedUploadRecords(existingRecords, record.StoredFilename); err != nil {
+		g.Log().Warningf(ctx, "cleanup replaced upload artifacts failed: %v", err)
+	}
+	if len(existingRecords) > 0 {
+		rag.DefaultIndexingService().SyncBM25Index(ctx)
 	}
 	return res, nil
 }
@@ -155,5 +222,152 @@ func buildIntoIndex(ctx context.Context, path string) error {
 		return err
 	}
 	g.Log().Infof(ctx, "indexing file: %s, deleted=%d, len of parts: %d", summary.SourcePath, summary.DeletedExisting, len(summary.ChunkIDs))
+	return nil
+}
+
+func buildUploadSourceKey(safeName string) string {
+	return uploadSourcePrefix + safeName
+}
+
+func computeFileSHA256(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	hasher := sha256.New()
+	if _, err := io.Copy(hasher, file); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hasher.Sum(nil)), nil
+}
+
+func uploadMetadataPath(path string) string {
+	ext := filepath.Ext(path)
+	if ext == "" {
+		return path + ".metadata.json"
+	}
+	return path[:len(path)-len(ext)] + ".metadata.json"
+}
+
+func listUploadRecordsBySourceKey(dir string, sourceKey string) ([]uploadFileRecord, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	records := make([]uploadFileRecord, 0)
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".metadata.json") {
+			continue
+		}
+		record, err := readUploadRecord(filepath.Join(dir, entry.Name()))
+		if err != nil {
+			return nil, err
+		}
+		if record.SourceKind != uploadSourceKind || record.SourceKey != sourceKey {
+			continue
+		}
+		if strings.TrimSpace(record.StoredFilename) == "" {
+			continue
+		}
+		record.filePath = filepath.Join(dir, record.StoredFilename)
+		record.metadataPath = filepath.Join(dir, entry.Name())
+		records = append(records, record)
+	}
+
+	sort.SliceStable(records, func(i, j int) bool {
+		if records[i].Version != records[j].Version {
+			return records[i].Version > records[j].Version
+		}
+		return records[i].UploadedAt > records[j].UploadedAt
+	})
+	return records, nil
+}
+
+func readUploadRecord(path string) (uploadFileRecord, error) {
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return uploadFileRecord{}, err
+	}
+	var record uploadFileRecord
+	if err := json.Unmarshal(body, &record); err != nil {
+		return uploadFileRecord{}, err
+	}
+	record.metadataPath = path
+	return record, nil
+}
+
+func findDuplicateUploadRecord(records []uploadFileRecord, contentHash string) (uploadFileRecord, bool) {
+	for _, record := range records {
+		if record.ContentHash != contentHash {
+			continue
+		}
+		if strings.TrimSpace(record.StoredFilename) == "" {
+			continue
+		}
+		if record.filePath == "" {
+			record.filePath = filepath.Join(common.FileDir, record.StoredFilename)
+		}
+		if _, err := os.Stat(record.filePath); err == nil {
+			return record, true
+		}
+	}
+	return uploadFileRecord{}, false
+}
+
+func nextUploadVersion(records []uploadFileRecord) int {
+	version := 1
+	for _, record := range records {
+		if record.Version >= version {
+			version = record.Version + 1
+		}
+	}
+	return version
+}
+
+func writeUploadMetadata(path string, record uploadFileRecord) error {
+	record.filePath = path
+	record.metadataPath = uploadMetadataPath(path)
+	body, err := json.MarshalIndent(record, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(record.metadataPath, body, 0o644)
+}
+
+func cleanupReplacedUploadRecords(records []uploadFileRecord, keepStoredFilename string) error {
+	for _, record := range records {
+		if record.StoredFilename == keepStoredFilename {
+			continue
+		}
+		if err := cleanupUploadRecord(record); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func cleanupUploadRecord(record uploadFileRecord) error {
+	if record.filePath == "" && strings.TrimSpace(record.StoredFilename) != "" {
+		record.filePath = filepath.Join(common.FileDir, record.StoredFilename)
+	}
+	if record.metadataPath == "" && record.filePath != "" {
+		record.metadataPath = uploadMetadataPath(record.filePath)
+	}
+	if record.filePath != "" {
+		if err := os.Remove(record.filePath); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	if record.metadataPath != "" {
+		if err := os.Remove(record.metadataPath); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
 	return nil
 }

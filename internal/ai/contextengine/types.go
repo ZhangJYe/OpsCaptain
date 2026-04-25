@@ -4,6 +4,8 @@ import "github.com/cloudwego/eino/schema"
 
 type ContextRequest struct {
 	SessionID string
+	UserID    string
+	ProjectID string
 	TraceID   string
 	Mode      string
 	Intent    string
@@ -12,16 +14,18 @@ type ContextRequest struct {
 }
 
 type ContextProfile struct {
-	Name               string
-	AllowHistory       bool
-	AllowMemory        bool
-	AllowDocs          bool
-	AllowToolResults   bool
-	Staged             bool
-	MaxHistoryMessages int
-	MaxMemoryItems     int
-	MaxToolItems       int
-	Budget             ContextBudget
+	Name                string
+	AllowHistory        bool
+	AllowMemory         bool
+	AllowDocs           bool
+	AllowToolResults    bool
+	Staged              bool
+	MaxHistoryMessages  int
+	MaxMemoryItems      int
+	MaxToolItems        int
+	MinMemoryConfidence float64
+	AllowedMemoryScopes []string
+	Budget              ContextBudget
 }
 
 type ContextBudget struct {
@@ -52,6 +56,10 @@ type ContextItem struct {
 	UpdatePolicy     string
 	ConflictGroup    string
 	CompressionLevel string
+	Scope            string
+	Confidence       float64
+	Provenance       string
+	ExpiresAt        int64
 }
 
 type BudgetSnapshot struct {

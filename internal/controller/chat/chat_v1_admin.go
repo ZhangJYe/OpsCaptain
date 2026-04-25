@@ -3,8 +3,10 @@ package chat
 import (
 	v1 "SuperBizAgent/api/chat/v1"
 	"SuperBizAgent/internal/ai/service"
+	"SuperBizAgent/utility/mem"
 	"context"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -115,5 +117,64 @@ func toApprovalRequestItem(request service.ApprovalRequest) v1.ApprovalRequestIt
 		ApprovedAt:    request.ApprovedAt,
 		RejectedAt:    request.RejectedAt,
 		ExecutionAt:   request.ExecutionAt,
+	}
+}
+
+func (c *ControllerV1) MemoryList(ctx context.Context, req *v1.MemoryListReq) (res *v1.MemoryListRes, err error) {
+	items := service.NewMemoryService().ListMemories(ctx, service.MemoryListOptions{
+		SessionID:      req.SessionID,
+		UserID:         req.UserID,
+		ProjectID:      req.ProjectID,
+		IncludeExpired: req.IncludeExpired,
+	})
+	result := make([]v1.MemoryItem, 0, len(items))
+	for _, item := range items {
+		result = append(result, toMemoryItem(item))
+	}
+	return &v1.MemoryListRes{Items: result}, nil
+}
+
+func (c *ControllerV1) MemoryAction(ctx context.Context, req *v1.MemoryActionReq) (res *v1.MemoryActionRes, err error) {
+	svc := service.NewMemoryService()
+	switch req.Action {
+	case "delete":
+		return &v1.MemoryActionRes{Success: svc.DeleteMemory(ctx, req.ID)}, nil
+	case "disable":
+		return &v1.MemoryActionRes{Success: svc.DisableMemory(ctx, req.ID)}, nil
+	default:
+		return nil, fmt.Errorf("unsupported memory action: %s", req.Action)
+	}
+}
+
+func (c *ControllerV1) MemoryPromote(ctx context.Context, req *v1.MemoryPromoteReq) (res *v1.MemoryActionRes, err error) {
+	success := service.NewMemoryService().PromoteMemory(ctx, req.ID, service.MemoryPromoteOptions{
+		Scope:      mem.MemoryScope(req.Scope),
+		ScopeID:    req.ScopeID,
+		Confidence: req.Confidence,
+	})
+	return &v1.MemoryActionRes{Success: success}, nil
+}
+
+func toMemoryItem(item *mem.MemoryEntry) v1.MemoryItem {
+	if item == nil {
+		return v1.MemoryItem{}
+	}
+	return v1.MemoryItem{
+		ID:            item.ID,
+		SessionID:     item.SessionID,
+		Type:          string(item.Type),
+		Content:       item.Content,
+		Source:        item.Source,
+		Scope:         string(item.Scope),
+		ScopeID:       item.ScopeID,
+		Confidence:    item.Confidence,
+		SafetyLabel:   item.SafetyLabel,
+		Provenance:    item.Provenance,
+		UpdatePolicy:  item.UpdatePolicy,
+		ConflictGroup: item.ConflictGroup,
+		ExpiresAt:     item.ExpiresAt,
+		CreatedAt:     item.CreatedAt.UnixMilli(),
+		UpdatedAt:     item.UpdatedAt.UnixMilli(),
+		LastUsed:      item.LastUsed.UnixMilli(),
 	}
 }

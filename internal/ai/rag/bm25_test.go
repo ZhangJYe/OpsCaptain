@@ -52,6 +52,28 @@ func TestBM25Index_MetadataFieldsContribute(t *testing.T) {
 	}
 }
 
+func TestBM25Index_ReplacesExistingDocumentByID(t *testing.T) {
+	t.Parallel()
+
+	idx := NewBM25Index()
+	idx.AddDocument("doc-1", "checkoutservice timeout", nil)
+	idx.AddDocument("doc-1", "frontend latency", nil)
+
+	if idx.Size() != 1 {
+		t.Fatalf("expected 1 doc after replace, got %d", idx.Size())
+	}
+
+	hits := idx.Search("frontend", 5)
+	if len(hits) != 1 || hits[0].DocID != "doc-1" {
+		t.Fatalf("expected replaced doc to match frontend query, got %+v", hits)
+	}
+
+	hits = idx.Search("checkoutservice", 5)
+	if len(hits) != 0 {
+		t.Fatalf("expected old content to be replaced, got %+v", hits)
+	}
+}
+
 func TestBM25Index_EmptyQuery(t *testing.T) {
 	t.Parallel()
 

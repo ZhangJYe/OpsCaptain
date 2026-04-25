@@ -3,6 +3,8 @@ package mem
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -34,6 +36,165 @@ func TestLongTermMemory_StoreAndRetrieve(t *testing.T) {
 	}
 	if !foundFact {
 		t.Fatal("expected to find fact memory")
+	}
+}
+
+func TestLongTermMemory_StoreWithOptionsMetadata(t *testing.T) {
+	resetLTM()
+	ltm := GetLongTermMemory()
+	ctx := context.Background()
+	expiresAt := time.Now().Add(time.Hour).UnixMilli()
+
+	ltm.StoreWithOptions(ctx, "sess-meta", MemoryTypeFact, "服务名是payment-service", "review", MemoryStoreOptions{
+		Scope:       MemoryScopeProject,
+		Confidence:  0.92,
+		SafetyLabel: "internal",
+		Provenance:  "human_review",
+		ExpiresAt:   expiresAt,
+	})
+
+	results := ltm.RetrieveScoped(ctx, "payment-service", 1, MemoryRetrievePolicy{
+		ScopeRefs: []MemoryScopeRef{{Scope: MemoryScopeProject, ScopeID: "sess-meta"}},
+	})
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	got := results[0]
+	if got.Scope != MemoryScopeProject {
+		t.Fatalf("expected project scope, got %q", got.Scope)
+	}
+	if got.Confidence != 0.92 {
+		t.Fatalf("expected confidence 0.92, got %f", got.Confidence)
+	}
+	if got.Provenance != "human_review" {
+		t.Fatalf("expected provenance, got %q", got.Provenance)
+	}
+	if got.ExpiresAt != expiresAt {
+		t.Fatalf("expected expires_at %d, got %d", expiresAt, got.ExpiresAt)
+	}
+}
+
+func TestLongTermMemory_RetrieveScopedIncludesMultipleScopes(t *testing.T) {
+	resetLTM()
+	ltm := GetLongTermMemory()
+	ctx := context.Background()
+
+	ltm.Store(ctx, "sess-scope", MemoryTypeFact, "session memory payment-service", "test")
+	ltm.StoreWithOptions(ctx, "user-1", MemoryTypeFact, "user memory payment-service", "test", MemoryStoreOptions{
+		Scope:   MemoryScopeUser,
+		ScopeID: "user-1",
+	})
+	ltm.StoreWithOptions(ctx, "project-1", MemoryTypeFact, "project memory payment-service", "test", MemoryStoreOptions{
+		Scope:   MemoryScopeProject,
+		ScopeID: "project-1",
+	})
+	ltm.StoreWithOptions(ctx, "global", MemoryTypeFact, "global memory payment-service", "test", MemoryStoreOptions{
+		Scope: MemoryScopeGlobal,
+	})
+
+	results := ltm.RetrieveScoped(ctx, "payment-service", 10, MemoryRetrievePolicy{
+		ScopeRefs: []MemoryScopeRef{
+			{Scope: MemoryScopeSession, ScopeID: "sess-scope"},
+			{Scope: MemoryScopeUser, ScopeID: "user-1"},
+			{Scope: MemoryScopeProject, ScopeID: "project-1"},
+			{Scope: MemoryScopeGlobal, ScopeID: "global"},
+		},
+	})
+	if len(results) != 4 {
+		t.Fatalf("expected 4 scoped memories, got %d", len(results))
+	}
+}
+
+func TestLongTermMemory_FileStorePersistsEntries(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "memory.json")
+	store := NewFileLongTermMemoryStore(path)
+	ltm := NewLongTermMemoryWithStore(ctx, store)
+
+	ltm.Store(ctx, "sess-file", MemoryTypeFact, "file-backed payment-service memory", "test")
+
+	reloaded := NewLongTermMemoryWithStore(ctx, store)
+	results := reloaded.Retrieve(ctx, "sess-file", "payment-service", 10)
+	if len(results) != 1 {
+		t.Fatalf("expected persisted memory after reload, got %d", len(results))
+	}
+}
+
+func TestLongTermMemory_DeleteDisablePromote(t *testing.T) {
+	resetLTM()
+	ltm := GetLongTermMemory()
+	ctx := context.Background()
+
+	id := ltm.Store(ctx, "sess-manage", MemoryTypeFact, "manageable payment-service memory", "test")
+	if !ltm.Promote(ctx, id, MemoryScopeProject, "project-manage", 0.95) {
+		t.Fatal("expected promote to succeed")
+	}
+	listed := ltm.List([]MemoryScopeRef{{Scope: MemoryScopeProject, ScopeID: "project-manage"}}, false)
+	if len(listed) != 1 || listed[0].Confidence != 0.95 {
+		t.Fatalf("expected promoted memory, got %+v", listed)
+	}
+	if !ltm.Disable(ctx, id) {
+		t.Fatal("expected disable to succeed")
+	}
+	if got := ltm.RetrieveScoped(ctx, "payment-service", 10, MemoryRetrievePolicy{
+		ScopeRefs: []MemoryScopeRef{{Scope: MemoryScopeProject, ScopeID: "project-manage"}},
+	}); len(got) != 0 {
+		t.Fatalf("expected disabled memory to be filtered, got %d", len(got))
+	}
+	if !ltm.Delete(ctx, id) {
+		t.Fatal("expected delete to succeed")
+	}
+	if ltm.Count() != 0 {
+		t.Fatalf("expected memory to be deleted, count=%d", ltm.Count())
+	}
+}
+
+func TestLongTermMemory_ConflictGroupSupersedesOldMemory(t *testing.T) {
+	resetLTM()
+	ltm := GetLongTermMemory()
+	ctx := context.Background()
+
+	oldID := ltm.StoreWithOptions(ctx, "sess-conflict", MemoryTypeFact, "服务端口是8080", "test", MemoryStoreOptions{
+		ConflictGroup: "service-port",
+		Confidence:    0.90,
+	})
+	ltm.StoreWithOptions(ctx, "sess-conflict", MemoryTypeFact, "服务端口是9090", "test", MemoryStoreOptions{
+		ConflictGroup: "service-port",
+		Confidence:    0.90,
+	})
+
+	results := ltm.Retrieve(ctx, "sess-conflict", "服务端口", 10)
+	if len(results) != 1 || !strings.Contains(results[0].Content, "9090") {
+		t.Fatalf("expected only new conflict memory, got %+v", results)
+	}
+	all := ltm.List([]MemoryScopeRef{{Scope: MemoryScopeSession, ScopeID: "sess-conflict"}}, true)
+	foundSuperseded := false
+	for _, entry := range all {
+		if entry.ID == oldID && entry.SafetyLabel == "superseded" {
+			foundSuperseded = true
+		}
+	}
+	if !foundSuperseded {
+		t.Fatalf("expected old memory to be superseded, got %+v", all)
+	}
+}
+
+func TestLongTermMemory_RetrieveSkipsExpiredByDefault(t *testing.T) {
+	resetLTM()
+	ltm := GetLongTermMemory()
+	ctx := context.Background()
+
+	ltm.StoreWithOptions(ctx, "sess-expired", MemoryTypeFact, "过期事实", "test", MemoryStoreOptions{
+		Confidence: 0.90,
+		ExpiresAt:  time.Now().Add(-time.Minute).UnixMilli(),
+	})
+
+	if got := ltm.Retrieve(ctx, "sess-expired", "过期", 10); len(got) != 0 {
+		t.Fatalf("expected expired memory to be skipped, got %d", len(got))
+	}
+	withExpired := ltm.RetrieveWithPolicy(ctx, "sess-expired", "过期", 10, MemoryRetrievePolicy{IncludeExpired: true})
+	if len(withExpired) != 1 {
+		t.Fatalf("expected expired memory with explicit policy, got %d", len(withExpired))
 	}
 }
 

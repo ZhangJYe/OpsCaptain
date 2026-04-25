@@ -1,0 +1,48 @@
+groups:
+  - name: freeexchanged-workers
+    rules:
+      - alert: FreeExchangedArticleOutboxPublishErrors
+        expr: increase(freeexchanged_article_outbox_publish_total{result="error"}[5m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+          app: freeexchanged
+        annotations:
+          summary: FreeExchanged article outbox publish errors detected
+          description: Article outbox had Kafka publish errors in the last 5 minutes.
+      - alert: FreeExchangedInteractionOutboxPublishErrors
+        expr: increase(freeexchanged_interaction_outbox_publish_total{result="error"}[5m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+          app: freeexchanged
+        annotations:
+          summary: FreeExchanged interaction outbox publish errors detected
+          description: Interaction outbox had Kafka publish errors in the last 5 minutes.
+      - alert: FreeExchangedOutboxLeaseLost
+        expr: increase(freeexchanged_article_outbox_lease_events_total{result=~"lost_.*"}[5m]) + increase(freeexchanged_interaction_outbox_lease_events_total{result=~"lost_.*"}[5m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+          app: freeexchanged
+        annotations:
+          summary: FreeExchanged outbox lease lost events detected
+          description: At least one outbox worker lost an event lease during the last 5 minutes.
+      - alert: FreeExchangedRankingStreamDLQEvents
+        expr: increase(freeexchanged_ranking_stream_messages_total{result=~"dlq|dlq_publish_error"}[5m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+          app: freeexchanged
+        annotations:
+          summary: FreeExchanged ranking stream sent messages to the DLQ
+          description: Ranking stream produced DLQ events in the last 5 minutes.
+      - alert: FreeExchangedRankingStreamUnavailable
+        expr: min_over_time(up{job="freeexchanged-ranking-stream"}[5m]) == 0
+        for: 5m
+        labels:
+          severity: critical
+          app: freeexchanged
+        annotations:
+          summary: FreeExchanged ranking stream metrics target is down
+          description: Prometheus could not scrape ranking-stream for at least 5 minutes.

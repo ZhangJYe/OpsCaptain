@@ -170,3 +170,52 @@ type ApprovalRejectReq struct {
 	RequestID string `json:"request_id" v:"required|max-length:128#RequestID不能为空|RequestID长度不能超过128"`
 	Reason    string `json:"reason,omitempty" v:"max-length:512#拒绝原因长度不能超过512"`
 }
+
+type MemoryListReq struct {
+	g.Meta         `path:"/memories" method:"get" summary:"查询记忆"`
+	SessionID      string `json:"session_id,omitempty" v:"max-length:128#SessionID长度不能超过128"`
+	UserID         string `json:"user_id,omitempty" v:"max-length:128#UserID长度不能超过128"`
+	ProjectID      string `json:"project_id,omitempty" v:"max-length:128#ProjectID长度不能超过128"`
+	IncludeExpired bool   `json:"include_expired,omitempty"`
+}
+
+type MemoryItem struct {
+	ID            string  `json:"id"`
+	SessionID     string  `json:"session_id,omitempty"`
+	Type          string  `json:"type"`
+	Content       string  `json:"content"`
+	Source        string  `json:"source,omitempty"`
+	Scope         string  `json:"scope,omitempty"`
+	ScopeID       string  `json:"scope_id,omitempty"`
+	Confidence    float64 `json:"confidence,omitempty"`
+	SafetyLabel   string  `json:"safety_label,omitempty"`
+	Provenance    string  `json:"provenance,omitempty"`
+	UpdatePolicy  string  `json:"update_policy,omitempty"`
+	ConflictGroup string  `json:"conflict_group,omitempty"`
+	ExpiresAt     int64   `json:"expires_at,omitempty"`
+	CreatedAt     int64   `json:"created_at,omitempty"`
+	UpdatedAt     int64   `json:"updated_at,omitempty"`
+	LastUsed      int64   `json:"last_used,omitempty"`
+}
+
+type MemoryListRes struct {
+	Items []MemoryItem `json:"items"`
+}
+
+type MemoryActionReq struct {
+	g.Meta `path:"/memories/action" method:"post" summary:"管理记忆"`
+	ID     string `json:"id" v:"required|max-length:128#Memory ID不能为空|Memory ID长度不能超过128"`
+	Action string `json:"action" v:"required|in:delete,disable#记忆操作不合法"`
+}
+
+type MemoryPromoteReq struct {
+	g.Meta     `path:"/memories/promote" method:"post" summary:"提升记忆作用域"`
+	ID         string  `json:"id" v:"required|max-length:128#Memory ID不能为空|Memory ID长度不能超过128"`
+	Scope      string  `json:"scope" v:"required|in:session,user,project,global#记忆作用域不合法"`
+	ScopeID    string  `json:"scope_id,omitempty" v:"max-length:128#ScopeID长度不能超过128"`
+	Confidence float64 `json:"confidence,omitempty"`
+}
+
+type MemoryActionRes struct {
+	Success bool `json:"success"`
+}

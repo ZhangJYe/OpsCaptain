@@ -1,0 +1,13 @@
+[Unit]
+Description=OpsCaptain FreeExchanged local k8s log MCP
+After=network-online.target k3s.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/opscaptain/local-k8s-log-mcp.py --host 172.17.0.1 --port 18088
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

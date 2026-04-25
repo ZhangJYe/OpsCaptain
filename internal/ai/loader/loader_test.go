@@ -19,7 +19,7 @@ func TestNewFileLoader_MergesMetadataSidecar(t *testing.T) {
 	if err := os.WriteFile(docPath, []byte("# Case A\n\nhello"), 0o644); err != nil {
 		t.Fatalf("write doc: %v", err)
 	}
-	if err := os.WriteFile(sidecarPath, []byte(`{"case_id":"case-a","service":"checkoutservice","instance_type":"service"}`), 0o644); err != nil {
+	if err := os.WriteFile(sidecarPath, []byte(`{"_source":"upload://case-a.md","case_id":"case-a","service":"checkoutservice","instance_type":"service"}`), 0o644); err != nil {
 		t.Fatalf("write sidecar: %v", err)
 	}
 
@@ -45,8 +45,8 @@ func TestNewFileLoader_MergesMetadataSidecar(t *testing.T) {
 	if got := docs[0].MetaData["instance_type"]; got != "service" {
 		t.Fatalf("expected instance_type sidecar metadata, got %#v", got)
 	}
-	if _, ok := docs[0].MetaData["_source"]; !ok {
-		t.Fatalf("expected existing loader metadata to be preserved, got %#v", docs[0].MetaData)
+	if got := docs[0].MetaData["_source"]; got != "upload://case-a.md" {
+		t.Fatalf("expected sidecar _source override, got %#v", got)
 	}
 }
 

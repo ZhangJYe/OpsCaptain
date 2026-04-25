@@ -177,6 +177,14 @@ func TestRequiredRolesForPath(t *testing.T) {
 	if IsRoleAllowed(RoleViewer, required...) {
 		t.Fatal("viewer should not satisfy operator path")
 	}
+	memoryListRoles := RequiredRolesForPath("/api/memories")
+	if len(memoryListRoles) != 2 || memoryListRoles[0] != RoleOperator {
+		t.Fatalf("unexpected memory list roles: %v", memoryListRoles)
+	}
+	memoryActionRoles := RequiredRolesForPath("/api/memories/action")
+	if len(memoryActionRoles) != 1 || memoryActionRoles[0] != RoleAdmin {
+		t.Fatalf("unexpected memory action roles: %v", memoryActionRoles)
+	}
 }
 
 func resetRevokedTokensForTest() {

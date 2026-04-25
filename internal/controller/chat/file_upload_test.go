@@ -1,6 +1,9 @@
 package chat
 
 import (
+	"SuperBizAgent/utility/common"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -76,4 +79,128 @@ func TestAllowedExtensionList(t *testing.T) {
 	if len(list) != len(allowedExtensions) {
 		t.Errorf("expected %d extensions, got %d", len(allowedExtensions), len(list))
 	}
+}
+
+func TestBuildUploadSourceKey(t *testing.T) {
+	if got := buildUploadSourceKey("runbook.md"); got != "upload://runbook.md" {
+		t.Fatalf("unexpected source key: %q", got)
+	}
+}
+
+func TestListUploadRecordsBySourceKeyFiltersChatUploads(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "keep.md"), []byte("hello"), 0o644); err != nil {
+		t.Fatalf("write keep file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "ignore.md"), []byte("hello"), 0o644); err != nil {
+		t.Fatalf("write ignore file: %v", err)
+	}
+	if err := writeUploadMetadata(filepath.Join(dir, "keep.md"), uploadFileRecord{
+		SourceKind:       uploadSourceKind,
+		SourceKey:        "upload://keep.md",
+		Source:           "upload://keep.md",
+		OriginalFilename: "keep.md",
+		StoredFilename:   "keep.md",
+		ContentHash:      "hash-1",
+		UploadedAt:       "2026-04-24T09:00:00Z",
+		Version:          2,
+		FileSize:         5,
+	}); err != nil {
+		t.Fatalf("write keep metadata: %v", err)
+	}
+	if err := writeUploadMetadata(filepath.Join(dir, "ignore.md"), uploadFileRecord{
+		SourceKind:       "manual",
+		SourceKey:        "upload://keep.md",
+		Source:           "upload://keep.md",
+		OriginalFilename: "ignore.md",
+		StoredFilename:   "ignore.md",
+		ContentHash:      "hash-2",
+		UploadedAt:       "2026-04-24T08:00:00Z",
+		Version:          1,
+		FileSize:         5,
+	}); err != nil {
+		t.Fatalf("write ignore metadata: %v", err)
+	}
+
+	records, err := listUploadRecordsBySourceKey(dir, "upload://keep.md")
+	if err != nil {
+		t.Fatalf("list upload records: %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("expected 1 record, got %d", len(records))
+	}
+	if records[0].StoredFilename != "keep.md" {
+		t.Fatalf("unexpected stored filename: %q", records[0].StoredFilename)
+	}
+}
+
+func TestFindDuplicateUploadRecordReturnsExistingFile(t *testing.T) {
+	dir := t.TempDir()
+	oldFileDir := commonFileDirForTest(t, dir)
+	defer restoreCommonFileDir(oldFileDir)
+
+	filePath := filepath.Join(dir, "keep.md")
+	if err := os.WriteFile(filePath, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	record := uploadFileRecord{
+		StoredFilename: "keep.md",
+		ContentHash:    "same-hash",
+		filePath:       filePath,
+	}
+	duplicate, ok := findDuplicateUploadRecord([]uploadFileRecord{record}, "same-hash")
+	if !ok {
+		t.Fatal("expected duplicate record")
+	}
+	if duplicate.StoredFilename != "keep.md" {
+		t.Fatalf("unexpected duplicate filename: %q", duplicate.StoredFilename)
+	}
+}
+
+func TestNextUploadVersion(t *testing.T) {
+	version := nextUploadVersion([]uploadFileRecord{
+		{Version: 1},
+		{Version: 3},
+		{Version: 2},
+	})
+	if version != 4 {
+		t.Fatalf("expected version 4, got %d", version)
+	}
+}
+
+func TestCleanupUploadRecordRemovesMetadataWithStoredFilenameOnly(t *testing.T) {
+	dir := t.TempDir()
+	oldFileDir := commonFileDirForTest(t, dir)
+	defer restoreCommonFileDir(oldFileDir)
+
+	filePath := filepath.Join(dir, "failed.md")
+	metadataPath := uploadMetadataPath(filePath)
+	if err := os.WriteFile(filePath, []byte("hello"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	if err := os.WriteFile(metadataPath, []byte(`{}`), 0o644); err != nil {
+		t.Fatalf("write metadata: %v", err)
+	}
+
+	if err := cleanupUploadRecord(uploadFileRecord{StoredFilename: "failed.md"}); err != nil {
+		t.Fatalf("cleanup upload record: %v", err)
+	}
+	if _, err := os.Stat(filePath); !os.IsNotExist(err) {
+		t.Fatalf("expected file to be removed, err=%v", err)
+	}
+	if _, err := os.Stat(metadataPath); !os.IsNotExist(err) {
+		t.Fatalf("expected metadata to be removed, err=%v", err)
+	}
+}
+
+func commonFileDirForTest(t *testing.T, dir string) string {
+	t.Helper()
+	old := common.FileDir
+	common.FileDir = dir
+	return old
+}
+
+func restoreCommonFileDir(old string) {
+	common.FileDir = old
 }

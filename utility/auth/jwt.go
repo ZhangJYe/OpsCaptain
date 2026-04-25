@@ -279,9 +279,9 @@ func IsRoleAllowed(role string, allowed ...string) bool {
 
 func RequiredRolesForPath(path string) []string {
 	switch strings.ToLower(strings.TrimSpace(path)) {
-	case "/api/ai_ops", "/api/ai_ops_trace", "/api/upload", "/api/token_audit", "/api/approval_requests":
+	case "/api/ai_ops", "/api/ai_ops_trace", "/api/upload", "/api/token_audit", "/api/approval_requests", "/api/memories":
 		return []string{RoleOperator, RoleAdmin}
-	case "/api/approval_requests/approve", "/api/approval_requests/reject":
+	case "/api/approval_requests/approve", "/api/approval_requests/reject", "/api/memories/action", "/api/memories/promote":
 		return []string{RoleAdmin}
 	default:
 		return nil

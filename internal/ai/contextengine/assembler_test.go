@@ -2,6 +2,7 @@ package contextengine
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -167,6 +168,127 @@ func TestAssemblerBuildsAIOpsMemoryOnlyContext(t *testing.T) {
 	}
 	if got := MemoryContext(pkg); !strings.Contains(got, "支付服务最近出现连接超时") {
 		t.Fatalf("unexpected memory context: %q", got)
+	}
+}
+
+func TestAssemblerDropsUnusableMemoriesWithTrace(t *testing.T) {
+	resetLongTermMemory()
+	ltm := mem.GetLongTermMemory()
+	ctx := context.Background()
+	ltm.StoreWithOptions(ctx, "sess-policy", mem.MemoryTypeFact, "payment-service 正常记忆", "test", mem.MemoryStoreOptions{
+		Confidence: 0.90,
+	})
+	ltm.StoreWithOptions(ctx, "sess-policy", mem.MemoryTypeFact, "payment-service 低可信记忆", "test", mem.MemoryStoreOptions{
+		Confidence: 0.20,
+	})
+	ltm.StoreWithOptions(ctx, "sess-policy", mem.MemoryTypeFact, "payment-service 过期记忆", "test", mem.MemoryStoreOptions{
+		Confidence: 0.90,
+		ExpiresAt:  1,
+	})
+	ltm.StoreWithOptions(ctx, "sess-policy", mem.MemoryTypeFact, "payment-service 敏感记忆", "test", mem.MemoryStoreOptions{
+		Confidence:  0.90,
+		SafetyLabel: "secret",
+	})
+
+	assembler := NewAssembler()
+	pkg, err := assembler.Assemble(ctx, ContextRequest{
+		SessionID: "sess-policy",
+		Mode:      "aiops",
+		Query:     "payment-service",
+	}, nil)
+	if err != nil {
+		t.Fatalf("assemble: %v", err)
+	}
+	if len(pkg.MemoryItems) != 1 {
+		t.Fatalf("expected only one usable memory, got %d", len(pkg.MemoryItems))
+	}
+	reasons := map[string]bool{}
+	for _, item := range pkg.Trace.DroppedItems {
+		reasons[item.DroppedReason] = true
+	}
+	for _, reason := range []string{"memory_confidence", "memory_safety"} {
+		if !reasons[reason] {
+			t.Fatalf("expected drop reason %s in trace, got %+v", reason, reasons)
+		}
+	}
+}
+
+func TestAssemblerExpiredMemoriesDoNotCrowdOutValidMemory(t *testing.T) {
+	resetLongTermMemory()
+	ltm := mem.GetLongTermMemory()
+	ctx := context.Background()
+	for i := 0; i < 20; i++ {
+		ltm.StoreWithOptions(ctx, "sess-expired-window", mem.MemoryTypeFact, fmt.Sprintf("payment-service 过期记忆-%d", i), "test", mem.MemoryStoreOptions{
+			Confidence: 0.90,
+			ExpiresAt:  1,
+		})
+	}
+	ltm.StoreWithOptions(ctx, "sess-expired-window", mem.MemoryTypeFact, "payment-service 有效记忆", "test", mem.MemoryStoreOptions{
+		Confidence: 0.90,
+	})
+
+	assembler := NewAssembler()
+	pkg, err := assembler.Assemble(ctx, ContextRequest{
+		SessionID: "sess-expired-window",
+		Mode:      "aiops",
+		Query:     "payment-service",
+	}, nil)
+	if err != nil {
+		t.Fatalf("assemble: %v", err)
+	}
+	if len(pkg.MemoryItems) != 1 {
+		t.Fatalf("expected valid memory to survive expired candidates, got %d", len(pkg.MemoryItems))
+	}
+	if !strings.Contains(pkg.MemoryItems[0].Content, "有效记忆") {
+		t.Fatalf("expected valid memory, got %q", pkg.MemoryItems[0].Content)
+	}
+}
+
+func TestAssemblerLoadsLayeredMemoryScopes(t *testing.T) {
+	resetLongTermMemory()
+	ltm := mem.GetLongTermMemory()
+	ctx := context.Background()
+	ltm.Store(context.Background(), "sess-layer", mem.MemoryTypeFact, "session scoped payment-service memory", "test")
+	ltm.StoreWithOptions(ctx, "user-layer", mem.MemoryTypeFact, "user scoped payment-service memory", "test", mem.MemoryStoreOptions{
+		Scope:   mem.MemoryScopeUser,
+		ScopeID: "user-layer",
+	})
+	ltm.StoreWithOptions(ctx, "project-layer", mem.MemoryTypeFact, "project scoped payment-service memory", "test", mem.MemoryStoreOptions{
+		Scope:   mem.MemoryScopeProject,
+		ScopeID: "project-layer",
+	})
+	ltm.StoreWithOptions(ctx, "global", mem.MemoryTypeFact, "global scoped payment-service memory", "test", mem.MemoryStoreOptions{
+		Scope: mem.MemoryScopeGlobal,
+	})
+
+	assembler := NewAssembler()
+	pkg, err := assembler.Assemble(ctx, ContextRequest{
+		SessionID: "sess-layer",
+		UserID:    "user-layer",
+		ProjectID: "project-layer",
+		Mode:      "aiops",
+		Query:     "payment-service",
+	}, nil)
+	if err != nil {
+		t.Fatalf("assemble: %v", err)
+	}
+	got := MemoryContext(pkg)
+	for _, expected := range []string{"session scoped", "user scoped", "project scoped", "global scoped"} {
+		if !strings.Contains(got, expected) {
+			t.Fatalf("expected %q in memory context, got %q", expected, got)
+		}
+	}
+}
+
+func TestNormalizeUnitFloatRejectsOutOfRangeValues(t *testing.T) {
+	if got := normalizeUnitFloat(1.2, 0.5); got != 0.5 {
+		t.Fatalf("expected fallback for value > 1, got %f", got)
+	}
+	if got := normalizeUnitFloat(-0.1, 0.5); got != 0.5 {
+		t.Fatalf("expected fallback for value <= 0, got %f", got)
+	}
+	if got := normalizeUnitFloat(0.8, 0.5); got != 0.8 {
+		t.Fatalf("expected valid value to pass through, got %f", got)
 	}
 }
 

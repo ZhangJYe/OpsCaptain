@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"SuperBizAgent/internal/ai/contextengine"
+	"SuperBizAgent/internal/ai/models"
 	"SuperBizAgent/internal/ai/protocol"
 	"SuperBizAgent/internal/consts"
+	"SuperBizAgent/utility/common"
 	"SuperBizAgent/utility/mem"
 	"SuperBizAgent/utility/metrics"
 
@@ -22,8 +24,22 @@ type MemoryService struct {
 	assembler *contextengine.Assembler
 }
 
+type MemoryListOptions struct {
+	SessionID      string
+	UserID         string
+	ProjectID      string
+	IncludeExpired bool
+}
+
+type MemoryPromoteOptions struct {
+	Scope      mem.MemoryScope
+	ScopeID    string
+	Confidence float64
+}
+
 var (
-	extractMemoriesFunc     = mem.ExtractMemoriesWithReport
+	processMemoryEventFunc  = processMemoryEventWithConfiguredAgent
+	newMemoryChatModel      = models.OpenAIForDeepSeekV3Quick
 	memoryExtractionTimeout = loadMemoryExtractionTimeout
 	memoryExtractionMaxJobs = loadMemoryExtractionMaxJobs
 	memoryExtractionWait    = loadMemoryExtractionWait
@@ -68,6 +84,8 @@ func (s *MemoryService) BuildContext(ctx context.Context, sessionID, query strin
 func (s *MemoryService) BuildContextPlan(ctx context.Context, mode, sessionID, query string) (string, []protocol.MemoryRef, []string) {
 	pkg, err := s.assembler.Assemble(ctx, contextengine.ContextRequest{
 		SessionID: sessionID,
+		UserID:    memoryUserID(ctx),
+		ProjectID: memoryProjectID(ctx),
 		Mode:      mode,
 		Query:     query,
 	}, nil)
@@ -80,6 +98,8 @@ func (s *MemoryService) BuildContextPlan(ctx context.Context, mode, sessionID, q
 func (s *MemoryService) BuildChatPackage(ctx context.Context, sessionID, query string, history []*schema.Message) (*contextengine.ContextPackage, []string) {
 	pkg, err := s.assembler.Assemble(ctx, contextengine.ContextRequest{
 		SessionID: sessionID,
+		UserID:    memoryUserID(ctx),
+		ProjectID: memoryProjectID(ctx),
 		Mode:      "chat",
 		Query:     query,
 	}, history)
@@ -95,6 +115,22 @@ func (s *MemoryService) BuildChatPackage(ctx context.Context, sessionID, query s
 		}, []string{fmt.Sprintf("context assemble failed: %v", err)}
 	}
 	return pkg, contextengine.TraceDetails(pkg.Trace)
+}
+
+func (s *MemoryService) ListMemories(ctx context.Context, opts MemoryListOptions) []*mem.MemoryEntry {
+	return mem.GetLongTermMemory().List(memoryScopeRefsFromOptions(ctx, opts), opts.IncludeExpired)
+}
+
+func (s *MemoryService) DeleteMemory(ctx context.Context, id string) bool {
+	return mem.GetLongTermMemory().Delete(ctx, strings.TrimSpace(id))
+}
+
+func (s *MemoryService) DisableMemory(ctx context.Context, id string) bool {
+	return mem.GetLongTermMemory().Disable(ctx, strings.TrimSpace(id))
+}
+
+func (s *MemoryService) PromoteMemory(ctx context.Context, id string, opts MemoryPromoteOptions) bool {
+	return mem.GetLongTermMemory().Promote(ctx, strings.TrimSpace(id), opts.Scope, opts.ScopeID, opts.Confidence)
 }
 
 func (s *MemoryService) InjectContext(ctx context.Context, sessionID, query string) (string, []protocol.MemoryRef) {
@@ -129,12 +165,52 @@ func (s *MemoryService) PersistOutcome(ctx context.Context, sessionID, query, su
 		defer release()
 		extractCtx, cancel := boundedMemoryContext(parent)
 		defer cancel()
-		report := extractMemoriesFunc(extractCtx, sessionID, query, summary)
+		report := processMemoryEventFunc(extractCtx, memoryEventFromContext(parent, sessionID, query, summary))
 		metrics.ObserveMemoryExtraction("local", "consumed")
 		if report != nil && len(report.Dropped) > 0 {
 			g.Log().Debugf(parent, "[memory] dropped %d memory candidates for session %s", len(report.Dropped), sessionID)
 		}
 	}(ctx)
+}
+
+func memoryEventFromContext(ctx context.Context, sessionID, query, summary string) mem.MemoryEvent {
+	traceID := ""
+	if value, ok := ctx.Value(consts.CtxKeyTraceID).(string); ok {
+		traceID = strings.TrimSpace(value)
+	}
+	return mem.MemoryEvent{
+		SessionID: sessionID,
+		UserID:    memoryUserID(ctx),
+		ProjectID: memoryProjectID(ctx),
+		Query:     query,
+		Answer:    summary,
+		TraceID:   traceID,
+	}
+}
+
+func processMemoryEventWithConfiguredAgent(ctx context.Context, event mem.MemoryEvent) *mem.MemoryExtractionReport {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if strings.TrimSpace(event.SessionID) != "" {
+		if _, ok := ctx.Value(consts.CtxKeySessionID).(string); !ok {
+			ctx = context.WithValue(ctx, consts.CtxKeySessionID, strings.TrimSpace(event.SessionID))
+		}
+	}
+	agent := mem.MemoryAgent(mem.NewRuleMemoryAgent())
+	if loadMemoryAgentMode(ctx) == "llm" {
+		if !memoryAgentLLMConfigured(ctx) {
+			g.Log().Debug(ctx, "[memory] llm memory agent fallback to rule: model api key is not configured")
+		} else {
+			chatModel, err := newMemoryChatModel(ctx)
+			if err != nil {
+				g.Log().Debugf(ctx, "[memory] llm memory agent fallback to rule: %v", err)
+			} else {
+				agent = mem.NewLLMMemoryAgent(chatModel, mem.NewRuleMemoryAgent())
+			}
+		}
+	}
+	return mem.ProcessMemoryEventWithAgent(ctx, event, agent)
 }
 
 func boundedMemoryContext(parent context.Context) (context.Context, context.CancelFunc) {
@@ -143,6 +219,29 @@ func boundedMemoryContext(parent context.Context) (context.Context, context.Canc
 		base = context.WithoutCancel(parent)
 	}
 	return context.WithTimeout(base, memoryExtractionTimeout(parent))
+}
+
+func loadMemoryAgentMode(ctx context.Context) string {
+	v, err := g.Cfg().Get(ctx, "memory.agent_mode")
+	if err != nil {
+		return "rule"
+	}
+	mode := strings.ToLower(strings.TrimSpace(v.String()))
+	switch mode {
+	case "llm", "rule":
+		return mode
+	default:
+		return "rule"
+	}
+}
+
+func memoryAgentLLMConfigured(ctx context.Context) bool {
+	v, err := g.Cfg().Get(ctx, "ds_quick_chat_model.api_key")
+	if err != nil {
+		return false
+	}
+	resolved, ok := common.ResolveOptionalEnv(v.String())
+	return ok && !common.LooksLikePlaceholderSecret(resolved)
 }
 
 func loadMemoryExtractionTimeout(ctx context.Context) time.Duration {
@@ -217,9 +316,57 @@ func refsFromContextItems(items []contextengine.ContextItem) []protocol.MemoryRe
 	refs := make([]protocol.MemoryRef, 0, len(items))
 	for _, item := range items {
 		refs = append(refs, protocol.MemoryRef{
-			ID:   item.ID,
-			Type: item.Title,
+			ID:         item.ID,
+			Type:       item.Title,
+			Scope:      item.Scope,
+			Confidence: item.Confidence,
+			Source:     item.SourceID,
+			Provenance: item.Provenance,
 		})
 	}
+	return refs
+}
+
+func memoryUserID(ctx context.Context) string {
+	if userID, ok := ctx.Value(consts.CtxKeyUserID).(string); ok {
+		return strings.TrimSpace(userID)
+	}
+	return ""
+}
+
+func memoryProjectID(ctx context.Context) string {
+	v, err := g.Cfg().Get(ctx, "memory.project_id")
+	if err == nil {
+		return strings.TrimSpace(v.String())
+	}
+	return ""
+}
+
+func memoryScopeRefsFromOptions(ctx context.Context, opts MemoryListOptions) []mem.MemoryScopeRef {
+	refs := make([]mem.MemoryScopeRef, 0, 4)
+	sessionID := strings.TrimSpace(opts.SessionID)
+	if sessionID == "" {
+		if current, ok := ctx.Value(consts.CtxKeySessionID).(string); ok {
+			sessionID = strings.TrimSpace(current)
+		}
+	}
+	if sessionID != "" {
+		refs = append(refs, mem.MemoryScopeRef{Scope: mem.MemoryScopeSession, ScopeID: sessionID})
+	}
+	userID := strings.TrimSpace(opts.UserID)
+	if userID == "" {
+		userID = memoryUserID(ctx)
+	}
+	if userID != "" {
+		refs = append(refs, mem.MemoryScopeRef{Scope: mem.MemoryScopeUser, ScopeID: userID})
+	}
+	projectID := strings.TrimSpace(opts.ProjectID)
+	if projectID == "" {
+		projectID = memoryProjectID(ctx)
+	}
+	if projectID != "" {
+		refs = append(refs, mem.MemoryScopeRef{Scope: mem.MemoryScopeProject, ScopeID: projectID})
+	}
+	refs = append(refs, mem.MemoryScopeRef{Scope: mem.MemoryScopeGlobal, ScopeID: "global"})
 	return refs
 }

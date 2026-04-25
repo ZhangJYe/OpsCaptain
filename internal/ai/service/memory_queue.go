@@ -11,7 +11,9 @@ import (
 	"sync"
 	"time"
 
+	"SuperBizAgent/internal/consts"
 	"SuperBizAgent/utility/common"
+	"SuperBizAgent/utility/mem"
 	"SuperBizAgent/utility/metrics"
 
 	"github.com/gogf/gf/v2/frame/g"
@@ -38,6 +40,9 @@ const (
 type memoryExtractionEvent struct {
 	EventID     string `json:"event_id"`
 	SessionID   string `json:"session_id"`
+	UserID      string `json:"user_id,omitempty"`
+	ProjectID   string `json:"project_id,omitempty"`
+	TraceID     string `json:"trace_id,omitempty"`
 	Query       string `json:"query"`
 	Summary     string `json:"summary"`
 	RequestedAt int64  `json:"requested_at"`
@@ -138,7 +143,7 @@ func enqueueMemoryExtractionDefault(ctx context.Context, sessionID, query, summa
 	if client == nil {
 		return false, nil
 	}
-	event := newMemoryExtractionEvent(sessionID, query, summary, 0)
+	event := newMemoryExtractionEvent(ctx, sessionID, query, summary, 0)
 	if err := client.publishEvent(ctx, event, client.cfg.MemoryExtractRoutingKey); err != nil {
 		metrics.ObserveMemoryExtraction("rabbitmq", "publish_failed")
 		return false, err
@@ -535,7 +540,14 @@ func (c *rabbitMQMemoryClient) consumeEvent(event memoryExtractionEvent) (err er
 	extractCtx, cancel := context.WithTimeout(context.Background(), c.cfg.MemoryExtractTimeout)
 	defer cancel()
 
-	report := extractMemoriesFunc(extractCtx, event.SessionID, event.Query, event.Summary)
+	report := processMemoryEventFunc(extractCtx, mem.MemoryEvent{
+		SessionID: event.SessionID,
+		UserID:    event.UserID,
+		ProjectID: event.ProjectID,
+		Query:     event.Query,
+		Answer:    event.Summary,
+		TraceID:   event.TraceID,
+	})
 	if extractCtx.Err() != nil {
 		return extractCtx.Err()
 	}
@@ -767,11 +779,18 @@ func decodeMemoryExtractionEvent(body []byte) (memoryExtractionEvent, error) {
 	return event, nil
 }
 
-func newMemoryExtractionEvent(sessionID, query, summary string, attempt int) memoryExtractionEvent {
+func newMemoryExtractionEvent(ctx context.Context, sessionID, query, summary string, attempt int) memoryExtractionEvent {
 	requestedAt := time.Now().UnixMilli()
+	traceID := ""
+	if value, ok := ctx.Value(consts.CtxKeyTraceID).(string); ok {
+		traceID = strings.TrimSpace(value)
+	}
 	return memoryExtractionEvent{
 		EventID:     buildMemoryExtractionEventID(sessionID, query, summary, requestedAt),
 		SessionID:   sessionID,
+		UserID:      memoryUserID(ctx),
+		ProjectID:   memoryProjectID(ctx),
+		TraceID:     traceID,
 		Query:       query,
 		Summary:     summary,
 		RequestedAt: requestedAt,

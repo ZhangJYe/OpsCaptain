@@ -13,6 +13,7 @@ const (
 	defaultChatMaxMemoryItems     = 5
 	defaultAIOpsMaxMemoryItems    = 5
 	defaultReporterMaxToolItems   = 8
+	defaultMinMemoryConfidence    = 0.50
 )
 
 type PolicyResolver struct{}
@@ -24,15 +25,17 @@ func NewPolicyResolver() *PolicyResolver {
 func (r *PolicyResolver) Resolve(ctx context.Context, req ContextRequest) ContextProfile {
 	budget := mem.GetTokenBudget()
 	base := ContextProfile{
-		Name:               "chat-default",
-		AllowHistory:       true,
-		AllowMemory:        true,
-		AllowDocs:          true,
-		AllowToolResults:   false,
-		Staged:             true,
-		MaxHistoryMessages: loadPositiveInt(ctx, "context.chat_max_history_messages", defaultChatMaxHistoryMessages),
-		MaxMemoryItems:     loadPositiveInt(ctx, "context.chat_max_memory_items", defaultChatMaxMemoryItems),
-		MaxToolItems:       0,
+		Name:                "chat-default",
+		AllowHistory:        true,
+		AllowMemory:         true,
+		AllowDocs:           true,
+		AllowToolResults:    false,
+		Staged:              true,
+		MaxHistoryMessages:  loadPositiveInt(ctx, "context.chat_max_history_messages", defaultChatMaxHistoryMessages),
+		MaxMemoryItems:      loadPositiveInt(ctx, "context.chat_max_memory_items", defaultChatMaxMemoryItems),
+		MaxToolItems:        0,
+		MinMemoryConfidence: loadPositiveFloat(ctx, "context.min_memory_confidence", defaultMinMemoryConfidence),
+		AllowedMemoryScopes: []string{"session", "user", "project", "global"},
 		Budget: ContextBudget{
 			MaxTotalTokens: budget.MaxTokens,
 			SystemTokens:   budget.SystemReserve,
@@ -80,4 +83,19 @@ func loadPositiveInt(ctx context.Context, key string, fallback int) int {
 		return v.Int()
 	}
 	return fallback
+}
+
+func loadPositiveFloat(ctx context.Context, key string, fallback float64) float64 {
+	v, err := g.Cfg().Get(ctx, key)
+	if err == nil && v.Float64() > 0 {
+		return normalizeUnitFloat(v.Float64(), fallback)
+	}
+	return fallback
+}
+
+func normalizeUnitFloat(value, fallback float64) float64 {
+	if value <= 0 || value > 1 {
+		return fallback
+	}
+	return value
 }

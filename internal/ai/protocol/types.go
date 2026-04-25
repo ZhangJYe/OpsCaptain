@@ -25,8 +25,12 @@ const (
 )
 
 type MemoryRef struct {
-	ID   string `json:"id"`
-	Type string `json:"type"`
+	ID         string  `json:"id"`
+	Type       string  `json:"type"`
+	Scope      string  `json:"scope,omitempty"`
+	Confidence float64 `json:"confidence,omitempty"`
+	Source     string  `json:"source,omitempty"`
+	Provenance string  `json:"provenance,omitempty"`
 }
 
 type ArtifactRef struct {
