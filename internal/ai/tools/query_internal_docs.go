@@ -9,10 +9,17 @@ import (
 
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/components/tool/utils"
+	"github.com/gogf/gf/v2/frame/g"
 )
 
 type QueryInternalDocsInput struct {
 	Query string `json:"query" jsonschema:"description=The query string to search in internal documentation for relevant information and processing steps"`
+}
+
+type QueryInternalDocsOutput struct {
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+	Error   string `json:"error,omitempty"`
 }
 
 const defaultInternalDocsQueryTimeout = 5 * time.Second
@@ -27,7 +34,14 @@ func NewQueryInternalDocsTool() tool.InvokableTool {
 
 			resp, _, err := rag.Query(queryCtx, rag.SharedPool(), input.Query)
 			if err != nil {
-				return "", fmt.Errorf("failed to query internal docs: %w", err)
+				g.Log().Warningf(ctx, "query_internal_docs degraded: %v", err)
+				out := QueryInternalDocsOutput{
+					Success: false,
+					Message: "内部知识库检索暂时不可用。请继续基于可用的 metrics、logs 和用户提供的上下文诊断，并明确标注缺失知识库证据。",
+					Error:   fmt.Sprintf("failed to query internal docs: %v", err),
+				}
+				respBytes, _ := json.Marshal(out)
+				return string(respBytes), nil
 			}
 			respBytes, err := json.Marshal(resp)
 			if err != nil {

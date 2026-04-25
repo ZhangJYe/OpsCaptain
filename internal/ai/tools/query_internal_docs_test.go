@@ -3,6 +3,7 @@ package tools
 import (
 	"SuperBizAgent/internal/ai/rag"
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -63,8 +64,19 @@ func TestQueryInternalDocsToolCachesRecentInitFailures(t *testing.T) {
 	tool := NewQueryInternalDocsTool()
 	input := `{"query":"请查询 SOP"}`
 	for i := 0; i < 2; i++ {
-		if _, err := tool.InvokableRun(context.Background(), input); err == nil {
-			t.Fatalf("expected init error on run %d", i+1)
+		output, err := tool.InvokableRun(context.Background(), input)
+		if err != nil {
+			t.Fatalf("expected degraded output on run %d, got error: %v", i+1, err)
+		}
+		var payload QueryInternalDocsOutput
+		if err := json.Unmarshal([]byte(output), &payload); err != nil {
+			t.Fatalf("run %d: failed to parse degraded output %q: %v", i+1, output, err)
+		}
+		if payload.Success {
+			t.Fatalf("run %d: expected success=false, got %#v", i+1, payload)
+		}
+		if payload.Error == "" {
+			t.Fatalf("run %d: expected error detail, got %#v", i+1, payload)
 		}
 	}
 	if created != 1 {
