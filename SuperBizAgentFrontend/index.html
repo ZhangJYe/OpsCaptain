@@ -9,11 +9,11 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="theme.css?v=ui-20260425-1">
-    <link rel="stylesheet" href="layout.css?v=ui-20260425-1">
-    <link rel="stylesheet" href="chat.css?v=ui-20260425-1">
-    <link rel="stylesheet" href="input.css?v=ui-20260425-1">
-    <link rel="stylesheet" href="components.css?v=ui-20260425-1">
+    <link rel="stylesheet" href="theme.css?v=ui-20260425-2">
+    <link rel="stylesheet" href="layout.css?v=ui-20260425-2">
+    <link rel="stylesheet" href="chat.css?v=ui-20260425-2">
+    <link rel="stylesheet" href="input.css?v=ui-20260425-2">
+    <link rel="stylesheet" href="components.css?v=ui-20260425-2">
     <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
     <link rel="stylesheet" id="hljsTheme" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css">
     <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/es/highlight.min.js"></script>
@@ -206,30 +206,94 @@
                 <section class="welcome-greeting" id="welcomeGreeting">
                     <section class="reference-chat-stage" id="landingProduct">
                         <div class="incident-workbench">
-                            <section class="workbench-primary" aria-label="诊断概览">
-                                <div class="workbench-meta">
-                                    <span class="live-indicator"></span>
-                                    <span><strong id="welcomeOperatorName">林澈</strong> 值班</span>
-                                    <span>prod / paymentservice</span>
+                            <section class="incident-board" aria-label="诊断概览">
+                                <div class="incident-header">
+                                    <div class="incident-title-block">
+                                        <div class="incident-kicker">
+                                            <span class="severity-dot"></span>
+                                            <span>SEV-2</span>
+                                            <span>prod / paymentservice</span>
+                                            <span><strong id="welcomeOperatorName">林澈</strong> 值班</span>
+                                        </div>
+                                        <h1>Paymentservice 延迟异常</h1>
+                                        <p>p95 在 10 分钟窗口内抬升，先确认影响面，再对齐 metrics、error logs、最近变更和历史相似案例。</p>
+                                    </div>
+                                    <div class="incident-window">
+                                        <strong>10m</strong>
+                                        <span>analysis window</span>
+                                    </div>
                                 </div>
-                                <h1>paymentservice p95 突增</h1>
-                                <p class="workbench-summary">先确认影响面，再对齐 metrics、error logs、最近变更和历史相似案例。</p>
 
-                                <div class="signal-strip" aria-label="当前信号">
-                                    <div class="signal-item signal-item-danger">
+                                <div class="metric-grid" aria-label="当前信号">
+                                    <div class="metric-tile metric-tile-danger">
                                         <span>Latency</span>
                                         <strong>p95 +42%</strong>
                                         <small>10 min window</small>
                                     </div>
-                                    <div class="signal-item signal-item-warning">
+                                    <div class="metric-tile metric-tile-warning">
                                         <span>Errors</span>
                                         <strong>2.7%</strong>
                                         <small>checkout path</small>
                                     </div>
-                                    <div class="signal-item signal-item-green">
+                                    <div class="metric-tile metric-tile-blue">
+                                        <span>Queue</span>
+                                        <strong>+18%</strong>
+                                        <small>retry backlog</small>
+                                    </div>
+                                    <div class="metric-tile metric-tile-green">
                                         <span>Evidence</span>
                                         <strong>3 / 4</strong>
-                                        <small>metrics, logs, docs</small>
+                                        <small>ready to reason</small>
+                                    </div>
+                                </div>
+
+                                <div class="console-grid">
+                                    <div class="console-panel evidence-chain">
+                                        <div class="console-panel-head">
+                                            <strong>证据链</strong>
+                                            <span>3 ready</span>
+                                        </div>
+                                        <div class="chain-row chain-row-ready">
+                                            <i></i>
+                                            <div>
+                                                <strong>Metrics</strong>
+                                                <small>p95、retry、queue depth 已拉取</small>
+                                            </div>
+                                        </div>
+                                        <div class="chain-row chain-row-ready">
+                                            <i></i>
+                                            <div>
+                                                <strong>Logs</strong>
+                                                <small>Redis timeout 在 checkout path 集中出现</small>
+                                            </div>
+                                        </div>
+                                        <div class="chain-row chain-row-ready">
+                                            <i></i>
+                                            <div>
+                                                <strong>Knowledge</strong>
+                                                <small>支付超时 SOP 和历史相似案例已匹配</small>
+                                            </div>
+                                        </div>
+                                        <div class="chain-row chain-row-waiting">
+                                            <i></i>
+                                            <div>
+                                                <strong>Change</strong>
+                                                <small>等待最近发布记录补齐</small>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="console-panel response-plan">
+                                        <div class="console-panel-head">
+                                            <strong>建议节奏</strong>
+                                            <span>safe path</span>
+                                        </div>
+                                        <ol>
+                                            <li>先判断错误率和队列堆积是否同步扩大</li>
+                                            <li>再确认 Redis / DB timeout 是否集中出现</li>
+                                            <li>最后给出回滚、限流和验证步骤</li>
+                                        </ol>
+                                        <blockquote>不要先重启。先看 Redis timeout 和下游重试是否同时抬升，再判断是否需要回滚。</blockquote>
                                     </div>
                                 </div>
 
@@ -240,40 +304,32 @@
                                 </div>
                             </section>
 
-                            <aside class="evidence-panel" aria-label="证据状态">
-                                <div class="panel-title-row">
-                                    <strong>证据状态</strong>
-                                    <span>Live</span>
+                            <aside class="console-side" aria-label="侧边状态">
+                                <div class="side-section">
+                                    <div class="panel-title-row">
+                                        <strong>运行状态</strong>
+                                        <span>Live</span>
+                                    </div>
+                                    <div class="health-grid">
+                                        <div><strong>Ready</strong><small>Backend</small></div>
+                                        <div><strong>Trace</strong><small>Jaeger</small></div>
+                                        <div><strong>Alert</strong><small>Prometheus</small></div>
+                                    </div>
                                 </div>
-                                <div class="evidence-list">
-                                    <div class="evidence-row evidence-row-live">
-                                        <span></span>
-                                        <div>
-                                            <strong>Metrics</strong>
-                                            <small>p95, retry, queue depth</small>
-                                        </div>
+                                <div class="side-section">
+                                    <div class="panel-title-row">
+                                        <strong>风险判断</strong>
+                                        <span>Watch</span>
                                     </div>
-                                    <div class="evidence-row evidence-row-live">
-                                        <span></span>
-                                        <div>
-                                            <strong>Logs</strong>
-                                            <small>Redis timeout 集中出现</small>
-                                        </div>
+                                    <div class="risk-list">
+                                        <div><span></span>错误率同步上升时升级为 SEV-1</div>
+                                        <div><span></span>队列继续扩大时先限流再回滚</div>
+                                        <div><span></span>历史案例只作辅助证据</div>
                                     </div>
-                                    <div class="evidence-row evidence-row-live">
-                                        <span></span>
-                                        <div>
-                                            <strong>Knowledge</strong>
-                                            <small>支付超时 SOP 已匹配</small>
-                                        </div>
-                                    </div>
-                                    <div class="evidence-row evidence-row-waiting">
-                                        <span></span>
-                                        <div>
-                                            <strong>Change</strong>
-                                            <small>等待最近发布记录</small>
-                                        </div>
-                                    </div>
+                                </div>
+                                <div class="side-section side-section-muted">
+                                    <strong>当前目标</strong>
+                                    <p>把告警、日志和知识库证据整理成可执行建议。</p>
                                 </div>
                             </aside>
                         </div>
@@ -281,25 +337,10 @@
                         <article class="reference-agent-message diagnosis-preview">
                             <div class="reference-agent-avatar operator-avatar operator-tone-blue" id="welcomeOperatorAvatar"></div>
                             <div class="reference-agent-copy">
-                                <p class="reference-agent-byline">建议节奏</p>
-                                <blockquote>先看 Redis timeout 和下游重试是否同时抬升，再判断是否需要回滚。</blockquote>
-                                <div class="preview-columns">
-                                    <div>
-                                        <h3>先确认</h3>
-                                        <ul>
-                                            <li>错误率是否同步上升</li>
-                                            <li>队列堆积是否扩大</li>
-                                            <li>最近发布是否改变调用路径</li>
-                                        </ul>
-                                    </div>
-                                    <div>
-                                        <h3>再处置</h3>
-                                        <ul>
-                                            <li>拉取 metrics 与 error logs</li>
-                                            <li>使用历史案例作辅助证据</li>
-                                            <li>输出回滚、限流和验证步骤</li>
-                                        </ul>
-                                    </div>
+                                <p class="reference-agent-byline">诊断预览</p>
+                                <div class="preview-note">
+                                    <strong>判断</strong>
+                                    <span>当前更像依赖 timeout 与重试放大共同导致的延迟抬升。</span>
                                 </div>
                             </div>
                         </article>
@@ -377,7 +418,7 @@
         </div>
     </div>
 
-    <script src="config.js?v=ui-20260425-1"></script>
-    <script src="app.js?v=ui-20260425-1"></script>
+    <script src="config.js?v=ui-20260425-2"></script>
+    <script src="app.js?v=ui-20260425-2"></script>
 </body>
 </html>
