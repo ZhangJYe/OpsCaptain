@@ -2,6 +2,7 @@ package triage
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	agentcontracts "SuperBizAgent/internal/ai/agent/contracts"
@@ -28,5 +29,112 @@ func TestTriageAlertAnalysis(t *testing.T) {
 	}
 	if result.Metadata["agent_contract_id"] != "triage:"+agentcontracts.Version {
 		t.Fatalf("expected triage contract metadata, got %#v", result.Metadata)
+	}
+}
+
+func TestHybridTriageUsesRuleFastPath(t *testing.T) {
+	oldMode := triageMode
+	oldClassifier := classifyTriageWithLLM
+	defer func() {
+		triageMode = oldMode
+		classifyTriageWithLLM = oldClassifier
+	}()
+
+	triageMode = func(context.Context) string { return "hybrid" }
+	classifyTriageWithLLM = func(context.Context, string) (decision, error) {
+		t.Fatal("hybrid triage should not call LLM when rule matches")
+		return decision{}, nil
+	}
+
+	agent := New()
+	task := protocol.NewRootTask("session-test", "Prometheus 告警持续 firing", agent.Name())
+	result, err := agent.Handle(context.Background(), task)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Metadata["triage_source"] != "rule" {
+		t.Fatalf("expected rule source, got %#v", result.Metadata)
+	}
+	if result.Metadata["triage_fallback"] != false {
+		t.Fatalf("expected no fallback, got %#v", result.Metadata)
+	}
+}
+
+func TestHybridTriageUsesLLMOnRuleMiss(t *testing.T) {
+	oldMode := triageMode
+	oldClassifier := classifyTriageWithLLM
+	defer func() {
+		triageMode = oldMode
+		classifyTriageWithLLM = oldClassifier
+	}()
+
+	triageMode = func(context.Context) string { return "hybrid" }
+	classifyTriageWithLLM = func(context.Context, string) (decision, error) {
+		return decision{
+			intent:        "kb_qa",
+			domains:       []string{"knowledge"},
+			priority:      "medium",
+			useMultiAgent: true,
+			summary:       "LLM classified as kb_qa",
+			source:        "llm",
+			confidence:    0.82,
+		}, nil
+	}
+
+	agent := New()
+	task := protocol.NewRootTask("session-test", "HPA 怎么配置", agent.Name())
+	result, err := agent.Handle(context.Background(), task)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Metadata["intent"] != "kb_qa" {
+		t.Fatalf("expected kb_qa, got %#v", result.Metadata)
+	}
+	if result.Metadata["triage_source"] != "llm" || result.Metadata["triage_fallback"] != false {
+		t.Fatalf("expected llm source without fallback, got %#v", result.Metadata)
+	}
+	domains, _ := result.Metadata["domains"].([]string)
+	if len(domains) != 1 || domains[0] != "knowledge" {
+		t.Fatalf("expected knowledge domain, got %#v", domains)
+	}
+}
+
+func TestHybridTriageFallsBackWhenLLMFails(t *testing.T) {
+	oldMode := triageMode
+	oldClassifier := classifyTriageWithLLM
+	defer func() {
+		triageMode = oldMode
+		classifyTriageWithLLM = oldClassifier
+	}()
+
+	triageMode = func(context.Context) string { return "hybrid" }
+	classifyTriageWithLLM = func(context.Context, string) (decision, error) {
+		return decision{}, errors.New("timeout")
+	}
+
+	agent := New()
+	task := protocol.NewRootTask("session-test", "HPA 怎么配置", agent.Name())
+	result, err := agent.Handle(context.Background(), task)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Metadata["triage_source"] != "fallback" || result.Metadata["triage_fallback"] != true {
+		t.Fatalf("expected fallback metadata, got %#v", result.Metadata)
+	}
+	if result.Status != protocol.ResultStatusSucceeded {
+		t.Fatalf("expected succeeded fallback result, got %s", result.Status)
+	}
+}
+
+func TestParseLLMDecisionNormalizesOutput(t *testing.T) {
+	route, err := parseLLMDecision(`{"intent":"incident_analysis","domains":["logs","knowledge","logs"],"priority":"high","use_multi_agent":true}`)
+	if err != nil {
+		t.Fatalf("parse llm decision: %v", err)
+	}
+	if route.intent != "incident_analysis" || route.priority != "high" || !route.useMultiAgent {
+		t.Fatalf("unexpected route: %#v", route)
+	}
+	if len(route.domains) != 2 || route.domains[0] != "logs" || route.domains[1] != "knowledge" {
+		t.Fatalf("expected deduped domains, got %#v", route.domains)
 	}
 }

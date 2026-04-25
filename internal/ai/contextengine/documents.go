@@ -55,17 +55,12 @@ func selectDocuments(ctx context.Context, query string, profile ContextProfile) 
 	used := 0
 	for idx, doc := range docs {
 		item := newDocumentItem(doc, idx)
-		if item.TokenEstimate > remaining {
-			trimmed := mem.TrimToTokenBudget(item.Content, remaining)
-			if strings.TrimSpace(trimmed) == "" {
-				item.DroppedReason = "document_budget"
-				dropped = append(dropped, item)
-				continue
-			}
-			item.Content = trimmed
-			item.TokenEstimate = mem.EstimateTokens(trimmed)
-			item.CompressionLevel = "trimmed"
+		fitted, ok := fitContextItemToBudget(ctx, query, item, remaining, "document_budget")
+		if !ok {
+			dropped = append(dropped, fitted)
+			continue
 		}
+		item = fitted
 		item.Selected = true
 		selected = append(selected, item)
 		remaining -= item.TokenEstimate
@@ -78,15 +73,20 @@ func selectDocuments(ctx context.Context, query string, profile ContextProfile) 
 		}
 	}
 
+	notes := []string{
+		fmt.Sprintf("tokens=%d/%d", used, profile.Budget.DocumentTokens),
+		formatRetrievalTraceNote(metrics),
+	}
+	if note := formatCompressionNote(selected); note != "" {
+		notes = append(notes, note)
+	}
+
 	return documentSelectionResult{
 		selected: selected,
 		dropped:  dropped,
 		used:     used,
-		notes: []string{
-			fmt.Sprintf("tokens=%d/%d", used, profile.Budget.DocumentTokens),
-			formatRetrievalTraceNote(metrics),
-		},
-		metrics: metrics,
+		notes:    notes,
+		metrics:  metrics,
 	}
 }
 

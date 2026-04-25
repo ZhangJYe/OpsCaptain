@@ -97,7 +97,7 @@ func (a *Assembler) Assemble(ctx context.Context, req ContextRequest, history []
 	}
 
 	if profile.AllowToolResults && len(req.ToolItems) > 0 {
-		selectedTools, droppedTools, usedTools, toolNotes := selectToolItems(req.ToolItems, profile)
+		selectedTools, droppedTools, usedTools, toolNotes := selectToolItems(ctx, req.Query, req.ToolItems, profile)
 		pkg.ToolItems = selectedTools
 		trace.SourcesConsidered += len(selectedTools) + len(droppedTools)
 		trace.SourcesSelected += len(selectedTools)
@@ -145,7 +145,7 @@ func memoryScopeRefs(req ContextRequest) []mem.MemoryScopeRef {
 	return refs
 }
 
-func selectToolItems(items []ContextItem, profile ContextProfile) ([]ContextItem, []ContextItem, int, []string) {
+func selectToolItems(ctx context.Context, query string, items []ContextItem, profile ContextProfile) ([]ContextItem, []ContextItem, int, []string) {
 	if len(items) == 0 || profile.MaxToolItems == 0 || profile.Budget.ToolTokens == 0 {
 		return nil, nil, 0, []string{"tool results empty or disabled"}
 	}
@@ -161,17 +161,12 @@ func selectToolItems(items []ContextItem, profile ContextProfile) ([]ContextItem
 			dropped = append(dropped, item)
 			continue
 		}
-		if item.TokenEstimate > remaining {
-			trimmed := mem.TrimToTokenBudget(item.Content, remaining)
-			if strings.TrimSpace(trimmed) == "" {
-				item.DroppedReason = "tool_budget"
-				dropped = append(dropped, item)
-				continue
-			}
-			item.Content = trimmed
-			item.TokenEstimate = mem.EstimateTokens(trimmed)
-			item.CompressionLevel = "trimmed"
+		fitted, ok := fitContextItemToBudget(ctx, query, item, remaining, "tool_budget")
+		if !ok {
+			dropped = append(dropped, fitted)
+			continue
 		}
+		item = fitted
 		item.Selected = true
 		selected = append(selected, item)
 		remaining -= item.TokenEstimate
@@ -184,7 +179,11 @@ func selectToolItems(items []ContextItem, profile ContextProfile) ([]ContextItem
 			break
 		}
 	}
-	return selected, dropped, used, []string{fmt.Sprintf("tokens=%d/%d", used, profile.Budget.ToolTokens)}
+	notes := []string{fmt.Sprintf("tokens=%d/%d", used, profile.Budget.ToolTokens)}
+	if note := formatCompressionNote(selected); note != "" {
+		notes = append(notes, note)
+	}
+	return selected, dropped, used, notes
 }
 
 func TraceDetails(trace ContextAssemblyTrace) []string {

@@ -1,0 +1,2 @@
+{"id":"contra-001","query":"paymentservice 状态异常，指标正常但日志有大量 connection refused","expected_intent":"incident_analysis","expected_domains":["metrics","logs","knowledge"],"must_mention":["指标正常","日志","connection refused","矛盾"],"must_not_mention":[],"expected_action":"标注信号矛盾并建议人工确认服务发现和网络状态","severity":"high"}
+{"id":"contra-002","query":"checkout 延迟告警恢复了，但用户仍反馈 504","expected_intent":"incident_analysis","expected_domains":["metrics","logs","knowledge"],"must_mention":["告警恢复","用户反馈","504","矛盾"],"must_not_mention":[],"expected_action":"继续检查日志和链路追踪，不能只按指标恢复关闭事件","severity":"high"}

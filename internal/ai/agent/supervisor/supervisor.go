@@ -64,7 +64,9 @@ func (a *Agent) Handle(ctx context.Context, task *protocol.TaskEnvelope) (*proto
 			}
 		}
 	}
-	if len(rawDomains) == 0 {
+	if useMultiAgent, ok := metadataBool(triageResult.Metadata, "use_multi_agent"); ok && !useMultiAgent {
+		rawDomains = nil
+	} else if len(rawDomains) == 0 {
 		rawDomains = []string{"metrics", "logs", "knowledge"}
 	}
 
@@ -130,11 +132,13 @@ func (a *Agent) Handle(ctx context.Context, task *protocol.TaskEnvelope) (*proto
 			evidence = append(evidence, child.Evidence...)
 		}
 	}
-	metadata := make(map[string]any, len(reportResult.Metadata)+1)
-	metadata["intent"] = intent
+	metadata := make(map[string]any, len(reportResult.Metadata)+8)
 	for k, v := range reportResult.Metadata {
 		metadata[k] = v
 	}
+	copyTriageMetadata(metadata, triageResult.Metadata)
+	metadata["intent"] = intent
+	metadata["domains"] = append([]string(nil), rawDomains...)
 
 	return &protocol.TaskResult{
 		TaskID:            task.TaskID,
@@ -185,6 +189,40 @@ func taskInputString(task *protocol.TaskEnvelope, key string) string {
 	}
 	value, _ := task.Input[key].(string)
 	return value
+}
+
+func metadataBool(metadata map[string]any, key string) (bool, bool) {
+	if metadata == nil {
+		return false, false
+	}
+	switch value := metadata[key].(type) {
+	case bool:
+		return value, true
+	case string:
+		switch strings.ToLower(strings.TrimSpace(value)) {
+		case "true":
+			return true, true
+		case "false":
+			return false, true
+		}
+	}
+	return false, false
+}
+
+func copyTriageMetadata(dst, src map[string]any) {
+	for _, key := range []string{
+		"priority",
+		"use_multi_agent",
+		"matched_rule",
+		"triage_fallback",
+		"triage_mode",
+		"triage_source",
+		"llm_error",
+	} {
+		if value, ok := src[key]; ok {
+			dst[key] = value
+		}
+	}
 }
 
 func withMemoryContext(query, memoryContext string) string {

@@ -14,6 +14,7 @@ import (
 
 type captureTriageAgent struct {
 	lastGoal string
+	metadata map[string]any
 }
 
 func (a *captureTriageAgent) Name() string {
@@ -26,16 +27,20 @@ func (a *captureTriageAgent) Capabilities() []string {
 
 func (a *captureTriageAgent) Handle(_ context.Context, task *protocol.TaskEnvelope) (*protocol.TaskResult, error) {
 	a.lastGoal = task.Goal
+	metadata := a.metadata
+	if metadata == nil {
+		metadata = map[string]any{
+			"intent":  "kb_qa",
+			"domains": []string{"knowledge"},
+		}
+	}
 	return &protocol.TaskResult{
 		TaskID:     task.TaskID,
 		Agent:      a.Name(),
 		Status:     protocol.ResultStatusSucceeded,
 		Summary:    "triaged",
 		Confidence: 1,
-		Metadata: map[string]any{
-			"intent":  "kb_qa",
-			"domains": []string{"knowledge"},
-		},
+		Metadata:   metadata,
 	}, nil
 }
 
@@ -62,7 +67,9 @@ func (a *captureKnowledgeAgent) Handle(_ context.Context, task *protocol.TaskEnv
 	}, nil
 }
 
-type fakeReporterAgent struct{}
+type fakeReporterAgent struct {
+	resultsLen int
+}
 
 func (a *fakeReporterAgent) Name() string {
 	return reporter.AgentName
@@ -73,6 +80,8 @@ func (a *fakeReporterAgent) Capabilities() []string {
 }
 
 func (a *fakeReporterAgent) Handle(_ context.Context, task *protocol.TaskEnvelope) (*protocol.TaskResult, error) {
+	raw, _ := task.Input["results"].([]*protocol.TaskResult)
+	a.resultsLen = len(raw)
 	return &protocol.TaskResult{
 		TaskID:     task.TaskID,
 		Agent:      a.Name(),
@@ -120,5 +129,52 @@ func TestSupervisorRoutesOnRawQueryButPassesMemoryToSpecialists(t *testing.T) {
 	}
 	if !strings.Contains(knowledgeAgent.lastGoal, "可参考的历史上下文") {
 		t.Fatalf("expected specialist query to include memory section, got %q", knowledgeAgent.lastGoal)
+	}
+}
+
+func TestSupervisorHonorsTriageUseMultiAgentFalse(t *testing.T) {
+	rt := runtime.New()
+	supervisorAgent := New()
+	triageAgent := &captureTriageAgent{
+		metadata: map[string]any{
+			"intent":          "kb_qa",
+			"domains":         []string{},
+			"use_multi_agent": false,
+			"triage_source":   "llm",
+			"triage_fallback": false,
+		},
+	}
+	reporterAgent := &fakeReporterAgent{}
+
+	for _, agent := range []runtime.Agent{
+		supervisorAgent,
+		triageAgent,
+		reporterAgent,
+	} {
+		if err := rt.Register(agent); err != nil {
+			t.Fatalf("register %s: %v", agent.Name(), err)
+		}
+	}
+
+	task := protocol.NewRootTask("session-test", "你好，介绍一下你自己", AgentName)
+	result, err := rt.Dispatch(context.Background(), task)
+	if err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected result")
+	}
+	if reporterAgent.resultsLen != 0 {
+		t.Fatalf("expected no specialist fan-out, got %d results", reporterAgent.resultsLen)
+	}
+	if result.Metadata["use_multi_agent"] != false {
+		t.Fatalf("expected use_multi_agent=false metadata, got %#v", result.Metadata)
+	}
+	if result.Metadata["triage_source"] != "llm" || result.Metadata["triage_fallback"] != false {
+		t.Fatalf("expected triage metadata to be propagated, got %#v", result.Metadata)
+	}
+	domains, _ := result.Metadata["domains"].([]string)
+	if len(domains) != 0 {
+		t.Fatalf("expected empty routed domains, got %#v", domains)
 	}
 }

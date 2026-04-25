@@ -46,15 +46,19 @@ func DefaultHybridConfig(ctx context.Context) HybridConfig {
 }
 
 type HybridTrace struct {
-	DenseCount       int   `json:"dense_count"`
-	LexicalCount     int   `json:"lexical_count"`
-	FusedCount       int   `json:"fused_count"`
-	DenseLatencyMs   int64 `json:"dense_latency_ms"`
-	LexicalLatencyMs int64 `json:"lexical_latency_ms"`
-	FusionLatencyMs  int64 `json:"fusion_latency_ms"`
-	DenseOnlyHits    int   `json:"dense_only_hits"`
-	LexicalOnlyHits  int   `json:"lexical_only_hits"`
-	BothHits         int   `json:"both_hits"`
+	CacheKey          string `json:"cache_key,omitempty"`
+	CacheHit          bool   `json:"cache_hit"`
+	InitFailureCached bool   `json:"init_failure_cached"`
+	InitLatencyMs     int64  `json:"init_latency_ms"`
+	DenseCount        int    `json:"dense_count"`
+	LexicalCount      int    `json:"lexical_count"`
+	FusedCount        int    `json:"fused_count"`
+	DenseLatencyMs    int64  `json:"dense_latency_ms"`
+	LexicalLatencyMs  int64  `json:"lexical_latency_ms"`
+	FusionLatencyMs   int64  `json:"fusion_latency_ms"`
+	DenseOnlyHits     int    `json:"dense_only_hits"`
+	LexicalOnlyHits   int    `json:"lexical_only_hits"`
+	BothHits          int    `json:"both_hits"`
 }
 
 type fusedDoc struct {
@@ -74,9 +78,10 @@ func HybridRetrieve(
 	var trace HybridTrace
 
 	type denseResult struct {
-		docs      []*schema.Document
-		err       error
-		latencyMs int64
+		docs        []*schema.Document
+		acquisition RetrieverAcquisition
+		err         error
+		latencyMs   int64
 	}
 	type lexResult struct {
 		hits      []BM25Hit
@@ -87,14 +92,14 @@ func HybridRetrieve(
 	lexCh := make(chan lexResult, 1)
 
 	go func() {
-		rr, _, err := pool.GetOrCreate(ctx)
+		rr, acquisition, err := pool.GetOrCreate(ctx)
 		if err != nil {
-			denseCh <- denseResult{err: err}
+			denseCh <- denseResult{acquisition: acquisition, err: err}
 			return
 		}
 		start := time.Now()
 		docs, err := rr.Retrieve(ctx, query, retrieverapi.WithTopK(cfg.DenseTopK))
-		denseCh <- denseResult{docs: docs, err: err, latencyMs: time.Since(start).Milliseconds()}
+		denseCh <- denseResult{docs: docs, acquisition: acquisition, err: err, latencyMs: time.Since(start).Milliseconds()}
 	}()
 
 	go func() {
@@ -111,6 +116,10 @@ func HybridRetrieve(
 
 	trace.DenseLatencyMs = dr.latencyMs
 	trace.LexicalLatencyMs = lr.latencyMs
+	trace.CacheKey = dr.acquisition.CacheKey
+	trace.CacheHit = dr.acquisition.CacheHit
+	trace.InitFailureCached = dr.acquisition.InitFailureCached
+	trace.InitLatencyMs = dr.acquisition.InitLatencyMs
 
 	if dr.err != nil {
 		return nil, trace, dr.err
