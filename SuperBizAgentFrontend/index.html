@@ -9,11 +9,11 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="theme.css?v=ui-20260421-2">
-    <link rel="stylesheet" href="layout.css?v=ui-20260421-2">
-    <link rel="stylesheet" href="chat.css?v=ui-20260421-2">
-    <link rel="stylesheet" href="input.css?v=ui-20260421-2">
-    <link rel="stylesheet" href="components.css?v=ui-20260421-2">
+    <link rel="stylesheet" href="theme.css?v=ui-20260425-1">
+    <link rel="stylesheet" href="layout.css?v=ui-20260425-1">
+    <link rel="stylesheet" href="chat.css?v=ui-20260425-1">
+    <link rel="stylesheet" href="input.css?v=ui-20260425-1">
+    <link rel="stylesheet" href="components.css?v=ui-20260425-1">
     <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
     <link rel="stylesheet" id="hljsTheme" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css">
     <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/es/highlight.min.js"></script>
@@ -70,7 +70,7 @@
                             <strong>Skills</strong>
                             <small>按需启用诊断技能</small>
                         </div>
-                        <span id="selectedSkillCount">3 active</span>
+                        <span id="selectedSkillCount">3 已启用</span>
                     </div>
                     <div class="skill-market-panel active" data-skill-panel="incident">
                         <button class="skill-choice active" type="button" data-skill-choice aria-pressed="true">Metrics</button>
@@ -205,35 +205,102 @@
             <div class="chat-container">
                 <section class="welcome-greeting" id="welcomeGreeting">
                     <section class="reference-chat-stage" id="landingProduct">
-                        <div class="reference-user-note">
-                            <p>如果你愿意，我下一条可以直接给你一个：</p>
-                            <ol>
-                                <li>当前告警的影响面和优先级判断</li>
-                                <li>指标、日志、知识库三路证据对照</li>
-                                <li>回滚、限流、验证的执行步骤</li>
-                            </ol>
-                            <p>你回我一句：“开始诊断”，我就按生产值班格式输出。</p>
+                        <div class="incident-workbench">
+                            <section class="workbench-primary" aria-label="诊断概览">
+                                <div class="workbench-meta">
+                                    <span class="live-indicator"></span>
+                                    <span><strong id="welcomeOperatorName">林澈</strong> 值班</span>
+                                    <span>prod / paymentservice</span>
+                                </div>
+                                <h1>paymentservice p95 突增</h1>
+                                <p class="workbench-summary">先确认影响面，再对齐 metrics、error logs、最近变更和历史相似案例。</p>
+
+                                <div class="signal-strip" aria-label="当前信号">
+                                    <div class="signal-item signal-item-danger">
+                                        <span>Latency</span>
+                                        <strong>p95 +42%</strong>
+                                        <small>10 min window</small>
+                                    </div>
+                                    <div class="signal-item signal-item-warning">
+                                        <span>Errors</span>
+                                        <strong>2.7%</strong>
+                                        <small>checkout path</small>
+                                    </div>
+                                    <div class="signal-item signal-item-green">
+                                        <span>Evidence</span>
+                                        <strong>3 / 4</strong>
+                                        <small>metrics, logs, docs</small>
+                                    </div>
+                                </div>
+
+                                <div class="prompt-toolbar" aria-label="快速诊断入口">
+                                    <button class="prompt-card prompt-card-primary" data-prompt="请模拟一次 paymentservice 延迟升高的线上故障诊断，输出影响判断、证据检查、可能原因和处理建议。">开始诊断</button>
+                                    <button class="prompt-card" data-prompt="请按 metrics、logs、knowledge 三路证据，分析 paymentservice p95 升高可能原因。">证据对照</button>
+                                    <button class="prompt-card" data-prompt="请给出 paymentservice 延迟升高时的回滚、限流和验证步骤。">处置步骤</button>
+                                </div>
+                            </section>
+
+                            <aside class="evidence-panel" aria-label="证据状态">
+                                <div class="panel-title-row">
+                                    <strong>证据状态</strong>
+                                    <span>Live</span>
+                                </div>
+                                <div class="evidence-list">
+                                    <div class="evidence-row evidence-row-live">
+                                        <span></span>
+                                        <div>
+                                            <strong>Metrics</strong>
+                                            <small>p95, retry, queue depth</small>
+                                        </div>
+                                    </div>
+                                    <div class="evidence-row evidence-row-live">
+                                        <span></span>
+                                        <div>
+                                            <strong>Logs</strong>
+                                            <small>Redis timeout 集中出现</small>
+                                        </div>
+                                    </div>
+                                    <div class="evidence-row evidence-row-live">
+                                        <span></span>
+                                        <div>
+                                            <strong>Knowledge</strong>
+                                            <small>支付超时 SOP 已匹配</small>
+                                        </div>
+                                    </div>
+                                    <div class="evidence-row evidence-row-waiting">
+                                        <span></span>
+                                        <div>
+                                            <strong>Change</strong>
+                                            <small>等待最近发布记录</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </aside>
                         </div>
 
-                        <button class="floating-action prompt-card prompt-card-primary" data-prompt="请模拟一次 paymentservice 延迟升高的线上故障诊断，输出影响判断、证据检查、可能原因和处理建议。">开始诊断</button>
-
-                        <article class="reference-agent-message">
+                        <article class="reference-agent-message diagnosis-preview">
                             <div class="reference-agent-avatar operator-avatar operator-tone-blue" id="welcomeOperatorAvatar"></div>
                             <div class="reference-agent-copy">
-                                <p class="reference-agent-byline"><span id="welcomeOperatorName">林澈</span> 正在值班</p>
-                                <p class="reference-agent-title">如果你问的是 <strong>paymentservice p95 为什么突然升高</strong>，我的判断是：</p>
+                                <p class="reference-agent-byline">建议节奏</p>
                                 <blockquote>先看 Redis timeout 和下游重试是否同时抬升，再判断是否需要回滚。</blockquote>
-                                <h3>为什么不先重启</h3>
-                                <p>重启只能消除表象，真正影响恢复时间的通常是下面 5 件事：</p>
-                                <ul>
-                                    <li>错误率是否同步上升</li>
-                                    <li>队列堆积是否扩大</li>
-                                    <li>Redis / DB timeout 是否集中出现</li>
-                                    <li>最近发布是否改变调用路径</li>
-                                    <li>下游重试是否放大流量</li>
-                                </ul>
-                                <h3>一个比较稳的节奏</h3>
-                                <p>先确认影响面，再拉取 metrics 和 error logs，最后把历史相似案例作为辅助证据，不把历史标签当实时事实。</p>
+                                <div class="preview-columns">
+                                    <div>
+                                        <h3>先确认</h3>
+                                        <ul>
+                                            <li>错误率是否同步上升</li>
+                                            <li>队列堆积是否扩大</li>
+                                            <li>最近发布是否改变调用路径</li>
+                                        </ul>
+                                    </div>
+                                    <div>
+                                        <h3>再处置</h3>
+                                        <ul>
+                                            <li>拉取 metrics 与 error logs</li>
+                                            <li>使用历史案例作辅助证据</li>
+                                            <li>输出回滚、限流和验证步骤</li>
+                                        </ul>
+                                    </div>
+                                </div>
                             </div>
                         </article>
                     </section>
@@ -310,7 +377,7 @@
         </div>
     </div>
 
-    <script src="config.js?v=ui-20260421-2"></script>
-    <script src="app.js?v=ui-20260421-2"></script>
+    <script src="config.js?v=ui-20260425-1"></script>
+    <script src="app.js?v=ui-20260425-1"></script>
 </body>
 </html>

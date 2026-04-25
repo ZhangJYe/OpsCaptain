@@ -645,7 +645,7 @@ class SuperBizAgentApp {
         const selected = activePanel
             ? activePanel.querySelectorAll('[data-skill-choice].active').length
             : document.querySelectorAll('[data-skill-choice].active').length;
-        this.selectedSkillCount.textContent = `${selected} active`;
+        this.selectedSkillCount.textContent = `${selected} 已启用`;
     }
 
     applyPrompt(prompt) {
