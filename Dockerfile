@@ -20,7 +20,7 @@ WORKDIR /app
 COPY --from=builder /build/superbizagent .
 COPY --from=builder /build/manifest/config/config.yaml manifest/config/config.yaml
 
-RUN mkdir -p /app/docs /app/docs/quarantine && \
+RUN mkdir -p /app/docs /app/docs/quarantine /app/var/runtime && \
     chown -R appuser:appuser /app
 
 USER appuser

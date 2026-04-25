@@ -121,6 +121,11 @@ ensure_prometheus_bind_files() {
   fi
 }
 
+ensure_runtime_volume_permissions() {
+  $COMPOSE run --rm --no-deps --user root --entrypoint sh backend -c \
+    'mkdir -p /app/var/runtime/ledger /app/var/runtime/artifacts && chown -R 1000:1000 /app/var/runtime'
+}
+
 write_site_block() {
   site_label="$1"
 
@@ -323,6 +328,7 @@ fi
 ensure_prometheus_bind_files
 
 $COMPOSE pull
+ensure_runtime_volume_permissions
 if ! $COMPOSE up -d --wait --wait-timeout 180 --remove-orphans; then
   $COMPOSE ps || true
   $COMPOSE logs --tail=120 backend frontend caddy jaeger prometheus rabbitmq redis || true
