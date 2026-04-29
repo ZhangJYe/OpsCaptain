@@ -56,6 +56,16 @@ cors:
   allowed_origins:
     - "*"
 
+harness:
+  max_iterations: 10
+  task_timeout_ms: 300000
+  retry_budget: 3
+  fail_fast: false
+  validation:
+    enabled: true
+    contract_enforce: true
+    strict_mode: false
+
 milvus:
   address: "localhost:19530"
 
