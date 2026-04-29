@@ -76,7 +76,9 @@ func (r *Runtime) Dispatch(ctx context.Context, task *protocol.TaskEnvelope) (*p
 		return nil, fmt.Errorf("agent %q not registered", task.Assignee)
 	}
 
-	_ = r.ledger.UpdateTaskStatus(persistCtx, task.TaskID, protocol.TaskStatusRunning)
+	if err := r.ledger.UpdateTaskStatus(persistCtx, task.TaskID, protocol.TaskStatusRunning); err != nil {
+		g.Log().Warningf(ctx, "[runtime] update task status to running failed: %v", err)
+	}
 	_ = r.Publish(persistCtx, &protocol.TaskEvent{
 		EventID:   uuid.NewString(),
 		TaskID:    task.TaskID,
@@ -113,8 +115,12 @@ func (r *Runtime) Dispatch(ctx context.Context, task *protocol.TaskEnvelope) (*p
 			attribute.String("result.status", string(protocol.ResultStatusFailed)),
 		)
 		failResult := failureResultForError(task, startedAt, err, dispatchTimeout)
-		_ = r.ledger.AppendResult(persistCtx, task.TaskID, failResult)
-		_ = r.ledger.UpdateTaskStatus(persistCtx, task.TaskID, protocol.TaskStatusFailed)
+		if appendErr := r.ledger.AppendResult(persistCtx, task.TaskID, failResult); appendErr != nil {
+			g.Log().Warningf(ctx, "[runtime] append failure result to ledger failed: %v", appendErr)
+		}
+		if statusErr := r.ledger.UpdateTaskStatus(persistCtx, task.TaskID, protocol.TaskStatusFailed); statusErr != nil {
+			g.Log().Warningf(ctx, "[runtime] update task status to failed: %v", statusErr)
+		}
 		if isDispatchTimeout(err) {
 			_ = r.Publish(persistCtx, &protocol.TaskEvent{
 				EventID: uuid.NewString(),
@@ -166,7 +172,9 @@ func (r *Runtime) Dispatch(ctx context.Context, task *protocol.TaskEnvelope) (*p
 		return nil, err
 	}
 
-	_ = r.ledger.UpdateTaskStatus(persistCtx, task.TaskID, taskStatusForResult(result.Status))
+	if statusErr := r.ledger.UpdateTaskStatus(persistCtx, task.TaskID, taskStatusForResult(result.Status)); statusErr != nil {
+		g.Log().Warningf(ctx, "[runtime] update task status to %s failed: %v", taskStatusForResult(result.Status), statusErr)
+	}
 	payload := map[string]any{
 		"status":          result.Status,
 		"summary_length":  len(strings.TrimSpace(result.Summary)),

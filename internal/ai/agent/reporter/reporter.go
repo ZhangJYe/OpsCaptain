@@ -409,10 +409,3 @@ func collectDegradationReasons(results []*protocol.TaskResult) []string {
 	}
 	return reasons
 }
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}

@@ -151,7 +151,7 @@ func selectToolItems(items []ContextItem, profile ContextProfile) ([]ContextItem
 	}
 
 	remaining := profile.Budget.ToolTokens
-	selected := make([]ContextItem, 0, minInt(len(items), profile.MaxToolItems))
+	selected := make([]ContextItem, 0, min(len(items), profile.MaxToolItems))
 	dropped := make([]ContextItem, 0)
 	used := 0
 	for idx, item := range items {
@@ -239,7 +239,7 @@ func selectHistory(history []*schema.Message, profile ContextProfile) ([]*schema
 	maxMessages := profile.MaxHistoryMessages
 	remaining := profile.Budget.HistoryTokens
 	selectedIdx := make(map[int]bool)
-	selected := make([]*schema.Message, 0, minInt(len(history), maxMessages))
+	selected := make([]*schema.Message, 0, min(len(history), maxMessages))
 	dropped := make([]ContextItem, 0)
 	used := 0
 	selectedCount := 0
@@ -295,7 +295,7 @@ func selectMemories(entries []*mem.MemoryEntry, profile ContextProfile, now time
 	}
 
 	remaining := profile.Budget.MemoryTokens
-	selected := make([]ContextItem, 0, minInt(len(entries), profile.MaxMemoryItems))
+	selected := make([]ContextItem, 0, min(len(entries), profile.MaxMemoryItems))
 	dropped := make([]ContextItem, 0)
 	used := 0
 	selectedCount := 0
@@ -451,11 +451,4 @@ func hasSummaryPrefix(msg *schema.Message) bool {
 		return false
 	}
 	return strings.HasPrefix(strings.TrimSpace(msg.Content), "[对话历史摘要]")
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

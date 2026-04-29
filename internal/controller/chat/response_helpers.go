@@ -6,6 +6,7 @@ import (
 	"SuperBizAgent/utility/safety"
 	traceutil "SuperBizAgent/utility/tracing"
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -65,6 +66,12 @@ func userFacingExecutionError(err error) (int, string) {
 		return http.StatusTooManyRequests, "daily token limit exceeded for this session"
 	case strings.Contains(strings.ToLower(err.Error()), "llm concurrency queue timeout"):
 		return http.StatusServiceUnavailable, "AI is temporarily busy. Please retry shortly."
+	case errors.Is(err, context.DeadlineExceeded) || strings.Contains(strings.ToLower(err.Error()), "timeout"):
+		return http.StatusGatewayTimeout, "AI response timeout. The request may still be processing — please retry."
+	case errors.Is(err, context.Canceled):
+		return 0, ""
+	case strings.Contains(strings.ToLower(err.Error()), "circuit breaker open"):
+		return http.StatusServiceUnavailable, "AI service temporarily unavailable. Please retry later."
 	default:
 		return 0, ""
 	}

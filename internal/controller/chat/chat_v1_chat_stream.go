@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/cloudwego/eino/compose"
 	"github.com/gogf/gf/v2/frame/g"
@@ -35,7 +36,8 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 	ctx = context.WithValue(ctx, consts.CtxKeyClientID, req.Id)
 	ctx = enrichRequestContext(ctx, id, requestID)
 
-	g.Log().Infof(ctx, "[session:%s][req:%s] ChatStream request received, question length: %d", id, requestID, len(msg))
+	phaseStart := time.Now()
+	g.Log().Infof(ctx, "[session:%s][req:%s] ChatStream start, question length: %d", id, requestID, len(msg))
 
 	if err := rejectSuspiciousPrompt(ctx, msg); err != nil {
 		return nil, err
@@ -43,9 +45,13 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 
 	client, err := c.service.Create(ctx, g.RequestFromCtx(ctx))
 	if err != nil {
+		g.Log().Errorf(ctx, "[session:%s][req:%s] ChatStream init failed: SSE client create error: %v", id, requestID, err)
 		return nil, err
 	}
+	g.Log().Debugf(ctx, "[session:%s][req:%s] ChatStream phase=sse_init duration=%dms", id, requestID, time.Since(phaseStart).Milliseconds())
 	if decision := getDegradationDecision(ctx, "chat_stream"); decision.Enabled {
+		g.Log().Infof(ctx, "[session:%s][req:%s] ChatStream phase=degraded reason=%s duration=%dms",
+			id, requestID, decision.Reason, time.Since(phaseStart).Milliseconds())
 		_, filteredReason := filterAssistantPayload(ctx, "", []string{decision.Reason})
 		sendChatStreamMeta(client, "degraded", "", filteredReason, true, decision.Reason)
 		streamDetailsToClient(client, filteredReason)
@@ -58,9 +64,15 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 	defer releaseSessionLock(id, mu)
 
 	if shouldUseChatMultiAgent(ctx, msg) {
+		g.Log().Infof(ctx, "[session:%s][req:%s] ChatStream phase=multi_agent_start duration=%dms",
+			id, requestID, time.Since(phaseStart).Milliseconds())
 		response, execErr := runChatMultiAgent(ctx, id, msg)
 		if execErr != nil {
+			g.Log().Errorf(ctx, "[session:%s][req:%s] ChatStream phase=multi_agent_failed error=%v duration=%dms",
+				id, requestID, execErr, time.Since(phaseStart).Milliseconds())
 			if fallback := userFacingChatError(ctx, execErr); fallback != nil {
+				g.Log().Infof(ctx, "[session:%s][req:%s] ChatStream phase=multi_agent_fallback reason=%s",
+					id, requestID, fallback.DegradationReason)
 				_, filteredDetail := filterAssistantPayload(ctx, "", fallback.Detail)
 				sendChatStreamMeta(client, fallback.Mode, fallback.TraceID, filteredDetail, fallback.Degraded, fallback.DegradationReason)
 				streamDetailsToClient(client, filteredDetail)
@@ -73,6 +85,8 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 			return &v1.ChatStreamRes{}, nil
 		}
 		_, filteredDetail := filterAssistantPayload(ctx, "", response.Detail)
+		g.Log().Infof(ctx, "[session:%s][req:%s] ChatStream phase=multi_agent_success content_len=%d duration=%dms",
+			id, requestID, len(response.Content), time.Since(phaseStart).Milliseconds())
 		sendChatStreamMeta(client, "multi_agent", response.TraceID, filteredDetail, response.Degraded(), response.DegradationReason)
 		streamDetailsToClient(client, filteredDetail)
 		filteredContent, _ := filterAssistantPayload(ctx, response.Content, nil)
@@ -84,7 +98,11 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 	sessionMem := mem.GetSimpleMemory(id)
 
 	memorySvc := aiservice.NewMemoryService()
+	ctxBuildStart := time.Now()
 	contextPkg, contextDetail := memorySvc.BuildChatPackage(ctx, id, msg, sessionMem.GetContextMessages())
+	g.Log().Debugf(ctx, "[session:%s][req:%s] ChatStream phase=context_built history=%d memory=%d docs=%d tools=%d duration=%dms",
+		id, requestID, len(contextPkg.HistoryMessages), len(contextPkg.MemoryItems),
+		len(contextPkg.DocumentItems), len(contextPkg.ToolItems), time.Since(ctxBuildStart).Milliseconds())
 
 	userMessage := &chat_pipeline.UserMessage{
 		ID:        id,
@@ -93,9 +111,13 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 		History:   contextPkg.HistoryMessages,
 	}
 
-	runner, err := buildChatAgent(ctx, msg)
-	if err != nil {
-		if fallback := userFacingChatError(ctx, err); fallback != nil {
+	runner, agentBuildErr := buildChatAgent(ctx, msg)
+	if agentBuildErr != nil {
+		g.Log().Errorf(ctx, "[session:%s][req:%s] ChatStream phase=agent_build_failed error=%v duration=%dms",
+			id, requestID, agentBuildErr, time.Since(phaseStart).Milliseconds())
+		if fallback := userFacingChatError(ctx, agentBuildErr); fallback != nil {
+			g.Log().Infof(ctx, "[session:%s][req:%s] ChatStream phase=agent_build_fallback reason=%s",
+				id, requestID, fallback.DegradationReason)
 			_, filteredDetail := filterAssistantPayload(ctx, "", fallback.Detail)
 			sendChatStreamMeta(client, fallback.Mode, "", filteredDetail, fallback.Degraded, fallback.DegradationReason)
 			streamDetailsToClient(client, filteredDetail)
@@ -103,12 +125,14 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 			client.SendToClient("done", "Stream completed")
 			return &v1.ChatStreamRes{}, nil
 		}
-		g.Log().Errorf(ctx, "[session:%s][req:%s] BuildChatAgent failed: %v", id, requestID, err)
-		client.SendToClient("error", err.Error())
+		g.Log().Errorf(ctx, "[session:%s][req:%s] BuildChatAgent failed: %v", id, requestID, agentBuildErr)
+		client.SendToClient("error", agentBuildErr.Error())
 		client.SendToClient("done", "Stream completed")
 		return &v1.ChatStreamRes{}, nil
 	}
 	_, filteredDetail := filterAssistantPayload(ctx, "", contextDetail)
+	g.Log().Infof(ctx, "[session:%s][req:%s] ChatStream phase=agent_built duration=%dms",
+		id, requestID, time.Since(phaseStart).Milliseconds())
 	sendChatStreamMeta(client, "chat", "", filteredDetail, false, "")
 	streamDetailsToClient(client, filteredDetail)
 	sr, err := runner.Stream(ctx, userMessage, compose.WithCallbacks(log_call_back.LogCallback(nil)))
@@ -147,6 +171,25 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 		}
 		if err != nil {
 			g.Log().Errorf(ctx, "[session:%s][req:%s] Stream recv error: %v", id, requestID, err)
+
+			if fullResponse.Len() > 0 {
+				g.Log().Infof(ctx, "[session:%s][req:%s] Stream interrupted but partial content (%d chars) already received, ending gracefully",
+					id, requestID, fullResponse.Len())
+				client.SendToClient("done", "Stream completed")
+				return &v1.ChatStreamRes{}, nil
+			}
+
+			if fallback := userFacingChatError(ctx, err); fallback != nil {
+				g.Log().Infof(ctx, "[session:%s][req:%s] ChatStream phase=stream_fallback reason=%s",
+					id, requestID, fallback.DegradationReason)
+				_, filteredDetail := filterAssistantPayload(ctx, "", fallback.Detail)
+				sendChatStreamMeta(client, fallback.Mode, fallback.TraceID, filteredDetail, fallback.Degraded, fallback.DegradationReason)
+				streamDetailsToClient(client, filteredDetail)
+				streamTextToClient(client, fallback.Answer)
+				client.SendToClient("done", "Stream completed")
+				return &v1.ChatStreamRes{}, nil
+			}
+
 			client.SendToClient("error", err.Error())
 			client.SendToClient("done", "Stream completed")
 			return &v1.ChatStreamRes{}, nil

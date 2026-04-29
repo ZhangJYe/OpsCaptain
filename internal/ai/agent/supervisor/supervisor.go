@@ -50,6 +50,15 @@ func (a *Agent) Handle(ctx context.Context, task *protocol.TaskEnvelope) (*proto
 	triageTask.MemoryRefs = append([]protocol.MemoryRef(nil), task.MemoryRefs...)
 	triageResult, err := rt.Dispatch(ctx, triageTask)
 	if err != nil {
+		if triageResult == nil {
+			triageResult = &protocol.TaskResult{
+				TaskID:     triageTask.TaskID,
+				Agent:      triage.AgentName,
+				Status:     protocol.ResultStatusFailed,
+				Summary:    err.Error(),
+				Confidence: 0,
+			}
+		}
 		return triageResult, err
 	}
 
@@ -88,14 +97,21 @@ func (a *Agent) Handle(ctx context.Context, task *protocol.TaskEnvelope) (*proto
 			})
 			childTask.MemoryRefs = append([]protocol.MemoryRef(nil), task.MemoryRefs...)
 			result, dispatchErr := rt.Dispatch(ctx, childTask)
-			mu.Lock()
-			defer mu.Unlock()
+			var artifactRef *protocol.ArtifactRef
 			if result != nil {
-				if ref, artifactErr := createResultArtifact(ctx, rt, result); artifactErr == nil && ref != nil {
-					result.ArtifactRefs = append(result.ArtifactRefs, *ref)
+				ref, artifactErr := createResultArtifact(ctx, rt, result)
+				if artifactErr == nil && ref != nil {
+					artifactRef = ref
+				}
+			}
+			mu.Lock()
+			if result != nil {
+				if artifactRef != nil {
+					result.ArtifactRefs = append(result.ArtifactRefs, *artifactRef)
 				}
 				childResults = append(childResults, result)
 			}
+			mu.Unlock()
 			if dispatchErr != nil && result == nil {
 				childResults = append(childResults, &protocol.TaskResult{
 					TaskID:     childTask.TaskID,

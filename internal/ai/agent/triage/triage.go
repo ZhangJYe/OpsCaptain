@@ -67,15 +67,19 @@ func (a *Agent) Handle(_ context.Context, task *protocol.TaskEnvelope) (*protoco
 	query := strings.TrimSpace(task.Goal)
 	lower := strings.ToLower(query)
 	selected := rule{
-		intent:   "alert_analysis",
-		domains:  []string{"metrics", "logs", "knowledge"},
-		priority: "medium",
-		summary:  "已识别为告警分析任务，优先查询告警、日志和知识库。",
+		intent:   "general_qa",
+		domains:  []string{"knowledge"},
+		priority: "low",
+		summary:  "已识别为通用问题，优先查询知识库。",
 	}
+	confidence := 0.5
+	matched := false
 
 	for _, candidate := range triageRules {
 		if matchesRule(lower, candidate.keywords) {
 			selected = candidate
+			confidence = 0.85
+			matched = true
 			break
 		}
 	}
@@ -84,12 +88,16 @@ func (a *Agent) Handle(_ context.Context, task *protocol.TaskEnvelope) (*protoco
 		selected.priority = "high"
 	}
 
+	if !matched && (strings.Contains(lower, "错误") || strings.Contains(lower, "error") || strings.Contains(lower, "异常")) {
+		confidence = 0.65
+	}
+
 	return agentcontracts.AttachMetadata(&protocol.TaskResult{
 		TaskID:     task.TaskID,
 		Agent:      a.Name(),
 		Status:     protocol.ResultStatusSucceeded,
 		Summary:    selected.summary,
-		Confidence: 0.76,
+		Confidence: confidence,
 		Metadata: map[string]any{
 			"intent":   selected.intent,
 			"domains":  selected.domains,
