@@ -39,7 +39,7 @@ type MemoryPromoteOptions struct {
 
 var (
 	processMemoryEventFunc  = processMemoryEventWithConfiguredAgent
-	newMemoryChatModel      = models.OpenAIForDeepSeekV3Quick
+	newMemoryChatModel      = models.OpenAIForGLMFast
 	memoryExtractionTimeout = loadMemoryExtractionTimeout
 	memoryExtractionMaxJobs = loadMemoryExtractionMaxJobs
 	memoryExtractionWait    = loadMemoryExtractionWait
@@ -236,7 +236,7 @@ func loadMemoryAgentMode(ctx context.Context) string {
 }
 
 func memoryAgentLLMConfigured(ctx context.Context) bool {
-	v, err := g.Cfg().Get(ctx, "ds_quick_chat_model.api_key")
+	v, err := g.Cfg().Get(ctx, "glm_chat_model_fast.api_key")
 	if err != nil {
 		return false
 	}

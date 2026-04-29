@@ -8,7 +8,7 @@ import (
 )
 
 func newChatModel(ctx context.Context) (cm model.ToolCallingChatModel, err error) {
-	cm, err = models.OpenAIForDeepSeekV3Quick(ctx)
+	cm, err = models.OpenAIForGLMFast(ctx)
 	if err != nil {
 		return nil, err
 	}

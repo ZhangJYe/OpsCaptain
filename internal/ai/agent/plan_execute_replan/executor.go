@@ -23,7 +23,7 @@ func NewExecutor(ctx context.Context) (adk.Agent, error) {
 	toolList = append(toolList, tools.NewQueryInternalDocsTool())
 	// time
 	toolList = append(toolList, tools.NewGetCurrentTimeTool())
-	execModel, err := models.OpenAIForDeepSeekV3Quick(ctx)
+	execModel, err := models.OpenAIForGLMFast(ctx)
 	if err != nil {
 		return nil, err
 	}

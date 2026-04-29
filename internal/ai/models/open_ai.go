@@ -9,16 +9,16 @@ import (
 	"github.com/gogf/gf/v2/frame/g"
 )
 
-func OpenAIForDeepSeekV31Think(ctx context.Context) (cm model.ToolCallingChatModel, err error) {
-	model, err := g.Cfg().Get(ctx, "ds_think_chat_model.model")
+func OpenAIForGLM(ctx context.Context) (cm model.ToolCallingChatModel, err error) {
+	model, err := g.Cfg().Get(ctx, "glm_chat_model.model")
 	if err != nil {
 		return nil, err
 	}
-	api_key, err := g.Cfg().Get(ctx, "ds_think_chat_model.api_key")
+	api_key, err := g.Cfg().Get(ctx, "glm_chat_model.api_key")
 	if err != nil {
 		return nil, err
 	}
-	base_url, err := g.Cfg().Get(ctx, "ds_think_chat_model.base_url")
+	base_url, err := g.Cfg().Get(ctx, "glm_chat_model.base_url")
 	if err != nil {
 		return nil, err
 	}
@@ -34,16 +34,16 @@ func OpenAIForDeepSeekV31Think(ctx context.Context) (cm model.ToolCallingChatMod
 	return wrapToolCallingChatModel(cm, config.Model), nil
 }
 
-func OpenAIForDeepSeekV3Quick(ctx context.Context) (cm model.ToolCallingChatModel, err error) {
-	model, err := g.Cfg().Get(ctx, "ds_quick_chat_model.model")
+func OpenAIForGLMFast(ctx context.Context) (cm model.ToolCallingChatModel, err error) {
+	model, err := g.Cfg().Get(ctx, "glm_chat_model_fast.model")
 	if err != nil {
 		return nil, err
 	}
-	api_key, err := g.Cfg().Get(ctx, "ds_quick_chat_model.api_key")
+	api_key, err := g.Cfg().Get(ctx, "glm_chat_model_fast.api_key")
 	if err != nil {
 		return nil, err
 	}
-	base_url, err := g.Cfg().Get(ctx, "ds_quick_chat_model.base_url")
+	base_url, err := g.Cfg().Get(ctx, "glm_chat_model_fast.base_url")
 	if err != nil {
 		return nil, err
 	}

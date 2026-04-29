@@ -9,7 +9,7 @@ import (
 )
 
 func NewPlanner(ctx context.Context) (adk.Agent, error) {
-	planModel, err := models.OpenAIForDeepSeekV31Think(ctx)
+	planModel, err := models.OpenAIForGLM(ctx)
 	if err != nil {
 		return nil, err
 	}

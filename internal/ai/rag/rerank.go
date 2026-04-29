@@ -37,7 +37,7 @@ func Rerank(ctx context.Context, query string, docs []*schema.Document, topK int
 	rerankCtx, cancel := context.WithTimeout(ctx, rerankTimeout(ctx))
 	defer cancel()
 
-	chatModel, err := models.OpenAIForDeepSeekV3Quick(rerankCtx)
+	chatModel, err := models.OpenAIForGLMFast(rerankCtx)
 	if err != nil {
 		g.Log().Debugf(ctx, "rerank skipped: model init failed: %v", err)
 		return RerankResult{Docs: docs, Enabled: false}

@@ -28,7 +28,7 @@ func ValidateStartupSecrets(ctx context.Context) error {
 		configPath string
 		display    string
 	}{
-		{configPath: "ds_quick_chat_model.api_key", display: "GLM API key"},
+		{configPath: "glm_chat_model_fast.api_key", display: "GLM API key"},
 		{configPath: "doubao_embedding_model.api_key", display: "SiliconFlow API key"},
 	} {
 		value, err := g.Cfg().Get(ctx, check.configPath)

@@ -13,15 +13,15 @@ import (
 
 func main() {
 	ctx := context.Background()
-	modelVal, err := g.Cfg().Get(ctx, "ds_quick_chat_model.model")
+	modelVal, err := g.Cfg().Get(ctx, "glm_chat_model_fast.model")
 	if err != nil {
 		panic(err)
 	}
-	apiKeyVal, err := g.Cfg().Get(ctx, "ds_quick_chat_model.api_key")
+	apiKeyVal, err := g.Cfg().Get(ctx, "glm_chat_model_fast.api_key")
 	if err != nil {
 		panic(err)
 	}
-	baseURLVal, err := g.Cfg().Get(ctx, "ds_quick_chat_model.base_url")
+	baseURLVal, err := g.Cfg().Get(ctx, "glm_chat_model_fast.base_url")
 	if err != nil {
 		panic(err)
 	}

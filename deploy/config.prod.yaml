@@ -64,12 +64,12 @@ milvus:
     m: 16
     ef_construction: 200
 
-ds_think_chat_model:
+glm_chat_model:
   model: "GLM-4.5-AIR"
   api_key: "${GLM_API_KEY}"
   base_url: "https://open.bigmodel.cn/api/paas/v4"
 
-ds_quick_chat_model:
+glm_chat_model_fast:
   model: "GLM-4.5-AIR"
   api_key: "${GLM_API_KEY}"
   base_url: "https://open.bigmodel.cn/api/paas/v4"

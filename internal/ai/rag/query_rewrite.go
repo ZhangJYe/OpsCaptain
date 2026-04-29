@@ -33,7 +33,7 @@ func RewriteQuery(ctx context.Context, query string) string {
 	rewriteCtx, cancel := context.WithTimeout(ctx, rewriteTimeout(ctx))
 	defer cancel()
 
-	chatModel, err := models.OpenAIForDeepSeekV3Quick(rewriteCtx)
+	chatModel, err := models.OpenAIForGLMFast(rewriteCtx)
 	if err != nil {
 		g.Log().Debugf(ctx, "query rewrite skipped: model init failed: %v", err)
 		return query
@@ -74,7 +74,7 @@ func RewriteQueryMulti(ctx context.Context, query string, n int) []string {
 	rewriteCtx, cancel := context.WithTimeout(ctx, rewriteTimeout(ctx))
 	defer cancel()
 
-	chatModel, err := models.OpenAIForDeepSeekV3Quick(rewriteCtx)
+	chatModel, err := models.OpenAIForGLMFast(rewriteCtx)
 	if err != nil {
 		return []string{query}
 	}
