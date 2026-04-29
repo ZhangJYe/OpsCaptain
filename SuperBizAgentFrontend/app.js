@@ -3,6 +3,7 @@ class SuperBizAgentApp {
     constructor() {
         this.apiBaseUrl = this.resolveApiBaseUrl();
         this.authConfig = this.resolveAuthConfig();
+        this.siteRecord = this.resolveSiteRecordConfig();
         this.observability = this.resolveObservabilityConfig();
         this.currentMode = 'quick'; // 'quick' 或 'stream'
         this.sessionId = this.generateSessionId();
@@ -30,6 +31,7 @@ class SuperBizAgentApp {
         this.syncOperatorUI();
         this.bindEvents();
         this.updateUI();
+        this.renderSiteRecordInfo();
         this.initMarkdown();
         this.checkAndSetCentered();
         this.renderChatHistory();
@@ -52,6 +54,15 @@ class SuperBizAgentApp {
         return {
             authToken: (runtimeConfig.authToken || '').trim(),
             authTokenStorageKey: (runtimeConfig.authTokenStorageKey || 'opscaptain-auth-token').trim() || 'opscaptain-auth-token',
+        };
+    }
+
+    resolveSiteRecordConfig() {
+        const runtimeConfig = window.SUPERBIZAGENT_CONFIG || {};
+        const configured = runtimeConfig.siteRecord || {};
+        return {
+            icpNumber: (configured.icpNumber || '').trim(),
+            icpLink: (configured.icpLink || 'https://beian.miit.gov.cn/').trim() || 'https://beian.miit.gov.cn/',
         };
     }
 
@@ -248,6 +259,8 @@ class SuperBizAgentApp {
         this.skillMarketPanels = document.querySelectorAll('[data-skill-panel]');
         this.skillChoiceButtons = document.querySelectorAll('[data-skill-choice]');
         this.selectedSkillCount = document.getElementById('selectedSkillCount');
+        this.siteRecordFooter = document.getElementById('siteRecordFooter');
+        this.siteRecordLink = document.getElementById('siteRecordLink');
         
         // 输入区域元素
         this.messageInput = document.getElementById('messageInput');
@@ -304,6 +317,21 @@ class SuperBizAgentApp {
         
         // 初始化时检查是否需要居中
         this.checkAndSetCentered();
+    }
+
+    renderSiteRecordInfo() {
+        if (!this.siteRecordFooter || !this.siteRecordLink) {
+            return;
+        }
+        const icpNumber = this.siteRecord.icpNumber;
+        if (!icpNumber) {
+            this.siteRecordFooter.hidden = true;
+            return;
+        }
+        this.siteRecordLink.textContent = icpNumber;
+        this.siteRecordLink.href = this.siteRecord.icpLink;
+        this.siteRecordLink.setAttribute('aria-label', `ICP备案号 ${icpNumber}`);
+        this.siteRecordFooter.hidden = false;
     }
 
     // 绑定事件监听器

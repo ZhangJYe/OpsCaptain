@@ -646,6 +646,44 @@ body.sidebar-open .sidebar-backdrop {
         radial-gradient(760px 320px at 52% -12%, rgba(117, 185, 194, 0.12), transparent 70%);
 }
 
+.site-record-footer {
+    border-top: 1px solid var(--line-soft);
+    padding: 12px 24px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.74);
+    backdrop-filter: blur(12px);
+}
+
+[data-theme="dark"] .site-record-footer {
+    background: rgba(18, 24, 34, 0.78);
+}
+
+.site-record-copy {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    text-align: center;
+    color: var(--text-subtle);
+    font-size: 0.78rem;
+    line-height: 1.6;
+}
+
+.site-record-link {
+    color: var(--text-subtle);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.site-record-link:hover {
+    color: var(--accent-strong);
+    text-decoration: underline;
+}
+
 .topbar {
     position: sticky;
     top: 0;
