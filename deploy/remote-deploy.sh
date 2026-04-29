@@ -110,6 +110,10 @@ ensure_prometheus_bind_files() {
     rm -rf "./prometheus/opscaptionai-cost-alerts.yml"
   fi
 
+  if [ -d "./prometheus/freeexchanged-alerts.yml" ]; then
+    rm -rf "./prometheus/freeexchanged-alerts.yml"
+  fi
+
   if [ ! -f "./prometheus/prometheus.yml" ]; then
     echo "missing file: ./prometheus/prometheus.yml"
     exit 1
@@ -117,6 +121,11 @@ ensure_prometheus_bind_files() {
 
   if [ ! -f "./prometheus/opscaptionai-cost-alerts.yml" ]; then
     echo "missing file: ./prometheus/opscaptionai-cost-alerts.yml"
+    exit 1
+  fi
+
+  if [ ! -f "./prometheus/freeexchanged-alerts.yml" ]; then
+    echo "missing file: ./prometheus/freeexchanged-alerts.yml"
     exit 1
   fi
 }

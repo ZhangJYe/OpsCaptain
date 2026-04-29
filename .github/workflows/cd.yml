@@ -154,6 +154,7 @@ jobs:
           cp deploy/remote-deploy.sh dist-deploy/remote-deploy.sh
           cp deploy/prometheus/prometheus.yml dist-deploy/prometheus/prometheus.yml
           cp deploy/prometheus/opscaptionai-cost-alerts.yml dist-deploy/prometheus/opscaptionai-cost-alerts.yml
+          cp deploy/prometheus/freeexchanged-alerts.yml dist-deploy/prometheus/freeexchanged-alerts.yml
           printf '%s' "${PROD_ENV_FILE}" | tr -d '\r' > dist-deploy/.env.production
 
           jaeger_endpoint="$(normalize_optional_env_value JAEGER_ENDPOINT http://jaeger:14268/api/traces)"
@@ -225,7 +226,8 @@ jobs:
           ssh -p "${ECS_SSH_PORT}" "${ECS_USER}@${ECS_HOST}" "\
             mkdir -p '${REMOTE_APP_DIR}' '${REMOTE_APP_DIR}/prometheus' && \
             rm -rf '${REMOTE_APP_DIR}/prometheus/prometheus.yml' && \
-            rm -rf '${REMOTE_APP_DIR}/prometheus/opscaptionai-cost-alerts.yml'"
+            rm -rf '${REMOTE_APP_DIR}/prometheus/opscaptionai-cost-alerts.yml' && \
+            rm -rf '${REMOTE_APP_DIR}/prometheus/freeexchanged-alerts.yml'"
 
       - name: Upload deployment files
         run: |
@@ -237,6 +239,7 @@ jobs:
           scp -P "${ECS_SSH_PORT}" dist-deploy/release.env "${ECS_USER}@${ECS_HOST}:${REMOTE_APP_DIR}/release.env"
           scp -P "${ECS_SSH_PORT}" dist-deploy/prometheus/prometheus.yml "${ECS_USER}@${ECS_HOST}:${REMOTE_APP_DIR}/prometheus/"
           scp -P "${ECS_SSH_PORT}" dist-deploy/prometheus/opscaptionai-cost-alerts.yml "${ECS_USER}@${ECS_HOST}:${REMOTE_APP_DIR}/prometheus/"
+          scp -P "${ECS_SSH_PORT}" dist-deploy/prometheus/freeexchanged-alerts.yml "${ECS_USER}@${ECS_HOST}:${REMOTE_APP_DIR}/prometheus/"
 
       - name: Deploy on ECS
         run: |
@@ -244,5 +247,6 @@ jobs:
             cd '${REMOTE_APP_DIR}' && \
             test -f './prometheus/prometheus.yml' && \
             test -f './prometheus/opscaptionai-cost-alerts.yml' && \
+            test -f './prometheus/freeexchanged-alerts.yml' && \
             chmod +x ./remote-deploy.sh && \
             APP_DIR='${REMOTE_APP_DIR}' ./remote-deploy.sh"

@@ -67,7 +67,7 @@ func ToolItemSnippets(items []ContextItem, limit int) []string {
 	if limit <= 0 || len(items) == 0 {
 		return nil
 	}
-	out := make([]string, 0, minInt(limit, len(items)))
+	out := make([]string, 0, min(limit, len(items)))
 	for idx, item := range items {
 		if idx >= limit {
 			break
