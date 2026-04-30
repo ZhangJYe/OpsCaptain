@@ -37,7 +37,9 @@ export function MainLayout({
   const siteRecord = getSiteRecord()
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="relative flex h-screen overflow-hidden bg-zinc-950 text-zinc-100">
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(9,12,18,0.92)_0%,rgba(6,9,15,0.98)_100%)]" />
+      <div className="pointer-events-none absolute inset-0 opacity-[0.06] [background-image:linear-gradient(to_right,rgba(255,255,255,0.12)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.12)_1px,transparent_1px)] [background-size:72px_72px]" />
       <AnimatePresence>
         {sidebarOpen && (
           <>
@@ -68,16 +70,16 @@ export function MainLayout({
           </>
         )}
       </AnimatePresence>
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="relative flex-1 flex flex-col min-w-0 overflow-hidden">
         <TopBar
           theme={theme}
           onToggleSidebar={onToggleSidebar}
           onToggleTheme={onToggleTheme}
           chatMode={chatMode}
         />
-        <main className="flex-1 overflow-hidden">{children}</main>
+        <main className="relative flex-1 overflow-hidden">{children}</main>
         {siteRecord ? (
-          <footer className="border-t border-zinc-800/50 px-4 py-3 text-center text-xs text-zinc-500">
+          <footer className="border-t border-zinc-900/80 bg-zinc-950/90 px-4 py-3 text-center text-xs text-zinc-500 backdrop-blur-xl">
             <span className="mr-1">ICP备案号：</span>
             <a
               className="font-medium text-zinc-400 transition-colors hover:text-zinc-200 hover:underline"

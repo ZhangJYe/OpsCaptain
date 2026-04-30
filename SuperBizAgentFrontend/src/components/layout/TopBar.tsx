@@ -1,4 +1,4 @@
-import { Menu, Moon, Sun, Layers } from 'lucide-react'
+import { Menu, Moon, Sun, ShieldAlert } from 'lucide-react'
 import type { ChatMode } from '../../types/chat'
 
 interface Props {
@@ -10,34 +10,43 @@ interface Props {
 
 export function TopBar({ theme, onToggleSidebar, onToggleTheme, chatMode }: Props) {
   return (
-    <header className="h-14 glass flex items-center justify-between px-4 shrink-0">
-      <div className="flex items-center gap-3">
+    <header className="h-16 shrink-0 border-b border-zinc-900/80 bg-zinc-950/80 backdrop-blur-xl">
+      <div className="flex h-full items-center justify-between gap-4 px-4 lg:px-6">
+        <div className="flex min-w-0 items-center gap-3">
         <button
           onClick={onToggleSidebar}
-          className="p-2 rounded-lg hover:bg-zinc-800 transition-colors"
+          className="rounded-xl border border-zinc-800/80 bg-zinc-900/70 p-2 text-zinc-300 transition-colors hover:bg-zinc-800"
           aria-label="切换侧栏"
         >
           <Menu size={20} />
         </button>
-        <div className="flex items-center gap-2">
-          <span className="w-7 h-7 rounded-md bg-accent flex items-center justify-center text-xs font-bold text-white">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-accent/30 bg-accent/18 text-sm font-bold text-accent">
             OC
           </span>
-          <span className="font-semibold text-sm">OpsCaption</span>
+          <div className="min-w-0">
+            <div className="truncate text-sm font-semibold text-zinc-100">OpsCaption</div>
+            <div className="truncate text-xs text-zinc-500">生产诊断工作台</div>
+          </div>
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        <span className="text-xs px-2 py-1 rounded-full bg-accent/20 text-accent border border-accent/30">
-          {chatMode === 'quick' ? '快速' : '流式'}
-        </span>
-        <button
-          onClick={onToggleTheme}
-          className="p-2 rounded-lg hover:bg-zinc-800 transition-colors"
-          aria-label="切换主题"
-        >
-          {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="hidden items-center gap-2 rounded-full border border-zinc-800/80 bg-zinc-900/70 px-3 py-1.5 text-xs text-zinc-400 md:flex">
+            <ShieldAlert size={14} className="text-amber-400" />
+            <span>生产环境</span>
+          </div>
+          <span className="rounded-full border border-accent/30 bg-accent/16 px-2.5 py-1 text-xs font-medium text-accent">
+            {chatMode === 'quick' ? '快速回答' : '流式输出'}
+          </span>
+          <button
+            onClick={onToggleTheme}
+            className="rounded-xl border border-zinc-800/80 bg-zinc-900/70 p-2 text-zinc-300 transition-colors hover:bg-zinc-800"
+            aria-label="切换主题"
+          >
+            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
+        </div>
       </div>
     </header>
   )
