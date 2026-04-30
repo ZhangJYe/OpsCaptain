@@ -4,6 +4,12 @@ import type { EndpointStatus } from '../../types/chat'
 
 interface Props {}
 
+const observabilityTargets = [
+  { name: 'Backend', probeUrl: '/ai/readyz', link: '/ai/readyz' },
+  { name: 'Jaeger', probeUrl: '/ai/jaeger/', link: '/ai/jaeger/' },
+  { name: 'Prometheus', probeUrl: '/ai/prometheus/-/healthy', link: '/ai/prometheus/' },
+] as const
+
 export function ObservabilityPanel({}: Props) {
   const [endpoints, setEndpoints] = useState<EndpointStatus[]>([
     { name: 'Backend', status: 'checking', text: '检测中...', link: '/ai/readyz', lastCheck: 0 },
@@ -18,23 +24,19 @@ export function ObservabilityPanel({}: Props) {
     )
 
     const results = await Promise.allSettled(
-      [
-        { name: 'Backend', url: '/ai/readyz' },
-        { name: 'Jaeger', url: '/ai/jaeger/' },
-        { name: 'Prometheus', url: '/ai/prometheus/-/healthy' },
-      ].map(async ({ name, url }) => {
+      observabilityTargets.map(async ({ name, probeUrl, link }) => {
         try {
-          const res = await fetch(url, { signal: AbortSignal.timeout(5000) })
+          const res = await fetch(probeUrl, { signal: AbortSignal.timeout(5000) })
           const status = res.ok ? ('healthy' as const) : ('degraded' as const)
-          return { name, status, text: res.ok ? '正常' : `${res.status}`, lastCheck: now }
+          return { name, status, text: res.ok ? '正常' : `${res.status}`, link, lastCheck: now }
         } catch {
-          return { name, status: 'down' as const, text: '不可达', lastCheck: now }
+          return { name, status: 'down' as const, text: '不可达', link, lastCheck: now }
         }
       })
     )
 
     const newEndpoints = results.map((r) =>
-      r.status === 'fulfilled' ? r.value : { name: '', status: 'down' as const, text: '不可达', lastCheck: now }
+      r.status === 'fulfilled' ? r.value : { name: '', status: 'down' as const, text: '不可达', link: '', lastCheck: now }
     )
     setEndpoints((prev) =>
       prev.map((ep) => newEndpoints.find((n) => n.name === ep.name) || ep)
