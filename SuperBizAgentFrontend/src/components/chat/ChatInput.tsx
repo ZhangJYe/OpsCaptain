@@ -29,7 +29,7 @@ export function ChatInput({ onSend, onStop, isLoading, mode, selectedSkillIds, o
   const [input, setInput] = useState('')
   const [isFocused, setIsFocused] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const { files, isUploading, uploadError, openFilePicker, removeFile, clearFiles, fileInputProps } = useFileUpload()
+  const { files, isUploading, uploadError, removeFile, clearFiles, inputId, handleChange, accept, multiple } = useFileUpload()
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -58,8 +58,7 @@ export function ChatInput({ onSend, onStop, isLoading, mode, selectedSkillIds, o
 
   return (
     <div className="shrink-0 border-t border-zinc-200/80 bg-white/88 px-4 py-4 backdrop-blur-xl dark:border-zinc-900/80 dark:bg-zinc-950/80">
-      {/* Hidden file input */}
-      <input {...fileInputProps} />
+      <input type="file" id={inputId} onChange={handleChange} accept={accept} multiple={multiple} className="hidden" />
 
       <div className="mx-auto max-w-4xl">
         <div
@@ -151,16 +150,12 @@ export function ChatInput({ onSend, onStop, isLoading, mode, selectedSkillIds, o
             </div>
 
             <div className="flex items-center gap-2">
-              {/* Upload button */}
-              <button
-                onClick={openFilePicker}
-                disabled={isUploading || isLoading}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200/80 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-600 transition-all hover:border-accent/30 hover:text-accent disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:border-accent/30 dark:hover:text-accent"
-                title="上传文档到知识库"
-              >
+              <label htmlFor={inputId}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200/80 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-600 cursor-pointer transition-all hover:border-accent/30 hover:text-accent dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:border-accent/30 dark:hover:text-accent"
+                title="上传文档到知识库">
                 {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Paperclip size={14} />}
                 上传文档
-              </button>
+              </label>
 
               <span className="hidden text-[10px] text-zinc-400 dark:text-zinc-600 lg:inline">
                 Enter 发送 · Shift+Enter 换行

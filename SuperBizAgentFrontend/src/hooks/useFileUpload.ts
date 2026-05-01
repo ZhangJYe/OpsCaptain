@@ -1,5 +1,5 @@
-import { useState, useCallback, useRef } from 'react'
-import { getApiBaseUrl } from '../lib/utils'
+import { useState, useCallback } from 'react'
+import { getApiBaseUrl, generateId } from '../lib/utils'
 
 export interface UploadedFile {
   name: string
@@ -11,27 +11,19 @@ interface UseFileUploadReturn {
   files: UploadedFile[]
   isUploading: boolean
   uploadError: string | null
-  openFilePicker: () => void
-  removeFile: (id: string) => void
   clearFiles: () => void
-  fileInputProps: {
-    ref: React.RefObject<HTMLInputElement>
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
-    accept: string
-    multiple: boolean
-    style: React.CSSProperties
-  }
+  removeFile: (id: string) => void
+  inputId: string
+  handleChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+  accept: string
+  multiple: boolean
 }
 
 export function useFileUpload(): UseFileUploadReturn {
   const [files, setFiles] = useState<UploadedFile[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
-  const inputRef = useRef<HTMLInputElement | null>(null)
-
-  const openFilePicker = useCallback(() => {
-    inputRef.current?.click()
-  }, [])
+  const [inputId] = useState(() => `file-upload-${generateId().slice(0, 8)}`)
 
   const uploadFile = useCallback(async (file: File): Promise<UploadedFile | null> => {
     const baseUrl = getApiBaseUrl()
@@ -62,7 +54,7 @@ export function useFileUpload(): UseFileUploadReturn {
     }
   }, [])
 
-  const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files
     if (!selectedFiles || selectedFiles.length === 0) return
 
@@ -85,9 +77,7 @@ export function useFileUpload(): UseFileUploadReturn {
     setIsUploading(false)
 
     // Reset input so same file can be re-selected
-    if (inputRef.current) {
-      inputRef.current.value = ''
-    }
+    e.target.value = ''
   }, [uploadFile])
 
   const removeFile = useCallback((id: string) => {
@@ -103,21 +93,11 @@ export function useFileUpload(): UseFileUploadReturn {
     files,
     isUploading,
     uploadError,
-    openFilePicker,
-    removeFile,
     clearFiles,
-    fileInputProps: {
-      ref: inputRef,
-      onChange: handleFileChange,
-      accept: '.md,.txt,.pdf,.doc,.docx,.csv,.json,.yaml,.yml',
-      multiple: true,
-      style: {
-        position: 'absolute',
-        opacity: 0,
-        width: '1px',
-        height: '1px',
-        overflow: 'hidden',
-      },
-    },
+    removeFile,
+    inputId,
+    handleChange,
+    accept: '.md,.txt,.pdf,.doc,.docx,.csv,.json,.yaml,.yml',
+    multiple: true,
   }
 }
