@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Activity, Database, Waves } from 'lucide-react'
+import { Activity, Waves } from 'lucide-react'
 import { MessageBubble } from './MessageBubble'
 import { StreamingText } from './StreamingText'
 import { ChatInput } from './ChatInput'
@@ -39,37 +39,27 @@ export function ChatView({
 
   return (
     <div className="flex flex-col h-full">
-      <div className="border-b border-zinc-200/80 bg-white/72 px-4 py-3 backdrop-blur-xl dark:border-zinc-900/80 dark:bg-zinc-950/42">
-        <div className="mx-auto flex max-w-4xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="text-[11px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-600">Current Session</div>
-            <div className="mt-1 text-sm text-zinc-700 dark:text-zinc-300">
-              {formatSelectedSkillSummary(selectedSkillIds)}
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="inline-flex items-center gap-1 rounded-full border border-zinc-200/80 bg-zinc-100/90 px-3 py-1.5 text-zinc-500 dark:border-zinc-800/80 dark:bg-zinc-900/70 dark:text-zinc-400">
-              <Database size={12} className="text-accent" />
-              {selectedSkills.length > 0 ? `${selectedSkills.length} 个能力已启用` : '上下文已装配'}
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full border border-zinc-200/80 bg-zinc-100/90 px-3 py-1.5 text-zinc-500 dark:border-zinc-800/80 dark:bg-zinc-900/70 dark:text-zinc-400">
-              {mode === 'quick' ? <Activity size={12} className="text-accent" /> : <Waves size={12} className="text-accent" />}
-              {mode === 'quick' ? '快速回答' : '流式输出'}
-            </span>
-          </div>
-        </div>
-        {selectedSkills.length > 0 ? (
-          <div className="mx-auto mt-3 flex max-w-4xl flex-wrap gap-2">
-            {selectedSkills.map((skill) => (
-              <span
-                key={skill.id}
-                className="rounded-full border border-accent/20 bg-accent/10 px-3 py-1 text-[11px] font-medium text-accent"
-              >
-                {skill.label}
+      <div className="border-b border-zinc-200/80 bg-white/72 px-4 py-2 backdrop-blur-xl dark:border-zinc-900/80 dark:bg-zinc-950/42">
+        <div className="mx-auto flex max-w-4xl items-center gap-3 text-xs text-zinc-500 dark:text-zinc-500">
+          <span className="inline-flex items-center gap-1">
+            {mode === 'quick' ? <Activity size={12} className="text-accent" /> : <Waves size={12} className="text-accent" />}
+            {mode === 'quick' ? '快速回答' : '流式输出'}
+          </span>
+          {selectedSkills.length > 0 ? (
+            <>
+              <span className="text-zinc-300 dark:text-zinc-700">|</span>
+              <span>{selectedSkills.length} 个能力已启用</span>
+              <span className="hidden sm:inline text-zinc-400 dark:text-zinc-600">
+                — {selectedSkills.map(s => s.label).join('、')}
               </span>
-            ))}
-          </div>
-        ) : null}
+            </>
+          ) : (
+            <>
+              <span className="text-zinc-300 dark:text-zinc-700">|</span>
+              <span>{formatSelectedSkillSummary(selectedSkillIds)}</span>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto scrollbar-thin px-4 py-6">

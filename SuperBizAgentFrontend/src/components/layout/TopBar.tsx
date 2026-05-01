@@ -1,4 +1,4 @@
-import { Menu, Moon, Sun, ShieldAlert } from 'lucide-react'
+import { Menu, Moon, Sun, ShieldAlert, Plus } from 'lucide-react'
 import type { ChatMode } from '../../types/chat'
 
 interface Props {
@@ -6,9 +6,11 @@ interface Props {
   onToggleSidebar: () => void
   onToggleTheme: () => void
   chatMode: ChatMode
+  onNewChat: () => void
+  isLoading: boolean
 }
 
-export function TopBar({ theme, onToggleSidebar, onToggleTheme, chatMode }: Props) {
+export function TopBar({ theme, onToggleSidebar, onToggleTheme, chatMode, onNewChat, isLoading }: Props) {
   return (
     <header className="h-16 shrink-0 border-b border-zinc-200/80 bg-white/88 backdrop-blur-xl dark:border-zinc-900/80 dark:bg-zinc-950/80">
       <div className="flex h-full items-center justify-between gap-4 px-4 lg:px-6">
@@ -32,6 +34,15 @@ export function TopBar({ theme, onToggleSidebar, onToggleTheme, chatMode }: Prop
       </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={onNewChat}
+            disabled={isLoading}
+            className="rounded-xl border border-zinc-200/80 bg-white/80 p-2 text-zinc-600 transition-colors hover:bg-zinc-100 disabled:opacity-40 disabled:cursor-not-allowed dark:border-zinc-800/80 dark:bg-zinc-900/70 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            aria-label="新建会话"
+            title={isLoading ? '请等待当前请求完成' : '新建会话'}
+          >
+            <Plus size={20} />
+          </button>
           <div className="hidden items-center gap-2 rounded-full border border-zinc-200/80 bg-zinc-100/90 px-3 py-1.5 text-xs text-zinc-500 dark:border-zinc-800/80 dark:bg-zinc-900/70 dark:text-zinc-400 md:flex">
             <ShieldAlert size={14} className="text-amber-400" />
             <span>生产环境</span>

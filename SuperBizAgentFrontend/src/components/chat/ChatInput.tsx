@@ -52,7 +52,7 @@ export function ChatInput({ onSend, onStop, isLoading, mode, selectedSkillIds, o
             onKeyDown={handleKeyDown}
             placeholder="描述告警、日志或系统现象..."
             rows={1}
-            className="min-h-[84px] w-full resize-none bg-transparent px-3 py-3 text-sm leading-7 text-zinc-900 outline-none placeholder:text-zinc-400 dark:text-zinc-100 dark:placeholder:text-zinc-500"
+            className="min-h-[44px] w-full resize-none bg-transparent px-3 py-2 text-sm leading-7 text-zinc-900 outline-none placeholder:text-zinc-400 dark:text-zinc-100 dark:placeholder:text-zinc-500"
           />
 
           <div className="mt-3 flex flex-col gap-3 border-t border-zinc-200/80 px-1 pt-3 dark:border-zinc-800/80 lg:flex-row lg:items-center lg:justify-between">

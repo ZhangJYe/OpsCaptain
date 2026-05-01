@@ -16,6 +16,7 @@ interface Props {
   onModeChange: (m: ChatMode) => void
   selectedSkillIds: string[]
   onSelectedSkillIdsChange: (ids: string[]) => void
+  isLoading: boolean
 }
 
 export function Sidebar({
@@ -28,6 +29,7 @@ export function Sidebar({
   onModeChange,
   selectedSkillIds,
   onSelectedSkillIdsChange,
+  isLoading,
 }: Props) {
   return (
     <div className="h-full glass flex flex-col">
@@ -68,10 +70,12 @@ export function Sidebar({
       <div className="border-t border-zinc-200/80 p-3 dark:border-zinc-800/50">
         <button
           onClick={onNewChat}
-          className="w-full flex items-center justify-center gap-2 rounded-xl bg-accent/10 py-2.5 text-sm font-medium text-accent transition-colors hover:bg-accent/20"
+          disabled={isLoading}
+          className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-colors bg-accent/10 text-accent hover:bg-accent/20 disabled:opacity-40 disabled:cursor-not-allowed"
+          title={isLoading ? '请等待当前请求完成' : '新建会话'}
         >
           <Plus size={16} />
-          新建会话
+          {isLoading ? '请求中...' : '新建会话'}
         </button>
       </div>
     </div>

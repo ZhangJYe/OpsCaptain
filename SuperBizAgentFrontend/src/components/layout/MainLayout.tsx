@@ -19,6 +19,7 @@ interface Props {
   messages: ChatMessage[]
   selectedSkillIds: string[]
   onSelectedSkillIdsChange: (ids: string[]) => void
+  isLoading: boolean
   children: ReactNode
 }
 
@@ -36,6 +37,7 @@ export function MainLayout({
   messages,
   selectedSkillIds,
   onSelectedSkillIdsChange,
+  isLoading,
   children,
 }: Props) {
   const siteRecord = getSiteRecord()
@@ -71,6 +73,7 @@ export function MainLayout({
                 onModeChange={onModeChange}
                 selectedSkillIds={selectedSkillIds}
                 onSelectedSkillIdsChange={onSelectedSkillIdsChange}
+                isLoading={isLoading}
               />
             </motion.aside>
           </>
@@ -82,6 +85,8 @@ export function MainLayout({
           onToggleSidebar={onToggleSidebar}
           onToggleTheme={onToggleTheme}
           chatMode={chatMode}
+          onNewChat={onNewChat}
+          isLoading={isLoading}
         />
         <main className="relative flex-1 overflow-hidden">{children}</main>
         {siteRecord ? (

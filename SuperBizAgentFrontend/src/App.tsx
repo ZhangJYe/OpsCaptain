@@ -12,7 +12,10 @@ const SKILL_STORAGE_KEY = 'opscaptain-selected-skills'
 export default function App() {
   const { theme, toggle: toggleTheme } = useTheme()
   const chat = useChat()
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.innerWidth >= 1024
+  })
   const [showWelcome, setShowWelcome] = useState(true)
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>(() => {
     if (typeof window === 'undefined') return []
@@ -86,6 +89,7 @@ export default function App() {
       messages={chat.messages}
       selectedSkillIds={selectedSkillIds}
       onSelectedSkillIdsChange={setSelectedSkillIds}
+      isLoading={chat.isLoading}
     >
       {showWelcome && chat.messages.length === 0 ? (
         <WelcomeScreen onSend={handleSend} />
