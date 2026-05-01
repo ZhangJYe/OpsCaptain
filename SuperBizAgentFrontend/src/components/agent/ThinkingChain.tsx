@@ -39,21 +39,22 @@ const stepBgs: Record<string, string> = {
 export function ThinkingChain({ steps, isStreaming }: Props) {
   if (steps.length === 0 && !isStreaming) return null
 
-  const activeSteps = steps.filter((s) => s.status !== 'pending')
-  if (activeSteps.length === 0 && !isStreaming) return null
+  const doneCount = steps.filter(s => s.status === 'done').length
+  const hasActivity = steps.some(s => s.status !== 'pending') || isStreaming
+  if (!hasActivity && !isStreaming) return null
 
   return (
     <div className="rounded-2xl border border-zinc-200/80 bg-white/80 px-4 py-3 backdrop-blur dark:border-zinc-800/60 dark:bg-zinc-900/60">
       <div className="mb-2 flex items-center gap-2">
         <Brain size={14} className="text-accent" />
         <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-500">
-          {isStreaming ? 'Agent 思考中...' : `Agent 已完成 ${activeSteps.filter(s => s.status === 'done').length}/${activeSteps.length} 步`}
+          {isStreaming ? 'Agent 思考中...' : doneCount > 0 ? `Agent 已完成 ${doneCount}/${steps.length} 步` : 'Agent 正在启动...'}
         </span>
       </div>
 
       <div className="space-y-1">
         <AnimatePresence>
-          {activeSteps.map((step, i) => {
+          {steps.map((step, i) => {
             const Icon = stepIcons[step.id] || stepIcons.default
             return (
               <motion.div

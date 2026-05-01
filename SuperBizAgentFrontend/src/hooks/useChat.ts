@@ -51,7 +51,7 @@ function parseSSEBlock(block: string): { event: string; data: string } {
 
 function buildThinkingSteps(mode: string, thoughts: string[], hasResponse: boolean): ThinkingStep[] {
   const baseSteps: ThinkingStep[] = [
-    { id: 'triage', label: '分析问题类型', status: 'pending' },
+    { id: 'triage', label: '分析问题类型', status: 'active', detail: '启动诊断...' },
     { id: 'metrics', label: '拉取指标证据', status: 'pending' },
     { id: 'logs', label: '检索日志特征', status: 'pending' },
     { id: 'knowledge', label: '匹配历史案例', status: 'pending' },
