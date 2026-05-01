@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react'
 import type { ChatMessage, ChatMode, ChatSession } from '../types/chat'
 import { buildSkillAwareQuery, generateId, getApiBaseUrl } from '../lib/utils'
-import type { ThinkingStep } from '../components/agent/ThinkingChain'
+import type { ThinkingStep } from '../components/agent/ThinkingCollapse'
 import { generateSuggestions } from '../components/agent/SuggestionChips'
 import type { Suggestion } from '../components/agent/SuggestionChips'
 

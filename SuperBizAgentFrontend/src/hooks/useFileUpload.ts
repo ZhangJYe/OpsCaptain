@@ -114,10 +114,9 @@ export function useFileUpload(): UseFileUploadReturn {
       style: {
         position: 'absolute',
         opacity: 0,
-        width: 0,
-        height: 0,
+        width: '1px',
+        height: '1px',
         overflow: 'hidden',
-        pointerEvents: 'none',
       },
     },
   }
