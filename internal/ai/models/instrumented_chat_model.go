@@ -152,11 +152,25 @@ func (m *instrumentedChatModel) Stream(ctx context.Context, input []*schema.Mess
 		return nil, err
 	}
 
-	reader, err := resilience.Execute(ctx, llmCallOption(agent, m.modelName), func(callCtx context.Context) (*schema.StreamReader[*schema.Message], error) {
-		return m.inner.Stream(callCtx, input, opts...)
-	})
+	// Stream 调用不经过 resilience.Execute 的超时包装，因为流式 LLM 调用需要在
+	// reader 返回后长时间保持底层 HTTP 连接。resilience.Execute 会在 fn 返回后
+	// 立即 cancel 超时 context，这会杀死流读取器。
+	//
+	// 这里只使用 circuit breaker，超时由 HTTP client 层控制。
+	opt := llmCallOption(agent, m.modelName)
+	cb := resilience.GetBreaker(opt.Name)
+	if !cb.Allow() {
+		release()
+		span.RecordError(fmt.Errorf("circuit breaker open"))
+		span.SetStatus(codes.Error, "circuit breaker open")
+		span.End()
+		return nil, fmt.Errorf("circuit breaker open for %s", opt.Name)
+	}
+
+	reader, err := m.inner.Stream(ctx, input, opts...)
 	if err != nil {
 		release()
+		cb.RecordFailure()
 		status := llmStatus(err)
 		metrics.ObserveLLMCall(agent, m.modelName, status, time.Since(started))
 		emitLLMEvent(ctx, agent, "llm_stream_failed", map[string]any{
@@ -169,6 +183,7 @@ func (m *instrumentedChatModel) Stream(ctx context.Context, input []*schema.Mess
 		span.End()
 		return nil, err
 	}
+	cb.RecordSuccess()
 
 	streamReader, streamWriter := schema.Pipe[*schema.Message](8)
 	go func() {
