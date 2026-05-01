@@ -111,7 +111,14 @@ export function useFileUpload(): UseFileUploadReturn {
       onChange: handleFileChange,
       accept: '.md,.txt,.pdf,.doc,.docx,.csv,.json,.yaml,.yml',
       multiple: true,
-      style: { display: 'none' },
+      style: {
+        position: 'absolute',
+        opacity: 0,
+        width: 0,
+        height: 0,
+        overflow: 'hidden',
+        pointerEvents: 'none',
+      },
     },
   }
 }
