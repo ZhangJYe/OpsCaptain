@@ -1,5 +1,6 @@
+import { useState, useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Activity, AlertTriangle, ArrowRight, Clock3, Database, Shield, TerminalSquare } from 'lucide-react'
+import { Activity, AlertTriangle, ArrowRight, Clock3, Database, Send, Shield, TerminalSquare } from 'lucide-react'
 
 interface Props {
   onSend: (query: string) => void
@@ -46,6 +47,28 @@ const operatorNotes = [
 ]
 
 export function WelcomeScreen({ onSend }: Props) {
+  const [input, setInput] = useState('')
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto'
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 160) + 'px'
+    }
+  }, [input])
+
+  const handleSubmit = () => {
+    if (!input.trim()) return
+    onSend(input.trim())
+    setTimeout(() => setInput(''), 0)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSubmit()
+    }
+  }
   return (
     <div className="h-full overflow-y-auto scrollbar-thin">
       <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 lg:px-6 lg:py-8">
@@ -220,6 +243,38 @@ export function WelcomeScreen({ onSend }: Props) {
                 <span>最近发布、依赖变更或错误日志片段</span>
               </li>
             </ul>
+          </div>
+        </motion.section>
+
+        <motion.section
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, delay: 0.18 }}
+        >
+          <div className="rounded-[24px] border border-zinc-200/80 bg-white/92 p-4 backdrop-blur-xl dark:border-zinc-800/80 dark:bg-zinc-950/70">
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="描述告警、日志或系统现象，按 Enter 发送..."
+              rows={1}
+              className="min-h-[44px] w-full resize-none bg-transparent px-2 py-2 text-sm leading-7 text-zinc-900 outline-none placeholder:text-zinc-400 dark:text-zinc-100 dark:placeholder:text-zinc-500"
+            />
+            <div className="flex items-center justify-between border-t border-zinc-200/80 pt-3 dark:border-zinc-800/80">
+              <span className="text-[11px] text-zinc-500 dark:text-zinc-500">Enter 发送，Shift + Enter 换行</span>
+              <button
+                onClick={handleSubmit}
+                className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all ${
+                  input.trim()
+                    ? 'bg-accent text-white hover:brightness-110'
+                    : 'bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600'
+                }`}
+              >
+                <Send size={14} />
+                发送
+              </button>
+            </div>
           </div>
         </motion.section>
       </div>
