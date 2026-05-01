@@ -4,6 +4,7 @@ import {
   AlertTriangle, Activity, Shield, Send, Sparkles,
   Search, FileText, Terminal, ArrowUpRight,
 } from 'lucide-react'
+import { AIOpsPanel } from './AIOpsPanel'
 
 interface Props {
   onSend: (query: string) => void
@@ -138,6 +139,9 @@ export function WelcomeScreen({ onSend }: Props) {
             ))}
           </div>
         </motion.div>
+
+        {/* AIOps Panel */}
+        <AIOpsPanel onStartDiagnosis={onSend} />
 
         {/* Input area */}
         <motion.div
