@@ -5,6 +5,7 @@ import (
 	"SuperBizAgent/internal/ai/agent/chat_pipeline"
 	"SuperBizAgent/internal/ai/contextengine"
 	aiservice "SuperBizAgent/internal/ai/service"
+	"SuperBizAgent/internal/ai/skills"
 	"SuperBizAgent/internal/consts"
 	"SuperBizAgent/internal/logic/sse"
 	"SuperBizAgent/utility/log_call_back"
@@ -25,6 +26,7 @@ import (
 func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (res *v1.ChatStreamRes, err error) {
 	id := req.Id
 	msg := req.Question
+	selectedSkillIDs := chat_pipeline.NormalizeSelectedSkillIDs(req.SelectedSkillIds)
 
 	if err := mem.ValidateSessionID(id); err != nil {
 		return nil, fmt.Errorf("invalid session ID: %w", err)
@@ -34,10 +36,12 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 	ctx = context.WithValue(ctx, consts.CtxKeySessionID, id)
 	ctx = context.WithValue(ctx, consts.CtxKeyRequestID, requestID)
 	ctx = context.WithValue(ctx, consts.CtxKeyClientID, req.Id)
+	ctx = skills.WithSelectedSkillIDs(ctx, selectedSkillIDs)
 	ctx = enrichRequestContext(ctx, id, requestID)
+	selectedSkillIDs = skills.SelectedSkillIDsFromContext(ctx)
 
 	phaseStart := time.Now()
-	g.Log().Infof(ctx, "[session:%s][req:%s] ChatStream start, question length: %d", id, requestID, len(msg))
+	g.Log().Infof(ctx, "[session:%s][req:%s] ChatStream start, question length: %d, selected_skills=%v", id, requestID, len(msg), selectedSkillIDs)
 
 	if err := rejectSuspiciousPrompt(ctx, msg); err != nil {
 		return nil, err

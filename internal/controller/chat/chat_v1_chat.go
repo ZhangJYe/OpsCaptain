@@ -5,6 +5,7 @@ import (
 	"SuperBizAgent/internal/ai/agent/chat_pipeline"
 	"SuperBizAgent/internal/ai/contextengine"
 	aiservice "SuperBizAgent/internal/ai/service"
+	"SuperBizAgent/internal/ai/skills"
 	"SuperBizAgent/internal/consts"
 	"SuperBizAgent/utility/cache"
 	"SuperBizAgent/utility/log_call_back"
@@ -73,6 +74,7 @@ func releaseSessionLock(id string, entry *sessionLockEntry) {
 func (c *ControllerV1) Chat(ctx context.Context, req *v1.ChatReq) (res *v1.ChatRes, err error) {
 	id := req.Id
 	msg := req.Question
+	selectedSkillIDs := chat_pipeline.NormalizeSelectedSkillIDs(req.SelectedSkillIds)
 
 	if err := mem.ValidateSessionID(id); err != nil {
 		return nil, fmt.Errorf("invalid session ID: %w", err)
@@ -81,9 +83,11 @@ func (c *ControllerV1) Chat(ctx context.Context, req *v1.ChatReq) (res *v1.ChatR
 	requestID := guid.S()
 	ctx = context.WithValue(ctx, consts.CtxKeySessionID, id)
 	ctx = context.WithValue(ctx, consts.CtxKeyRequestID, requestID)
+	ctx = skills.WithSelectedSkillIDs(ctx, selectedSkillIDs)
 	ctx = enrichRequestContext(ctx, id, requestID)
+	selectedSkillIDs = skills.SelectedSkillIDsFromContext(ctx)
 
-	g.Log().Infof(ctx, "[session:%s][req:%s] Chat request received, question length: %d", id, requestID, len(msg))
+	g.Log().Infof(ctx, "[session:%s][req:%s] Chat request received, question length: %d, selected_skills=%v", id, requestID, len(msg), selectedSkillIDs)
 
 	if err := rejectSuspiciousPrompt(ctx, msg); err != nil {
 		return nil, err
@@ -103,7 +107,7 @@ func (c *ControllerV1) Chat(ctx context.Context, req *v1.ChatReq) (res *v1.ChatR
 
 	sessionMem := mem.GetSimpleMemory(id)
 
-	if entry, found, cacheErr := cache.LoadChatResponse(ctx, id, msg); cacheErr != nil {
+	if entry, found, cacheErr := cache.LoadChatResponse(ctx, id, msg, selectedSkillIDs...); cacheErr != nil {
 		g.Log().Warningf(ctx, "[session:%s][req:%s] cache lookup failed: %v", id, requestID, cacheErr)
 	} else if found {
 		answer, detail := filterAssistantPayload(ctx, entry.Answer, entry.Detail)
@@ -128,7 +132,7 @@ func (c *ControllerV1) Chat(ctx context.Context, req *v1.ChatReq) (res *v1.ChatR
 			Answer: answer,
 			Detail: detail,
 			Mode:   "multi_agent",
-		}); cacheErr != nil {
+		}, selectedSkillIDs...); cacheErr != nil {
 			g.Log().Warningf(ctx, "[session:%s][req:%s] cache store failed: %v", id, requestID, cacheErr)
 		}
 		return &v1.ChatRes{
@@ -172,7 +176,7 @@ func (c *ControllerV1) Chat(ctx context.Context, req *v1.ChatReq) (res *v1.ChatR
 		Answer: answer,
 		Detail: detail,
 		Mode:   "chat",
-	}); cacheErr != nil {
+	}, selectedSkillIDs...); cacheErr != nil {
 		g.Log().Warningf(ctx, "[session:%s][req:%s] cache store failed: %v", id, requestID, cacheErr)
 	}
 

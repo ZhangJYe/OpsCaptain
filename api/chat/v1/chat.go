@@ -5,9 +5,10 @@ import (
 )
 
 type ChatReq struct {
-	g.Meta   `path:"/chat" method:"post" summary:"对话"`
-	Id       string `json:"Id" v:"required|max-length:128#会话ID不能为空|会话ID长度不能超过128"`
-	Question string `json:"Question" v:"required|max-length:8000#问题不能为空|问题长度不能超过8000"`
+	g.Meta           `path:"/chat" method:"post" summary:"对话"`
+	Id               string   `json:"Id" v:"required|max-length:128#会话ID不能为空|会话ID长度不能超过128"`
+	Question         string   `json:"Question" v:"required|max-length:8000#问题不能为空|问题长度不能超过8000"`
+	SelectedSkillIds []string `json:"SelectedSkillIds,omitempty"`
 }
 
 type ChatRes struct {
@@ -21,9 +22,10 @@ type ChatRes struct {
 }
 
 type ChatSubmitReq struct {
-	g.Meta   `path:"/chat_submit" method:"post" summary:"提交异步对话任务"`
-	Id       string `json:"Id" v:"required|max-length:128#会话ID不能为空|会话ID长度不能超过128"`
-	Question string `json:"Question" v:"required|max-length:8000#问题不能为空|问题长度不能超过8000"`
+	g.Meta           `path:"/chat_submit" method:"post" summary:"提交异步对话任务"`
+	Id               string   `json:"Id" v:"required|max-length:128#会话ID不能为空|会话ID长度不能超过128"`
+	Question         string   `json:"Question" v:"required|max-length:8000#问题不能为空|问题长度不能超过8000"`
+	SelectedSkillIds []string `json:"SelectedSkillIds,omitempty"`
 }
 
 type ChatSubmitRes struct {
@@ -57,9 +59,10 @@ type ChatTaskRes struct {
 }
 
 type ChatStreamReq struct {
-	g.Meta   `path:"/chat_stream" method:"post" summary:"流式对话"`
-	Id       string `json:"Id" v:"required|max-length:128#会话ID不能为空|会话ID长度不能超过128"`
-	Question string `json:"Question" v:"required|max-length:8000#问题不能为空|问题长度不能超过8000"`
+	g.Meta           `path:"/chat_stream" method:"post" summary:"流式对话"`
+	Id               string   `json:"Id" v:"required|max-length:128#会话ID不能为空|会话ID长度不能超过128"`
+	Question         string   `json:"Question" v:"required|max-length:8000#问题不能为空|问题长度不能超过8000"`
+	SelectedSkillIds []string `json:"SelectedSkillIds,omitempty"`
 }
 
 type ChatStreamRes struct {

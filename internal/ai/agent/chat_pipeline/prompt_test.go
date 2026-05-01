@@ -1,6 +1,7 @@
 package chat_pipeline
 
 import (
+	"SuperBizAgent/internal/ai/skills"
 	"context"
 	"strings"
 	"testing"
@@ -60,5 +61,16 @@ func TestNormalizePromptSectionRemovesCodeIndentation(t *testing.T) {
 	got := normalizePromptSection("\n\t\t## 标题\n\t\t- 内容\n")
 	if got != "## 标题\n- 内容" {
 		t.Fatalf("unexpected normalized prompt section: %q", got)
+	}
+}
+
+func TestBuildSystemPromptIncludesSelectedSkillHintsWithoutLiteralReplayInstruction(t *testing.T) {
+	ctx := skills.WithSelectedSkillIDs(context.Background(), []string{"logs_evidence_extract", "knowledge_sop_lookup"})
+	prompt := buildSystemPrompt(ctx)
+	if !strings.Contains(prompt, "本轮执行偏好") {
+		t.Fatalf("expected selected skill hints in prompt, got %q", prompt)
+	}
+	if !strings.Contains(prompt, "不要逐条复述给用户") {
+		t.Fatalf("expected hidden execution guidance guard, got %q", prompt)
 	}
 }

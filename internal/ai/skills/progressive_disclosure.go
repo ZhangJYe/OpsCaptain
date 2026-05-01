@@ -35,17 +35,28 @@ func NewProgressiveDisclosure(registries []*Registry, tieredTools []TieredTool) 
 }
 
 type DisclosureResult struct {
-	Tools         []tool.BaseTool
-	DisclosedTier map[ToolTier]int
-	MatchedSkills []string
+	Tools          []tool.BaseTool
+	DisclosedTier  map[ToolTier]int
+	MatchedSkills  []string
+	MatchedDomains []string
+	SelectedSkills []SelectedSkill
 }
 
-func (pd *ProgressiveDisclosure) Disclose(query string) DisclosureResult {
+type SelectedSkill struct {
+	Name        string
+	Domain      string
+	Description string
+}
+
+func (pd *ProgressiveDisclosure) Disclose(query string, selectedSkillIDs []string) DisclosureResult {
 	result := DisclosureResult{
 		DisclosedTier: make(map[ToolTier]int),
 	}
 
-	matchedDomains := pd.matchDomains(query)
+	selectedSkills := pd.ResolveSelectedSkills(selectedSkillIDs)
+	matchedDomains := mergeDomains(pd.matchDomains(query), domainsFromSelectedSkills(selectedSkills))
+	result.SelectedSkills = selectedSkills
+	result.MatchedDomains = matchedDomains
 	result.MatchedSkills = matchedDomains
 
 	for _, tt := range pd.tools {
@@ -63,6 +74,32 @@ func (pd *ProgressiveDisclosure) Disclose(query string) DisclosureResult {
 	}
 
 	return result
+}
+
+func (pd *ProgressiveDisclosure) ResolveSelectedSkills(selectedSkillIDs []string) []SelectedSkill {
+	selectedSkillIDs = normalizeSelectedSkillIDs(selectedSkillIDs)
+	if len(selectedSkillIDs) == 0 {
+		return nil
+	}
+	selected := make([]SelectedSkill, 0, len(selectedSkillIDs))
+	for _, id := range selectedSkillIDs {
+		for _, reg := range pd.registries {
+			if reg == nil {
+				continue
+			}
+			skill := reg.SkillByName(id)
+			if skill == nil {
+				continue
+			}
+			selected = append(selected, SelectedSkill{
+				Name:        skill.Name(),
+				Domain:      reg.Domain(),
+				Description: skill.Description(),
+			})
+			break
+		}
+	}
+	return selected
 }
 
 func (pd *ProgressiveDisclosure) ExpandDomain(current []tool.BaseTool, domain string) []tool.BaseTool {
@@ -109,8 +146,8 @@ func (pd *ProgressiveDisclosure) matchDomains(query string) []string {
 		if reg == nil {
 			continue
 		}
-		skill, err := reg.Resolve(task)
-		if err != nil || skill == nil {
+		skill := reg.Match(task)
+		if skill == nil {
 			continue
 		}
 		d := reg.Domain()
@@ -143,4 +180,38 @@ func containsDomain(domains []string, target string) bool {
 		}
 	}
 	return false
+}
+
+func domainsFromSelectedSkills(selected []SelectedSkill) []string {
+	if len(selected) == 0 {
+		return nil
+	}
+	domains := make([]string, 0, len(selected))
+	for _, skill := range selected {
+		if strings.TrimSpace(skill.Domain) == "" {
+			continue
+		}
+		domains = append(domains, skill.Domain)
+	}
+	return mergeDomains(domains)
+}
+
+func mergeDomains(groups ...[]string) []string {
+	var merged []string
+	seen := make(map[string]bool)
+	for _, group := range groups {
+		for _, domain := range group {
+			trimmed := strings.TrimSpace(domain)
+			if trimmed == "" {
+				continue
+			}
+			key := strings.ToLower(trimmed)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			merged = append(merged, trimmed)
+		}
+	}
+	return merged
 }

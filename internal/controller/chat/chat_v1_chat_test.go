@@ -9,6 +9,7 @@ import (
 	v1 "SuperBizAgent/api/chat/v1"
 	"SuperBizAgent/internal/ai/agent/chat_pipeline"
 	aiService "SuperBizAgent/internal/ai/service"
+	"SuperBizAgent/internal/ai/skills"
 	"SuperBizAgent/utility/mem"
 
 	"github.com/cloudwego/eino/compose"
@@ -162,6 +163,39 @@ func TestChatRoutesToMultiAgentWhenQueryMatches(t *testing.T) {
 	}
 	if res.TraceID != "trace-123" {
 		t.Fatalf("expected trace id, got %q", res.TraceID)
+	}
+}
+
+func TestChatPassesSelectedSkillIDsIntoRequestContext(t *testing.T) {
+	oldBuild := buildChatAgent
+	oldDecision := getDegradationDecision
+	oldShould := shouldUseChatMultiAgent
+	oldRun := runChatMultiAgent
+	defer func() {
+		buildChatAgent = oldBuild
+		getDegradationDecision = oldDecision
+		shouldUseChatMultiAgent = oldShould
+		runChatMultiAgent = oldRun
+	}()
+
+	getDegradationDecision = func(context.Context, string) aiService.DegradationDecision { return aiService.DegradationDecision{} }
+	shouldUseChatMultiAgent = func(context.Context, string) bool { return false }
+	buildChatAgent = func(ctx context.Context, _ string) (compose.Runnable[*chat_pipeline.UserMessage, *schema.Message], error) {
+		selected := skills.SelectedSkillIDsFromContext(ctx)
+		if len(selected) != 2 || selected[0] != "logs_evidence_extract" || selected[1] != "knowledge_sop_lookup" {
+			t.Fatalf("unexpected selected skills in context: %v", selected)
+		}
+		return &fakeChatRunnable{answer: "hello back"}, nil
+	}
+
+	ctrl := &ControllerV1{}
+	_, err := ctrl.Chat(context.Background(), &v1.ChatReq{
+		Id:               mem.GenerateSessionID(),
+		Question:         "hello",
+		SelectedSkillIds: []string{"logs_evidence_extract", "knowledge_sop_lookup"},
+	})
+	if err != nil {
+		t.Fatalf("chat returned error: %v", err)
 	}
 }
 

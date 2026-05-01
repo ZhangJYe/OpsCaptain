@@ -25,6 +25,8 @@ type Registry struct {
 	skills []Skill
 }
 
+type selectedSkillsContextKey struct{}
+
 func NewRegistry(domain string, skills ...Skill) (*Registry, error) {
 	r := &Registry{domain: strings.TrimSpace(domain)}
 	for _, skill := range skills {
@@ -59,12 +61,22 @@ func (r *Registry) Resolve(task *protocol.TaskEnvelope) (Skill, error) {
 	if r == nil || len(r.skills) == 0 {
 		return nil, fmt.Errorf("skills registry is empty")
 	}
-	for _, skill := range r.skills {
-		if skill.Match(task) {
-			return skill, nil
-		}
+	if skill := r.Match(task); skill != nil {
+		return skill, nil
 	}
 	return r.skills[0], nil
+}
+
+func (r *Registry) Match(task *protocol.TaskEnvelope) Skill {
+	if r == nil || len(r.skills) == 0 {
+		return nil
+	}
+	for _, skill := range r.skills {
+		if skill.Match(task) {
+			return skill
+		}
+	}
+	return nil
 }
 
 func (r *Registry) Execute(ctx context.Context, task *protocol.TaskEnvelope) (*Execution, error) {
@@ -96,6 +108,59 @@ func (r *Registry) SkillNames() []string {
 		names = append(names, skill.Name())
 	}
 	return names
+}
+
+func (r *Registry) SkillByName(name string) Skill {
+	if r == nil || len(r.skills) == 0 {
+		return nil
+	}
+	target := strings.TrimSpace(name)
+	if target == "" {
+		return nil
+	}
+	for _, skill := range r.skills {
+		if strings.EqualFold(skill.Name(), target) {
+			return skill
+		}
+	}
+	return nil
+}
+
+func WithSelectedSkillIDs(ctx context.Context, selectedSkillIDs []string) context.Context {
+	normalized := normalizeSelectedSkillIDs(selectedSkillIDs)
+	if len(normalized) == 0 {
+		return ctx
+	}
+	return context.WithValue(ctx, selectedSkillsContextKey{}, normalized)
+}
+
+func SelectedSkillIDsFromContext(ctx context.Context) []string {
+	if ctx == nil {
+		return nil
+	}
+	selected, _ := ctx.Value(selectedSkillsContextKey{}).([]string)
+	return append([]string(nil), selected...)
+}
+
+func normalizeSelectedSkillIDs(selectedSkillIDs []string) []string {
+	if len(selectedSkillIDs) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool, len(selectedSkillIDs))
+	normalized := make([]string, 0, len(selectedSkillIDs))
+	for _, raw := range selectedSkillIDs {
+		id := strings.TrimSpace(raw)
+		if id == "" {
+			continue
+		}
+		key := strings.ToLower(id)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		normalized = append(normalized, id)
+	}
+	return normalized
 }
 
 func AttachMetadata(result *protocol.TaskResult, domain string, skill Skill) *protocol.TaskResult {

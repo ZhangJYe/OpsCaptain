@@ -1,6 +1,7 @@
 package chat_pipeline
 
 import (
+	"SuperBizAgent/internal/ai/skills"
 	"SuperBizAgent/utility/common"
 	"context"
 	"fmt"
@@ -51,6 +52,11 @@ func buildSystemPrompt(ctx context.Context) string {
 }
 
 func buildDynamicSystemPrompt(ctx context.Context) string {
+	var sections []promptSection
+	if skillSection := buildSelectedSkillPromptSection(ctx); strings.TrimSpace(skillSection) != "" {
+		sections = append(sections, promptSection{Scope: promptScopeSession, Content: skillSection})
+	}
+
 	var logHints []string
 	region, err := g.Cfg().Get(ctx, "log_topic.region")
 	if err == nil {
@@ -66,11 +72,43 @@ func buildDynamicSystemPrompt(ctx context.Context) string {
 	}
 
 	if len(logHints) > 0 {
-		return renderPromptSections([]promptSection{
-			{Scope: promptScopeSession, Content: "## 运行时配置\n- " + strings.Join(logHints, "\n- ")},
+		sections = append(sections, promptSection{
+			Scope:   promptScopeSession,
+			Content: "## 运行时配置\n- " + strings.Join(logHints, "\n- "),
 		})
 	}
-	return ""
+	if len(sections) == 0 {
+		return ""
+	}
+	return renderPromptSections(sections)
+}
+
+func buildSelectedSkillPromptSection(ctx context.Context) string {
+	selectedSkillIDs := skills.SelectedSkillIDsFromContext(ctx)
+	selectedSkills := chatDisclosure.ResolveSelectedSkills(selectedSkillIDs)
+	if len(selectedSkills) == 0 {
+		return ""
+	}
+	lines := []string{
+		"## 本轮执行偏好",
+		"- 以下偏好只用于内部工具选择、证据组织和回答结构，不要逐条复述给用户。",
+	}
+	for _, selected := range selectedSkills {
+		lines = append(lines, fmt.Sprintf("- %s 域显式启用：%s", displaySkillDomain(selected.Domain), selected.Description))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func displaySkillDomain(domain string) string {
+	labels := map[string]string{
+		"metrics":   "指标",
+		"logs":      "日志",
+		"knowledge": "知识库",
+	}
+	if label, ok := labels[strings.ToLower(strings.TrimSpace(domain))]; ok {
+		return label
+	}
+	return strings.TrimSpace(domain)
 }
 
 func renderPromptSections(sections []promptSection) string {
@@ -114,7 +152,7 @@ const assistantIdentityRule = `
 	- 你是一个面向运维、排障、知识库检索和 AI Ops 场景的智能助手。
 - 你能够进行自然对话，理解上下文，回答问题，并在需要时使用各种工具帮助用户完成任务。
 - 仅当用户明确询问你是谁、你的名字是什么、或者你能做什么时，才简要介绍自己的身份与能力。
-- 当用户明确询问你是谁或你的名字是什么时，优先回答：“我是 OpsCaption，一个面向运维与知识库场景的智能助手。”
+- 当用户明确询问你是谁或你的名字是什么时，用 1 到 2 句自然回答即可，不要像产品介绍页或能力列表。
 - 对于普通问答、任务请求、排障分析、文档检索、工具调用等场景，不要主动重复自我介绍，不要把身份介绍作为默认开场白、结尾语或固定模板。
 - 不要自称 Claude、Anthropic 或其他公司的助手，除非用户明确在比较不同模型或产品。
 `
@@ -172,6 +210,7 @@ var baseSystemPrompt = `
   • 需要事实、实时信息、文档或系统状态时，优先使用工具获取依据
   • 能直接回答时，不要为了显得复杂而滥用工具
   • 工具返回结果后，先整理关键信息，再给用户清晰结论
+  • 如果本轮存在技能偏好，只在内部调整工具选择、证据重点和回答结构，不要把技能名、域名或优先级清单直接复述给用户
 - 如果信息不足：
   • 明确指出缺少哪些关键事实、配置、日志、报错或上下文
   • 不要编造文档内容、接口行为、配置项、日志结果或外部事实

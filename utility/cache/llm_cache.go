@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -27,12 +28,12 @@ type ChatResponseEntry struct {
 	CachedAt int64    `json:"cached_at"`
 }
 
-func LoadChatResponse(ctx context.Context, sessionID, query string) (ChatResponseEntry, bool, error) {
+func LoadChatResponse(ctx context.Context, sessionID, query string, scope ...string) (ChatResponseEntry, bool, error) {
 	if !responseCacheEnabled(ctx) {
 		return ChatResponseEntry{}, false, nil
 	}
 
-	key := responseCacheKey(sessionID, query)
+	key := responseCacheKey(sessionID, query, scope...)
 	value, err := g.Redis().Do(ctx, "GET", key)
 	if err != nil {
 		return ChatResponseEntry{}, false, err
@@ -53,7 +54,7 @@ func LoadChatResponse(ctx context.Context, sessionID, query string) (ChatRespons
 	return entry, true, nil
 }
 
-func StoreChatResponse(ctx context.Context, sessionID, query string, entry ChatResponseEntry) error {
+func StoreChatResponse(ctx context.Context, sessionID, query string, entry ChatResponseEntry, scope ...string) error {
 	if !responseCacheEnabled(ctx) {
 		return nil
 	}
@@ -66,7 +67,7 @@ func StoreChatResponse(ctx context.Context, sessionID, query string, entry ChatR
 	if err != nil {
 		return err
 	}
-	key := responseCacheKey(sessionID, query)
+	key := responseCacheKey(sessionID, query, scope...)
 	ttl := int(responseCacheTTL(ctx).Seconds())
 	_, err = g.Redis().Do(ctx, "SETEX", key, ttl, string(payload))
 	return err
@@ -93,7 +94,24 @@ func responseCacheTTL(ctx context.Context) time.Duration {
 	return time.Duration(v.Int64()) * time.Second
 }
 
-func responseCacheKey(sessionID, query string) string {
-	sum := sha256.Sum256([]byte(strings.TrimSpace(query)))
+func responseCacheKey(sessionID, query string, scope ...string) string {
+	parts := []string{strings.TrimSpace(query)}
+	normalizedScope := make([]string, 0, len(scope))
+	seen := make(map[string]bool, len(scope))
+	for _, item := range scope {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		key := strings.ToLower(item)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		normalizedScope = append(normalizedScope, item)
+	}
+	sort.Strings(normalizedScope)
+	parts = append(parts, normalizedScope...)
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\n")))
 	return fmt.Sprintf("opscaptionai:cache:chat:%s:%s:%s", llmResponseCacheVsn, strings.TrimSpace(sessionID), hex.EncodeToString(sum[:8]))
 }

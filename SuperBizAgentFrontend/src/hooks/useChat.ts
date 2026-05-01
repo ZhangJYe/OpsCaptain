@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import type { ChatMessage, ChatMode, ChatSession } from '../types/chat'
-import { buildSkillAwareQuery, generateId, getApiBaseUrl } from '../lib/utils'
+import { generateId, getApiBaseUrl } from '../lib/utils'
 import type { ThinkingStep } from '../components/agent/ThinkingCollapse'
 import { generateSuggestions } from '../components/agent/SuggestionChips'
 import type { Suggestion } from '../components/agent/SuggestionChips'
@@ -87,7 +87,6 @@ export function useChat() {
       const trimmed = String(query || '').trim()
       if (!trimmed || isLoading) return
 
-      const requestQuery = buildSkillAwareQuery(trimmed, options.selectedSkillIds || [])
       const userMsg: ChatMessage = {
         id: generateId(),
         role: 'user',
@@ -118,7 +117,7 @@ export function useChat() {
           const res = await fetch(`${baseUrl}/chat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ Id: sessionId, Question: requestQuery }),
+            body: JSON.stringify({ Id: sessionId, Question: trimmed, SelectedSkillIds: options.selectedSkillIds || [] }),
           })
           const data = await res.json()
           const payload = normalizeResponsePayload(data)
@@ -168,7 +167,7 @@ export function useChat() {
         const res = await fetch(`${baseUrl}/chat_stream`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ Id: sessionId, Question: requestQuery }),
+          body: JSON.stringify({ Id: sessionId, Question: trimmed, SelectedSkillIds: options.selectedSkillIds || [] }),
           signal: ctrl.signal,
         })
 
