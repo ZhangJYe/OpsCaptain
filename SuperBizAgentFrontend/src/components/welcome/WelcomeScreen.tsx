@@ -55,8 +55,8 @@ export function WelcomeScreen({ onSend }: Props) {
           transition={{ duration: 0.45 }}
           className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_340px]"
         >
-          <div className="rounded-[28px] border border-zinc-800/80 bg-zinc-950/80 p-6 shadow-[0_28px_120px_rgba(0,0,0,0.34)] backdrop-blur-xl lg:p-8">
-            <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-400">
+          <div className="rounded-[28px] border border-zinc-200/80 bg-white/92 p-6 shadow-[0_28px_120px_rgba(15,23,42,0.10)] backdrop-blur-xl dark:border-zinc-800/80 dark:bg-zinc-950/80 dark:shadow-[0_28px_120px_rgba(0,0,0,0.34)] lg:p-8">
+            <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-500 dark:text-zinc-400">
               <span className="inline-flex items-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-3 py-1 font-medium text-red-300">
                 <span className="h-2 w-2 rounded-full bg-red-400" />
                 SEV-2
@@ -70,10 +70,10 @@ export function WelcomeScreen({ onSend }: Props) {
             </div>
 
             <div className="mt-6 max-w-3xl">
-              <h1 className="text-4xl font-semibold tracking-[-0.04em] leading-[0.96] text-white sm:text-5xl lg:text-[4.75rem] xl:text-[5.35rem]">
+              <h1 className="text-4xl font-semibold tracking-[-0.04em] leading-[0.96] text-zinc-950 dark:text-white sm:text-5xl lg:text-[4.75rem] xl:text-[5.35rem]">
                 Paymentservice 延迟异常
               </h1>
-              <p className="mt-4 max-w-2xl text-sm leading-7 text-zinc-400 lg:text-base">
+              <p className="mt-4 max-w-2xl text-sm leading-7 text-zinc-600 dark:text-zinc-400 lg:text-base">
                 p95 在近 10 分钟窗口内抬升。先确认影响面，再对齐 metrics、error logs、最近变更与历史相似案例，最后整理回滚和验证步骤。
               </p>
             </div>
@@ -82,51 +82,51 @@ export function WelcomeScreen({ onSend }: Props) {
               {metricTiles.map((tile) => (
                 <div
                   key={tile.label}
-                  className="rounded-2xl border border-zinc-800/80 bg-zinc-900/62 px-4 py-4"
+                  className="rounded-2xl border border-zinc-200/80 bg-zinc-50/92 px-4 py-4 dark:border-zinc-800/80 dark:bg-zinc-900/62"
                 >
-                  <div className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">{tile.label}</div>
-                  <div className="mt-2 text-2xl font-semibold text-zinc-100">{tile.value}</div>
-                  <div className="mt-1 text-xs text-zinc-500">{tile.note}</div>
+                  <div className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-500">{tile.label}</div>
+                  <div className="mt-2 text-2xl font-semibold text-zinc-900 dark:text-zinc-100">{tile.value}</div>
+                  <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-500">{tile.note}</div>
                 </div>
               ))}
             </div>
 
             <div className="mt-8 grid gap-4 lg:grid-cols-[minmax(0,1.06fr)_minmax(0,0.94fr)]">
-              <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/54 p-5">
+              <div className="rounded-2xl border border-zinc-200/80 bg-zinc-50/92 p-5 dark:border-zinc-800/80 dark:bg-zinc-900/54">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-sm font-medium text-zinc-100">
+                  <div className="flex items-center gap-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">
                     <Database size={16} className="text-accent" />
                     证据链
                   </div>
-                  <span className="text-xs text-zinc-500">3 ready</span>
+                  <span className="text-xs text-zinc-500 dark:text-zinc-500">3 ready</span>
                 </div>
                 <div className="mt-5 space-y-4">
                   {evidenceRows.map((row) => (
                     <div key={row.title} className="flex items-start gap-3">
                       <span className={`mt-2 h-2.5 w-2.5 rounded-full ${row.tone}`} />
                       <div>
-                        <div className="text-sm font-medium text-zinc-100">{row.title}</div>
-                        <div className="mt-1 text-sm leading-6 text-zinc-400">{row.detail}</div>
+                        <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{row.title}</div>
+                        <div className="mt-1 text-sm leading-6 text-zinc-600 dark:text-zinc-400">{row.detail}</div>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/54 p-5">
+              <div className="rounded-2xl border border-zinc-200/80 bg-zinc-50/92 p-5 dark:border-zinc-800/80 dark:bg-zinc-900/54">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-sm font-medium text-zinc-100">
+                  <div className="flex items-center gap-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">
                     <TerminalSquare size={16} className="text-accent" />
                     建议节奏
                   </div>
-                  <span className="text-xs text-zinc-500">safe path</span>
+                  <span className="text-xs text-zinc-500 dark:text-zinc-500">safe path</span>
                 </div>
-                <ol className="mt-5 space-y-4 text-sm leading-6 text-zinc-400">
+                <ol className="mt-5 space-y-4 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
                   <li>1. 先判断错误率和队列堆积是否同步扩大。</li>
                   <li>2. 再确认 Redis / DB timeout 是否在 checkout path 集中出现。</li>
                   <li>3. 最后输出回滚、限流与验证步骤，并标注风险。</li>
                 </ol>
-                <div className="mt-5 rounded-2xl border border-accent/20 bg-accent/8 px-4 py-3 text-sm leading-6 text-zinc-300">
+                <div className="mt-5 rounded-2xl border border-accent/20 bg-accent/8 px-4 py-3 text-sm leading-6 text-zinc-700 dark:text-zinc-300">
                   不要先重启。先看 timeout 和重试是否同时抬升，再判断是否需要回滚。
                 </div>
               </div>
@@ -134,25 +134,25 @@ export function WelcomeScreen({ onSend }: Props) {
           </div>
 
           <div className="space-y-4">
-            <div className="rounded-[24px] border border-zinc-800/80 bg-zinc-950/80 p-5 backdrop-blur-xl">
+            <div className="rounded-[24px] border border-zinc-200/80 bg-white/92 p-5 backdrop-blur-xl dark:border-zinc-800/80 dark:bg-zinc-950/80">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-xs uppercase tracking-[0.22em] text-zinc-600">Current Shift</div>
-                  <div className="mt-2 text-xl font-semibold text-zinc-100">林澈</div>
+                  <div className="text-xs uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-600">Current Shift</div>
+                  <div className="mt-2 text-xl font-semibold text-zinc-900 dark:text-zinc-100">林澈</div>
                 </div>
                 <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-300">
                   <span className="h-2 w-2 rounded-full bg-emerald-400" />
                   Live
                 </span>
               </div>
-              <p className="mt-4 text-sm leading-6 text-zinc-400">
+              <p className="mt-4 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
                 整理证据、判断影响面，再把结论收束成可以执行的处置建议。
               </p>
             </div>
 
-            <div className="rounded-[24px] border border-zinc-800/80 bg-zinc-950/80 p-5 backdrop-blur-xl">
-              <div className="text-xs uppercase tracking-[0.22em] text-zinc-600">Current Guardrail</div>
-              <ul className="mt-4 space-y-3 text-sm leading-6 text-zinc-400">
+            <div className="rounded-[24px] border border-zinc-200/80 bg-white/92 p-5 backdrop-blur-xl dark:border-zinc-800/80 dark:bg-zinc-950/80">
+              <div className="text-xs uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-600">Current Guardrail</div>
+              <ul className="mt-4 space-y-3 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
                 {operatorNotes.map((note) => (
                   <li key={note} className="flex items-start gap-3">
                     <span className="mt-2 h-1.5 w-1.5 rounded-full bg-accent" />
@@ -170,28 +170,28 @@ export function WelcomeScreen({ onSend }: Props) {
           transition={{ duration: 0.45, delay: 0.12 }}
           className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_320px]"
         >
-          <div className="rounded-[24px] border border-zinc-800/80 bg-zinc-950/70 p-4 backdrop-blur-xl lg:p-5">
+          <div className="rounded-[24px] border border-zinc-200/80 bg-white/92 p-4 backdrop-blur-xl dark:border-zinc-800/80 dark:bg-zinc-950/70 lg:p-5">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <div className="text-xs uppercase tracking-[0.22em] text-zinc-600">Quick Entry</div>
-                <div className="mt-2 text-lg font-semibold text-zinc-100">从一个明确动作开始</div>
+                <div className="text-xs uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-600">Quick Entry</div>
+                <div className="mt-2 text-lg font-semibold text-zinc-900 dark:text-zinc-100">从一个明确动作开始</div>
               </div>
-              <div className="hidden text-xs text-zinc-500 md:block">支持 metrics / logs / knowledge 联动</div>
+              <div className="hidden text-xs text-zinc-500 dark:text-zinc-500 md:block">支持 metrics / logs / knowledge 联动</div>
             </div>
             <div className="grid gap-3 lg:grid-cols-3">
               {quickActions.map((item) => (
                 <button
                   key={item.title}
                   onClick={() => onSend(item.action)}
-                  className="group rounded-2xl border border-zinc-800/80 bg-zinc-900/50 p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-700 hover:bg-zinc-900/70"
+                  className="group rounded-2xl border border-zinc-200/80 bg-zinc-50/92 p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-300 hover:bg-white dark:border-zinc-800/80 dark:bg-zinc-900/50 dark:hover:border-zinc-700 dark:hover:bg-zinc-900/70"
                 >
                   <div className="flex items-center gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-accent/20 bg-accent/10 text-accent">
                       <item.icon size={18} />
                     </div>
                     <div className="min-w-0">
-                      <div className="text-sm font-medium text-zinc-100">{item.title}</div>
-                      <div className="mt-1 text-xs leading-5 text-zinc-500">{item.description}</div>
+                      <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">{item.title}</div>
+                      <div className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-500">{item.description}</div>
                     </div>
                   </div>
                   <div className="mt-5 inline-flex items-center gap-2 text-xs font-medium text-accent">
@@ -203,10 +203,10 @@ export function WelcomeScreen({ onSend }: Props) {
             </div>
           </div>
 
-          <div className="rounded-[24px] border border-zinc-800/80 bg-zinc-950/70 p-5 backdrop-blur-xl">
-            <div className="text-xs uppercase tracking-[0.22em] text-zinc-600">Input Hint</div>
-            <div className="mt-3 text-lg font-semibold text-zinc-100">给出三个关键信号</div>
-            <ul className="mt-4 space-y-3 text-sm leading-6 text-zinc-400">
+          <div className="rounded-[24px] border border-zinc-200/80 bg-white/92 p-5 backdrop-blur-xl dark:border-zinc-800/80 dark:bg-zinc-950/70">
+            <div className="text-xs uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-600">Input Hint</div>
+            <div className="mt-3 text-lg font-semibold text-zinc-900 dark:text-zinc-100">给出三个关键信号</div>
+            <ul className="mt-4 space-y-3 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
               <li className="flex items-start gap-3">
                 <span className="mt-2 h-1.5 w-1.5 rounded-full bg-accent" />
                 <span>异常服务或告警名称</span>

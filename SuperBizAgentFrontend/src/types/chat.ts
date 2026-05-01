@@ -13,9 +13,28 @@ export interface ChatSession {
   messages: ChatMessage[]
   createdAt: number
   updatedAt: number
+  mode?: ChatMode
+  selectedSkillIds?: string[]
 }
 
 export type ChatMode = 'quick' | 'stream'
+
+export type SkillDomain = 'metrics' | 'logs' | 'knowledge'
+
+export interface SkillOption {
+  id: string
+  label: string
+  description: string
+  domain: SkillDomain
+  promptFocus: string
+}
+
+export interface SkillGroup {
+  id: SkillDomain
+  label: string
+  description: string
+  skills: SkillOption[]
+}
 
 export type OperatorName = '林澈' | '许知安' | '周望' | '陈序' | '沈宁' | '陆遥' | '顾川' | '叶岚'
 export type OperatorTone = 'blue' | 'green' | 'amber' | 'slate'

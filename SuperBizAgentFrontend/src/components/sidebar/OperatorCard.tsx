@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import type { Operator } from '../../types/chat'
 
 const ROSTER: Operator[] = [
@@ -36,7 +36,7 @@ export function OperatorCard() {
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
             </span>
           </div>
-          <p className="text-xs text-zinc-500">当前值班 · 整理证据，生成处理建议</p>
+          <p className="text-xs text-zinc-500 dark:text-zinc-500">当前值班 · 整理证据，生成处理建议</p>
         </div>
         <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-medium">
           Live

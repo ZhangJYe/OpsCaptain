@@ -64,8 +64,8 @@ export function ObservabilityPanel({}: Props) {
 
   return (
     <div className="glass rounded-xl p-3">
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-xs text-zinc-500">服务状态</p>
+      <div className="mb-2 flex items-center justify-between">
+        <p className="text-xs text-zinc-600 dark:text-zinc-500">服务状态</p>
         <button
           onClick={probe}
           className="text-[10px] text-accent hover:underline"
@@ -77,11 +77,14 @@ export function ObservabilityPanel({}: Props) {
         {endpoints.map((ep) => {
           const Icon = icons[ep.name] || Server
           return (
-            <div key={ep.name} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-zinc-800/30 transition-colors">
-              <Icon size={14} className="text-zinc-500" />
+            <div
+              key={ep.name}
+              className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800/30"
+            >
+              <Icon size={14} className="text-zinc-500 dark:text-zinc-500" />
               <span className="text-xs flex-1">{ep.name}</span>
               <span className={`inline-block w-1.5 h-1.5 rounded-full ${statusColors[ep.status]}`} />
-              <span className="text-[10px] text-zinc-600 w-10 text-right">{ep.text}</span>
+              <span className="w-10 text-right text-[10px] text-zinc-500 dark:text-zinc-600">{ep.text}</span>
             </div>
           )
         })}

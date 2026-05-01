@@ -5,19 +5,33 @@ import { MessageBubble } from './MessageBubble'
 import { StreamingText } from './StreamingText'
 import { ChatInput } from './ChatInput'
 import type { ChatMessage, ChatMode } from '../../types/chat'
+import { findSkillsByIds, formatSelectedSkillSummary } from '../../lib/utils'
 
 interface Props {
   messages: ChatMessage[]
   streamingContent: string
+  streamingThoughts: string[]
   isLoading: boolean
   mode: ChatMode
+  selectedSkillIds: string[]
   onSend: (query: string) => void
   onStop: () => void
   onModeChange: (m: ChatMode) => void
 }
 
-export function ChatView({ messages, streamingContent, isLoading, mode, onSend, onStop, onModeChange }: Props) {
+export function ChatView({
+  messages,
+  streamingContent,
+  streamingThoughts,
+  isLoading,
+  mode,
+  selectedSkillIds,
+  onSend,
+  onStop,
+  onModeChange,
+}: Props) {
   const bottomRef = useRef<HTMLDivElement>(null)
+  const selectedSkills = findSkillsByIds(selectedSkillIds)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -25,25 +39,37 @@ export function ChatView({ messages, streamingContent, isLoading, mode, onSend, 
 
   return (
     <div className="flex flex-col h-full">
-      <div className="border-b border-zinc-900/80 bg-zinc-950/42 px-4 py-3 backdrop-blur-xl">
+      <div className="border-b border-zinc-200/80 bg-white/72 px-4 py-3 backdrop-blur-xl dark:border-zinc-900/80 dark:bg-zinc-950/42">
         <div className="mx-auto flex max-w-4xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="text-[11px] uppercase tracking-[0.22em] text-zinc-600">Current Session</div>
-            <div className="mt-1 text-sm text-zinc-300">
-              围绕 metrics、logs、knowledge 组织本轮诊断输出
+            <div className="text-[11px] uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-600">Current Session</div>
+            <div className="mt-1 text-sm text-zinc-700 dark:text-zinc-300">
+              {formatSelectedSkillSummary(selectedSkillIds)}
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="inline-flex items-center gap-1 rounded-full border border-zinc-800/80 bg-zinc-900/70 px-3 py-1.5 text-zinc-400">
+            <span className="inline-flex items-center gap-1 rounded-full border border-zinc-200/80 bg-zinc-100/90 px-3 py-1.5 text-zinc-500 dark:border-zinc-800/80 dark:bg-zinc-900/70 dark:text-zinc-400">
               <Database size={12} className="text-accent" />
-              上下文已装配
+              {selectedSkills.length > 0 ? `${selectedSkills.length} 个能力已启用` : '上下文已装配'}
             </span>
-            <span className="inline-flex items-center gap-1 rounded-full border border-zinc-800/80 bg-zinc-900/70 px-3 py-1.5 text-zinc-400">
+            <span className="inline-flex items-center gap-1 rounded-full border border-zinc-200/80 bg-zinc-100/90 px-3 py-1.5 text-zinc-500 dark:border-zinc-800/80 dark:bg-zinc-900/70 dark:text-zinc-400">
               {mode === 'quick' ? <Activity size={12} className="text-accent" /> : <Waves size={12} className="text-accent" />}
               {mode === 'quick' ? '快速回答' : '流式输出'}
             </span>
           </div>
         </div>
+        {selectedSkills.length > 0 ? (
+          <div className="mx-auto mt-3 flex max-w-4xl flex-wrap gap-2">
+            {selectedSkills.map((skill) => (
+              <span
+                key={skill.id}
+                className="rounded-full border border-accent/20 bg-accent/10 px-3 py-1 text-[11px] font-medium text-accent"
+              >
+                {skill.label}
+              </span>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       <div className="flex-1 overflow-y-auto scrollbar-thin px-4 py-6">
@@ -70,11 +96,20 @@ export function ChatView({ messages, streamingContent, isLoading, mode, onSend, 
               <div className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-accent/20 bg-accent/10">
                 <span className="text-xs font-bold text-accent">AI</span>
               </div>
-              <div className="flex-1 rounded-3xl border border-zinc-800/80 bg-zinc-900/62 px-5 py-4">
-                <div className="mb-3 flex items-center gap-2 text-[11px] text-zinc-500">
-                  <span className="font-medium text-zinc-300">OpsCaption</span>
+              <div className="flex-1 rounded-3xl border border-zinc-200/80 bg-white/85 px-5 py-4 dark:border-zinc-800/80 dark:bg-zinc-900/62">
+                <div className="mb-3 flex items-center gap-2 text-[11px] text-zinc-500 dark:text-zinc-500">
+                  <span className="font-medium text-zinc-800 dark:text-zinc-300">OpsCaption</span>
                   <span>正在整理证据与结论</span>
                 </div>
+                {streamingThoughts.length > 0 ? (
+                  <div className="mb-3 space-y-2 rounded-2xl border border-zinc-200/80 bg-zinc-50/90 px-4 py-3 dark:border-zinc-800/80 dark:bg-zinc-950/70">
+                    {streamingThoughts.map((thought) => (
+                      <div key={thought} className="text-xs leading-5 text-zinc-600 dark:text-zinc-400">
+                        {thought}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
                 {streamingContent ? (
                   <StreamingText content={streamingContent} />
                 ) : (
@@ -92,7 +127,14 @@ export function ChatView({ messages, streamingContent, isLoading, mode, onSend, 
         </div>
       </div>
 
-      <ChatInput onSend={onSend} onStop={onStop} isLoading={isLoading} mode={mode} onModeChange={onModeChange} />
+      <ChatInput
+        onSend={onSend}
+        onStop={onStop}
+        isLoading={isLoading}
+        mode={mode}
+        selectedSkillIds={selectedSkillIds}
+        onModeChange={onModeChange}
+      />
     </div>
   )
 }

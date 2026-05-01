@@ -4,29 +4,29 @@
 
 @layer base {
   * {
-    @apply border-zinc-800;
+    @apply border-zinc-200 dark:border-zinc-800;
   }
   html {
     @apply h-full;
   }
   body {
-    @apply h-full bg-zinc-950 text-zinc-100 antialiased overflow-hidden;
+    @apply h-full overflow-hidden bg-zinc-50 text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
   #root {
     @apply h-full;
   }
   ::selection {
-    @apply bg-accent/30 text-white;
+    @apply bg-accent/30 text-zinc-950 dark:text-white;
   }
 }
 
 @layer components {
   .glass {
-    @apply border border-zinc-800/60 bg-zinc-900/70 backdrop-blur-xl;
+    @apply border border-zinc-200 bg-white backdrop-blur-xl dark:border-zinc-800/60 dark:bg-zinc-900/70;
   }
   .glass-hover {
-    @apply transition-all duration-200 hover:bg-zinc-800/70 hover:border-zinc-700/60;
+    @apply transition-all duration-200 hover:border-zinc-300 hover:bg-white dark:hover:border-zinc-700/60 dark:hover:bg-zinc-800/70;
   }
 }
 

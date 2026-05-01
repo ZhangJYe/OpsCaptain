@@ -17,6 +17,8 @@ interface Props {
   onModeChange: (m: ChatMode) => void
   sessionId: string
   messages: ChatMessage[]
+  selectedSkillIds: string[]
+  onSelectedSkillIdsChange: (ids: string[]) => void
   children: ReactNode
 }
 
@@ -32,14 +34,16 @@ export function MainLayout({
   onModeChange,
   sessionId,
   messages,
+  selectedSkillIds,
+  onSelectedSkillIdsChange,
   children,
 }: Props) {
   const siteRecord = getSiteRecord()
 
   return (
-    <div className="relative flex h-screen overflow-hidden bg-zinc-950 text-zinc-100">
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(9,12,18,0.92)_0%,rgba(6,9,15,0.98)_100%)]" />
-      <div className="pointer-events-none absolute inset-0 opacity-[0.06] [background-image:linear-gradient(to_right,rgba(255,255,255,0.12)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.12)_1px,transparent_1px)] [background-size:72px_72px]" />
+    <div className="relative flex h-screen overflow-hidden bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(248,250,252,0.96)_0%,rgba(241,245,249,0.92)_100%)] dark:bg-[linear-gradient(180deg,rgba(9,12,18,0.92)_0%,rgba(6,9,15,0.98)_100%)]" />
+      <div className="pointer-events-none absolute inset-0 opacity-[0.04] dark:opacity-[0.06] [background-image:linear-gradient(to_right,rgba(15,23,42,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(15,23,42,0.08)_1px,transparent_1px)] dark:[background-image:linear-gradient(to_right,rgba(255,255,255,0.12)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.12)_1px,transparent_1px)] [background-size:72px_72px]" />
       <AnimatePresence>
         {sidebarOpen && (
           <>
@@ -65,6 +69,8 @@ export function MainLayout({
                 messages={messages}
                 chatMode={chatMode}
                 onModeChange={onModeChange}
+                selectedSkillIds={selectedSkillIds}
+                onSelectedSkillIdsChange={onSelectedSkillIdsChange}
               />
             </motion.aside>
           </>
@@ -79,10 +85,10 @@ export function MainLayout({
         />
         <main className="relative flex-1 overflow-hidden">{children}</main>
         {siteRecord ? (
-          <footer className="border-t border-zinc-900/80 bg-zinc-950/90 px-4 py-3 text-center text-xs text-zinc-500 backdrop-blur-xl">
+          <footer className="border-t border-zinc-200/80 bg-white/88 px-4 py-3 text-center text-xs text-zinc-500 backdrop-blur-xl dark:border-zinc-900/80 dark:bg-zinc-950/90 dark:text-zinc-500">
             <span className="mr-1">ICP备案号：</span>
             <a
-              className="font-medium text-zinc-400 transition-colors hover:text-zinc-200 hover:underline"
+              className="font-medium text-zinc-600 transition-colors hover:text-zinc-900 hover:underline dark:text-zinc-400 dark:hover:text-zinc-200"
               href={siteRecord.icpLink}
               target="_blank"
               rel="noopener noreferrer"
