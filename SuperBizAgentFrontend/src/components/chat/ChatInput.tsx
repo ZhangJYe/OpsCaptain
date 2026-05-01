@@ -155,12 +155,11 @@ export function ChatInput({ onSend, onStop, isLoading, mode, selectedSkillIds, o
               <button
                 onClick={openFilePicker}
                 disabled={isUploading || isLoading}
-                className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 disabled:opacity-50 dark:hover:bg-zinc-800 dark:hover:text-zinc-400"
-                title="上传知识库文件"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200/80 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-600 transition-all hover:border-accent/30 hover:text-accent disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:border-accent/30 dark:hover:text-accent"
+                title="上传文档到知识库"
               >
-                {isUploading
-                  ? <Loader2 size={15} className="animate-spin" />
-                  : <Paperclip size={15} />}
+                {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Paperclip size={14} />}
+                上传文档
               </button>
 
               <span className="hidden text-[10px] text-zinc-400 dark:text-zinc-600 lg:inline">

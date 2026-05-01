@@ -119,9 +119,12 @@ export function WelcomeScreen({ onSend }: Props) {
             </AnimatePresence>
 
             <div className="flex items-center justify-between border-t border-zinc-100 px-4 py-3 dark:border-zinc-800">
-              <div className="flex items-center gap-2">
-                <button onClick={openFilePicker} disabled={isUploading} className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 disabled:opacity-50 dark:hover:bg-zinc-800 dark:hover:text-zinc-400" title="上传知识库文件">
-                  {isUploading ? <Loader2 size={16} className="animate-spin" /> : <Paperclip size={16} />}
+              <div className="flex items-center gap-3">
+                <button onClick={openFilePicker} disabled={isUploading}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200/80 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-600 transition-all hover:border-accent/30 hover:text-accent disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:border-accent/30 dark:hover:text-accent"
+                  title="上传文档到知识库">
+                  {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Paperclip size={14} />}
+                  上传文档
                 </button>
                 <span className="text-[11px] text-zinc-400 dark:text-zinc-600">Enter 发送 · Shift+Enter 换行</span>
               </div>

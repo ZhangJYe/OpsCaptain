@@ -52,6 +52,8 @@ export function ChatView({
     onSend(query)
   }
 
+  const hasThinking = thinkingSteps.length > 0
+
   return (
     <div className="flex flex-col h-full">
       {/* Compact status bar */}
@@ -81,6 +83,22 @@ export function ChatView({
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto scrollbar-thin">
         <div className="mx-auto max-w-4xl px-4 py-6 space-y-5">
+
+          {/* Thinking chain — FIXED at top of content, always visible when active */}
+          <AnimatePresence>
+            {hasThinking && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8, transition: { duration: 0.3 } }}
+                className="ml-11"
+              >
+                <ThinkingChain steps={thinkingSteps} isStreaming={isLoading && mode === 'stream'} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Messages */}
           <AnimatePresence initial={false}>
             {messages.map((msg, i) => (
               <motion.div
@@ -93,22 +111,20 @@ export function ChatView({
 
                 {/* Suggestions after last assistant message */}
                 {msg.role === 'assistant' && i === messages.length - 1 && !isLoading && suggestions.length > 0 && (
-                  <div className="mt-3 ml-11">
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
+                    className="mt-3 ml-11"
+                  >
                     <SuggestionChips suggestions={suggestions} onSelect={handleSuggestion} />
-                  </div>
+                  </motion.div>
                 )}
               </motion.div>
             ))}
           </AnimatePresence>
 
-          {/* Thinking chain */}
-          {(thinkingSteps.length > 0 || isLoading) && (
-            <div className="ml-11">
-              <ThinkingChain steps={thinkingSteps} isStreaming={isLoading && mode === 'stream'} />
-            </div>
-          )}
-
-          {/* Streaming placeholder */}
+          {/* Streaming content bubble */}
           {isLoading && (
             <motion.div
               initial={{ opacity: 0, y: 8 }}
@@ -121,7 +137,9 @@ export function ChatView({
               <div className="min-w-0 flex-1 max-w-[85%]">
                 <div className="mb-1.5 flex items-center gap-2">
                   <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-500">OpsCaption</span>
-                  <span className="text-[10px] text-zinc-400 dark:text-zinc-600">生成中</span>
+                  <span className="text-[10px] text-zinc-400 dark:text-zinc-600">
+                    {streamingContent ? '生成中' : '思考中'}
+                  </span>
                 </div>
                 <div className="rounded-2xl border border-zinc-200/80 bg-white/90 px-4 py-3 shadow-sm dark:border-zinc-800/60 dark:bg-zinc-900/70">
                   {streamingThoughts.length > 0 && (
@@ -149,7 +167,6 @@ export function ChatView({
         </div>
       </div>
 
-      {/* Input */}
       <ChatInput
         onSend={onSend}
         onStop={onStop}
