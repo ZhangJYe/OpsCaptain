@@ -33,11 +33,12 @@ export function TopBar({ theme, onToggleSidebar, onToggleTheme, chatMode, onNewC
         <button
           onClick={onNewChat}
           disabled={isLoading}
-          className="rounded-lg p-2 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed dark:hover:bg-zinc-800 dark:hover:text-zinc-300"
+          className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
           aria-label="新建会话"
           title={isLoading ? '请等待当前请求完成' : '新建会话'}
         >
-          <Plus size={18} />
+          <Plus size={15} />
+          <span className="hidden sm:inline">新会话</span>
         </button>
         <span className="rounded-full bg-accent/10 px-2.5 py-1 text-[11px] font-medium text-accent">
           {chatMode === 'quick' ? '快速' : '流式'}
