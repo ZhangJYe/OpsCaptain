@@ -167,3 +167,9 @@ export function buildSkillAwareQuery(query: string, selectedSkillIds: string[]):
   const focus = selected.map((skill) => `- ${skill.label}：${skill.promptFocus}`).join('\n')
   return `请按以下分析重点优先组织本轮回答：\n${focus}\n\n用户问题：${trimmed}`
 }
+
+export function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
