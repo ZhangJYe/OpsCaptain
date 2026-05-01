@@ -144,18 +144,38 @@ func extractFacts(userMsg string, assistantMsg string) []string {
 		"服务名", "应用名", "IP地址", "端口", "数据库名", "集群名",
 		"版本号", "负责人", "告警规则", "阈值", "SLA", "域名",
 	}
-	combined := userMsg + " " + assistantMsg
+	_ = assistantMsg
+	combined := userMsg
 	for _, indicator := range indicators {
 		if strings.Contains(combined, indicator) {
 			sentences := splitSentences(combined)
 			for _, s := range sentences {
-				if strings.Contains(s, indicator) && len(s) > 5 && len(s) < 500 {
+				if strings.Contains(s, indicator) && len(s) > 5 && len(s) < 500 && !looksLikeQuestion(s) {
 					facts = append(facts, strings.TrimSpace(s))
 				}
 			}
 		}
 	}
 	return dedup(facts)
+}
+
+func looksLikeQuestion(sentence string) bool {
+	normalized := strings.TrimSpace(strings.ToLower(sentence))
+	if normalized == "" {
+		return false
+	}
+	if strings.ContainsAny(normalized, "？?") {
+		return true
+	}
+	for _, marker := range []string{
+		"什么", "多少", "谁", "哪", "怎么", "如何", "是否", "有没有", "吗",
+		"what", "which", "who", "where", "when", "why", "how", "is there", "do we", "should we",
+	} {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func extractPreferences(userMsg string) []string {

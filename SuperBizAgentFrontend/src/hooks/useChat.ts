@@ -9,6 +9,13 @@ interface SendOptions {
   selectedSkillIds?: string[]
 }
 
+interface QuickAnswerRequest {
+  baseUrl: string
+  sessionId: string
+  question: string
+  selectedSkillIds: string[]
+}
+
 function parseJsonSafe(raw: string): any {
   try {
     return JSON.parse(raw)
@@ -47,6 +54,32 @@ function parseSSEBlock(block: string): { event: string; data: string } {
     event,
     data: dataLines.join('\n'),
   }
+}
+
+function pullSSEBlock(buffer: string): { block: string; rest: string } | null {
+  const match = buffer.match(/\r?\n\r?\n/)
+  if (!match || match.index === undefined) {
+    return null
+  }
+  const boundary = match.index
+  return {
+    block: buffer.slice(0, boundary),
+    rest: buffer.slice(boundary + match[0].length),
+  }
+}
+
+async function requestQuickAnswer({ baseUrl, sessionId, question, selectedSkillIds }: QuickAnswerRequest): Promise<string> {
+  const res = await fetch(`${baseUrl}/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ Id: sessionId, Question: question, SelectedSkillIds: selectedSkillIds }),
+  })
+  const data = await res.json()
+  const payload = normalizeResponsePayload(data)
+  if (!res.ok) {
+    throw new Error(String(data?.message || `HTTP ${res.status}`))
+  }
+  return extractAnswer(payload)
 }
 
 function buildThinkingSteps(mode: string, thoughts: string[], hasResponse: boolean): ThinkingStep[] {
@@ -114,21 +147,14 @@ export function useChat() {
             i === 0 ? { ...s, status: 'done' as const } : i === 1 ? { ...s, status: 'active' as const, detail: '检索指标...' } : s
           ))
 
-          const res = await fetch(`${baseUrl}/chat`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ Id: sessionId, Question: trimmed, SelectedSkillIds: options.selectedSkillIds || [] }),
-          })
-          const data = await res.json()
-          const payload = normalizeResponsePayload(data)
-
           // Mark remaining steps
           setThinkingSteps((prev) => prev.map((s) => ({ ...s, status: 'done' as const })))
-
-          if (!res.ok) {
-            throw new Error(String(data?.message || `HTTP ${res.status}`))
-          }
-          const answer = extractAnswer(payload)
+          const answer = await requestQuickAnswer({
+            baseUrl,
+            sessionId,
+            question: trimmed,
+            selectedSkillIds: options.selectedSkillIds || [],
+          })
           const assistantMsg: ChatMessage = {
             id: generateId(),
             role: 'assistant',
@@ -162,12 +188,13 @@ export function useChat() {
       const ctrl = new AbortController()
       setAbortCtrl(ctrl)
       let partialContent = ''
+      const selectedSkillIds = options.selectedSkillIds || []
 
       try {
         const res = await fetch(`${baseUrl}/chat_stream`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ Id: sessionId, Question: trimmed, SelectedSkillIds: options.selectedSkillIds || [] }),
+          body: JSON.stringify({ Id: sessionId, Question: trimmed, SelectedSkillIds: selectedSkillIds }),
           signal: ctrl.signal,
         })
 
@@ -184,6 +211,7 @@ export function useChat() {
         let buffer = ''
         let fullContent = ''
         let thoughtCount = 0
+        let streamDone = false
 
         while (true) {
           const { done, value } = await reader.read()
@@ -191,10 +219,10 @@ export function useChat() {
             buffer += decoder.decode(value, { stream: !done })
           }
 
-          let separatorIndex = buffer.indexOf('\n\n')
-          while (separatorIndex >= 0) {
-            const block = buffer.slice(0, separatorIndex)
-            buffer = buffer.slice(separatorIndex + 2)
+          let parsedBlock = pullSSEBlock(buffer)
+          while (parsedBlock) {
+            const block = parsedBlock.block
+            buffer = parsedBlock.rest
             const { event, data } = parseSSEBlock(block)
 
             if (event === 'message') {
@@ -229,9 +257,16 @@ export function useChat() {
                 s.status === 'active' ? { ...s, status: 'error' as const, detail: data } : s
               ))
               throw new Error(data || '流式请求失败')
+            } else if (event === 'done') {
+              streamDone = true
+              break
             }
 
-            separatorIndex = buffer.indexOf('\n\n')
+            parsedBlock = pullSSEBlock(buffer)
+          }
+
+          if (streamDone) {
+            break
           }
 
           if (done) {
@@ -245,6 +280,8 @@ export function useChat() {
             fullContent += data
             partialContent = fullContent
             setStreamingContent(fullContent)
+          } else if (event === 'done') {
+            streamDone = true
           }
         }
 
@@ -259,6 +296,32 @@ export function useChat() {
         }
       } catch (err: any) {
         const isAbort = err?.name === 'AbortError'
+        let recoveredWithQuickFallback = false
+
+        if (!isAbort && !partialContent.trim()) {
+          try {
+            const fallbackAnswer = await requestQuickAnswer({
+              baseUrl,
+              sessionId,
+              question: trimmed,
+              selectedSkillIds,
+            })
+            recoveredWithQuickFallback = true
+            setThinkingSteps((prev) => prev.map((s) => ({ ...s, status: 'done' as const })))
+            setMessages((prev) => [
+              ...prev,
+              { id: generateId(), role: 'assistant', content: fallbackAnswer, timestamp: Date.now() },
+            ])
+            setSuggestions(generateSuggestions(fallbackAnswer, 'quick'))
+          } catch (fallbackErr: any) {
+            err = fallbackErr
+          }
+        }
+
+        if (recoveredWithQuickFallback) {
+          return
+        }
+
         setThinkingSteps((prev) => prev.map((s) =>
           s.status === 'active' ? { ...s, status: 'error' as const, detail: err?.message } : s
         ))

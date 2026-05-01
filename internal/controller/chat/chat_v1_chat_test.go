@@ -199,6 +199,66 @@ func TestChatPassesSelectedSkillIDsIntoRequestContext(t *testing.T) {
 	}
 }
 
+func TestChatBypassesCacheForGreetingInput(t *testing.T) {
+	oldBuild := buildChatAgent
+	oldDecision := getDegradationDecision
+	oldShould := shouldUseChatMultiAgent
+	oldRun := runChatMultiAgent
+	defer func() {
+		buildChatAgent = oldBuild
+		getDegradationDecision = oldDecision
+		shouldUseChatMultiAgent = oldShould
+		runChatMultiAgent = oldRun
+	}()
+
+	getDegradationDecision = func(context.Context, string) aiService.DegradationDecision { return aiService.DegradationDecision{} }
+	shouldUseChatMultiAgent = func(context.Context, string) bool { return false }
+
+	invokeCount := 0
+	buildChatAgent = func(_ context.Context, _ string) (compose.Runnable[*chat_pipeline.UserMessage, *schema.Message], error) {
+		invokeCount++
+		return &fakeChatRunnable{answer: fmt.Sprintf("reply-%d", invokeCount)}, nil
+	}
+
+	ctrl := &ControllerV1{}
+	sessionID := mem.GenerateSessionID()
+
+	first, err := ctrl.Chat(context.Background(), &v1.ChatReq{Id: sessionID, Question: "你好"})
+	if err != nil {
+		t.Fatalf("first chat returned error: %v", err)
+	}
+	second, err := ctrl.Chat(context.Background(), &v1.ChatReq{Id: sessionID, Question: "你好"})
+	if err != nil {
+		t.Fatalf("second chat returned error: %v", err)
+	}
+
+	if first == nil || second == nil {
+		t.Fatal("expected both responses")
+	}
+	if first.Cached || second.Cached {
+		t.Fatalf("expected greeting replies to bypass cache, got first=%#v second=%#v", first, second)
+	}
+	if invokeCount != 2 {
+		t.Fatalf("expected model invocation on both greeting turns, got %d", invokeCount)
+	}
+}
+
+func TestShouldBypassChatResponseCache(t *testing.T) {
+	cases := map[string]bool{
+		"你好":         true,
+		"hello":      true,
+		"在吗":         true,
+		"晚上好":        true,
+		"你好，帮我查告警":   false,
+		"payment 超时": false,
+	}
+	for query, want := range cases {
+		if got := shouldBypassChatResponseCache(query); got != want {
+			t.Fatalf("query=%q want=%t got=%t", query, want, got)
+		}
+	}
+}
+
 func TestSessionLockReferenceCountCleanup(t *testing.T) {
 	sessionLocksMu.Lock()
 	sessionLocks = make(map[string]*sessionLockEntry)

@@ -12,6 +12,7 @@ import (
 	"SuperBizAgent/utility/mem"
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -106,17 +107,22 @@ func (c *ControllerV1) Chat(ctx context.Context, req *v1.ChatReq) (res *v1.ChatR
 	defer releaseSessionLock(id, mu)
 
 	sessionMem := mem.GetSimpleMemory(id)
+	bypassResponseCache := shouldBypassChatResponseCache(msg)
 
-	if entry, found, cacheErr := cache.LoadChatResponse(ctx, id, msg, selectedSkillIDs...); cacheErr != nil {
-		g.Log().Warningf(ctx, "[session:%s][req:%s] cache lookup failed: %v", id, requestID, cacheErr)
-	} else if found {
-		answer, detail := filterAssistantPayload(ctx, entry.Answer, entry.Detail)
-		return &v1.ChatRes{
-			Answer: answer,
-			Detail: detail,
-			Mode:   "cache",
-			Cached: true,
-		}, nil
+	if !bypassResponseCache {
+		if entry, found, cacheErr := cache.LoadChatResponse(ctx, id, msg, selectedSkillIDs...); cacheErr != nil {
+			g.Log().Warningf(ctx, "[session:%s][req:%s] cache lookup failed: %v", id, requestID, cacheErr)
+		} else if found {
+			answer, detail := filterAssistantPayload(ctx, entry.Answer, entry.Detail)
+			return &v1.ChatRes{
+				Answer: answer,
+				Detail: detail,
+				Mode:   "cache",
+				Cached: true,
+			}, nil
+		}
+	} else {
+		g.Log().Debugf(ctx, "[session:%s][req:%s] bypass chat cache for lightweight social input", id, requestID)
 	}
 
 	if shouldUseChatMultiAgent(ctx, msg) {
@@ -128,12 +134,14 @@ func (c *ControllerV1) Chat(ctx context.Context, req *v1.ChatReq) (res *v1.ChatR
 			return nil, err
 		}
 		answer, detail := filterAssistantPayload(ctx, response.Content, response.Detail)
-		if cacheErr := cache.StoreChatResponse(ctx, id, msg, cache.ChatResponseEntry{
-			Answer: answer,
-			Detail: detail,
-			Mode:   "multi_agent",
-		}, selectedSkillIDs...); cacheErr != nil {
-			g.Log().Warningf(ctx, "[session:%s][req:%s] cache store failed: %v", id, requestID, cacheErr)
+		if !bypassResponseCache {
+			if cacheErr := cache.StoreChatResponse(ctx, id, msg, cache.ChatResponseEntry{
+				Answer: answer,
+				Detail: detail,
+				Mode:   "multi_agent",
+			}, selectedSkillIDs...); cacheErr != nil {
+				g.Log().Warningf(ctx, "[session:%s][req:%s] cache store failed: %v", id, requestID, cacheErr)
+			}
 		}
 		return &v1.ChatRes{
 			Answer:            answer,
@@ -172,12 +180,14 @@ func (c *ControllerV1) Chat(ctx context.Context, req *v1.ChatReq) (res *v1.ChatR
 
 	answer, detail := filterAssistantPayload(ctx, out.Content, contextDetail)
 	memorySvc.PersistOutcome(ctx, id, msg, answer)
-	if cacheErr := cache.StoreChatResponse(ctx, id, msg, cache.ChatResponseEntry{
-		Answer: answer,
-		Detail: detail,
-		Mode:   "chat",
-	}, selectedSkillIDs...); cacheErr != nil {
-		g.Log().Warningf(ctx, "[session:%s][req:%s] cache store failed: %v", id, requestID, cacheErr)
+	if !bypassResponseCache {
+		if cacheErr := cache.StoreChatResponse(ctx, id, msg, cache.ChatResponseEntry{
+			Answer: answer,
+			Detail: detail,
+			Mode:   "chat",
+		}, selectedSkillIDs...); cacheErr != nil {
+			g.Log().Warningf(ctx, "[session:%s][req:%s] cache store failed: %v", id, requestID, cacheErr)
+		}
 	}
 
 	g.Log().Infof(ctx, "[session:%s][req:%s] Chat completed, answer length: %d, turns: %d",
@@ -189,4 +199,20 @@ func (c *ControllerV1) Chat(ctx context.Context, req *v1.ChatReq) (res *v1.ChatR
 		Mode:   "chat",
 	}
 	return res, nil
+}
+
+func shouldBypassChatResponseCache(query string) bool {
+	normalized := strings.TrimSpace(strings.ToLower(query))
+	if normalized == "" {
+		return false
+	}
+	if strings.ContainsAny(normalized, "\n\t") {
+		return false
+	}
+	switch normalized {
+	case "hi", "hello", "hey", "你好", "您好", "嗨", "哈喽", "在吗", "在么", "早", "早上好", "晚上好", "午安":
+		return true
+	default:
+		return false
+	}
 }

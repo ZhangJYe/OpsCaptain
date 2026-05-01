@@ -30,8 +30,9 @@ func New() *Service {
 
 func (s *Service) Create(ctx context.Context, r *ghttp.Request) (*Client, error) {
 	r.Response.Header().Set("Content-Type", "text/event-stream")
-	r.Response.Header().Set("Cache-Control", "no-cache")
+	r.Response.Header().Set("Cache-Control", "no-cache, no-transform")
 	r.Response.Header().Set("Connection", "keep-alive")
+	r.Response.Header().Set("X-Accel-Buffering", "no")
 	if origin, ok := middleware.ResolveAllowedOrigin(ctx, r.GetHeader("Origin")); ok {
 		r.Response.Header().Set("Access-Control-Allow-Origin", origin)
 		r.Response.Header().Set("Vary", "Origin")

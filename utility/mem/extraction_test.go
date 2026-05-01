@@ -49,6 +49,26 @@ func TestExtractFacts(t *testing.T) {
 	}
 }
 
+func TestExtractFactsIgnoresAssistantOnlyClaims(t *testing.T) {
+	facts := extractFacts(
+		"先帮我看看这个问题",
+		"服务名是payment-service，负责人是Alice，阈值是95%。",
+	)
+	if len(facts) != 0 {
+		t.Fatalf("expected assistant-only facts to be ignored, got %v", facts)
+	}
+}
+
+func TestExtractFactsIgnoresQuestionSentences(t *testing.T) {
+	facts := extractFacts(
+		"我们的服务名是什么？端口是多少？",
+		"我先帮你查一下。",
+	)
+	if len(facts) != 0 {
+		t.Fatalf("expected question sentences not to become facts, got %v", facts)
+	}
+}
+
 func TestExtractFacts_NoMatch(t *testing.T) {
 	facts := extractFacts("你好", "你好，有什么可以帮你的？")
 	if len(facts) != 0 {
@@ -159,18 +179,11 @@ func TestExtractMemoriesWithReportDropsBoilerplate(t *testing.T) {
 	if report == nil {
 		t.Fatal("expected report")
 	}
-	if len(report.Dropped) == 0 {
-		t.Fatal("expected boilerplate candidate to be dropped")
+	if len(report.StoredIDs) != 0 {
+		t.Fatalf("expected assistant-only fact not to be stored, got %+v", report.StoredIDs)
 	}
-	foundBoilerplate := false
-	for _, item := range report.Dropped {
-		if item.Reason == "assistant_boilerplate" {
-			foundBoilerplate = true
-			break
-		}
-	}
-	if !foundBoilerplate {
-		t.Fatalf("expected assistant_boilerplate drop reason, got %+v", report.Dropped)
+	if len(report.Candidates) != 0 {
+		t.Fatalf("expected no candidates when only assistant output contains facts, got %+v", report.Candidates)
 	}
 }
 
