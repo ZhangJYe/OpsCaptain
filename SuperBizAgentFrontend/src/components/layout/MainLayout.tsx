@@ -43,21 +43,19 @@ export function MainLayout({
   const siteRecord = getSiteRecord()
 
   return (
-    <div className="relative flex h-screen overflow-hidden bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(248,250,252,0.96)_0%,rgba(241,245,249,0.92)_100%)] dark:bg-[linear-gradient(180deg,rgba(9,12,18,0.92)_0%,rgba(6,9,15,0.98)_100%)]" />
-      <div className="pointer-events-none absolute inset-0 opacity-[0.04] dark:opacity-[0.06] [background-image:linear-gradient(to_right,rgba(15,23,42,0.08)_1px,transparent_1px),linear-gradient(to_bottom,rgba(15,23,42,0.08)_1px,transparent_1px)] dark:[background-image:linear-gradient(to_right,rgba(255,255,255,0.12)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.12)_1px,transparent_1px)] [background-size:72px_72px]" />
+    <div className="relative flex h-screen overflow-hidden bg-[#fafafa] text-zinc-900 dark:bg-[#09090b] dark:text-zinc-100">
       <AnimatePresence>
         {sidebarOpen && (
           <>
             <motion.div
-              className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+              className="fixed inset-0 z-40 bg-black/50 lg:hidden"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={onCloseSidebar}
             />
             <motion.aside
-              className="fixed left-0 top-0 bottom-0 z-50 w-72 lg:relative lg:z-0"
+              className="fixed bottom-0 left-0 top-0 z-50 w-72 lg:relative lg:z-0"
               initial={{ x: -288 }}
               animate={{ x: 0 }}
               exit={{ x: -288 }}
@@ -79,7 +77,8 @@ export function MainLayout({
           </>
         )}
       </AnimatePresence>
-      <div className="relative flex-1 flex flex-col min-w-0 overflow-hidden">
+
+      <div className="relative flex flex-1 flex-col min-w-0 overflow-hidden">
         <TopBar
           theme={theme}
           onToggleSidebar={onToggleSidebar}
@@ -89,11 +88,11 @@ export function MainLayout({
           isLoading={isLoading}
         />
         <main className="relative flex-1 overflow-hidden">{children}</main>
-        {siteRecord ? (
-          <footer className="border-t border-zinc-200/80 bg-white/88 px-4 py-3 text-center text-xs text-zinc-500 backdrop-blur-xl dark:border-zinc-900/80 dark:bg-zinc-950/90 dark:text-zinc-500">
+        {siteRecord && (
+          <footer className="border-t border-zinc-200/80 bg-white/88 px-4 py-2.5 text-center text-xs text-zinc-400 backdrop-blur-xl dark:border-zinc-800/60 dark:bg-zinc-950/90 dark:text-zinc-600">
             <span className="mr-1">ICP备案号：</span>
             <a
-              className="font-medium text-zinc-600 transition-colors hover:text-zinc-900 hover:underline dark:text-zinc-400 dark:hover:text-zinc-200"
+              className="font-medium text-zinc-500 transition-colors hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300"
               href={siteRecord.icpLink}
               target="_blank"
               rel="noopener noreferrer"
@@ -101,7 +100,7 @@ export function MainLayout({
               {siteRecord.icpNumber}
             </a>
           </footer>
-        ) : null}
+        )}
       </div>
     </div>
   )

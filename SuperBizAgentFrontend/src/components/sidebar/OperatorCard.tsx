@@ -12,33 +12,33 @@ const ROSTER: Operator[] = [
   { name: '叶岚', tone: 'slate' },
 ]
 
-const TONE_COLORS: Record<string, string> = {
-  blue: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  green: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-  amber: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
-  slate: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
+const TONE_CLASSES: Record<string, string> = {
+  blue: 'bg-blue-500/10 text-blue-400 ring-blue-500/20',
+  green: 'bg-emerald-500/10 text-emerald-400 ring-emerald-500/20',
+  amber: 'bg-amber-500/10 text-amber-400 ring-amber-500/20',
+  slate: 'bg-slate-500/10 text-slate-400 ring-slate-500/20',
 }
 
 export function OperatorCard() {
   const [operator] = useState(() => ROSTER[Math.floor(Math.random() * ROSTER.length)])
 
   return (
-    <div className="glass rounded-xl p-4">
+    <div className="rounded-xl border border-zinc-200/80 bg-white/80 p-4 backdrop-blur dark:border-zinc-800/60 dark:bg-zinc-900/60">
       <div className="flex items-center gap-3">
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-lg border ${TONE_COLORS[operator.tone]}`}>
+        <div className={`flex h-10 w-10 items-center justify-center rounded-full text-lg font-bold ring-1 ring-inset ${TONE_CLASSES[operator.tone]}`}>
           {operator.name[0]}
         </div>
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">{operator.name}</span>
+            <span className="text-sm font-semibold text-zinc-900 dark:text-white">{operator.name}</span>
             <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
             </span>
           </div>
-          <p className="text-xs text-zinc-500 dark:text-zinc-500">当前值班 · 整理证据，生成处理建议</p>
+          <p className="text-xs text-zinc-500 dark:text-zinc-500">当前值班 · 证据整理中</p>
         </div>
-        <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-medium">
+        <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400 ring-1 ring-inset ring-emerald-500/20">
           Live
         </span>
       </div>

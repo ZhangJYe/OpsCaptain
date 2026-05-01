@@ -10,39 +10,43 @@
     @apply h-full;
   }
   body {
-    @apply h-full overflow-hidden bg-zinc-50 text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100;
+    @apply h-full overflow-hidden antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    background: #fafafa;
+  }
+  .dark body {
+    background: #09090b;
   }
   #root {
     @apply h-full;
   }
   ::selection {
-    @apply bg-accent/30 text-zinc-950 dark:text-white;
+    @apply bg-accent/20 text-zinc-900 dark:text-white;
   }
 }
 
 @layer components {
   .glass {
-    @apply border border-zinc-200 bg-white backdrop-blur-xl dark:border-zinc-800/60 dark:bg-zinc-900/70;
-  }
-  .glass-hover {
-    @apply transition-all duration-200 hover:border-zinc-300 hover:bg-white dark:hover:border-zinc-700/60 dark:hover:bg-zinc-800/70;
+    @apply border border-zinc-200/80 bg-white/80 backdrop-blur-xl dark:border-zinc-800/60 dark:bg-zinc-900/60;
   }
 }
 
 @layer utilities {
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: hsl(240 3.7% 15.9%) transparent;
+    scrollbar-color: hsl(240 3.7% 15.9% / 0.3) transparent;
   }
   .scrollbar-thin::-webkit-scrollbar {
-    width: 6px;
+    width: 5px;
   }
   .scrollbar-thin::-webkit-scrollbar-track {
     background: transparent;
   }
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background: hsl(240 3.7% 15.9%);
-    border-radius: 3px;
+    background: hsl(240 3.7% 15.9% / 0.25);
+    border-radius: 10px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: hsl(240 3.7% 15.9% / 0.4);
   }
 }

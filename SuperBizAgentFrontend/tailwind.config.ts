@@ -5,17 +5,13 @@ export default {
   theme: {
     extend: {
       colors: {
-        surface: {
-          DEFAULT: 'hsl(240 10% 3.9%)',
-          secondary: 'hsl(240 5.9% 10%)',
-        },
         accent: {
-          DEFAULT: 'hsl(217 91% 60%)',
-          foreground: 'hsl(0 0% 98%)',
+          DEFAULT: '#3b82f6',
+          foreground: '#ffffff',
         },
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
         mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
       },
       animation: {
@@ -27,7 +23,7 @@ export default {
       keyframes: {
         'pulse-dot': {
           '0%, 100%': { opacity: '1' },
-          '50%': { opacity: '0.4' },
+          '50%': { opacity: '0.35' },
         },
         'fade-in': {
           '0%': { opacity: '0' },

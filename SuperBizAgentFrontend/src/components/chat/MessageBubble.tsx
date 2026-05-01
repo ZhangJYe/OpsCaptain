@@ -15,37 +15,42 @@ export function MessageBubble({ message }: Props) {
 
   return (
     <div className={`flex items-start gap-3 ${isUser ? 'flex-row-reverse' : ''}`}>
+      {/* Avatar */}
       <div
-        className={`mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border ${
+        className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ring-1 ring-inset ${
           isUser
-            ? 'border-zinc-200 bg-zinc-100/90 dark:border-zinc-700 dark:bg-zinc-800/90'
-            : 'border-accent/20 bg-accent/10'
+            ? 'bg-zinc-100 text-zinc-600 ring-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:ring-zinc-700'
+            : 'bg-accent/10 text-accent ring-accent/20'
         }`}
       >
-        <span className={`text-xs font-bold ${isUser ? 'text-zinc-700 dark:text-zinc-300' : 'text-accent'}`}>
-          {isUser ? '你' : 'AI'}
-        </span>
+        {isUser ? '你' : 'AI'}
       </div>
 
-      <div className={`min-w-0 ${isUser ? 'max-w-[min(75%,42rem)]' : 'flex-1'}`}>
-        <div className={`mb-2 flex items-center gap-2 text-[11px] text-zinc-500 dark:text-zinc-500 ${isUser ? 'justify-end' : ''}`}>
-          <span className="font-medium text-zinc-700 dark:text-zinc-300">{isUser ? '你' : 'OpsCaption'}</span>
-          <span>{timeLabel}</span>
+      {/* Content */}
+      <div className={`min-w-0 ${isUser ? 'max-w-[75%]' : 'flex-1 max-w-[85%]'}`}>
+        {/* Meta line */}
+        <div className={`mb-1.5 flex items-center gap-2 ${isUser ? 'justify-end' : ''}`}>
+          <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-500">
+            {isUser ? '你' : 'OpsCaption'}
+          </span>
+          <span className="text-[10px] text-zinc-400 dark:text-zinc-600">{timeLabel}</span>
         </div>
+
+        {/* Bubble */}
         <div
-          className={`rounded-3xl px-4 py-3 ${
+          className={`rounded-2xl px-4 py-3 ${
             isUser
-              ? 'border border-accent/18 bg-accent/10 text-zinc-900 dark:text-zinc-100'
-              : 'border border-zinc-200/80 bg-white/88 dark:border-zinc-800/80 dark:bg-zinc-900/62'
+              ? 'bg-accent text-white shadow-sm shadow-accent/10'
+              : 'border border-zinc-200/80 bg-white/90 text-zinc-800 shadow-sm dark:border-zinc-800/60 dark:bg-zinc-900/70 dark:text-zinc-200'
           }`}
         >
-        {isUser ? (
-          <p className="whitespace-pre-wrap break-words text-sm leading-7">{message.content}</p>
-        ) : (
-          <div className="prose prose-sm max-w-none leading-7 prose-headings:text-zinc-900 prose-p:text-zinc-700 prose-strong:text-zinc-900 prose-li:text-zinc-700 prose-pre:border prose-pre:border-zinc-200 prose-pre:bg-zinc-50 prose-code:text-accent prose-a:text-accent dark:prose-invert dark:prose-headings:text-zinc-100 dark:prose-p:text-zinc-200 dark:prose-strong:text-zinc-100 dark:prose-li:text-zinc-200 dark:prose-pre:border-zinc-800 dark:prose-pre:bg-zinc-950">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
-          </div>
-        )}
+          {isUser ? (
+            <p className="whitespace-pre-wrap break-words text-sm leading-7">{message.content}</p>
+          ) : (
+            <div className="prose prose-sm max-w-none leading-7 prose-headings:text-zinc-900 prose-p:text-zinc-700 prose-strong:text-zinc-900 prose-li:text-zinc-700 prose-pre:border prose-pre:border-zinc-200 prose-pre:bg-zinc-50 prose-pre:rounded-xl prose-code:text-accent prose-code:before:content-none prose-code:after:content-none prose-a:text-accent dark:prose-invert dark:prose-headings:text-white dark:prose-p:text-zinc-300 dark:prose-strong:text-white dark:prose-li:text-zinc-300 dark:prose-pre:border-zinc-800 dark:prose-pre:bg-zinc-950">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+            </div>
+          )}
         </div>
       </div>
     </div>
