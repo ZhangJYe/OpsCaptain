@@ -4,6 +4,10 @@ import { Activity, Waves } from 'lucide-react'
 import { MessageBubble } from './MessageBubble'
 import { StreamingText } from './StreamingText'
 import { ChatInput } from './ChatInput'
+import { ThinkingChain } from '../agent/ThinkingChain'
+import type { ThinkingStep } from '../agent/ThinkingChain'
+import { SuggestionChips } from '../agent/SuggestionChips'
+import type { Suggestion } from '../agent/SuggestionChips'
 import type { ChatMessage, ChatMode } from '../../types/chat'
 import { findSkillsByIds, formatSelectedSkillSummary } from '../../lib/utils'
 
@@ -11,31 +15,42 @@ interface Props {
   messages: ChatMessage[]
   streamingContent: string
   streamingThoughts: string[]
+  thinkingSteps: ThinkingStep[]
+  suggestions: Suggestion[]
   isLoading: boolean
   mode: ChatMode
   selectedSkillIds: string[]
   onSend: (query: string) => void
   onStop: () => void
   onModeChange: (m: ChatMode) => void
+  onClearSuggestions: () => void
 }
 
 export function ChatView({
   messages,
   streamingContent,
   streamingThoughts,
+  thinkingSteps,
+  suggestions,
   isLoading,
   mode,
   selectedSkillIds,
   onSend,
   onStop,
   onModeChange,
+  onClearSuggestions,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const selectedSkills = findSkillsByIds(selectedSkillIds)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, streamingContent])
+  }, [messages, streamingContent, thinkingSteps])
+
+  const handleSuggestion = (query: string) => {
+    onClearSuggestions()
+    onSend(query)
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -43,9 +58,7 @@ export function ChatView({
       <div className="shrink-0 border-b border-zinc-200/80 bg-white/72 px-4 py-2 backdrop-blur-xl dark:border-zinc-900/80 dark:bg-zinc-950/42">
         <div className="mx-auto flex max-w-4xl items-center gap-3 text-xs text-zinc-500 dark:text-zinc-500">
           <span className="inline-flex items-center gap-1.5">
-            {mode === 'quick'
-              ? <Activity size={12} className="text-accent" />
-              : <Waves size={12} className="text-accent" />}
+            {mode === 'quick' ? <Activity size={12} className="text-accent" /> : <Waves size={12} className="text-accent" />}
             {mode === 'quick' ? '快速回答' : '流式输出'}
           </span>
           {selectedSkills.length > 0 ? (
@@ -74,17 +87,26 @@ export function ChatView({
                 key={msg.id}
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{
-                  type: 'spring',
-                  damping: 24,
-                  stiffness: 260,
-                  delay: i === messages.length - 1 ? 0 : 0,
-                }}
+                transition={{ type: 'spring', damping: 24, stiffness: 260 }}
               >
                 <MessageBubble message={msg} />
+
+                {/* Suggestions after last assistant message */}
+                {msg.role === 'assistant' && i === messages.length - 1 && !isLoading && suggestions.length > 0 && (
+                  <div className="mt-3 ml-11">
+                    <SuggestionChips suggestions={suggestions} onSelect={handleSuggestion} />
+                  </div>
+                )}
               </motion.div>
             ))}
           </AnimatePresence>
+
+          {/* Thinking chain */}
+          {(thinkingSteps.length > 0 || isLoading) && (
+            <div className="ml-11">
+              <ThinkingChain steps={thinkingSteps} isStreaming={isLoading && mode === 'stream'} />
+            </div>
+          )}
 
           {/* Streaming placeholder */}
           {isLoading && (
@@ -105,9 +127,7 @@ export function ChatView({
                   {streamingThoughts.length > 0 && (
                     <div className="mb-3 space-y-1.5 rounded-xl border border-zinc-100 bg-zinc-50/80 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-950/50">
                       {streamingThoughts.map((thought) => (
-                        <div key={thought} className="text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-                          {thought}
-                        </div>
+                        <div key={thought} className="text-xs leading-5 text-zinc-500 dark:text-zinc-400">{thought}</div>
                       ))}
                     </div>
                   )}

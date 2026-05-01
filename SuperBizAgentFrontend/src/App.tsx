@@ -98,12 +98,15 @@ export default function App() {
           messages={chat.messages}
           streamingContent={chat.streamingContent}
           streamingThoughts={chat.streamingThoughts}
+          thinkingSteps={chat.thinkingSteps}
+          suggestions={chat.suggestions}
           isLoading={chat.isLoading}
           mode={chat.mode}
           selectedSkillIds={selectedSkillIds}
           onSend={handleSend}
           onStop={chat.stop}
           onModeChange={chat.setMode}
+          onClearSuggestions={chat.clearSuggestions}
         />
       )}
     </MainLayout>
