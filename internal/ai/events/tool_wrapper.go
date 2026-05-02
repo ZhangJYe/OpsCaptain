@@ -61,6 +61,13 @@ func (w *ToolWrapper) InvokableRun(ctx context.Context, args string, opts ...too
 	toolName := w.toolName(ctx)
 	startTime := time.Now()
 
+	// 发射 tool_call_start 事件
+	if w.emitter != nil {
+		w.emitter.Emit(ctx, NewEvent(EventToolCallStart, w.traceID, toolName, map[string]any{
+			"tool_name": toolName,
+		}))
+	}
+
 	// beforeToolCall 拦截
 	if w.before != nil {
 		modifiedArgs, err := w.before(ctx, toolName, args)
@@ -71,19 +78,18 @@ func (w *ToolWrapper) InvokableRun(ctx context.Context, args string, opts ...too
 		args = modifiedArgs
 	}
 
-	// 发射 tool_call_start 事件
-	if w.emitter != nil {
-		w.emitter.Emit(ctx, NewEvent(EventToolCallStart, w.traceID, toolName, map[string]any{
-			"tool_name": toolName,
-		}))
-	}
-
 	// 执行实际工具
 	result, execErr := w.inner.InvokableRun(ctx, args, opts...)
 
 	// afterToolCall 处理（无论成功失败都执行）
 	if w.after != nil {
 		modifiedResult, afterErr := w.after(ctx, toolName, args, result, execErr)
+		if execErr == nil && afterErr != nil {
+			// 工具本身成功，但 after hook 失败（脱敏/校验/审计失败）
+			// 将 afterErr 作为工具失败返回
+			w.emitToolEndWithAfterError(ctx, toolName, args, startTime, result, afterErr)
+			return result, fmt.Errorf("tool %s afterToolCall failed: %w", toolName, afterErr)
+		}
 		if afterErr == nil {
 			result = modifiedResult
 		}
@@ -126,6 +132,28 @@ func (w *ToolWrapper) emitToolEnd(ctx context.Context, toolName, args string, st
 	w.emitter.Emit(ctx, NewEvent(EventToolCallEnd, w.traceID, toolName, payload))
 }
 
+// emitToolEndWithAfterError 发射 after hook 失败的事件（工具本身成功，after hook 失败）
+func (w *ToolWrapper) emitToolEndWithAfterError(ctx context.Context, toolName, args string, start time.Time, result string, afterErr error) {
+	if w.emitter == nil {
+		return
+	}
+
+	payload := map[string]any{
+		"tool_name":   toolName,
+		"duration_ms": time.Since(start).Milliseconds(),
+		"success":     false,
+		"error":       afterErr.Error(),
+		"after_error": true, // 标记是 after hook 失败，不是工具本身失败
+	}
+	if len(result) > 200 {
+		payload["summary"] = result[:200] + "..."
+	} else if result != "" {
+		payload["summary"] = result
+	}
+
+	w.emitter.Emit(ctx, NewEvent(EventToolCallEnd, w.traceID, toolName, payload))
+}
+
 func (w *ToolWrapper) toolName(ctx context.Context) string {
 	if w.cachedName != "" {
 		return w.cachedName
@@ -156,7 +184,7 @@ func SummaryAfterToolCall(maxLen int) AfterToolCallFunc {
 		}
 		// 结果过长时截断，减少 token 消耗
 		if maxLen > 0 && len(result) > maxLen {
-			return result[:maxLen] + "...(truncated)", nil
+			return result[:maxLen] + "...", nil
 		}
 		return result, nil
 	}

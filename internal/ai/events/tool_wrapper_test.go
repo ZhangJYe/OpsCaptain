@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/cloudwego/eino/components/tool"
@@ -224,5 +225,78 @@ func TestSummaryAfterToolCall(t *testing.T) {
 	_, err = summary(context.Background(), "t", "{}", "", errors.New("fail"))
 	if err == nil {
 		t.Fatal("expected error passthrough")
+	}
+}
+
+func TestToolWrapper_AfterHookError(t *testing.T) {
+	mock := &mockTool{name: "query_metrics", result: "cpu: 80%"}
+	emitter := &mockEmitter{}
+
+	// after hook 返回错误（模拟脱敏/校验失败）
+	afterFail := func(ctx context.Context, toolName string, args string, result string, execErr error) (string, error) {
+		return "", errors.New("desensitization failed")
+	}
+
+	wrapper := WrapTool(mock, emitter, "trace-after-err", nil, afterFail)
+	result, err := wrapper.InvokableRun(context.Background(), `{}`)
+
+	// 工具本身成功，但 after hook 失败 → 应该返回 error
+	if err == nil {
+		t.Fatal("expected error from after hook failure")
+	}
+	if !strings.Contains(err.Error(), "afterToolCall failed") {
+		t.Fatalf("expected afterToolCall error, got: %v", err)
+	}
+	// 原始结果仍然返回
+	if result != "cpu: 80%" {
+		t.Fatalf("expected original result 'cpu: 80%%', got %q", result)
+	}
+
+	// 验证事件：success=false, after_error=true
+	events := emitter.Events()
+	if len(events) != 2 {
+		t.Fatalf("expected 2 events, got %d", len(events))
+	}
+	endEvent := events[1]
+	if endEvent.Payload["success"] != false {
+		t.Fatalf("expected success false, got %v", endEvent.Payload["success"])
+	}
+	if endEvent.Payload["after_error"] != true {
+		t.Fatalf("expected after_error true, got %v", endEvent.Payload["after_error"])
+	}
+	if endEvent.Payload["error"] != "desensitization failed" {
+		t.Fatalf("expected 'desensitization failed', got %v", endEvent.Payload["error"])
+	}
+}
+
+func TestToolWrapper_AfterHookSuccess(t *testing.T) {
+	mock := &mockTool{name: "query_logs", result: "found 100 logs"}
+	emitter := &mockEmitter{}
+
+	// after hook 成功修改结果
+	afterModify := func(ctx context.Context, toolName string, args string, result string, execErr error) (string, error) {
+		return "found 100 logs (filtered)", nil
+	}
+
+	wrapper := WrapTool(mock, emitter, "trace-after-ok", nil, afterModify)
+	result, err := wrapper.InvokableRun(context.Background(), `{}`)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != "found 100 logs (filtered)" {
+		t.Fatalf("expected modified result, got %q", result)
+	}
+
+	// 验证事件：success=true, 无 after_error
+	events := emitter.Events()
+	if len(events) != 2 {
+		t.Fatalf("expected 2 events, got %d", len(events))
+	}
+	if events[1].Payload["success"] != true {
+		t.Fatalf("expected success true, got %v", events[1].Payload["success"])
+	}
+	if events[1].Payload["after_error"] != nil {
+		t.Fatalf("expected no after_error, got %v", events[1].Payload["after_error"])
 	}
 }

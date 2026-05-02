@@ -2,6 +2,7 @@ package events
 
 import (
 	"context"
+	"math"
 	"sort"
 	"sync"
 	"time"
@@ -9,18 +10,18 @@ import (
 
 // ToolHealthReport 工具健康度报告
 type ToolHealthReport struct {
-	ToolName     string        `json:"tool_name"`
-	TotalCalls   int           `json:"total_calls"`
-	SuccessCount int           `json:"success_count"`
-	FailCount    int           `json:"fail_count"`
-	SuccessRate  float64       `json:"success_rate"`
-	P50Duration  time.Duration `json:"p50_duration_ms"`
-	P95Duration  time.Duration `json:"p95_duration_ms"`
-	P99Duration  time.Duration `json:"p99_duration_ms"`
-	AvgDuration  time.Duration `json:"avg_duration_ms"`
-	CommonErrors []string      `json:"common_errors,omitempty"`
-	LastFailure  time.Time     `json:"last_failure,omitempty"`
-	LastCall     time.Time     `json:"last_call"`
+	ToolName      string    `json:"tool_name"`
+	TotalCalls    int       `json:"total_calls"`
+	SuccessCount  int       `json:"success_count"`
+	FailCount     int       `json:"fail_count"`
+	SuccessRate   float64   `json:"success_rate"`
+	P50DurationMs int64     `json:"p50_duration_ms"`
+	P95DurationMs int64     `json:"p95_duration_ms"`
+	P99DurationMs int64     `json:"p99_duration_ms"`
+	AvgDurationMs int64     `json:"avg_duration_ms"`
+	CommonErrors  []string  `json:"common_errors,omitempty"`
+	LastFailure   time.Time `json:"last_failure,omitempty"`
+	LastCall      time.Time `json:"last_call"`
 }
 
 // toolCallRecord 单次工具调用记录
@@ -167,16 +168,16 @@ func buildReport(toolName string, records []toolCallRecord) *ToolHealthReport {
 
 	// 计算分位数
 	sort.Slice(durations, func(i, j int) bool { return durations[i] < durations[j] })
-	report.P50Duration = percentile(durations, 0.5)
-	report.P95Duration = percentile(durations, 0.95)
-	report.P99Duration = percentile(durations, 0.99)
+	report.P50DurationMs = percentile(durations, 0.5).Milliseconds()
+	report.P95DurationMs = percentile(durations, 0.95).Milliseconds()
+	report.P99DurationMs = percentile(durations, 0.99).Milliseconds()
 
 	// 平均耗时
 	var total time.Duration
 	for _, d := range durations {
 		total += d
 	}
-	report.AvgDuration = total / time.Duration(len(durations))
+	report.AvgDurationMs = (total / time.Duration(len(durations))).Milliseconds()
 
 	// Top 3 常见错误
 	report.CommonErrors = topErrors(errorCounts, 3)
@@ -188,7 +189,13 @@ func percentile(sorted []time.Duration, p float64) time.Duration {
 	if len(sorted) == 0 {
 		return 0
 	}
-	idx := int(float64(len(sorted)-1) * p)
+	idx := int(math.Ceil(float64(len(sorted))*p)) - 1
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= len(sorted) {
+		idx = len(sorted) - 1
+	}
 	return sorted[idx]
 }
 
