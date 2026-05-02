@@ -109,7 +109,9 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 	sendChatStreamMeta(client, "chat", "", filteredDetail, false, "")
 	streamDetailsToClient(client, filteredDetail)
 	sseEmitter := events.NewSSEEmitter(client, requestID)
-	callbackEmitter := events.NewCallbackEmitter(sseEmitter, requestID)
+	traceEmitter := events.NewTraceEmitter(requestID)
+	multiEmitter := events.NewMultiEmitter(sseEmitter, traceEmitter)
+	callbackEmitter := events.NewCallbackEmitter(multiEmitter, requestID)
 	sr, err := runner.Stream(ctx, userMessage, compose.WithCallbacks(
 		log_call_back.LogCallback(nil),
 		callbackEmitter.Handler(),
