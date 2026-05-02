@@ -87,7 +87,7 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 	// 创建事件发射器（在 buildChatAgent 之前，以便工具包装）
 	sseEmitter := events.NewSSEEmitter(client, requestID)
 	traceEmitter := events.NewTraceEmitter(requestID)
-	multiEmitter := events.NewMultiEmitter(sseEmitter, traceEmitter)
+	multiEmitter := events.NewMultiEmitter(sseEmitter, traceEmitter, events.GlobalHealthCollector())
 	chat_pipeline.SetChatToolEmitter(multiEmitter, requestID)
 
 	runner, agentBuildErr := buildChatAgent(ctx, msg)

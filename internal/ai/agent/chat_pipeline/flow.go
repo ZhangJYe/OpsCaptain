@@ -82,8 +82,8 @@ func newReactAgentLambdaWithQuery(ctx context.Context, query string) (lba *compo
 			config.ToolsConfig.Tools,
 			chatToolEmitter,
 			chatToolTraceID,
-			nil, // beforeToolCall: 暂不启用
-			nil, // afterToolCall: 暂不启用
+			nil,                               // beforeToolCall: 暂不启用
+			events.SummaryAfterToolCall(4000), // afterToolCall: 截断过长结果，减少 token 消耗
 		)
 	}
 
