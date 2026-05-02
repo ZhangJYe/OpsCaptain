@@ -147,10 +147,17 @@ func TestToolWrapper_ToolExecutionError(t *testing.T) {
 	emitter := &mockEmitter{}
 
 	wrapper := WrapTool(mock, emitter, "trace-err", nil, nil)
-	_, err := wrapper.InvokableRun(context.Background(), `{}`)
+	result, err := wrapper.InvokableRun(context.Background(), `{}`)
 
-	if err == nil {
-		t.Fatal("expected error from tool execution")
+	// 工具失败时返回格式化字符串，不返回 Go error
+	if err != nil {
+		t.Fatalf("expected no Go error, got: %v", err)
+	}
+	if !strings.Contains(result, "[工具调用失败]") {
+		t.Fatalf("expected formatted error message, got: %q", result)
+	}
+	if !strings.Contains(result, "connection timeout") {
+		t.Fatalf("expected error detail in result, got: %q", result)
 	}
 
 	// 验证事件
@@ -249,16 +256,19 @@ func TestToolWrapper_AfterHookError(t *testing.T) {
 	wrapper := WrapTool(mock, emitter, "trace-after-err", nil, afterFail)
 	result, err := wrapper.InvokableRun(context.Background(), `{}`)
 
-	// 工具本身成功，但 after hook 失败 → 应该返回 error
-	if err == nil {
-		t.Fatal("expected error from after hook failure")
+	// 工具本身成功，但 after hook 失败 → 返回格式化字符串，不返回 Go error
+	if err != nil {
+		t.Fatalf("expected no Go error, got: %v", err)
 	}
-	if !strings.Contains(err.Error(), "afterToolCall failed") {
-		t.Fatalf("expected afterToolCall error, got: %v", err)
+	if !strings.Contains(result, "[工具结果处理失败]") {
+		t.Fatalf("expected formatted error message, got: %q", result)
 	}
-	// 原始结果不应暴露，返回空字符串
-	if result != "" {
-		t.Fatalf("expected empty result on after hook failure, got %q", result)
+	if !strings.Contains(result, "desensitization failed") {
+		t.Fatalf("expected error detail in result, got: %q", result)
+	}
+	// 原始结果不应暴露
+	if strings.Contains(result, "cpu: 80%") {
+		t.Fatalf("original result should not be exposed, got: %q", result)
 	}
 
 	// 验证事件：success=false, after_error=true, 无 summary

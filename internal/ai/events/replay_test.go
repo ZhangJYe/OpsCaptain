@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -139,12 +140,15 @@ func TestReplayCase_AfterHookDesensitization(t *testing.T) {
 	metricsTool := WrapTool(&mockTool{name: "query_metrics", result: "user john@ex.com: payment failed"}, multiEmitter, "replay-3", nil, desensitizeFail)
 	result, err := metricsTool.InvokableRun(context.Background(), `{}`)
 
-	// 验证：返回空结果，不泄露原始数据
-	if err == nil {
-		t.Fatal("expected error from desensitization failure")
+	// 验证：返回格式化错误，不泄露原始数据
+	if err != nil {
+		t.Fatalf("expected no Go error, got: %v", err)
 	}
-	if result != "" {
-		t.Fatalf("expected empty result, got %q", result)
+	if !strings.Contains(result, "[工具结果处理失败]") {
+		t.Fatalf("expected formatted error, got: %q", result)
+	}
+	if strings.Contains(result, "john@ex.com") {
+		t.Fatalf("original result should not be exposed, got: %q", result)
 	}
 
 	// 验证健康度：应标记为失败

@@ -88,7 +88,7 @@ func (w *ToolWrapper) InvokableRun(ctx context.Context, args string, opts ...too
 			// 工具本身成功，但 after hook 失败（脱敏/校验/审计失败）
 			// 不暴露原始 result，只返回错误
 			w.emitToolEndWithAfterError(ctx, toolName, args, startTime, afterErr)
-			return "", fmt.Errorf("tool %s afterToolCall failed: %w", toolName, afterErr)
+			return fmt.Sprintf("[工具结果处理失败] %s: %s\n该工具的结果未能通过安全校验，请告知用户。", toolName, afterErr.Error()), nil
 		}
 		if afterErr == nil {
 			result = modifiedResult
@@ -98,7 +98,10 @@ func (w *ToolWrapper) InvokableRun(ctx context.Context, args string, opts ...too
 	// 发射 tool_call_end 事件
 	w.emitToolEnd(ctx, toolName, args, startTime, result, execErr)
 
-	return result, execErr
+	if execErr != nil {
+		return fmt.Sprintf("[工具调用失败] %s: %s\n请告知用户该工具返回了错误，不要用通用建议替代实际数据。", toolName, execErr.Error()), nil
+	}
+	return result, nil
 }
 
 // StreamableRun 执行工具调用（流式），统一走 InvokableRun 保证事件发射
