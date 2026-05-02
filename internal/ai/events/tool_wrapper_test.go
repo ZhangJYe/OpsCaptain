@@ -204,14 +204,28 @@ func TestWrapTools_Batch(t *testing.T) {
 	}
 }
 
-func TestAuditBeforeToolCall(t *testing.T) {
-	audit := AuditBeforeToolCall()
-	args, err := audit(context.Background(), "test_tool", `{"key":"value"}`)
+func TestValidateBeforeToolCall(t *testing.T) {
+	validate := ValidateBeforeToolCall()
+
+	// 合法 JSON 应该通过
+	args, err := validate(context.Background(), "test_tool", `{"key":"value"}`)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if args != `{"key":"value"}` {
 		t.Fatalf("expected args passthrough, got %q", args)
+	}
+
+	// 空参数应该被拒绝
+	_, err = validate(context.Background(), "test_tool", "")
+	if err == nil {
+		t.Fatal("expected error for empty args")
+	}
+
+	// 非法 JSON 应该被拒绝
+	_, err = validate(context.Background(), "test_tool", "not json")
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
 	}
 }
 

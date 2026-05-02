@@ -2,7 +2,9 @@ package events
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/cloudwego/eino/components/tool"
@@ -167,10 +169,18 @@ func (w *ToolWrapper) toolName(ctx context.Context) string {
 
 // --- 常用的 before/after 函数 ---
 
-// AuditBeforeToolCall 审计日志 beforeToolCall
-func AuditBeforeToolCall() BeforeToolCallFunc {
+// ValidateBeforeToolCall 参数基础校验 beforeToolCall
+// 校验 JSON 格式、非空，防止 LLM 生成无效参数直接打到后端
+func ValidateBeforeToolCall() BeforeToolCallFunc {
 	return func(ctx context.Context, toolName string, args string) (string, error) {
-		// 未来可以接入权限校验、参数校验等
+		args = strings.TrimSpace(args)
+		if args == "" {
+			return "", fmt.Errorf("tool %s received empty arguments", toolName)
+		}
+		// 基础 JSON 格式校验（不校验 schema，只看是不是合法 JSON）
+		if !json.Valid([]byte(args)) {
+			return "", fmt.Errorf("tool %s received invalid JSON arguments: %.100s", toolName, args)
+		}
 		return args, nil
 	}
 }

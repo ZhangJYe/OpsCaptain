@@ -32,10 +32,17 @@ func ResolveEnv(val string) string {
 
 func GetMilvusAddr(ctx context.Context) string {
 	val, err := g.Cfg().Get(ctx, "milvus.address")
-	if err != nil || val.String() == "" {
-		return "localhost:19530"
+	if err == nil {
+		s := strings.TrimSpace(val.String())
+		if s != "" && !IsEnvReference(s) {
+			return normalizeMilvusAddr(s)
+		}
 	}
-	return normalizeMilvusAddr(val.String())
+	// fallback: 直接读环境变量
+	if env := strings.TrimSpace(os.Getenv("MILVUS_ADDRESS")); env != "" {
+		return normalizeMilvusAddr(env)
+	}
+	return "localhost:19530"
 }
 
 func GetMilvusCollectionName(ctx context.Context) string {

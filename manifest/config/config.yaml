@@ -221,6 +221,8 @@ log_topic:
 
 mcp:
   log_url: ""
+  connect_timeout_ms: 10000
+  tool_timeout_ms: 120000
 
 mysql:
   dsn: ""

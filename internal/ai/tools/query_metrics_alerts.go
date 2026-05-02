@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/cloudwego/eino/components/tool"
@@ -48,10 +49,15 @@ type PrometheusAlertsOutput struct {
 }
 
 func queryPrometheusAlerts(ctx context.Context) (PrometheusAlertsResult, error) {
-	baseURLVal, err := g.Cfg().Get(ctx, "prometheus.address")
 	var result PrometheusAlertsResult
-	baseURL := normalizeOptionalURL(baseURLVal.String())
-	if err != nil || baseURL == "" {
+	baseURL := ""
+	if v, err := g.Cfg().Get(ctx, "prometheus.address"); err == nil {
+		baseURL = normalizeOptionalURL(v.String())
+	}
+	if baseURL == "" {
+		baseURL = normalizeOptionalURL(os.Getenv("PROMETHEUS_ADDRESS"))
+	}
+	if baseURL == "" {
 		return result, fmt.Errorf("prometheus.address is not configured")
 	}
 	apiURL := fmt.Sprintf("%s/api/v1/alerts", baseURL)

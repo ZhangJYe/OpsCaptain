@@ -45,3 +45,4 @@ __pycache__/
 *.pyc
 .gotmp*/
 *.go.[0-9]*
+*.tsbuildinfo
