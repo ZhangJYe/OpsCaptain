@@ -107,6 +107,7 @@ func TestReplayCase_LogSearchFailure(t *testing.T) {
 func TestReplayCase_AfterHookDesensitization(t *testing.T) {
 	recorder := &sequenceRecorder{}
 	hc := NewHealthCollector(100)
+	multiEmitter := NewMultiEmitter(recorder, hc) // 同时发给 recorder 和 hc
 
 	// 模型推理
 	recorder.Emit(context.Background(), NewEvent(EventModelStart, "replay-3", "deepseek-v3", nil))
@@ -116,7 +117,7 @@ func TestReplayCase_AfterHookDesensitization(t *testing.T) {
 	desensitizeFail := func(ctx context.Context, toolName, args, result string, execErr error) (string, error) {
 		return "", errors.New("contains PII, desensitization failed")
 	}
-	metricsTool := WrapTool(&mockTool{name: "query_metrics", result: "user john@ex.com: payment failed"}, hc, "replay-3", nil, desensitizeFail)
+	metricsTool := WrapTool(&mockTool{name: "query_metrics", result: "user john@ex.com: payment failed"}, multiEmitter, "replay-3", nil, desensitizeFail)
 	result, err := metricsTool.InvokableRun(context.Background(), `{}`)
 
 	// 验证：返回空结果，不泄露原始数据
@@ -136,12 +137,22 @@ func TestReplayCase_AfterHookDesensitization(t *testing.T) {
 		t.Errorf("expected 0%% success rate, got %.1f%%", report.SuccessRate*100)
 	}
 
-	// 验证事件：无 summary
-	events := recorder.events
-	for _, e := range events {
-		if e.Type == EventToolCallEnd && e.Payload["summary"] != nil {
-			t.Errorf("expected no summary on desensitization failure, got %v", e.Payload["summary"])
+	// 验证事件：recorder 收到了 tool_call_end，且无 summary
+	var toolEndEvent *AgentEvent
+	for i := range recorder.events {
+		if recorder.events[i].Type == EventToolCallEnd {
+			toolEndEvent = &recorder.events[i]
+			break
 		}
+	}
+	if toolEndEvent == nil {
+		t.Fatal("expected recorder to receive tool_call_end event")
+	}
+	if toolEndEvent.Payload["summary"] != nil {
+		t.Errorf("expected no summary on desensitization failure, got %v", toolEndEvent.Payload["summary"])
+	}
+	if toolEndEvent.Payload["after_error"] != true {
+		t.Errorf("expected after_error true, got %v", toolEndEvent.Payload["after_error"])
 	}
 
 	t.Logf("Replay case 'desensitization': tool succeeded but after hook failed, result masked")
