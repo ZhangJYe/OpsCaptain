@@ -1,10 +1,18 @@
 export type MessageRole = 'user' | 'assistant'
 
+export interface ChatExecutionStep {
+  id: string
+  label: string
+  status: 'pending' | 'active' | 'done' | 'error'
+  detail?: string
+}
+
 export interface ChatMessage {
   id: string
   role: MessageRole
   content: string
   timestamp: number
+  executionSteps?: ChatExecutionStep[]
 }
 
 export interface ChatSession {

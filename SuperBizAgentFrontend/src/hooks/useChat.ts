@@ -1,9 +1,11 @@
-import { useCallback, useState } from "react";
-import type { ChatMessage, ChatMode, ChatSession } from "../types/chat";
+import { useCallback, useState, type Dispatch, type SetStateAction } from "react";
+import type { ChatExecutionStep, ChatMessage, ChatMode, ChatSession } from "../types/chat";
 import { generateId, getApiBaseUrl } from "../lib/utils";
-import type { ThinkingStep } from "../components/agent/ThinkingCollapse";
 import { generateSuggestions } from "../components/agent/SuggestionChips";
 import type { Suggestion } from "../components/agent/SuggestionChips";
+
+type ThinkingStep = ChatExecutionStep;
+type SetThinkingSteps = Dispatch<SetStateAction<ThinkingStep[]>>;
 
 interface SendOptions {
   selectedSkillIds?: string[];
@@ -91,43 +93,73 @@ async function requestQuickAnswer({
   return extractAnswer(payload);
 }
 
-function buildThinkingSteps(
-  mode: string,
-  thoughts: string[],
-  hasResponse: boolean,
-): ThinkingStep[] {
-  const baseSteps: ThinkingStep[] = [
+function buildExecutionSteps(): ThinkingStep[] {
+  return [
     {
-      id: "triage",
-      label: "分析问题类型",
+      id: "intent",
+      label: "理解请求",
       status: "active",
-      detail: "启动诊断...",
+      detail: "识别查询意图...",
     },
+    { id: "context", label: "装配上下文", status: "pending" },
     { id: "metrics", label: "拉取指标证据", status: "pending" },
     { id: "logs", label: "检索日志特征", status: "pending" },
-    { id: "knowledge", label: "匹配历史案例", status: "pending" },
-    { id: "reporter", label: "聚合生成结论", status: "pending" },
+    { id: "knowledge", label: "检索知识与案例", status: "pending" },
+    { id: "reporter", label: "生成回复", status: "pending" },
   ];
+}
 
-  if (!hasResponse && thoughts.length === 0) return baseSteps;
+function visibleExecutionSteps(steps: ThinkingStep[]): ThinkingStep[] {
+  return steps.filter((step) => step.status !== "pending");
+}
 
-  // Mark steps based on thoughts and response
-  const doneCount = hasResponse ? 5 : Math.min(thoughts.length + 1, 4);
-  const activeIdx = hasResponse ? -1 : doneCount;
+function upsertStep(
+  steps: ThinkingStep[],
+  id: string,
+  fallbackLabel: string,
+  patch: Partial<ThinkingStep>,
+): ThinkingStep[] {
+  const exists = steps.some((step) => step.id === id);
+  if (!exists) {
+    return [...steps, { id, label: fallbackLabel, status: "pending", ...patch }];
+  }
+  return steps.map((step) => (step.id === id ? { ...step, ...patch } : step));
+}
 
-  return baseSteps.map((step, i) => {
-    if (i < doneCount) return { ...step, status: "done" as const };
-    if (i === activeIdx)
-      return {
-        ...step,
-        status: "active" as const,
-        detail: thoughts[i - 1] || "处理中...",
-      };
+function completeExecutionSteps(steps: ThinkingStep[]): ThinkingStep[] {
+  let hasVisibleReporter = false;
+  const next = steps.map((step) => {
+    if (step.id === "intent" && step.status === "active") {
+      return { ...step, status: "done" as const, detail: "请求已识别" };
+    }
+    if (step.id === "reporter" && step.status !== "pending") {
+      hasVisibleReporter = true;
+      return { ...step, status: "done" as const, detail: step.detail || "回复已生成" };
+    }
+    if (step.status === "active") {
+      return { ...step, status: "done" as const };
+    }
     return step;
+  });
+
+  if (hasVisibleReporter) {
+    return next;
+  }
+  return upsertStep(next, "reporter", "生成回复", {
+    status: "done",
+    detail: "回复已生成",
   });
 }
 
-// 工具名称到 thinking step id 的映射
+function markActiveAsError(steps: ThinkingStep[], detail?: string): ThinkingStep[] {
+  return steps.map((step) =>
+    step.status === "active"
+      ? { ...step, status: "error" as const, detail: detail || "执行失败" }
+      : step,
+  );
+}
+
+// 工具名称到执行步骤的映射
 const TOOL_STEP_MAP: Record<string, string> = {
   query_metrics: "metrics",
   query_prometheus: "metrics",
@@ -153,75 +185,78 @@ const TOOL_LABELS: Record<string, string> = {
 
 function handleAgentEvent(
   event: { type: string; name?: string; payload?: Record<string, any> },
-  setThinkingSteps: React.Dispatch<React.SetStateAction<ThinkingStep[]>>,
-  setStreamingThoughts: React.Dispatch<React.SetStateAction<string[]>>,
+  setThinkingSteps: SetThinkingSteps,
+  setStreamingThoughts: Dispatch<SetStateAction<string[]>>,
 ) {
   const { type, name, payload } = event;
   const toolName = payload?.tool_name || name || "";
 
   if (type === "tool_call_start") {
-    const stepId = TOOL_STEP_MAP[toolName];
+    const stepId = TOOL_STEP_MAP[toolName] || `tool:${toolName || "unknown"}`;
     const label = TOOL_LABELS[toolName] || toolName;
 
-    if (stepId) {
-      setThinkingSteps((prev) =>
+    setThinkingSteps((prev) =>
+      upsertStep(
         prev.map((s) =>
-          s.id === stepId
-            ? { ...s, status: "active" as const, detail: `正在${label}...` }
+          s.id === "intent" && s.status === "active"
+            ? { ...s, status: "done" as const, detail: "请求已识别" }
             : s,
         ),
-      );
-    }
+        stepId,
+        label || "调用工具",
+        { status: "active", detail: `正在${label || "调用工具"}...` },
+      ),
+    );
 
     setStreamingThoughts((prev) => {
       const msg = `正在${label}...`;
       return prev.includes(msg) ? prev : [...prev, msg];
     });
   } else if (type === "tool_call_end") {
-    const stepId = TOOL_STEP_MAP[toolName];
+    const stepId = TOOL_STEP_MAP[toolName] || `tool:${toolName || "unknown"}`;
     const label = TOOL_LABELS[toolName] || toolName;
     const durationMs = payload?.duration_ms || 0;
     const success = payload?.success !== false;
     const error = payload?.error || "";
-    const summary = payload?.summary || "";
 
-    if (stepId) {
+    setThinkingSteps((prev) => {
       if (success) {
         const detail =
-          durationMs > 0 ? `${label}完成 (${durationMs}ms)` : `${label}完成`;
-        setThinkingSteps((prev) =>
-          prev.map((s) =>
-            s.id === stepId ? { ...s, status: "done" as const, detail } : s,
-          ),
-        );
-      } else {
-        setThinkingSteps((prev) =>
-          prev.map((s) =>
-            s.id === stepId
-              ? {
-                  ...s,
-                  status: "error" as const,
-                  detail: `${label}失败: ${error}`,
-                }
-              : s,
-          ),
-        );
+          durationMs > 0 ? `${label || "工具"}完成 (${durationMs}ms)` : `${label || "工具"}完成`;
+        return upsertStep(prev, stepId, label || "调用工具", {
+          status: "done",
+          detail,
+        });
       }
-    }
+      return upsertStep(prev, stepId, label || "调用工具", {
+        status: "error",
+        detail: `${label || "工具"}失败: ${error}`,
+      });
+    });
 
-    // 记录到 thoughts
     setStreamingThoughts((prev) => {
       let msg: string;
       if (success) {
         msg =
           durationMs > 0 ? `${label}完成 (${durationMs}ms)` : `${label}完成`;
-        if (summary) msg += `: ${summary}`;
       } else {
         msg = `${label}失败: ${error}`;
       }
       return prev.includes(msg) ? prev : [...prev, msg];
     });
   } else if (type === "model_start") {
+    setThinkingSteps((prev) =>
+      upsertStep(
+        prev.map((s) =>
+          s.id === "intent" && s.status === "active"
+            ? { ...s, status: "done" as const, detail: "请求已识别" }
+            : s,
+        ),
+        "reporter",
+        "生成回复",
+        { status: "active", detail: "组织回复..." },
+      ),
+    );
     setStreamingThoughts((prev) => {
       const msg = "模型推理中...";
       return prev.includes(msg) ? prev : [...prev, msg];
@@ -238,13 +273,7 @@ function handleAgentEvent(
     });
   } else if (type === "error") {
     const error = payload?.error || "未知错误";
-    setThinkingSteps((prev) =>
-      prev.map((s) =>
-        s.status === "active"
-          ? { ...s, status: "error" as const, detail: error }
-          : s,
-      ),
-    );
+    setThinkingSteps((prev) => markActiveAsError(prev, error));
   }
 }
 
@@ -270,40 +299,37 @@ export function useChat() {
         content: trimmed,
         timestamp: Date.now(),
       };
+      let liveSteps = buildExecutionSteps();
+      const commitThinkingSteps: SetThinkingSteps = (update) => {
+        liveSteps =
+          typeof update === "function"
+            ? (update as (prev: ThinkingStep[]) => ThinkingStep[])(liveSteps)
+            : update;
+        setThinkingSteps(liveSteps);
+      };
 
       setMessages((prev) => [...prev, userMsg]);
       setIsLoading(true);
       setStreamingContent("");
       setStreamingThoughts([]);
       setSuggestions([]);
-      setThinkingSteps(buildThinkingSteps(mode, [], false));
+      commitThinkingSteps(liveSteps);
 
       const baseUrl = getApiBaseUrl();
 
       if (mode === "quick") {
         try {
-          // Simulate thinking steps during quick mode
-          setThinkingSteps((prev) =>
-            prev.map((s, i) =>
-              i === 0
-                ? { ...s, status: "active" as const, detail: "识别查询意图..." }
-                : s,
-            ),
-          );
-          await new Promise((r) => setTimeout(r, 400));
-          setThinkingSteps((prev) =>
-            prev.map((s, i) =>
-              i === 0
-                ? { ...s, status: "done" as const }
-                : i === 1
-                  ? { ...s, status: "active" as const, detail: "检索指标..." }
+          commitThinkingSteps((prev) =>
+            upsertStep(
+              prev.map((s) =>
+                s.id === "intent"
+                  ? { ...s, status: "done" as const, detail: "请求已识别" }
                   : s,
+              ),
+              "reporter",
+              "生成回复",
+              { status: "active", detail: "组织回复..." },
             ),
-          );
-
-          // Mark remaining steps
-          setThinkingSteps((prev) =>
-            prev.map((s) => ({ ...s, status: "done" as const })),
           );
           const answer = await requestQuickAnswer({
             baseUrl,
@@ -311,22 +337,18 @@ export function useChat() {
             question: trimmed,
             selectedSkillIds: options.selectedSkillIds || [],
           });
+          commitThinkingSteps(completeExecutionSteps(liveSteps));
           const assistantMsg: ChatMessage = {
             id: generateId(),
             role: "assistant",
             content: answer,
             timestamp: Date.now(),
+            executionSteps: visibleExecutionSteps(liveSteps),
           };
           setMessages((prev) => [...prev, assistantMsg]);
           setSuggestions(generateSuggestions(answer, mode));
         } catch (err: any) {
-          setThinkingSteps((prev) =>
-            prev.map((s) =>
-              s.status === "active"
-                ? { ...s, status: "error" as const, detail: err?.message }
-                : s,
-            ),
-          );
+          commitThinkingSteps((prev) => markActiveAsError(prev, err?.message));
           setMessages((prev) => [
             ...prev,
             {
@@ -334,6 +356,7 @@ export function useChat() {
               role: "assistant",
               content: `请求失败: ${err?.message || "未知错误"}`,
               timestamp: Date.now(),
+              executionSteps: visibleExecutionSteps(liveSteps),
             },
           ]);
         } finally {
@@ -374,7 +397,6 @@ export function useChat() {
         const decoder = new TextDecoder();
         let buffer = "";
         let fullContent = "";
-        let thoughtCount = 0;
         let streamDone = false;
 
         while (true) {
@@ -393,68 +415,50 @@ export function useChat() {
               fullContent += data;
               partialContent = fullContent;
               setStreamingContent(fullContent);
-              // Update thinking to show reporter active
-              if (thoughtCount > 0) {
-                setThinkingSteps((prev) =>
+              commitThinkingSteps((prev) =>
+                upsertStep(
                   prev.map((s) =>
-                    s.id === "reporter"
-                      ? {
-                          ...s,
-                          status: "active" as const,
-                          detail: "生成诊断报告中...",
-                        }
+                    s.id === "intent" && s.status === "active"
+                      ? { ...s, status: "done" as const, detail: "请求已识别" }
                       : s,
                   ),
-                );
-              }
+                  "reporter",
+                  "生成回复",
+                  { status: "active", detail: "生成回复中..." },
+                ),
+              );
             } else if (event === "agent_event") {
               const agentEvt = parseJsonSafe(data);
               if (agentEvt) {
                 handleAgentEvent(
                   agentEvt,
-                  setThinkingSteps,
+                  commitThinkingSteps,
                   setStreamingThoughts,
                 );
               }
             } else if (event === "thought") {
               const thought = data.trim();
               if (thought) {
-                thoughtCount++;
                 setStreamingThoughts((prev) =>
                   prev.includes(thought) ? prev : [...prev, thought],
                 );
-                // Update thinking step
-                const stepIdx = Math.min(thoughtCount, 3);
-                const stepIds = ["triage", "metrics", "logs", "knowledge"];
-                setThinkingSteps((prev) =>
-                  prev.map((s) =>
-                    s.id === stepIds[stepIdx - 1]
-                      ? { ...s, status: "done" as const, detail: thought }
-                      : s,
-                  ),
-                );
-                if (stepIdx < 4) {
-                  setThinkingSteps((prev) =>
+                const detail =
+                  thought.length > 80 ? `${thought.slice(0, 80)}...` : thought;
+                commitThinkingSteps((prev) =>
+                  upsertStep(
                     prev.map((s) =>
-                      s.id === stepIds[stepIdx]
-                        ? {
-                            ...s,
-                            status: "active" as const,
-                            detail: "处理中...",
-                          }
+                      s.id === "intent" && s.status === "active"
+                        ? { ...s, status: "done" as const, detail: "请求已识别" }
                         : s,
                     ),
-                  );
-                }
+                    "context",
+                    "装配上下文",
+                    { status: "done", detail },
+                  ),
+                );
               }
             } else if (event === "error") {
-              setThinkingSteps((prev) =>
-                prev.map((s) =>
-                  s.status === "active"
-                    ? { ...s, status: "error" as const, detail: data }
-                    : s,
-                ),
-              );
+              commitThinkingSteps((prev) => markActiveAsError(prev, data));
               throw new Error(data || "流式请求失败");
             } else if (event === "done") {
               streamDone = true;
@@ -479,14 +483,24 @@ export function useChat() {
             fullContent += data;
             partialContent = fullContent;
             setStreamingContent(fullContent);
+            commitThinkingSteps((prev) =>
+              upsertStep(
+                prev.map((s) =>
+                  s.id === "intent" && s.status === "active"
+                    ? { ...s, status: "done" as const, detail: "请求已识别" }
+                    : s,
+                ),
+                "reporter",
+                "生成回复",
+                { status: "active", detail: "生成回复中..." },
+              ),
+            );
           } else if (event === "done") {
             streamDone = true;
           }
         }
 
-        setThinkingSteps((prev) =>
-          prev.map((s) => ({ ...s, status: "done" as const })),
-        );
+        commitThinkingSteps(completeExecutionSteps(liveSteps));
         if (fullContent.trim()) {
           setMessages((prev) => [
             ...prev,
@@ -495,6 +509,7 @@ export function useChat() {
               role: "assistant",
               content: fullContent,
               timestamp: Date.now(),
+              executionSteps: visibleExecutionSteps(liveSteps),
             },
           ]);
           setSuggestions(generateSuggestions(fullContent, mode));
@@ -512,9 +527,7 @@ export function useChat() {
               selectedSkillIds,
             });
             recoveredWithQuickFallback = true;
-            setThinkingSteps((prev) =>
-              prev.map((s) => ({ ...s, status: "done" as const })),
-            );
+            commitThinkingSteps(completeExecutionSteps(liveSteps));
             setMessages((prev) => [
               ...prev,
               {
@@ -522,6 +535,7 @@ export function useChat() {
                 role: "assistant",
                 content: fallbackAnswer,
                 timestamp: Date.now(),
+                executionSteps: visibleExecutionSteps(liveSteps),
               },
             ]);
             setSuggestions(generateSuggestions(fallbackAnswer, "quick"));
@@ -534,13 +548,7 @@ export function useChat() {
           return;
         }
 
-        setThinkingSteps((prev) =>
-          prev.map((s) =>
-            s.status === "active"
-              ? { ...s, status: "error" as const, detail: err?.message }
-              : s,
-          ),
-        );
+        commitThinkingSteps((prev) => markActiveAsError(prev, err?.message));
         setMessages((prev) => {
           if (partialContent.trim()) {
             return [
@@ -550,6 +558,7 @@ export function useChat() {
                 role: "assistant",
                 content: partialContent,
                 timestamp: Date.now(),
+                executionSteps: visibleExecutionSteps(liveSteps),
               },
             ];
           }
@@ -561,6 +570,7 @@ export function useChat() {
               role: "assistant",
               content: `流式请求失败: ${err?.message || "未知错误"}`,
               timestamp: Date.now(),
+              executionSteps: visibleExecutionSteps(liveSteps),
             },
           ];
         });

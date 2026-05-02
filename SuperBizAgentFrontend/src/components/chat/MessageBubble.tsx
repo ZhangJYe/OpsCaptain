@@ -1,6 +1,7 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { ChatMessage } from '../../types/chat'
+import { ThinkingCollapse } from '../agent/ThinkingCollapse'
 
 interface Props {
   message: ChatMessage
@@ -23,7 +24,7 @@ export function MessageBubble({ message }: Props) {
             : 'bg-accent/10 text-accent ring-accent/20'
         }`}
       >
-        {isUser ? '你' : 'AI'}
+        {isUser ? '你' : 'OC'}
       </div>
 
       {/* Content */}
@@ -47,9 +48,14 @@ export function MessageBubble({ message }: Props) {
           {isUser ? (
             <p className="whitespace-pre-wrap break-words text-sm leading-7">{message.content}</p>
           ) : (
-            <div className="prose prose-sm max-w-none leading-7 prose-headings:text-zinc-900 prose-p:text-zinc-700 prose-strong:text-zinc-900 prose-li:text-zinc-700 prose-pre:border prose-pre:border-zinc-200 prose-pre:bg-zinc-50 prose-pre:rounded-xl prose-code:text-accent prose-code:before:content-none prose-code:after:content-none prose-a:text-accent dark:prose-invert dark:prose-headings:text-white dark:prose-p:text-zinc-300 dark:prose-strong:text-white dark:prose-li:text-zinc-300 dark:prose-pre:border-zinc-800 dark:prose-pre:bg-zinc-950">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
-            </div>
+            <>
+              {message.executionSteps && message.executionSteps.length > 0 && (
+                <ThinkingCollapse steps={message.executionSteps} defaultOpen />
+              )}
+              <div className="prose prose-sm max-w-none leading-7 prose-headings:text-zinc-900 prose-p:text-zinc-700 prose-strong:text-zinc-900 prose-li:text-zinc-700 prose-pre:border prose-pre:border-zinc-200 prose-pre:bg-zinc-50 prose-pre:rounded-xl prose-code:text-accent prose-code:before:content-none prose-code:after:content-none prose-a:text-accent dark:prose-invert dark:prose-headings:text-white dark:prose-p:text-zinc-300 dark:prose-strong:text-white dark:prose-li:text-zinc-300 dark:prose-pre:border-zinc-800 dark:prose-pre:bg-zinc-950">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+              </div>
+            </>
           )}
         </div>
       </div>

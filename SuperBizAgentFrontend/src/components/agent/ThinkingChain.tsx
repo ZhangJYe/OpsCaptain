@@ -48,7 +48,7 @@ export function ThinkingChain({ steps, isStreaming }: Props) {
       <div className="mb-2 flex items-center gap-2">
         <Brain size={14} className="text-accent" />
         <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-500">
-          {isStreaming ? 'Agent 思考中...' : doneCount > 0 ? `Agent 已完成 ${doneCount}/${steps.length} 步` : 'Agent 正在启动...'}
+          {isStreaming ? '执行中...' : doneCount > 0 ? `执行完成 ${doneCount}/${steps.length} 步` : '准备执行...'}
         </span>
       </div>
 
