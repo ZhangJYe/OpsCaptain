@@ -6,6 +6,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/gogf/gf/v2/frame/g"
 )
 
 // ToolHealthReport 工具健康度报告
@@ -130,6 +132,38 @@ func GlobalHealthCollector() *HealthCollector {
 		globalHC = NewHealthCollector(1000)
 	})
 	return globalHC
+}
+
+// StartPeriodicReport 启动定期日志聚合
+// interval: 聚合间隔；ctx 取消时停止
+func (h *HealthCollector) StartPeriodicReport(ctx context.Context, interval time.Duration) {
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				h.logReport(ctx)
+			}
+		}
+	}()
+}
+
+func (h *HealthCollector) logReport(ctx context.Context) {
+	reports := h.Reports()
+	if len(reports) == 0 {
+		return
+	}
+	for _, r := range reports {
+		g.Log().Infof(ctx,
+			"[health] tool=%s calls=%d success_rate=%.1f%% p50=%dms p95=%dms p99=%dms errors=%v",
+			r.ToolName, r.TotalCalls, r.SuccessRate*100,
+			r.P50DurationMs, r.P95DurationMs, r.P99DurationMs,
+			r.CommonErrors,
+		)
+	}
 }
 
 // Reset 清空所有记录
