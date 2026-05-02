@@ -27,6 +27,78 @@ events:
   health_report_enabled: true
   health_report_interval_ms: 300000
 
+hallucination:
+  enabled: true
+  contract_enabled: true
+  schema_gate_enabled: true
+  output_validation_enabled: true
+  no_tool_call_detection_enabled: true
+  ops_keywords:
+    - "告警"
+    - "alert"
+    - "prometheus"
+    - "日志"
+    - "log"
+    - "排查"
+    - "故障"
+    - "incident"
+    - "指标"
+    - "metric"
+    - "延迟"
+    - "latency"
+    - "错误率"
+    - "error rate"
+    - "超时"
+    - "timeout"
+    - "服务异常"
+    - "服务挂了"
+    - "报警"
+    - "cpu"
+    - "内存"
+    - "memory"
+    - "磁盘"
+    - "网络"
+    - "network"
+    - "数据库"
+    - "mysql"
+    - "redis"
+    - "连接池"
+    - "队列"
+    - "queue"
+  hedge_words:
+    - "推测"
+    - "可能"
+    - "大概"
+    - "不确定"
+    - "待确认"
+    - "需要进一步"
+    - "建议确认"
+    - "仅供参考"
+  problem_words:
+    - "异常"
+    - "故障"
+    - "错误"
+    - "告警"
+    - "升高"
+    - "下降"
+    - "超时"
+    - "失败"
+  action_words:
+    - "建议"
+    - "推荐"
+    - "可以"
+    - "需要"
+    - "排查"
+    - "检查"
+    - "尝试"
+    - "应该"
+  contradictions:
+    - ["正常", "异常"]
+    - ["健康", "故障"]
+    - ["无告警", "告警"]
+    - ["没有问题", "问题"]
+  metric_pattern: '(?i)(\d+(?:\.\d+)?)\s*(ms|秒|s|%)|P[0-9]+\s*[:：]\s*(\d+(?:\.\d+)?)'
+
 debug:
   pprof_enabled: false
   pprof_address: "127.0.0.1:6060"

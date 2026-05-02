@@ -140,6 +140,9 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 
 	var fullResponse strings.Builder
 
+	// 加载防幻觉配置
+	hallucinationCfg, _ := events.HallucinationConfigFromYAML(ctx)
+
 	defer func() {
 		completeResponse := fullResponse.String()
 		if completeResponse != "" {
@@ -147,40 +150,49 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 			g.Log().Infof(ctx, "[session:%s][req:%s] ChatStream completed, answer length: %d, turns: %d",
 				id, requestID, len(completeResponse), sessionMem.TurnCount())
 
+			if hallucinationCfg == nil || !hallucinationCfg.Enabled {
+				return
+			}
+
 			// 输出校验：检查关键指标是否有工具数据来源
-			if resultCollector.HasToolCalls() {
-				toolResults := resultCollector.ToolResults()
-				if warnings := events.ValidateOutputAgainstToolResults(completeResponse, toolResults); len(warnings) > 0 {
-					g.Log().Warningf(ctx, "[session:%s][req:%s] output validation warnings: %v", id, requestID, warnings)
+			if hallucinationCfg.OutputValidationEnabled {
+				if resultCollector.HasToolCalls() {
+					toolResults := resultCollector.ToolResults()
+					if warnings := events.ValidateOutputWithConfig(hallucinationCfg, completeResponse, toolResults); len(warnings) > 0 {
+						g.Log().Warningf(ctx, "[session:%s][req:%s] output validation warnings: %v", id, requestID, warnings)
+					}
+				} else if hallucinationCfg.NoToolCallDetectionEnabled && isOpsRelatedQuery(msg, hallucinationCfg.OpsKeywords) {
+					g.Log().Warningf(ctx, "[session:%s][req:%s] ops-related query but no tool calls detected, possible hallucination risk", id, requestID)
 				}
-			} else if isOpsRelatedQuery(msg) {
-				// 运维相关问题但没有调用任何工具 → 可能是幻觉
-				g.Log().Warningf(ctx, "[session:%s][req:%s] ops-related query but no tool calls detected, possible hallucination risk", id, requestID)
 			}
 
 			// Contract 校验：轻量级输出合规检查
-			contractResult := events.ValidateContract(
-				completeResponse,
-				contractCollector.ToolResults(),
-				contractCollector.FailedTools(),
-				contractCollector.HasToolCalls(),
-			)
-			if !contractResult.Passed {
-				g.Log().Warningf(ctx, "[session:%s][req:%s] contract check: %s", id, requestID, contractResult.Summary())
-			} else if len(contractResult.Violations) > 0 {
-				g.Log().Infof(ctx, "[session:%s][req:%s] contract check: %s", id, requestID, contractResult.Summary())
+			if hallucinationCfg.ContractEnabled {
+				contractResult := events.ValidateContractWithConfig(
+					hallucinationCfg,
+					completeResponse,
+					contractCollector.ToolResults(),
+					contractCollector.FailedTools(),
+					contractCollector.HasToolCalls(),
+				)
+				if !contractResult.Passed {
+					g.Log().Warningf(ctx, "[session:%s][req:%s] contract check: %s", id, requestID, contractResult.Summary())
+				} else if len(contractResult.Violations) > 0 {
+					g.Log().Infof(ctx, "[session:%s][req:%s] contract check: %s", id, requestID, contractResult.Summary())
+				}
 			}
 
 			// Schema Gate：结构化输出校验
-			schemaGate := events.NewSchemaGate()
-			schemaResult := schemaGate.Validate(completeResponse)
-			if !schemaResult.Passed {
-				g.Log().Warningf(ctx, "[session:%s][req:%s] schema gate: %s", id, requestID, schemaResult.Summary())
-			} else {
-				// 检查是否有非阻塞的警告
-				for _, check := range schemaResult.Checks {
-					if !check.Passed {
-						g.Log().Infof(ctx, "[session:%s][req:%s] schema gate warn [%s]: %s", id, requestID, check.Field, check.Detail)
+			if hallucinationCfg.SchemaGateEnabled {
+				schemaGate := events.NewSchemaGateWithConfig(hallucinationCfg)
+				schemaResult := schemaGate.Validate(completeResponse)
+				if !schemaResult.Passed {
+					g.Log().Warningf(ctx, "[session:%s][req:%s] schema gate: %s", id, requestID, schemaResult.Summary())
+				} else {
+					for _, check := range schemaResult.Checks {
+						if !check.Passed {
+							g.Log().Infof(ctx, "[session:%s][req:%s] schema gate warn [%s]: %s", id, requestID, check.Field, check.Detail)
+						}
 					}
 				}
 			}
@@ -276,19 +288,22 @@ func sendChatStreamMeta(client *sse.Client, mode, traceID string, details []stri
 	client.SendToClient("meta", string(payload))
 }
 
-var opsKeywords = []string{
+var defaultOpsKeywords = []string{
 	"告警", "alert", "prometheus", "日志", "log", "排查", "故障", "incident",
 	"指标", "metric", "延迟", "latency", "错误率", "error rate", "超时", "timeout",
 	"服务异常", "服务挂了", "报警", "cpu", "内存", "memory", "磁盘",
 	"网络", "network", "数据库", "mysql", "redis", "连接池", "队列", "queue",
 }
 
-func isOpsRelatedQuery(query string) bool {
+func isOpsRelatedQuery(query string, keywords []string) bool {
+	if len(keywords) == 0 {
+		keywords = defaultOpsKeywords
+	}
 	lower := strings.ToLower(strings.TrimSpace(query))
 	if lower == "" {
 		return false
 	}
-	for _, kw := range opsKeywords {
+	for _, kw := range keywords {
 		if strings.Contains(lower, strings.ToLower(kw)) {
 			return true
 		}

@@ -72,6 +72,11 @@ func (r *ContractResult) Summary() string {
 
 // ValidateContract 对 ReAct 路径输出做轻量级 Contract 校验
 func ValidateContract(output string, toolResults []string, failedTools []string, hasToolCalls bool) *ContractResult {
+	return ValidateContractWithConfig(nil, output, toolResults, failedTools, hasToolCalls)
+}
+
+// ValidateContractWithConfig 带配置的 Contract 校验
+func ValidateContractWithConfig(hc *HallucinationConfig, output string, toolResults []string, failedTools []string, hasToolCalls bool) *ContractResult {
 	result := &ContractResult{Passed: true}
 
 	// 规则 1: 运维问题必须有工具调用
@@ -91,10 +96,8 @@ func ValidateContract(output string, toolResults []string, failedTools []string,
 	// 规则 3: 有工具结果时，输出必须引用数据
 	if len(toolResults) > 0 {
 		combined := strings.Join(toolResults, " ")
-		// 检查输出中是否包含工具结果中的关键片段
 		hasReference := false
 		for _, tr := range toolResults {
-			// 取工具结果的前 50 个字符作为匹配基准
 			snippet := tr
 			if len(snippet) > 50 {
 				snippet = snippet[:50]
@@ -124,8 +127,11 @@ func ValidateContract(output string, toolResults []string, failedTools []string,
 	}
 
 	// 规则 5: 置信度标注（软约束）
-	hasHedge := false
 	hedgeWords := []string{"推测", "可能", "大概", "不确定", "待确认", "需要进一步", "建议确认", "仅供参考"}
+	if hc != nil && len(hc.HedgeWords) > 0 {
+		hedgeWords = hc.HedgeWords
+	}
+	hasHedge := false
 	for _, hw := range hedgeWords {
 		if strings.Contains(output, hw) {
 			hasHedge = true

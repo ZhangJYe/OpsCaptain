@@ -3,7 +3,6 @@ package events
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strings"
 	"sync"
 )
@@ -23,12 +22,41 @@ type SchemaGate struct {
 }
 
 func NewSchemaGate() *SchemaGate {
+	return NewSchemaGateWithConfig(nil)
+}
+
+func NewSchemaGateWithConfig(hc *HallucinationConfig) *SchemaGate {
 	g := &SchemaGate{}
-	g.registerDefaults()
+	g.registerDefaults(hc)
 	return g
 }
 
-func (g *SchemaGate) registerDefaults() {
+func (g *SchemaGate) registerDefaults(hc *HallucinationConfig) {
+	contradictions := [][2]string{
+		{"正常", "异常"},
+		{"健康", "故障"},
+		{"无告警", "告警"},
+		{"没有问题", "问题"},
+	}
+	problemWords := []string{"异常", "故障", "错误", "告警", "升高", "下降", "超时", "失败"}
+	actionWords := []string{"建议", "推荐", "可以", "需要", "排查", "检查", "尝试", "应该"}
+
+	if hc != nil {
+		if len(hc.Contradictions) > 0 {
+			contradictions = hc.Contradictions
+		}
+		if len(hc.ProblemWords) > 0 {
+			problemWords = hc.ProblemWords
+		}
+		if len(hc.ActionWords) > 0 {
+			actionWords = hc.ActionWords
+		}
+	}
+
+	localContradictions := contradictions
+	localProblemWords := problemWords
+	localActionWords := actionWords
+
 	g.fields = []SchemaField{
 		{
 			Name:     "has_answer",
@@ -45,17 +73,10 @@ func (g *SchemaGate) registerDefaults() {
 			Name:     "no_contradiction",
 			Required: false,
 			Validator: func(output string) (bool, string) {
-				// 检测自相矛盾的模式
-				contradictions := []struct{ positive, negative string }{
-					{"正常", "异常"},
-					{"健康", "故障"},
-					{"无告警", "告警"},
-					{"没有问题", "问题"},
-				}
 				lower := strings.ToLower(output)
-				for _, c := range contradictions {
-					if strings.Contains(lower, c.positive) && strings.Contains(lower, c.negative) {
-						return false, fmt.Sprintf("输出可能自相矛盾：同时包含'%s'和'%s'", c.positive, c.negative)
+				for _, c := range localContradictions {
+					if strings.Contains(lower, c[0]) && strings.Contains(lower, c[1]) {
+						return false, fmt.Sprintf("输出可能自相矛盾：同时包含'%s'和'%s'", c[0], c[1])
 					}
 				}
 				return true, ""
@@ -66,18 +87,15 @@ func (g *SchemaGate) registerDefaults() {
 			Name:     "actionable",
 			Required: false,
 			Validator: func(output string) (bool, string) {
-				// 如果输出包含问题描述但没有建议，标记
-				problemWords := []string{"异常", "故障", "错误", "告警", "升高", "下降", "超时", "失败"}
-				actionWords := []string{"建议", "推荐", "可以", "需要", "排查", "检查", "尝试", "应该"}
 				hasProblem := false
 				hasAction := false
-				for _, w := range problemWords {
+				for _, w := range localProblemWords {
 					if strings.Contains(output, w) {
 						hasProblem = true
 						break
 					}
 				}
-				for _, w := range actionWords {
+				for _, w := range localActionWords {
 					if strings.Contains(output, w) {
 						hasAction = true
 						break
@@ -182,5 +200,3 @@ func (c *SchemaGateCollector) ToolCallCount() int {
 	defer c.mu.Unlock()
 	return c.toolCallCount
 }
-
-var metricExtractPattern = regexp.MustCompile(`(?i)(\d+(?:\.\d+)?)\s*(ms|秒|s|%)|P[0-9]+\s*[:：]\s*(\d+(?:\.\d+)?)`)

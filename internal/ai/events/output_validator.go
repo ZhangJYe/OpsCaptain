@@ -5,17 +5,26 @@ import (
 	"strings"
 )
 
-var metricPattern = regexp.MustCompile(`(?i)(\d+(?:\.\d+)?)\s*(ms|秒|s|%)|P[0-9]+[[:space:]]*[:：][[:space:]]*(\d+(?:\.\d+)?)`)
+var defaultMetricPattern = regexp.MustCompile(`(?i)(\d+(?:\.\d+)?)\s*(ms|秒|s|%)|P[0-9]+\s*[:：]\s*(\d+(?:\.\d+)?)`)
 
 // ValidateOutputAgainstToolResults 检查输出中的关键指标是否在工具结果中有来源
-// 返回警告列表，空列表表示没有发现问题
 func ValidateOutputAgainstToolResults(output string, toolResults []string) []string {
+	return ValidateOutputWithConfig(nil, output, toolResults)
+}
+
+// ValidateOutputWithConfig 带配置的输出校验
+func ValidateOutputWithConfig(hc *HallucinationConfig, output string, toolResults []string) []string {
 	if len(toolResults) == 0 {
 		return nil
 	}
 
+	pattern := defaultMetricPattern
+	if hc != nil && hc.MetricPattern != nil {
+		pattern = hc.MetricPattern
+	}
+
 	var warnings []string
-	outputMetrics := extractMetrics(output)
+	outputMetrics := extractMetricsWithPattern(output, pattern)
 
 	combined := strings.Join(toolResults, " ")
 	for _, m := range outputMetrics {
@@ -27,8 +36,8 @@ func ValidateOutputAgainstToolResults(output string, toolResults []string) []str
 	return warnings
 }
 
-func extractMetrics(text string) []string {
-	matches := metricPattern.FindAllString(text, -1)
+func extractMetricsWithPattern(text string, pattern *regexp.Regexp) []string {
+	matches := pattern.FindAllString(text, -1)
 	seen := make(map[string]bool)
 	var result []string
 	for _, m := range matches {
@@ -39,4 +48,8 @@ func extractMetrics(text string) []string {
 		}
 	}
 	return result
+}
+
+func extractMetrics(text string) []string {
+	return extractMetricsWithPattern(text, defaultMetricPattern)
 }
