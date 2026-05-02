@@ -338,8 +338,6 @@ export function useChat() {
           ]);
         } finally {
           setIsLoading(false);
-          // Clear thinking steps after a delay so user can see completion
-          setTimeout(() => setThinkingSteps([]), 2500);
         }
         return;
       }
@@ -489,7 +487,6 @@ export function useChat() {
         setThinkingSteps((prev) =>
           prev.map((s) => ({ ...s, status: "done" as const })),
         );
-
         if (fullContent.trim()) {
           setMessages((prev) => [
             ...prev,
@@ -572,8 +569,6 @@ export function useChat() {
         setStreamingContent("");
         setStreamingThoughts([]);
         setAbortCtrl(null);
-        // Clear thinking steps after delay
-        setTimeout(() => setThinkingSteps([]), 2500);
       }
     },
     [isLoading, mode, sessionId],
