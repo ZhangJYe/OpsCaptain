@@ -126,6 +126,23 @@ function upsertStep(
   return steps.map((step) => (step.id === id ? { ...step, ...patch } : step));
 }
 
+function appendStepMeta(
+  steps: ThinkingStep[],
+  id: string,
+  fallbackLabel: string,
+  message: string,
+): ThinkingStep[] {
+  const normalized = message.trim();
+  if (!normalized) return steps;
+
+  return upsertStep(steps, id, fallbackLabel, {}).map((step) => {
+    if (step.id !== id) return step;
+    const previous = step.meta || [];
+    if (previous.includes(normalized)) return step;
+    return { ...step, meta: [...previous.slice(-2), normalized] };
+  });
+}
+
 function completeExecutionSteps(steps: ThinkingStep[]): ThinkingStep[] {
   let hasVisibleReporter = false;
   const next = steps.map((step) => {
@@ -196,15 +213,20 @@ function handleAgentEvent(
     const label = TOOL_LABELS[toolName] || toolName;
 
     setThinkingSteps((prev) =>
-      upsertStep(
-        prev.map((s) =>
-          s.id === "intent" && s.status === "active"
-            ? { ...s, status: "done" as const, detail: "请求已识别" }
-            : s,
+      appendStepMeta(
+        upsertStep(
+          prev.map((s) =>
+            s.id === "intent" && s.status === "active"
+              ? { ...s, status: "done" as const, detail: "请求已识别" }
+              : s,
+          ),
+          stepId,
+          label || "调用工具",
+          { status: "active", detail: `正在${label || "调用工具"}...` },
         ),
         stepId,
         label || "调用工具",
-        { status: "active", detail: `正在${label || "调用工具"}...` },
+        "开始调用工具",
       ),
     );
 
@@ -223,15 +245,25 @@ function handleAgentEvent(
       if (success) {
         const detail =
           durationMs > 0 ? `${label || "工具"}完成 (${durationMs}ms)` : `${label || "工具"}完成`;
-        return upsertStep(prev, stepId, label || "调用工具", {
-          status: "done",
-          detail,
-        });
+        return appendStepMeta(
+          upsertStep(prev, stepId, label || "调用工具", {
+            status: "done",
+            detail,
+          }),
+          stepId,
+          label || "调用工具",
+          durationMs > 0 ? `返回成功，用时 ${durationMs}ms` : "返回成功",
+        );
       }
-      return upsertStep(prev, stepId, label || "调用工具", {
-        status: "error",
-        detail: `${label || "工具"}失败: ${error}`,
-      });
+      return appendStepMeta(
+        upsertStep(prev, stepId, label || "调用工具", {
+          status: "error",
+          detail: `${label || "工具"}失败: ${error}`,
+        }),
+        stepId,
+        label || "调用工具",
+        "工具调用失败，已进入降级路径",
+      );
     });
 
     setStreamingThoughts((prev) => {
@@ -264,6 +296,21 @@ function handleAgentEvent(
   } else if (type === "model_end") {
     const durationMs = payload?.duration_ms || 0;
     const totalTokens = payload?.total_tokens || 0;
+    setThinkingSteps((prev) => {
+      let detail = "模型输出完成";
+      const metaParts: string[] = [];
+      if (durationMs > 0) metaParts.push(`模型耗时 ${durationMs}ms`);
+      if (totalTokens > 0) metaParts.push(`${totalTokens} tokens`);
+      return appendStepMeta(
+        upsertStep(prev, "reporter", "生成回复", {
+          status: "done",
+          detail,
+        }),
+        "reporter",
+        "生成回复",
+        metaParts.join(" · "),
+      );
+    });
     setStreamingThoughts((prev) => {
       let msg = "模型推理完成";
       if (durationMs > 0) msg += ` (${durationMs}ms`;
@@ -320,15 +367,25 @@ export function useChat() {
       if (mode === "quick") {
         try {
           commitThinkingSteps((prev) =>
-            upsertStep(
-              prev.map((s) =>
-                s.id === "intent"
-                  ? { ...s, status: "done" as const, detail: "请求已识别" }
-                  : s,
+            appendStepMeta(
+              upsertStep(
+                appendStepMeta(
+                  prev.map((s) =>
+                    s.id === "intent"
+                      ? { ...s, status: "done" as const, detail: "请求已识别" }
+                      : s,
+                  ),
+                  "intent",
+                  "理解请求",
+                  "进入快速回答链路",
+                ),
+                "reporter",
+                "生成回复",
+                { status: "active", detail: "组织回复..." },
               ),
               "reporter",
               "生成回复",
-              { status: "active", detail: "组织回复..." },
+              "等待模型生成回答",
             ),
           );
           const answer = await requestQuickAnswer({
@@ -416,15 +473,20 @@ export function useChat() {
               partialContent = fullContent;
               setStreamingContent(fullContent);
               commitThinkingSteps((prev) =>
-                upsertStep(
-                  prev.map((s) =>
-                    s.id === "intent" && s.status === "active"
-                      ? { ...s, status: "done" as const, detail: "请求已识别" }
-                      : s,
+                appendStepMeta(
+                  upsertStep(
+                    prev.map((s) =>
+                      s.id === "intent" && s.status === "active"
+                        ? { ...s, status: "done" as const, detail: "请求已识别" }
+                        : s,
+                    ),
+                    "reporter",
+                    "生成回复",
+                    { status: "active", detail: "生成回复中..." },
                   ),
                   "reporter",
                   "生成回复",
-                  { status: "active", detail: "生成回复中..." },
+                  "开始向前端流式输出",
                 ),
               );
             } else if (event === "agent_event") {
@@ -445,15 +507,20 @@ export function useChat() {
                 const detail =
                   thought.length > 80 ? `${thought.slice(0, 80)}...` : thought;
                 commitThinkingSteps((prev) =>
-                  upsertStep(
-                    prev.map((s) =>
-                      s.id === "intent" && s.status === "active"
-                        ? { ...s, status: "done" as const, detail: "请求已识别" }
-                        : s,
+                  appendStepMeta(
+                    upsertStep(
+                      prev.map((s) =>
+                        s.id === "intent" && s.status === "active"
+                          ? { ...s, status: "done" as const, detail: "请求已识别" }
+                          : s,
+                      ),
+                      "context",
+                      "装配上下文",
+                      { status: "done", detail },
                     ),
                     "context",
                     "装配上下文",
-                    { status: "done", detail },
+                    "history / memory / docs 已进入请求上下文",
                   ),
                 );
               }
@@ -484,15 +551,20 @@ export function useChat() {
             partialContent = fullContent;
             setStreamingContent(fullContent);
             commitThinkingSteps((prev) =>
-              upsertStep(
-                prev.map((s) =>
-                  s.id === "intent" && s.status === "active"
-                    ? { ...s, status: "done" as const, detail: "请求已识别" }
-                    : s,
+              appendStepMeta(
+                upsertStep(
+                  prev.map((s) =>
+                    s.id === "intent" && s.status === "active"
+                      ? { ...s, status: "done" as const, detail: "请求已识别" }
+                      : s,
+                  ),
+                  "reporter",
+                  "生成回复",
+                  { status: "active", detail: "生成回复中..." },
                 ),
                 "reporter",
                 "生成回复",
-                { status: "active", detail: "生成回复中..." },
+                "开始向前端流式输出",
               ),
             );
           } else if (event === "done") {

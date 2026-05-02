@@ -5,6 +5,7 @@ export interface ChatExecutionStep {
   label: string
   status: 'pending' | 'active' | 'done' | 'error'
   detail?: string
+  meta?: string[]
 }
 
 export interface ChatMessage {
