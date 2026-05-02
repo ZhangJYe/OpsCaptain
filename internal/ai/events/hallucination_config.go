@@ -21,6 +21,17 @@ type HallucinationConfig struct {
 	ActionWords                []string
 	Contradictions             [][2]string
 	MetricPattern              *regexp.Regexp
+	LLMValidation              *LLMValidationConfig
+}
+
+// LLMValidationConfig LLM 校验配置
+type LLMValidationConfig struct {
+	Enabled           bool
+	Model             string
+	TimeoutMs         int
+	MaxTokens         int
+	OmissionDetection bool
+	AccuracyCheck     bool
 }
 
 var (
@@ -88,6 +99,35 @@ func HallucinationConfigFromYAML(ctx context.Context) (*HallucinationConfig, err
 			pattern = v.String()
 		}
 		hc.MetricPattern = regexp.MustCompile(pattern)
+
+		// LLM 校验配置
+		llmVal := &LLMValidationConfig{
+			Enabled:           false,
+			Model:             "glm_chat_model_fast",
+			TimeoutMs:         5000,
+			MaxTokens:         512,
+			OmissionDetection: true,
+			AccuracyCheck:     true,
+		}
+		if v, err := cfg.Get(ctx, "hallucination.llm_validation.enabled"); err == nil && !v.IsNil() {
+			llmVal.Enabled = v.Bool()
+		}
+		if v, err := cfg.Get(ctx, "hallucination.llm_validation.model"); err == nil && !v.IsNil() && v.String() != "" {
+			llmVal.Model = v.String()
+		}
+		if v, err := cfg.Get(ctx, "hallucination.llm_validation.timeout_ms"); err == nil && !v.IsNil() {
+			llmVal.TimeoutMs = v.Int()
+		}
+		if v, err := cfg.Get(ctx, "hallucination.llm_validation.max_tokens"); err == nil && !v.IsNil() {
+			llmVal.MaxTokens = v.Int()
+		}
+		if v, err := cfg.Get(ctx, "hallucination.llm_validation.omission_detection"); err == nil && !v.IsNil() {
+			llmVal.OmissionDetection = v.Bool()
+		}
+		if v, err := cfg.Get(ctx, "hallucination.llm_validation.accuracy_check"); err == nil && !v.IsNil() {
+			llmVal.AccuracyCheck = v.Bool()
+		}
+		hc.LLMValidation = llmVal
 
 		hallucinationCfg = hc
 	})

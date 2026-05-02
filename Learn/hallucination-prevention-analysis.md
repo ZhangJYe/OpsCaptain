@@ -284,10 +284,12 @@ LLM 输出
 | P1 | 输出关键指标来源校验 | ✅ done |
 | P1 | ReAct 路径轻量 Contract | ✅ done |
 | P2 | Schema Gate | ✅ done |
+| P2 | LLM 遗漏信息检测 | ✅ done |
+| P3 | LLM 准确性过滤层 | ✅ done |
 
 **剩余改进**：
-- 遗漏信息检测（工具返回多个结果但模型只提部分）
-- 准确性过滤层（需要更复杂的 NLP）
+- Contract 阻断模式（误报率确认后升级为拦截）
+- 前端展示 Contract/Schema Gate 结果
 
 ---
 
@@ -358,6 +360,8 @@ LLM 输出
 | `internal/ai/events/contract.go` | ReAct 路径 Contract 校验 |
 | `internal/ai/events/schema_gate.go` | Schema Gate 结构化校验 |
 | `internal/ai/events/result_collector.go` | 工具结果收集器 |
+| `internal/ai/events/llm_validator.go` | LLM 高级校验（遗漏检测 + 准确性校验） |
+| `internal/ai/events/hallucination_config.go` | 防幻觉配置加载 |
 | `internal/controller/chat/chat_v1_chat_stream.go` | 校验集成点 |
 
 ### 测试覆盖
@@ -367,6 +371,7 @@ LLM 输出
 | `events/contract_test.go` | 11 |
 | `events/schema_gate_test.go` | 6 |
 | `events/output_validator_test.go` | 5 |
+| `events/llm_validator_test.go` | 8 |
 | `events/sequence_test.go` | 6 |
 | `events/replay_test.go` | 4 |
 | `events/tool_wrapper_test.go` | 10 |
@@ -377,7 +382,6 @@ LLM 输出
 
 ## 八、下一步
 
-1. **遗漏信息检测**：工具返回多个结果但模型只提部分（需要解析工具结果结构）
-2. **准确性过滤层**：输出中编造的告警/指标检测（需要 NLP 能力）
-3. **Contract 阻断模式**：误报率确认后，VIOLATION 级别可升级为输出拦截
-4. **前端展示**：Contract/Schema Gate 结果可通过 SSE 推送到前端，让用户看到可信度标签
+1. **Contract 阻断模式**：误报率确认后，VIOLATION 级别可升级为输出拦截
+2. **前端展示**：Contract/Schema Gate 结果可通过 SSE 推送到前端，让用户看到可信度标签
+3. **LLM 校验优化**：根据实际误报率调整 prompt 和阈值

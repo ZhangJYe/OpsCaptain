@@ -5,6 +5,7 @@ import (
 	"SuperBizAgent/internal/ai/agent/chat_pipeline"
 	"SuperBizAgent/internal/ai/contextengine"
 	"SuperBizAgent/internal/ai/events"
+	"SuperBizAgent/internal/ai/models"
 	aiservice "SuperBizAgent/internal/ai/service"
 	"SuperBizAgent/internal/ai/skills"
 	"SuperBizAgent/internal/consts"
@@ -194,6 +195,19 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 							g.Log().Infof(ctx, "[session:%s][req:%s] schema gate warn [%s]: %s", id, requestID, check.Field, check.Detail)
 						}
 					}
+				}
+			}
+
+			// LLM 校验：使用 GLM 进行高级防幻觉检查
+			if hallucinationCfg.LLMValidation != nil && hallucinationCfg.LLMValidation.Enabled && resultCollector.HasToolCalls() {
+				toolResults := resultCollector.ToolResults()
+				llmValidator := events.NewLLMValidator(models.OpenAIForGLMFast, hallucinationCfg.LLMValidation)
+				llmResult := llmValidator.Validate(ctx, completeResponse, toolResults)
+				if len(llmResult.OmissionWarnings) > 0 {
+					g.Log().Warningf(ctx, "[session:%s][req:%s] LLM omission detection: %v", id, requestID, llmResult.OmissionWarnings)
+				}
+				if len(llmResult.AccuracyWarnings) > 0 {
+					g.Log().Warningf(ctx, "[session:%s][req:%s] LLM accuracy check: %v", id, requestID, llmResult.AccuracyWarnings)
 				}
 			}
 		}
