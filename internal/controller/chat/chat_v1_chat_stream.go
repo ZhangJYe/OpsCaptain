@@ -84,6 +84,12 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 		History:   contextPkg.HistoryMessages,
 	}
 
+	// 创建事件发射器（在 buildChatAgent 之前，以便工具包装）
+	sseEmitter := events.NewSSEEmitter(client, requestID)
+	traceEmitter := events.NewTraceEmitter(requestID)
+	multiEmitter := events.NewMultiEmitter(sseEmitter, traceEmitter)
+	chat_pipeline.SetChatToolEmitter(multiEmitter, requestID)
+
 	runner, agentBuildErr := buildChatAgent(ctx, msg)
 	if agentBuildErr != nil {
 		g.Log().Errorf(ctx, "[session:%s][req:%s] ChatStream phase=agent_build_failed error=%v duration=%dms",
@@ -108,9 +114,6 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 		id, requestID, time.Since(phaseStart).Milliseconds())
 	sendChatStreamMeta(client, "chat", "", filteredDetail, false, "")
 	streamDetailsToClient(client, filteredDetail)
-	sseEmitter := events.NewSSEEmitter(client, requestID)
-	traceEmitter := events.NewTraceEmitter(requestID)
-	multiEmitter := events.NewMultiEmitter(sseEmitter, traceEmitter)
 	callbackEmitter := events.NewCallbackEmitter(multiEmitter, requestID)
 	sr, err := runner.Stream(ctx, userMessage, compose.WithCallbacks(
 		log_call_back.LogCallback(nil),

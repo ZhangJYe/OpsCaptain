@@ -4,6 +4,7 @@ import (
 	"SuperBizAgent/internal/ai/agent/skillspecialists/knowledge"
 	"SuperBizAgent/internal/ai/agent/skillspecialists/logs"
 	"SuperBizAgent/internal/ai/agent/skillspecialists/metrics"
+	"SuperBizAgent/internal/ai/events"
 	"SuperBizAgent/internal/ai/skills"
 	"SuperBizAgent/internal/ai/tools"
 	"context"
@@ -21,6 +22,18 @@ var chatDisclosure = skills.NewProgressiveDisclosure(
 	},
 	tools.BuildTieredTools(),
 )
+
+// chatToolEmitter 工具事件发射器（由 ChatStream 设置）
+var chatToolEmitter events.Emitter
+
+// chatToolTraceID 工具事件 traceID（由 ChatStream 设置）
+var chatToolTraceID string
+
+// SetChatToolEmitter 设置工具事件发射器（由 ChatStream 调用）
+func SetChatToolEmitter(emitter events.Emitter, traceID string) {
+	chatToolEmitter = emitter
+	chatToolTraceID = traceID
+}
 
 func NormalizeSelectedSkillIDs(selectedSkillIDs []string) []string {
 	selectedSkills := chatDisclosure.ResolveSelectedSkills(selectedSkillIDs)
@@ -57,11 +70,21 @@ func newReactAgentLambdaWithQuery(ctx context.Context, query string) (lba *compo
 		disclosed = chatDisclosure.Disclose(query, selectedSkillIDs)
 		config.ToolsConfig.Tools = disclosed.Tools
 		g.Log().Infof(ctx, "[Chat] progressive disclosure: query=%q selected=%v domains=%v tools=%d (L0=%d L1=%d)",
-			query, selectedSkillIDs, disclosed.MatchedDomains, len(disclosed.Tools),
-			disclosed.DisclosedTier[skills.TierAlwaysOn],
+			query, selectedSkillIDs, disclosed.MatchedDomains, len(disclosed.Tools), disclosed.DisclosedTier[skills.TierAlwaysOn],
 			disclosed.DisclosedTier[skills.TierSkillGate])
 	} else {
 		config.ToolsConfig.Tools = chatDisclosure.AllTools()
+	}
+
+	// 如果配置了事件发射器，包装工具以支持 before/after 拦截和事件发射
+	if chatToolEmitter != nil {
+		config.ToolsConfig.Tools = events.WrapTools(
+			config.ToolsConfig.Tools,
+			chatToolEmitter,
+			chatToolTraceID,
+			nil, // beforeToolCall: 暂不启用
+			nil, // afterToolCall: 暂不启用
+		)
 	}
 
 	ins, err := react.NewAgent(ctx, config)
