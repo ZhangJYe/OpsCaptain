@@ -87,7 +87,10 @@ func ValidateContractWithConfig(hc *HallucinationConfig, output string, toolResu
 	// 规则 2: 工具失败必须告知用户
 	if len(failedTools) > 0 {
 		for _, ft := range failedTools {
-			if !strings.Contains(output, ft) && !strings.Contains(output, "失败") && !strings.Contains(output, "错误") {
+			// 工具名必须出现在输出中，或者输出中明确提到失败
+			toolMentioned := strings.Contains(output, ft)
+			failureMentioned := strings.Contains(output, "失败") || strings.Contains(output, "错误")
+			if !toolMentioned && !failureMentioned {
 				result.AddViolation("must_report_failure", fmt.Sprintf("工具 %s 调用失败，但输出中未提及", ft))
 			}
 		}
@@ -95,14 +98,10 @@ func ValidateContractWithConfig(hc *HallucinationConfig, output string, toolResu
 
 	// 规则 3: 有工具结果时，输出必须引用数据
 	if len(toolResults) > 0 {
-		combined := strings.Join(toolResults, " ")
 		hasReference := false
 		for _, tr := range toolResults {
-			snippet := tr
-			if len(snippet) > 50 {
-				snippet = snippet[:50]
-			}
-			words := strings.Fields(snippet)
+			// 取工具结果中的关键词进行匹配
+			words := extractKeywords(tr)
 			matchCount := 0
 			for _, w := range words {
 				if len(w) >= 2 && strings.Contains(output, w) {
@@ -114,20 +113,18 @@ func ValidateContractWithConfig(hc *HallucinationConfig, output string, toolResu
 				break
 			}
 		}
-		_ = combined
 		if !hasReference {
 			result.AddWarn("should_reference_data", "有工具返回数据，但输出中未明显引用工具结果")
 		}
 	}
 
 	// 规则 4: 编造告警检测
-	fabricatedAlertPattern := regexp.MustCompile(`(?i)(告警|alert)\s*[:：]?\s*[^\n]{5,50}(触发|firing|resolved|pending)`)
 	if fabricatedAlertPattern.MatchString(output) && len(toolResults) == 0 {
 		result.AddViolation("no_fabricated_alerts", "输出中包含告警描述，但无工具返回告警数据")
 	}
 
 	// 规则 5: 置信度标注（软约束）
-	hedgeWords := []string{"推测", "可能", "大概", "不确定", "待确认", "需要进一步", "建议确认", "仅供参考"}
+	hedgeWords := defaultHedgeWords
 	if hc != nil && len(hc.HedgeWords) > 0 {
 		hedgeWords = hc.HedgeWords
 	}
@@ -143,6 +140,24 @@ func ValidateContractWithConfig(hc *HallucinationConfig, output string, toolResu
 	}
 
 	return result
+}
+
+// 包级预编译正则
+var fabricatedAlertPattern = regexp.MustCompile(`(?i)(告警|alert)\s*[:：]?\s*[^\n]{5,50}(触发|firing|resolved|pending)`)
+
+var defaultHedgeWords = []string{"推测", "可能", "大概", "不确定", "待确认", "需要进一步", "建议确认", "仅供参考"}
+
+// extractKeywords 从文本中提取关键词（数字、服务名等）
+func extractKeywords(text string) []string {
+	words := strings.Fields(text)
+	var keywords []string
+	for _, w := range words {
+		w = strings.Trim(w, "，。、；：\"\"''（）【】")
+		if len(w) >= 2 {
+			keywords = append(keywords, w)
+		}
+	}
+	return keywords
 }
 
 // ContractCollector 实现 Emitter，收集事件用于 Contract 校验

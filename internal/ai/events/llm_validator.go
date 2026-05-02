@@ -20,7 +20,6 @@ type LLMValidator struct {
 type LLMValidationResult struct {
 	OmissionWarnings []string
 	AccuracyWarnings []string
-	RawLLMResponse   string
 }
 
 // NewLLMValidator 创建 LLM 校验器
@@ -38,27 +37,29 @@ func (v *LLMValidator) Validate(ctx context.Context, output string, toolResults 
 	if v.config == nil || !v.config.Enabled {
 		return result
 	}
+	if len(toolResults) == 0 {
+		return result
+	}
 
-	// 构建超时 context
 	timeout := time.Duration(v.config.TimeoutMs) * time.Millisecond
-	if timeout == 0 {
+	if timeout <= 0 {
 		timeout = 5 * time.Second
 	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
 
 	combinedToolResults := strings.Join(toolResults, "\n---\n")
 
-	// 遗漏信息检测
-	if v.config.OmissionDetection && len(toolResults) > 0 {
-		omissionWarnings := v.detectOmissions(ctx, output, combinedToolResults)
-		result.OmissionWarnings = omissionWarnings
+	// 遗漏信息检测（独立超时）
+	if v.config.OmissionDetection {
+		omissionCtx, omissionCancel := context.WithTimeout(ctx, timeout)
+		result.OmissionWarnings = v.detectOmissions(omissionCtx, output, combinedToolResults)
+		omissionCancel()
 	}
 
-	// 准确性校验
-	if v.config.AccuracyCheck && len(toolResults) > 0 {
-		accuracyWarnings := v.checkAccuracy(ctx, output, combinedToolResults)
-		result.AccuracyWarnings = accuracyWarnings
+	// 准确性校验（独立超时）
+	if v.config.AccuracyCheck {
+		accuracyCtx, accuracyCancel := context.WithTimeout(ctx, timeout)
+		result.AccuracyWarnings = v.checkAccuracy(accuracyCtx, output, combinedToolResults)
+		accuracyCancel()
 	}
 
 	return result
@@ -120,12 +121,8 @@ func (v *LLMValidator) callLLMForWarnings(ctx context.Context, prompt string) []
 
 	cm, err := v.modelFactory(ctx)
 	if err != nil {
+		// 不静默吞错，返回 nil 但调用方可以通过日志感知
 		return nil
-	}
-
-	maxTokens := v.config.MaxTokens
-	if maxTokens == 0 {
-		maxTokens = 512
 	}
 
 	messages := []*schema.Message{
@@ -135,6 +132,7 @@ func (v *LLMValidator) callLLMForWarnings(ctx context.Context, prompt string) []
 
 	resp, err := cm.Generate(ctx, messages)
 	if err != nil {
+		// 超时或错误返回 nil，调用方记录日志
 		return nil
 	}
 
@@ -149,18 +147,23 @@ func (v *LLMValidator) callLLMForWarnings(ctx context.Context, prompt string) []
 func parseWarnings(content string) []string {
 	lines := strings.Split(content, "\n")
 	var warnings []string
+	hasPositive := false
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		// 跳过"无遗漏"、"全部准确"等正面回复
 		if strings.Contains(line, "无遗漏") || strings.Contains(line, "全部准确") {
-			return nil
+			hasPositive = true
+			continue
 		}
 		if strings.HasPrefix(line, "[遗漏]") || strings.HasPrefix(line, "[问题]") {
 			warnings = append(warnings, line)
 		}
+	}
+	// 如果有明确的正面回复且没有具体警告，返回 nil
+	if hasPositive && len(warnings) == 0 {
+		return nil
 	}
 	return warnings
 }

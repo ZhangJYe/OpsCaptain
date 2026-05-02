@@ -30,7 +30,7 @@ func (r *ResultCollector) Emit(ctx context.Context, event AgentEvent) {
 
 	toolName, _ := event.Payload["tool_name"].(string)
 	summary, _ := event.Payload["summary"].(string)
-	success, _ := event.Payload["success"].(bool)
+	errMsg, _ := event.Payload["error"].(string)
 
 	if toolName == "" {
 		return
@@ -41,7 +41,7 @@ func (r *ResultCollector) Emit(ctx context.Context, event AgentEvent) {
 	r.results = append(r.results, collectedResult{
 		toolName: toolName,
 		summary:  summary,
-		success:  success,
+		success:  errMsg == "", // 与 ContractCollector 保持一致：无 error 即成功
 	})
 }
 

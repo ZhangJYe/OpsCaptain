@@ -178,6 +178,10 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 				)
 				if !contractResult.Passed {
 					g.Log().Warningf(ctx, "[session:%s][req:%s] contract check: %s", id, requestID, contractResult.Summary())
+					// 阻断模式：通知前端响应可能不可靠
+					if hallucinationCfg.ContractBlockOnViolation {
+						client.SendToClient("contract_violation", contractResult.Summary())
+					}
 				} else if len(contractResult.Violations) > 0 {
 					g.Log().Infof(ctx, "[session:%s][req:%s] contract check: %s", id, requestID, contractResult.Summary())
 				}
@@ -189,6 +193,7 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 				schemaResult := schemaGate.Validate(completeResponse)
 				if !schemaResult.Passed {
 					g.Log().Warningf(ctx, "[session:%s][req:%s] schema gate: %s", id, requestID, schemaResult.Summary())
+					client.SendToClient("schema_gate", schemaResult.Summary())
 				} else {
 					for _, check := range schemaResult.Checks {
 						if !check.Passed {

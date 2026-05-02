@@ -498,6 +498,46 @@ export function useChat() {
                   setStreamingThoughts,
                 );
               }
+            } else if (event === "contract_violation") {
+              // Contract 阻断模式：响应可能不可靠
+              const violationSummary = data.trim();
+              if (violationSummary) {
+                commitThinkingSteps((prev) =>
+                  appendStepMeta(
+                    upsertStep(
+                      prev,
+                      "contract",
+                      "Contract 校验",
+                      { status: "error", detail: "输出存在合规问题" },
+                    ),
+                    "contract",
+                    "Contract 校验",
+                    violationSummary,
+                  ),
+                );
+                setStreamingThoughts((prev) => [
+                  ...prev,
+                  `⚠️ 输出存在合规问题: ${violationSummary}`,
+                ]);
+              }
+            } else if (event === "schema_gate") {
+              // Schema Gate 校验失败
+              const schemaSummary = data.trim();
+              if (schemaSummary) {
+                commitThinkingSteps((prev) =>
+                  appendStepMeta(
+                    upsertStep(
+                      prev,
+                      "schema",
+                      "Schema 校验",
+                      { status: "error", detail: "输出质量不达标" },
+                    ),
+                    "schema",
+                    "Schema 校验",
+                    schemaSummary,
+                  ),
+                );
+              }
             } else if (event === "thought") {
               const thought = data.trim();
               if (thought) {

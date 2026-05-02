@@ -105,6 +105,7 @@ hallucination:
     max_tokens: 512
     omission_detection: true
     accuracy_check: true
+  contract_block_on_violation: false
 
 debug:
   pprof_enabled: false
