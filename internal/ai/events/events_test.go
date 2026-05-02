@@ -133,6 +133,40 @@ func TestCallbackEmitter_ModelCallEvents(t *testing.T) {
 	}
 }
 
+func TestModelCallbackEmitter_SuppressesToolEvents(t *testing.T) {
+	mock := &mockEmitter{}
+	emitter := NewModelCallbackEmitter(mock, "trace-model-only")
+	handler := emitter.Handler()
+
+	ctx := context.Background()
+	toolInfo := &callbacks.RunInfo{
+		Component: components.ComponentOfTool,
+		Name:      "query_metrics",
+		Type:      "Tool",
+	}
+	modelInfo := &callbacks.RunInfo{
+		Component: components.ComponentOfChatModel,
+		Name:      "deepseek-v3",
+		Type:      "ChatModel",
+	}
+
+	handler.OnStart(ctx, toolInfo, nil)
+	handler.OnEnd(ctx, toolInfo, `{"result":"ok"}`)
+	handler.OnStart(ctx, modelInfo, nil)
+	handler.OnEnd(ctx, modelInfo, nil)
+
+	events := mock.Events()
+	if len(events) != 2 {
+		t.Fatalf("expected only 2 model events, got %d", len(events))
+	}
+	if events[0].Type != EventModelStart {
+		t.Fatalf("expected model_start, got %q", events[0].Type)
+	}
+	if events[1].Type != EventModelEnd {
+		t.Fatalf("expected model_end, got %q", events[1].Type)
+	}
+}
+
 func TestCallbackEmitter_ErrorEvent(t *testing.T) {
 	mock := &mockEmitter{}
 	emitter := NewCallbackEmitter(mock, "trace-err")

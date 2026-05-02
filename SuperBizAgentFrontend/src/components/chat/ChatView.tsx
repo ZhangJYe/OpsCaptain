@@ -54,7 +54,7 @@ export function ChatView({
 
   return (
     <div className="flex flex-col h-full">
-      <div className="shrink-0 border-b border-zinc-200/80 bg-white/72 px-4 py-2 backdrop-blur-xl dark:border-zinc-900/80 dark:bg-zinc-950/42">
+      <div className="shrink-0 border-b border-zinc-200/80 bg-white/70 px-4 py-2 backdrop-blur-xl dark:border-zinc-900/80 dark:bg-zinc-950/40">
         <div className="mx-auto flex max-w-4xl items-center gap-3 text-xs text-zinc-500 dark:text-zinc-500">
           <span className="inline-flex items-center gap-1.5">
             {mode === 'quick' ? <Activity size={12} className="text-accent" /> : <Waves size={12} className="text-accent" />}
@@ -78,7 +78,7 @@ export function ChatView({
       </div>
 
       <div className="flex-1 overflow-y-auto scrollbar-thin">
-        <div className="mx-auto max-w-4xl px-4 py-6 space-y-5">
+        <div className="mx-auto max-w-4xl px-4 py-8 space-y-6">
 
           <AnimatePresence initial={false}>
             {messages.map((msg, i) => (
@@ -101,8 +101,8 @@ export function ChatView({
           {/* Streaming bubble — thinking collapse embedded inside */}
           {isLoading && (
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/10 text-xs font-semibold text-accent ring-1 ring-inset ring-accent/20">
-                AI
+              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-accent/20 bg-accent/10 text-xs font-semibold text-accent">
+                OC
               </div>
               <div className="min-w-0 flex-1 max-w-[85%]">
                 <div className="mb-1.5 flex items-center gap-2">
@@ -113,7 +113,6 @@ export function ChatView({
                 </div>
                 <div className="rounded-2xl border border-zinc-200/80 bg-white/90 px-4 py-3 shadow-sm dark:border-zinc-800/60 dark:bg-zinc-900/70">
 
-                  {/* Thinking collapse — like DeepSeek */}
                   <ThinkingCollapse steps={thinkingSteps} isStreaming />
 
                   {streamingContent ? (

@@ -88,7 +88,7 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 	sseEmitter := events.NewSSEEmitter(client, requestID)
 	traceEmitter := events.NewTraceEmitter(requestID)
 	multiEmitter := events.NewMultiEmitter(sseEmitter, traceEmitter, events.GlobalHealthCollector())
-	chat_pipeline.SetChatToolEmitter(multiEmitter, requestID)
+	ctx = chat_pipeline.WithChatToolEmitter(ctx, multiEmitter, requestID)
 
 	runner, agentBuildErr := buildChatAgent(ctx, msg)
 	if agentBuildErr != nil {
@@ -114,7 +114,7 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 		id, requestID, time.Since(phaseStart).Milliseconds())
 	sendChatStreamMeta(client, "chat", "", filteredDetail, false, "")
 	streamDetailsToClient(client, filteredDetail)
-	callbackEmitter := events.NewCallbackEmitter(multiEmitter, requestID)
+	callbackEmitter := events.NewModelCallbackEmitter(multiEmitter, requestID)
 	sr, err := runner.Stream(ctx, userMessage, compose.WithCallbacks(
 		log_call_back.LogCallback(nil),
 		callbackEmitter.Handler(),

@@ -19,8 +19,9 @@ type Emitter interface {
 
 // CallbackEmitter 将 Eino callback 转换为 AgentEvent
 type CallbackEmitter struct {
-	emitter Emitter
-	traceID string
+	emitter           Emitter
+	traceID           string
+	includeToolEvents bool
 
 	mu     sync.Mutex
 	timers map[string]time.Time // key: component:name
@@ -29,10 +30,18 @@ type CallbackEmitter struct {
 // NewCallbackEmitter 创建 callback emitter
 func NewCallbackEmitter(emitter Emitter, traceID string) *CallbackEmitter {
 	return &CallbackEmitter{
-		emitter: emitter,
-		traceID: traceID,
-		timers:  make(map[string]time.Time),
+		emitter:           emitter,
+		traceID:           traceID,
+		includeToolEvents: true,
+		timers:            make(map[string]time.Time),
 	}
+}
+
+// NewModelCallbackEmitter 创建只上报模型事件的 callback emitter。
+func NewModelCallbackEmitter(emitter Emitter, traceID string) *CallbackEmitter {
+	callbackEmitter := NewCallbackEmitter(emitter, traceID)
+	callbackEmitter.includeToolEvents = false
+	return callbackEmitter
 }
 
 // Handler 返回 Eino callbacks.Handler，用于 compose.WithCallbacks
@@ -53,9 +62,11 @@ func (c *CallbackEmitter) timerKey(info *callbacks.RunInfo) string {
 func (c *CallbackEmitter) onStart(ctx context.Context, info *callbacks.RunInfo, input callbacks.CallbackInput) context.Context {
 	key := c.timerKey(info)
 
-	c.mu.Lock()
-	c.timers[key] = time.Now()
-	c.mu.Unlock()
+	if c.shouldTrackTimer(info) {
+		c.mu.Lock()
+		c.timers[key] = time.Now()
+		c.mu.Unlock()
+	}
 
 	switch info.Component {
 	case components.ComponentOfChatModel:
@@ -63,6 +74,9 @@ func (c *CallbackEmitter) onStart(ctx context.Context, info *callbacks.RunInfo, 
 			"model_name": info.Name,
 		}))
 	case components.ComponentOfTool:
+		if !c.includeToolEvents {
+			return ctx
+		}
 		c.emitter.Emit(ctx, NewEvent(EventToolCallStart, c.traceID, info.Name, map[string]any{
 			"tool_name": info.Name,
 		}))
@@ -90,6 +104,9 @@ func (c *CallbackEmitter) onEnd(ctx context.Context, info *callbacks.RunInfo, ou
 	case components.ComponentOfChatModel:
 		c.handleModelEnd(ctx, info, output, duration)
 	case components.ComponentOfTool:
+		if !c.includeToolEvents {
+			return ctx
+		}
 		c.handleToolEnd(ctx, info, output, duration)
 	}
 
@@ -120,6 +137,9 @@ func (c *CallbackEmitter) onError(ctx context.Context, info *callbacks.RunInfo, 
 			"error":       err.Error(),
 		}))
 	case components.ComponentOfTool:
+		if !c.includeToolEvents {
+			return ctx
+		}
 		c.emitter.Emit(ctx, NewEvent(EventToolCallEnd, c.traceID, info.Name, map[string]any{
 			"tool_name":   info.Name,
 			"duration_ms": duration.Milliseconds(),
@@ -129,6 +149,11 @@ func (c *CallbackEmitter) onError(ctx context.Context, info *callbacks.RunInfo, 
 	}
 
 	return ctx
+}
+
+func (c *CallbackEmitter) shouldTrackTimer(info *callbacks.RunInfo) bool {
+	return info.Component == components.ComponentOfChatModel ||
+		(info.Component == components.ComponentOfTool && c.includeToolEvents)
 }
 
 func (c *CallbackEmitter) handleModelEnd(ctx context.Context, info *callbacks.RunInfo, output callbacks.CallbackOutput, duration time.Duration) {

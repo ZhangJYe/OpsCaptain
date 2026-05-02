@@ -123,7 +123,7 @@ http://你的ECS公网IP/healthz
 
 ```bash
 cd /opt/opscaptain
-source ./release.env
+set -a; . ./release.env; set +a
 docker compose --env-file .env.production -f docker-compose.prod.yml ps
 ```
 
@@ -131,7 +131,7 @@ docker compose --env-file .env.production -f docker-compose.prod.yml ps
 
 ```bash
 cd /opt/opscaptain
-source ./release.env
+set -a; . ./release.env; set +a
 docker compose --env-file .env.production -f docker-compose.prod.yml logs -f backend frontend caddy
 ```
 

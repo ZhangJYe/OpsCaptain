@@ -23,16 +23,29 @@ var chatDisclosure = skills.NewProgressiveDisclosure(
 	tools.BuildTieredTools(),
 )
 
-// chatToolEmitter 工具事件发射器（由 ChatStream 设置）
-var chatToolEmitter events.Emitter
+type chatToolEmitterContextKey struct{}
 
-// chatToolTraceID 工具事件 traceID（由 ChatStream 设置）
-var chatToolTraceID string
+type chatToolEmitterConfig struct {
+	emitter events.Emitter
+	traceID string
+}
 
-// SetChatToolEmitter 设置工具事件发射器（由 ChatStream 调用）
-func SetChatToolEmitter(emitter events.Emitter, traceID string) {
-	chatToolEmitter = emitter
-	chatToolTraceID = traceID
+func WithChatToolEmitter(ctx context.Context, emitter events.Emitter, traceID string) context.Context {
+	if emitter == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, chatToolEmitterContextKey{}, chatToolEmitterConfig{
+		emitter: emitter,
+		traceID: traceID,
+	})
+}
+
+func chatToolEmitterFromContext(ctx context.Context) (events.Emitter, string, bool) {
+	cfg, ok := ctx.Value(chatToolEmitterContextKey{}).(chatToolEmitterConfig)
+	if !ok || cfg.emitter == nil {
+		return nil, "", false
+	}
+	return cfg.emitter, cfg.traceID, true
 }
 
 func NormalizeSelectedSkillIDs(selectedSkillIDs []string) []string {
@@ -76,12 +89,11 @@ func newReactAgentLambdaWithQuery(ctx context.Context, query string) (lba *compo
 		config.ToolsConfig.Tools = chatDisclosure.AllTools()
 	}
 
-	// 如果配置了事件发射器，包装工具以支持 before/after 拦截和事件发射
-	if chatToolEmitter != nil {
+	if emitter, traceID, ok := chatToolEmitterFromContext(ctx); ok {
 		config.ToolsConfig.Tools = events.WrapTools(
 			config.ToolsConfig.Tools,
-			chatToolEmitter,
-			chatToolTraceID,
+			emitter,
+			traceID,
 			nil,                               // beforeToolCall: 暂不启用
 			events.SummaryAfterToolCall(4000), // afterToolCall: 截断过长结果，减少 token 消耗
 		)

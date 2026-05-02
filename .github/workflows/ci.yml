@@ -9,6 +9,9 @@ on:
 permissions:
   contents: read
 
+env:
+  GOPROXY: https://goproxy.cn,https://proxy.golang.org,direct
+
 jobs:
   test-and-build:
     runs-on: ubuntu-latest

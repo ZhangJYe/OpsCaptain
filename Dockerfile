@@ -1,5 +1,7 @@
 FROM golang:1.24-alpine AS builder
 
+ENV GOPROXY=https://goproxy.cn,https://proxy.golang.org,direct
+
 RUN apk add --no-cache ca-certificates tzdata
 
 WORKDIR /build
