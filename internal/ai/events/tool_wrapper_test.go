@@ -9,7 +9,7 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-// mockTool 模拟工具
+// mockTool 模拟工具（实现 InvokableTool）
 type mockTool struct {
 	name    string
 	result  string
@@ -172,9 +172,11 @@ func TestWrapTools_Batch(t *testing.T) {
 
 	// 验证每个工具都能正常执行
 	for i, w := range wrapped {
-		_, err := w.InvokableRun(context.Background(), "{}")
-		if err != nil {
-			t.Fatalf("tool %d failed: %v", i, err)
+		if it, ok := w.(tool.InvokableTool); ok {
+			_, err := it.InvokableRun(context.Background(), "{}")
+			if err != nil {
+				t.Fatalf("tool %d failed: %v", i, err)
+			}
 		}
 	}
 

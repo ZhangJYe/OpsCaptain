@@ -19,7 +19,7 @@ type AfterToolCallFunc func(ctx context.Context, toolName string, args string, r
 
 // ToolWrapper 工具包装器，支持 beforeToolCall / afterToolCall 拦截
 type ToolWrapper struct {
-	inner      tool.BaseTool
+	inner      tool.InvokableTool
 	before     BeforeToolCallFunc
 	after      AfterToolCallFunc
 	emitter    Emitter
@@ -27,8 +27,8 @@ type ToolWrapper struct {
 	cachedName string
 }
 
-// WrapTool 包装单个工具
-func WrapTool(t tool.BaseTool, emitter Emitter, traceID string, before BeforeToolCallFunc, after AfterToolCallFunc) *ToolWrapper {
+// WrapTool 包装单个工具（必须是 InvokableTool）
+func WrapTool(t tool.InvokableTool, emitter Emitter, traceID string, before BeforeToolCallFunc, after AfterToolCallFunc) *ToolWrapper {
 	return &ToolWrapper{
 		inner:   t,
 		before:  before,
@@ -36,6 +36,19 @@ func WrapTool(t tool.BaseTool, emitter Emitter, traceID string, before BeforeToo
 		emitter: emitter,
 		traceID: traceID,
 	}
+}
+
+// WrapTools 批量包装工具，自动过滤非 InvokableTool
+func WrapTools(tools []tool.BaseTool, emitter Emitter, traceID string, before BeforeToolCallFunc, after AfterToolCallFunc) []tool.BaseTool {
+	result := make([]tool.BaseTool, 0, len(tools))
+	for _, t := range tools {
+		if it, ok := t.(tool.InvokableTool); ok {
+			result = append(result, WrapTool(it, emitter, traceID, before, after))
+		} else {
+			result = append(result, t)
+		}
+	}
+	return result
 }
 
 // Info 返回工具信息（透传）
@@ -123,15 +136,6 @@ func (w *ToolWrapper) toolName(ctx context.Context) string {
 	}
 	w.cachedName = info.Name
 	return w.cachedName
-}
-
-// WrapTools 批量包装工具
-func WrapTools(tools []tool.BaseTool, emitter Emitter, traceID string, before BeforeToolCallFunc, after AfterToolCallFunc) []tool.BaseTool {
-	result := make([]tool.BaseTool, len(tools))
-	for i, t := range tools {
-		result[i] = WrapTool(t, emitter, traceID, before, after)
-	}
-	return result
 }
 
 // --- 常用的 before/after 函数 ---
