@@ -1,158 +1,137 @@
 # OpsCaption 代码导读地图
 
-本文档列出系统中每个关键文件的作用，方便你快速定位。
+> 当前统一口径（2026-05）
+> - Chat 主链路：`ContextEngine / MemoryService -> Eino ReAct Agent -> Tools / RAG -> JSON / SSE`
+> - AIOps 主链路：`Approval / Degradation / Memory -> Runtime -> Plan-Execute-Replan`
+> - `supervisor / triage / reporter / skillspecialists / chat_multi_agent` 相关内容，如果仍出现在仓库其他文档里，应理解为历史实验或演进讨论，不再代表当前聊天主链路。
+
+本文档只列出**当前最值得读、且会直接影响线上行为**的代码入口，方便你快速建立阅读顺序。
 
 ---
 
-## Agent 层
+## 1. 先看入口
+
+| 文件 | 作用 | 为什么先看 |
+|---|---|---|
+| `main.go` | 服务启动、配置加载、中间件、路由注册 | 先搞清楚系统怎么启动 |
+| `manifest/config/config.yaml` | 全局配置 | 看 feature flags、模型、RAG、memory、runtime 参数 |
+| `internal/controller/chat/chat_v1_chat.go` | 普通聊天入口 | 当前 Chat 主链路 |
+| `internal/controller/chat/chat_v1_chat_stream.go` | 流式聊天入口 | 当前 SSE 主链路 |
+| `internal/controller/chat/chat_v1_ai_ops.go` | AIOps 入口 | 复杂分析链路入口 |
+
+---
+
+## 2. Chat 主链路
 
 | 文件 | 作用 | 一句话说明 |
 |---|---|---|
-| supervisor/supervisor.go | 总指挥 | 调 triage 分类 → 并行派 specialists → 汇总给 reporter |
-| triage/triage.go | 路由器 | 用规则表匹配关键词，决定走哪些 domain |
-| skillspecialists/metrics/agent.go | 指标 Agent | 查 Prometheus 告警 |
-| skillspecialists/logs/agent.go | 日志 Agent | 查 MCP 日志 |
-| skillspecialists/knowledge/agent.go | 知识 Agent | 用 Skills Registry 选 skill，查知识库 |
-| reporter/reporter.go | 报告生成器 | 汇总所有 specialist 结果，生成 Markdown 或自然语言回答 |
+| `internal/controller/chat/chat_v1_chat.go` | Chat Controller | 校验、降级、缓存、session lock、构建上下文、执行 ReAct、持久化结果 |
+| `internal/controller/chat/chat_v1_chat_stream.go` | ChatStream Controller | 流式版本的 Chat，负责 SSE 事件输出和 fallback |
+| `internal/ai/service/memory_service.go` | 记忆服务 | 构建 ChatPackage、持久化对话结果、异步触发记忆抽取 |
+| `internal/ai/contextengine/assembler.go` | 上下文装配器 | 把 history / memory / docs / tool outputs 组装成可供模型消费的上下文包 |
+| `internal/ai/contextengine/resolver.go` | Profile 解析 | 根据 mode 选择 ContextProfile 和预算策略 |
+| `internal/ai/agent/chat_pipeline/orchestration.go` | ReAct 执行装配 | 构建 Chat ReAct 执行器 |
+| `internal/ai/agent/chat_pipeline/flow.go` | ReAct 行为配置 | 绑定工具、技能披露、回调等 |
+| `internal/ai/agent/chat_pipeline/prompt.go` | Chat Prompt | 系统规则、上下文提示、轻社交约束 |
 
-## 协议层
+---
 
-| 文件 | 作用 | 一句话说明 |
-|---|---|---|
-| protocol/types.go | 统一数据结构 | TaskEnvelope / TaskResult / TaskEvent / EvidenceItem / ArtifactRef |
-
-## Runtime 层
+## 3. AIOps 主链路
 
 | 文件 | 作用 | 一句话说明 |
 |---|---|---|
-| runtime/runtime.go | 任务分发引擎 | Dispatch: 找 Agent → 执行 → 记录 |
-| runtime/registry.go | Agent 注册表 | 记录谁能做什么 |
-| runtime/ledger.go | 任务账本接口 | 记录任务创建/更新/完成 |
-| runtime/bus.go | 事件总线 | Agent 之间发事件通知 |
-| runtime/artifacts.go | 产物存储接口 | 存储 Agent 执行产物 |
-| runtime/file_store.go | 持久化实现 | Ledger + ArtifactStore 的文件存储版 |
-| runtime/context.go | Runtime 上下文 | 通过 ctx 传递 Runtime 引用 |
-| runtime/agent.go | Agent 接口定义 | Name() + Capabilities() + Handle() |
+| `internal/controller/chat/chat_v1_ai_ops.go` | AIOps Controller | AIOps 请求入口，负责参数校验和响应封装 |
+| `internal/ai/service/ai_ops_service.go` | AIOps Service | AIOps 主服务，负责审批、降级、runtime 调度 |
+| `internal/ai/service/ai_ops_runtime.go` | Runtime 复用 | 按 dataDir 复用 AIOps runtime，避免每次重建 |
+| `internal/ai/agent/plan_execute_replan/plan_execute_replan.go` | AIOps 执行骨架 | Plan-Execute-Replan 的主入口 |
+| `internal/ai/agent/plan_execute_replan/planner.go` | Planner | 拆计划 |
+| `internal/ai/agent/plan_execute_replan/executor.go` | Executor | 按计划调工具 |
+| `internal/ai/agent/plan_execute_replan/replan.go` | RePlanner | 结果不够时调整计划 |
 
-## Service 层
+---
 
-| 文件 | 作用 | 一句话说明 |
-|---|---|---|
-| service/chat_multi_agent.go | Chat Multi-Agent 入口 | 判断是否走 Multi-Agent + 执行 |
-| service/ai_ops_service.go | AIOps 入口 | AIOps 专用的 Multi-Agent 执行 |
-| service/ai_ops_runtime.go | Runtime 工厂 | 按 dataDir 复用 Runtime |
-| service/memory_service.go | 记忆管理 | 记忆构建 + 记忆持久化 |
-| service/degradation.go | 降级开关 | 手动关闭 AI 能力 |
-| service/approval_gate.go | 审批门 | 高风险操作拦截 |
-| service/token_audit.go | Token 审计 | 用量追踪和限制 |
-
-## RAG 层
+## 4. Context / RAG / Skills
 
 | 文件 | 作用 | 一句话说明 |
 |---|---|---|
-| rag/query.go | RAG 查询主入口 | Query → Rewrite → Retrieve → Rerank |
-| rag/query_rewrite.go | 查询改写 | 用 LLM 把口语改成搜索词 |
-| rag/rerank.go | 结果重排 | 用 LLM 给文档打分重排 |
-| rag/retriever_pool.go | Retriever 连接池 | 按地址+top_k 复用 Milvus retriever |
-| rag/shared_pool.go | 全局共享池 | 进程级单例 RetrieverPool |
-| rag/config.go | RAG 配置 | 从 config.yaml 读取 RAG 参数 |
-| rag/indexing_service.go | 知识入库 | 文档 → 切分 → embedding → 写入 Milvus |
+| `internal/ai/contextengine/types.go` | 上下文协议 | ContextRequest / ContextPackage / Budget / Profile |
+| `internal/ai/contextengine/documents.go` | 文档上下文 | 把 RAG 检索结果转成上下文项 |
+| `internal/ai/contextengine/tool_items.go` | 工具结果上下文 | 把 tool outputs 转成上下文项 |
+| `internal/ai/rag/query.go` | RAG 主入口 | Query -> Rewrite -> Retrieve -> Rerank |
+| `internal/ai/rag/query_rewrite.go` | Query Rewrite | 口语问题转检索式表达 |
+| `internal/ai/rag/rerank.go` | Rerank | 结果重排 |
+| `internal/ai/rag/retriever_pool.go` | Milvus 连接池 | 复用 retriever，避免每次重建 |
+| `internal/ai/skills/registry.go` | Skills 注册表 | 注册、解析、归一化 skill |
+| `internal/ai/skills/progressive_disclosure.go` | 渐进披露 | 根据 query 和 selected skills 决定暴露哪些工具 |
 
-## RAG Eval 层
+---
 
-| 文件 | 作用 | 一句话说明 |
-|---|---|---|
-| rag/eval/types.go | 评测数据结构 | EvalCase / EvalResult / EvalReport |
-| rag/eval/runner.go | 评测执行器 | 跑 eval cases，算 Recall@K |
-| rag/eval/aiops_baseline.go | AIOps baseline 生成 | 从 groundtruth 生成 docs + eval cases |
-| rag/eval/inmemory.go | 内存 Retriever | 评测用的内存向量库 |
-| rag/eval/io.go | 文件读写 | 读写 JSONL / JSON 文件 |
-| rag/eval/adapter.go | 适配器 | 把 Milvus retriever 适配成 eval 接口 |
-| rag/eval/samples.go | 样本数据 | 内置的小规模评测样本 |
-| rag/eval/online.go | 在线评测 | 线上 RAG 质量监控 |
-
-## Context Engine 层
+## 5. Tools 与外部依赖
 
 | 文件 | 作用 | 一句话说明 |
 |---|---|---|
-| contextengine/types.go | 数据结构 | ContextRequest / Profile / Budget / Package |
-| contextengine/assembler.go | 上下文装配器 | 按 Profile 和 Budget 组装四类上下文 |
-| contextengine/resolver.go | 策略解析器 | 根据 mode/intent 选择 Profile |
-| contextengine/documents.go | 文档注入 | RAG 检索结果注入上下文 |
-| contextengine/tool_items.go | 工具结果注入 | Specialist 结果注入上下文 |
+| `internal/ai/tools/query_metrics_alerts.go` | 告警查询 | Prometheus 告警/指标 |
+| `internal/ai/tools/query_log.go` | 日志查询 | 日志平台/MCP 日志 |
+| `internal/ai/tools/query_internal_docs.go` | 知识检索工具 | 走 RAG 查内部文档 |
+| `internal/ai/tools/mysql_crud.go` | 数据库查询 | 只读 SQL 能力 |
+| `internal/ai/tools/get_current_time.go` | 时间工具 | 获取当前时间 |
+| `internal/ai/tools/tiered_tools.go` | 工具分层 | 管理工具分级和暴露边界 |
 
-## Skills 层
+---
 
-| 文件 | 作用 | 一句话说明 |
-|---|---|---|
-| skills/registry.go | Skill 注册表 | Register + Resolve + Match |
-| skills/focus_collector.go | Focus 收集 | 从 task 提取 focus 信息 |
-| skills/progressive_disclosure.go | 渐进展示 | 控制 skill 输出详细度 |
-
-## Tools 层
+## 6. Memory / Cache / MQ
 
 | 文件 | 作用 | 一句话说明 |
 |---|---|---|
-| tools/query_metrics_alerts.go | Prometheus 告警查询 | 查活跃告警 |
-| tools/query_log.go | MCP 日志查询 | 查日志条目 |
-| tools/query_internal_docs.go | 知识库检索 | 走 RAG 链路查文档 |
-| tools/mysql_crud.go | MySQL 操作 | 数据库查询 |
-| tools/get_current_time.go | 时间工具 | 获取当前时间 |
-| tools/tiered_tools.go | 分层工具 | 工具能力分级 |
+| `utility/mem/mem.go` | 短期记忆 | 会话窗口、摘要、working state |
+| `utility/mem/long_term.go` | 长期记忆 | scope、衰减、检索、上限控制 |
+| `utility/mem/extraction.go` | 记忆提取 | 从用户明确陈述中抽候选记忆并做过滤 |
+| `utility/cache/llm_cache.go` | 回答缓存 | 按 session + query + skill scope 做缓存 |
+| `internal/ai/service/chat_task_queue.go` | Chat 异步任务 | 聊天异步执行 |
+| `internal/ai/service/memory_queue.go` | 记忆异步任务 | 记忆抽取异步执行 |
 
-## Memory 层
+---
 
-| 文件 | 作用 | 一句话说明 |
-|---|---|---|
-| utility/mem/long_term.go | 长期记忆存储 | 按 session 存取记忆 |
-| utility/mem/extraction.go | 记忆提取 | 用 LLM 从对话中提取记忆 |
-| utility/mem/token_budget.go | Token 预算 | 记忆 token 计算 |
-| utility/mem/mem.go | 记忆工具函数 | SessionID 生成等 |
-
-## 基础设施层
+## 7. 安全与稳定性
 
 | 文件 | 作用 | 一句话说明 |
 |---|---|---|
-| utility/auth/jwt.go | JWT 认证 | Token 签发/验证/吊销 |
-| utility/auth/rate_limiter.go | 本地限流 | 令牌桶算法 |
-| utility/metrics/metrics.go | Prometheus 指标 | 系统指标收集 |
-| utility/tracing/tracing.go | OpenTelemetry 追踪 | 分布式追踪 |
-| utility/health/health.go | 健康检查 | /healthz /readyz |
-| utility/safety/prompt_guard.go | 输入安全 | 过滤危险 prompt |
-| utility/safety/output_filter.go | 输出安全 | 过滤敏感输出 |
-| utility/resilience/resilience.go | 重试/熔断 | 韧性工具 |
-| utility/cache/llm_cache.go | LLM 缓存 | 缓存 LLM 调用结果 |
-| utility/common/common.go | 公共配置 | Milvus 地址、top_k 等读取 |
-| utility/common/env.go | 环境变量 | .env 文件加载 |
+| `internal/ai/service/degradation.go` | 降级决策 | 系统降级开关 |
+| `internal/ai/service/approval_gate.go` | 审批门 | 高风险请求审批 |
+| `internal/ai/service/token_audit.go` | Token 审计 | 记录成本与配额 |
+| `utility/safety/prompt_guard.go` | 输入安全 | 拦截危险 prompt |
+| `utility/safety/output_filter.go` | 输出安全 | 过滤敏感或违规输出 |
+| `utility/auth/rate_limiter.go` | 限流 | 本地令牌桶 |
+| `internal/logic/sse/sse.go` | SSE 封装 | 统一流式响应头和事件写出 |
 
-## Controller 层
+---
 
-| 文件 | 作用 | 一句话说明 |
-|---|---|---|
-| controller/chat/chat_v1_chat.go | 普通聊天 | POST /api/v1/chat |
-| controller/chat/chat_v1_chat_stream.go | 流式聊天 | SSE 流式响应 |
-| controller/chat/chat_v1_ai_ops.go | AIOps 接口 | POST /api/v1/aiops |
-| controller/chat/chat_v1_admin.go | 管理接口 | memory/degradation/approval |
-| controller/chat/chat_v1_file_upload.go | 文件上传 | 知识库文件入库 |
-| controller/chat/prompt_guard.go | 请求安全检查 | Controller 层的安全拦截 |
-| controller/chat/response_helpers.go | 响应工具 | 统一响应格式 |
+## 8. 读代码的建议顺序
 
-## 脚本层
+1. `main.go`
+2. `internal/controller/chat/chat_v1_chat.go`
+3. `internal/ai/service/memory_service.go`
+4. `internal/ai/contextengine/assembler.go`
+5. `internal/ai/agent/chat_pipeline/`
+6. `internal/controller/chat/chat_v1_ai_ops.go`
+7. `internal/ai/service/ai_ops_service.go`
+8. `internal/ai/agent/plan_execute_replan/`
+9. `internal/ai/rag/`
+10. `utility/mem/`、`utility/cache/`、`internal/ai/service/*queue.go`
 
-| 文件 | 作用 | 一句话说明 |
-|---|---|---|
-| scripts/aiops/build_telemetry_evidence.py | 本地预处理 | parquet → 异常信号摘要 |
-| scripts/aiops/run_telemetry_local_then_remote.ps1 | 全链路编排 | 本地 → 上传 → 远程索引 → 评测 |
-| scripts/aiops/run_telemetry_baseline_remote.sh | 远程评测 | Milvus + 索引 + eval |
+---
 
-## CLI 入口
+## 9. 哪些目录属于历史/实验材料
 
-| 文件 | 作用 | 一句话说明 |
-|---|---|---|
-| cmd/knowledge_cmd/main.go | 知识库 CLI | 本地文档入库 |
-| cmd/rag_eval_cmd/main.go | RAG 评测 CLI | 离线评测 |
-| cmd/rag_online_eval_cmd/main.go | 在线评测 CLI | 线上质量监控 |
-| cmd/aiops_rag_prep_cmd/main.go | AIOps 预处理 CLI | baseline 生成 |
-| cmd/ai_ops_cmd/main.go | AIOps CLI | 命令行 AIOps |
-| cmd/chat_cmd/main.go | Chat CLI | 命令行聊天 |
-| cmd/recall_cmd/main.go | 召回测试 CLI | RAG 召回调试 |
+下面这些目录仍然有参考价值，但**不要再把它们当成当前聊天主链路**：
+
+- `internal/ai/agent/supervisor/`
+- `internal/ai/agent/triage/`
+- `internal/ai/agent/reporter/`
+- `internal/ai/agent/skillspecialists/`
+
+它们更适合用来理解：
+
+- 你们曾经尝试过什么 Orchestrator / Multi-Agent 方案
+- 为什么后来把 Chat 收敛到 ReAct 单链路
+- 为什么 AIOps 最终保留 runtime 外壳，但执行核心切到 Plan-Execute-Replan

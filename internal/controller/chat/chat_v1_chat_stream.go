@@ -67,38 +67,6 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 	mu := acquireSessionLock(id)
 	defer releaseSessionLock(id, mu)
 
-	if shouldUseChatMultiAgent(ctx, msg) {
-		g.Log().Infof(ctx, "[session:%s][req:%s] ChatStream phase=multi_agent_start duration=%dms",
-			id, requestID, time.Since(phaseStart).Milliseconds())
-		response, execErr := runChatMultiAgent(ctx, id, msg)
-		if execErr != nil {
-			g.Log().Errorf(ctx, "[session:%s][req:%s] ChatStream phase=multi_agent_failed error=%v duration=%dms",
-				id, requestID, execErr, time.Since(phaseStart).Milliseconds())
-			if fallback := userFacingChatError(ctx, execErr); fallback != nil {
-				g.Log().Infof(ctx, "[session:%s][req:%s] ChatStream phase=multi_agent_fallback reason=%s",
-					id, requestID, fallback.DegradationReason)
-				_, filteredDetail := filterAssistantPayload(ctx, "", fallback.Detail)
-				sendChatStreamMeta(client, fallback.Mode, fallback.TraceID, filteredDetail, fallback.Degraded, fallback.DegradationReason)
-				streamDetailsToClient(client, filteredDetail)
-				streamTextToClient(client, fallback.Answer)
-				client.SendToClient("done", "Stream completed")
-				return &v1.ChatStreamRes{}, nil
-			}
-			client.SendToClient("error", execErr.Error())
-			client.SendToClient("done", "Stream completed")
-			return &v1.ChatStreamRes{}, nil
-		}
-		_, filteredDetail := filterAssistantPayload(ctx, "", response.Detail)
-		g.Log().Infof(ctx, "[session:%s][req:%s] ChatStream phase=multi_agent_success content_len=%d duration=%dms",
-			id, requestID, len(response.Content), time.Since(phaseStart).Milliseconds())
-		sendChatStreamMeta(client, "multi_agent", response.TraceID, filteredDetail, response.Degraded(), response.DegradationReason)
-		streamDetailsToClient(client, filteredDetail)
-		filteredContent, _ := filterAssistantPayload(ctx, response.Content, nil)
-		streamTextToClient(client, filteredContent)
-		client.SendToClient("done", "Stream completed")
-		return &v1.ChatStreamRes{}, nil
-	}
-
 	sessionMem := mem.GetSimpleMemory(id)
 
 	memorySvc := aiservice.NewMemoryService()

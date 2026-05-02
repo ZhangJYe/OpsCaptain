@@ -32,10 +32,8 @@ var (
 	sessionLocksMu sync.Mutex
 )
 var (
-	buildChatAgent          = chat_pipeline.BuildChatAgentWithQuery
-	getDegradationDecision  = aiservice.GetDegradationDecision
-	shouldUseChatMultiAgent = aiservice.ShouldUseMultiAgentForChat
-	runChatMultiAgent       = aiservice.RunChatMultiAgent
+	buildChatAgent         = chat_pipeline.BuildChatAgentWithQuery
+	getDegradationDecision = aiservice.GetDegradationDecision
 )
 
 func acquireSessionLock(id string) *sessionLockEntry {
@@ -123,34 +121,6 @@ func (c *ControllerV1) Chat(ctx context.Context, req *v1.ChatReq) (res *v1.ChatR
 		}
 	} else {
 		g.Log().Debugf(ctx, "[session:%s][req:%s] bypass chat cache for lightweight social input", id, requestID)
-	}
-
-	if shouldUseChatMultiAgent(ctx, msg) {
-		response, err := runChatMultiAgent(ctx, id, msg)
-		if err != nil {
-			if fallback := userFacingChatError(ctx, err); fallback != nil {
-				return fallback, nil
-			}
-			return nil, err
-		}
-		answer, detail := filterAssistantPayload(ctx, response.Content, response.Detail)
-		if !bypassResponseCache {
-			if cacheErr := cache.StoreChatResponse(ctx, id, msg, cache.ChatResponseEntry{
-				Answer: answer,
-				Detail: detail,
-				Mode:   "multi_agent",
-			}, selectedSkillIDs...); cacheErr != nil {
-				g.Log().Warningf(ctx, "[session:%s][req:%s] cache store failed: %v", id, requestID, cacheErr)
-			}
-		}
-		return &v1.ChatRes{
-			Answer:            answer,
-			TraceID:           response.TraceID,
-			Detail:            detail,
-			Mode:              "multi_agent",
-			Degraded:          response.Degraded(),
-			DegradationReason: response.DegradationReason,
-		}, nil
 	}
 
 	memorySvc := aiservice.NewMemoryService()

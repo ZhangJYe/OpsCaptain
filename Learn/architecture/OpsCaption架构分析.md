@@ -1,5 +1,10 @@
 # OpsCaption 项目架构分析
 
+> 当前统一口径（2026-05）
+> - Chat 主链路：`ContextEngine / MemoryService -> Eino ReAct Agent -> Tools / RAG -> JSON / SSE`
+> - AIOps 主链路：`Approval / Degradation / Memory -> Runtime -> Plan-Execute-Replan`
+> - 文中若出现 `skillspecialists / supervisor / triage / reporter / chat_multi_agent`，请按历史实验或演进材料理解，不再代表当前聊天主链路。
+
 > **分析日期：** 2026-04-25  
 > **项目定位：** 面向 AIOps 场景的智能运维助手  
 > **Go Module：** SuperBizAgent  
@@ -800,10 +805,10 @@ OpsCaptain/
 │   │   │   ├── plan_execute_replan/ # ★ Plan-Execute-Replan (Eino ADK)
 │   │   │   ├── contracts/           # Agent Contract 定义
 │   │   │   ├── knowledge_index_pipeline/ # 知识入库流水线
-│   │   │   ├── skillspecialists/    # Skills-Driven Agent (知识/日志/指标)
-│   │   │   ├── supervisor/          # 编排器 (实验性)
-│   │   │   ├── triage/              # 路由器 (实验性)
-│   │   │   ├── reporter/            # 报告器 (实验性)
+│   │   │   ├── skillspecialists/    # 历史 Skills 实验目录
+│   │   │   ├── supervisor/          # 历史编排器实验目录
+│   │   │   ├── triage/              # 历史路由实验目录
+│   │   │   ├── reporter/            # 历史报告实验目录
 │   │   │   └── specialists/         # Legacy Specialists
 │   │   ├── protocol/                # 统一数据结构 (TaskEnvelope/TaskResult)
 │   │   ├── runtime/                 # 任务分发引擎 (Registry/Ledger/Bus/Artifacts)
@@ -814,7 +819,8 @@ OpsCaptain/
 │   │   │   ├── memory_service.go    #   记忆管理核心
 │   │   │   ├── chat_task_queue.go   #   MQ 异步 Chat
 │   │   │   ├── memory_queue.go      #   MQ 异步记忆
-│   │   │   ├── chat_multi_agent.go  #   路由判断
+│   │   │   ├── ai_ops_service.go    #   AIOps 主服务
+│   │   │   ├── ai_ops_runtime.go    #   AIOps runtime 复用
 │   │   │   ├── degradation.go       #   降级开关
 │   │   │   ├── approval_gate.go     #   审批门
 │   │   │   └── token_audit.go       #   Token 审计

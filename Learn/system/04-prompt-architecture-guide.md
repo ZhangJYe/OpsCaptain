@@ -1,5 +1,9 @@
 # OpsCaption Prompt 与 Agent Contract 指南
 
+> 当前统一口径（2026-05）
+> - 当前线上主链路：Chat = `ReAct Agent`，AIOps = `Runtime + Plan-Execute-Replan`
+> - 本文中若出现 `supervisor / triage / reporter / skillspecialists`，主要用于说明历史 contract / prompt 设计思想，不再代表当前聊天主链路结构。
+
 本文面向 OpsCaption 当前代码结构，说明 prompt 分层、上下文注入、Agent Contract、以及未来 Anthropic Prompt Caching 的预留方式。它不是 Claude Code 的照搬版，而是把 Claude Code 的“静态规则 / 动态上下文 / 缓存边界”思想迁移到 AIOps 多 Agent 架构里。
 
 ## 1. 文档定位

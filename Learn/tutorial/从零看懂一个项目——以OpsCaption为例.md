@@ -1,5 +1,10 @@
 # 从零看懂一个项目 —— 以 OpsCaption 为例
 
+> 当前统一口径（2026-05）
+> - Chat 主链路：`ContextEngine / MemoryService -> Eino ReAct Agent -> Tools / RAG -> JSON / SSE`
+> - AIOps 主链路：`Approval / Degradation / Memory -> Runtime -> Plan-Execute-Replan`
+> - 本文若出现 `supervisor / triage / reporter / skillspecialists / chat_multi_agent`，请理解为历史实验代码或演进材料，不再代表当前聊天主链路。
+
 > **写给初学者：** 这篇教程不假设你懂任何框架，只假设你认识 Go 的基本语法。
 > 我们会用 OpsCaption 的**真实代码**当例子，手把手带你理解：拿到一个陌生项目，怎么一步步把它看懂。
 

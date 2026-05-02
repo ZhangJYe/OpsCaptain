@@ -40,6 +40,13 @@ var (
 		metrics.SkillRegistry(),
 		knowledge.SkillRegistry(),
 	)
+	multiAgentConfigBool = func(ctx context.Context, key string) (bool, bool) {
+		v, err := g.Cfg().Get(ctx, key)
+		if err != nil || strings.TrimSpace(v.String()) == "" {
+			return false, false
+		}
+		return v.Bool(), true
+	}
 )
 
 type aiOpsMemory interface {
@@ -200,5 +207,33 @@ func parseApprovalStatus(status string) ApprovalStatus {
 		return ApprovalStatusExecuted
 	default:
 		return ApprovalStatusPending
+	}
+}
+
+func aiOpsMultiAgentEnabled(ctx context.Context) bool {
+	if !multiAgentEnabled(ctx) {
+		return false
+	}
+	enabled, configured := multiAgentConfigBool(ctx, "multi_agent.ai_ops_enabled")
+	if configured {
+		return enabled
+	}
+	return true
+}
+
+func multiAgentEnabled(ctx context.Context) bool {
+	enabled, configured := multiAgentConfigBool(ctx, "multi_agent.enabled")
+	if configured {
+		return enabled
+	}
+	return true
+}
+
+func multiAgentDisabledResponse() ExecutionResponse {
+	return ExecutionResponse{
+		Content:           "Multi-agent runtime is disabled; use the Chat/RAG baseline route.",
+		Detail:            []string{"multi_agent.enabled=false"},
+		Status:            protocol.ResultStatusDegraded,
+		DegradationReason: "multi_agent_disabled",
 	}
 }

@@ -36,17 +36,12 @@ func (f *fakeChatRunnable) Transform(context.Context, *schema.StreamReader[*chat
 func TestChatReturnsAnswer(t *testing.T) {
 	oldBuild := buildChatAgent
 	oldDecision := getDegradationDecision
-	oldShould := shouldUseChatMultiAgent
-	oldRun := runChatMultiAgent
 	defer func() {
 		buildChatAgent = oldBuild
 		getDegradationDecision = oldDecision
-		shouldUseChatMultiAgent = oldShould
-		runChatMultiAgent = oldRun
 	}()
 
 	getDegradationDecision = func(context.Context, string) aiService.DegradationDecision { return aiService.DegradationDecision{} }
-	shouldUseChatMultiAgent = func(context.Context, string) bool { return false }
 	buildChatAgent = func(_ context.Context, _ string) (compose.Runnable[*chat_pipeline.UserMessage, *schema.Message], error) {
 		return &fakeChatRunnable{answer: "hello back"}, nil
 	}
@@ -70,19 +65,14 @@ func TestChatReturnsAnswer(t *testing.T) {
 func TestChatReturnsKillSwitchResponse(t *testing.T) {
 	oldBuild := buildChatAgent
 	oldDecision := getDegradationDecision
-	oldShould := shouldUseChatMultiAgent
-	oldRun := runChatMultiAgent
 	defer func() {
 		buildChatAgent = oldBuild
 		getDegradationDecision = oldDecision
-		shouldUseChatMultiAgent = oldShould
-		runChatMultiAgent = oldRun
 	}()
 
 	getDegradationDecision = func(context.Context, string) aiService.DegradationDecision {
 		return aiService.DegradationDecision{Enabled: true, Message: "degraded response", Reason: "kill switch"}
 	}
-	shouldUseChatMultiAgent = func(context.Context, string) bool { return false }
 	buildChatAgent = func(_ context.Context, _ string) (compose.Runnable[*chat_pipeline.UserMessage, *schema.Message], error) {
 		t.Fatal("chat agent should not run when kill switch is enabled")
 		return nil, nil
@@ -101,17 +91,12 @@ func TestChatReturnsKillSwitchResponse(t *testing.T) {
 func TestChatBlocksPromptInjection(t *testing.T) {
 	oldBuild := buildChatAgent
 	oldDecision := getDegradationDecision
-	oldShould := shouldUseChatMultiAgent
-	oldRun := runChatMultiAgent
 	defer func() {
 		buildChatAgent = oldBuild
 		getDegradationDecision = oldDecision
-		shouldUseChatMultiAgent = oldShould
-		runChatMultiAgent = oldRun
 	}()
 
 	getDegradationDecision = func(context.Context, string) aiService.DegradationDecision { return aiService.DegradationDecision{} }
-	shouldUseChatMultiAgent = func(context.Context, string) bool { return false }
 	buildChatAgent = func(_ context.Context, _ string) (compose.Runnable[*chat_pipeline.UserMessage, *schema.Message], error) {
 		t.Fatal("prompt guard should block before execution")
 		return nil, nil
@@ -124,62 +109,15 @@ func TestChatBlocksPromptInjection(t *testing.T) {
 	}
 }
 
-func TestChatRoutesToMultiAgentWhenQueryMatches(t *testing.T) {
-	oldBuild := buildChatAgent
-	oldDecision := getDegradationDecision
-	oldShould := shouldUseChatMultiAgent
-	oldRun := runChatMultiAgent
-	defer func() {
-		buildChatAgent = oldBuild
-		getDegradationDecision = oldDecision
-		shouldUseChatMultiAgent = oldShould
-		runChatMultiAgent = oldRun
-	}()
-
-	getDegradationDecision = func(context.Context, string) aiService.DegradationDecision { return aiService.DegradationDecision{} }
-	shouldUseChatMultiAgent = func(context.Context, string) bool { return true }
-	buildChatAgent = func(_ context.Context, _ string) (compose.Runnable[*chat_pipeline.UserMessage, *schema.Message], error) {
-		t.Fatal("legacy chat agent should not run on multi-agent route")
-		return nil, nil
-	}
-	runChatMultiAgent = func(context.Context, string, string) (aiService.ExecutionResponse, error) {
-		return aiService.ExecutionResponse{
-			Content: "multi-agent answer",
-			Detail:  []string{"detail"},
-			TraceID: "trace-123",
-		}, nil
-	}
-
-	ctrl := &ControllerV1{}
-	res, err := ctrl.Chat(context.Background(), &v1.ChatReq{Id: mem.GenerateSessionID(), Question: "check prometheus alerts"})
-	if err != nil {
-		t.Fatalf("chat returned error: %v", err)
-	}
-	if res == nil {
-		t.Fatal("expected response")
-	}
-	if res.Mode != "multi_agent" {
-		t.Fatalf("expected multi_agent mode, got %q", res.Mode)
-	}
-	if res.TraceID != "trace-123" {
-		t.Fatalf("expected trace id, got %q", res.TraceID)
-	}
-}
-
 func TestChatPassesSelectedSkillIDsIntoRequestContext(t *testing.T) {
 	oldBuild := buildChatAgent
 	oldDecision := getDegradationDecision
-	oldShould := shouldUseChatMultiAgent
-	oldRun := runChatMultiAgent
 	defer func() {
 		buildChatAgent = oldBuild
 		getDegradationDecision = oldDecision
-		shouldUseChatMultiAgent = oldShould
-		runChatMultiAgent = oldRun
 	}()
 
 	getDegradationDecision = func(context.Context, string) aiService.DegradationDecision { return aiService.DegradationDecision{} }
-	shouldUseChatMultiAgent = func(context.Context, string) bool { return false }
 	buildChatAgent = func(ctx context.Context, _ string) (compose.Runnable[*chat_pipeline.UserMessage, *schema.Message], error) {
 		selected := skills.SelectedSkillIDsFromContext(ctx)
 		if len(selected) != 2 || selected[0] != "logs_evidence_extract" || selected[1] != "knowledge_sop_lookup" {
@@ -202,17 +140,12 @@ func TestChatPassesSelectedSkillIDsIntoRequestContext(t *testing.T) {
 func TestChatBypassesCacheForGreetingInput(t *testing.T) {
 	oldBuild := buildChatAgent
 	oldDecision := getDegradationDecision
-	oldShould := shouldUseChatMultiAgent
-	oldRun := runChatMultiAgent
 	defer func() {
 		buildChatAgent = oldBuild
 		getDegradationDecision = oldDecision
-		shouldUseChatMultiAgent = oldShould
-		runChatMultiAgent = oldRun
 	}()
 
 	getDegradationDecision = func(context.Context, string) aiService.DegradationDecision { return aiService.DegradationDecision{} }
-	shouldUseChatMultiAgent = func(context.Context, string) bool { return false }
 
 	invokeCount := 0
 	buildChatAgent = func(_ context.Context, _ string) (compose.Runnable[*chat_pipeline.UserMessage, *schema.Message], error) {

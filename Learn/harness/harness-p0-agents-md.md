@@ -1,8 +1,12 @@
 # Harness Engineering P0 落地：AGENTS.md 设计与实践
 
+> 当前统一口径（2026-05）
+> - 本文形成于历史 Orchestrator / 多智能体讨论阶段。
+> - 当前实现请以 `Chat ReAct` 与 `AIOps Runtime + Plan-Execute-Replan` 为准。
+
 ## 1. 背景
 
-OpsCaption 项目已经进入 Orchestrator 编排模式的 P1 阶段，具备 supervisor/triage/specialists/reporter 编排、统一协议、上下文工程、RAG 链路和 eval 骨架。但缺少一个关键工程基础设施：**仓库级 Agent 行为约束文件**。
+OpsCaption 项目在本文写作时仍处于 Orchestrator 编排模式的讨论阶段，具备 supervisor/triage/specialists/reporter 方案、统一协议、上下文工程、RAG 链路和 eval 骨架。但缺少一个关键工程基础设施：**仓库级 Agent 行为约束文件**。
 
 在之前的开发过程中，大量工程经验沉淀在 `res/todo.md`（1798 行）里，但这些经验对 AI Agent 来说"等于不存在"——Agent 不会主动去读复盘文档。
 

@@ -113,7 +113,6 @@ retriever:
 multi_agent:
   enabled: true
   data_dir: "/app/var/runtime"
-  chat_route_enabled: false
   ai_ops_enabled: true
   agent_timeout_ms: 30000
   metrics_query_timeout_ms: 5000

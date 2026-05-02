@@ -28,6 +28,17 @@ func (s *stubAIOpsMemory) PersistOutcome(_ context.Context, _ string, query, sum
 	s.persistedResult = summary
 }
 
+func enableMultiAgentForTest(t *testing.T) {
+	t.Helper()
+	oldConfigBool := multiAgentConfigBool
+	multiAgentConfigBool = func(context.Context, string) (bool, bool) {
+		return true, true
+	}
+	t.Cleanup(func() {
+		multiAgentConfigBool = oldConfigBool
+	})
+}
+
 func TestRunAIOpsMultiAgentApprovalDenialReturnsReason(t *testing.T) {
 	enableMultiAgentForTest(t)
 	response, err := RunAIOpsMultiAgent(context.Background(), "delete production history")

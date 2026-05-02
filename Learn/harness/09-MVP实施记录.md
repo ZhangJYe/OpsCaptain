@@ -1,5 +1,9 @@
 # Harness MVP 实施记录
 
+> 当前统一口径（2026-05）
+> - 本文是历史 Harness MVP 落地记录，保留当时的角色命名和测试输出。
+> - 当前实现请以 `Chat ReAct` 与 `AIOps Runtime + Plan-Execute-Replan` 为准。
+
 > 实施日期：2026-04-29
 > 范围：第一优先级验证闭环 + 统一配置
 

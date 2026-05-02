@@ -48,7 +48,7 @@ func (r *PolicyResolver) Resolve(ctx context.Context, req ContextRequest) Contex
 	}
 
 	switch req.Mode {
-	case "aiops", "chat_multi_agent", "specialist":
+	case "aiops", "specialist":
 		base.Name = "aiops-default"
 		base.AllowHistory = false
 		base.AllowDocs = false

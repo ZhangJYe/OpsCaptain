@@ -1,5 +1,9 @@
 # 从 Orchestrator 到真正的 Multi-Agent：架构演进设计
 
+> 当前统一口径（2026-05）
+> - 本文是历史架构演进设计稿，讨论的是早期 `Supervisor / Triage / Specialists / Reporter` 方案。
+> - 当前实现已不再把这套结构当成聊天主链路；请以 `Chat ReAct` 和 `AIOps Runtime + Plan-Execute-Replan` 为准。
+
 ---
 
 ## 1. 背景
@@ -10,7 +14,7 @@
 
 ---
 
-## 2. 当前系统：Orchestrator 编排模式
+## 2. 历史方案：Orchestrator 编排模式
 
 ### 2.1 模式特征
 

@@ -21,6 +21,7 @@ var (
 	aiOpsRuntimes         = make(map[string]*runtime.Runtime)
 	registerAIOpsAgentsFn = registerAIOpsAgents
 	buildPlanAgent        = plan_execute_replan.BuildPlanAgent
+	newPersistentRuntime  = runtime.NewPersistent
 )
 
 type aiOpsPlanAgent struct{}
