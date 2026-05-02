@@ -86,9 +86,9 @@ func (w *ToolWrapper) InvokableRun(ctx context.Context, args string, opts ...too
 		modifiedResult, afterErr := w.after(ctx, toolName, args, result, execErr)
 		if execErr == nil && afterErr != nil {
 			// 工具本身成功，但 after hook 失败（脱敏/校验/审计失败）
-			// 将 afterErr 作为工具失败返回
-			w.emitToolEndWithAfterError(ctx, toolName, args, startTime, result, afterErr)
-			return result, fmt.Errorf("tool %s afterToolCall failed: %w", toolName, afterErr)
+			// 不暴露原始 result，只返回错误
+			w.emitToolEndWithAfterError(ctx, toolName, args, startTime, afterErr)
+			return "", fmt.Errorf("tool %s afterToolCall failed: %w", toolName, afterErr)
 		}
 		if afterErr == nil {
 			result = modifiedResult
@@ -133,7 +133,8 @@ func (w *ToolWrapper) emitToolEnd(ctx context.Context, toolName, args string, st
 }
 
 // emitToolEndWithAfterError 发射 after hook 失败的事件（工具本身成功，after hook 失败）
-func (w *ToolWrapper) emitToolEndWithAfterError(ctx context.Context, toolName, args string, start time.Time, result string, afterErr error) {
+// 不包含原始 result summary，避免泄露未脱敏的数据
+func (w *ToolWrapper) emitToolEndWithAfterError(ctx context.Context, toolName, args string, start time.Time, afterErr error) {
 	if w.emitter == nil {
 		return
 	}
@@ -143,12 +144,7 @@ func (w *ToolWrapper) emitToolEndWithAfterError(ctx context.Context, toolName, a
 		"duration_ms": time.Since(start).Milliseconds(),
 		"success":     false,
 		"error":       afterErr.Error(),
-		"after_error": true, // 标记是 after hook 失败，不是工具本身失败
-	}
-	if len(result) > 200 {
-		payload["summary"] = result[:200] + "..."
-	} else if result != "" {
-		payload["summary"] = result
+		"after_error": true,
 	}
 
 	w.emitter.Emit(ctx, NewEvent(EventToolCallEnd, w.traceID, toolName, payload))

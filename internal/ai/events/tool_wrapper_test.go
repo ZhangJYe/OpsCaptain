@@ -247,12 +247,12 @@ func TestToolWrapper_AfterHookError(t *testing.T) {
 	if !strings.Contains(err.Error(), "afterToolCall failed") {
 		t.Fatalf("expected afterToolCall error, got: %v", err)
 	}
-	// 原始结果仍然返回
-	if result != "cpu: 80%" {
-		t.Fatalf("expected original result 'cpu: 80%%', got %q", result)
+	// 原始结果不应暴露，返回空字符串
+	if result != "" {
+		t.Fatalf("expected empty result on after hook failure, got %q", result)
 	}
 
-	// 验证事件：success=false, after_error=true
+	// 验证事件：success=false, after_error=true, 无 summary
 	events := emitter.Events()
 	if len(events) != 2 {
 		t.Fatalf("expected 2 events, got %d", len(events))
@@ -266,6 +266,9 @@ func TestToolWrapper_AfterHookError(t *testing.T) {
 	}
 	if endEvent.Payload["error"] != "desensitization failed" {
 		t.Fatalf("expected 'desensitization failed', got %v", endEvent.Payload["error"])
+	}
+	if endEvent.Payload["summary"] != nil {
+		t.Fatalf("expected no summary on after hook failure, got %v", endEvent.Payload["summary"])
 	}
 }
 
