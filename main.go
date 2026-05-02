@@ -1,6 +1,7 @@
 package main
 
 import (
+	"SuperBizAgent/internal/ai/events"
 	"SuperBizAgent/internal/ai/models"
 	aiservice "SuperBizAgent/internal/ai/service"
 	"SuperBizAgent/internal/controller/chat"
@@ -20,6 +21,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"syscall"
+	"time"
 
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/net/ghttp"
@@ -87,6 +89,9 @@ func main() {
 	} else {
 		chatTaskPipelineShutdown = shutdownFn
 	}
+
+	// 启动工具健康度日志聚合（每 5 分钟输出一次）
+	events.StartGlobalHealthReporting(ctx, 5*time.Minute)
 
 	var shuttingDown atomic.Bool
 	pprofServer := startPprofServer(ctx)

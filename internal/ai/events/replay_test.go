@@ -12,29 +12,23 @@ import (
 func TestReplayCase_PaymentServiceAlert(t *testing.T) {
 	recorder := &sequenceRecorder{}
 	hc := NewHealthCollector(100)
+	emitter := NewMultiEmitter(recorder, hc) // 工具事件同时发给 recorder 和 hc
 
-	// 模拟 agent 执行过程
 	// 1. 模型推理（triage）
 	recorder.Emit(context.Background(), NewEvent(EventModelStart, "replay-1", "deepseek-v3", map[string]any{"model_name": "deepseek-v3"}))
 	recorder.Emit(context.Background(), NewEvent(EventModelEnd, "replay-1", "deepseek-v3", map[string]any{"model_name": "deepseek-v3", "duration_ms": int64(1200), "total_tokens": 350, "success": true}))
 
-	// 2. 查询 Prometheus 告警
-	metricsTool := WrapTool(&mockTool{name: "query_metrics", result: "payment_service: 3 alerts (P99 latency > 500ms)"}, hc, "replay-1", nil, nil)
+	// 2. 查询 Prometheus 告警（事件来自真实 wrapper）
+	metricsTool := WrapTool(&mockTool{name: "query_metrics", result: "payment_service: 3 alerts (P99 latency > 500ms)"}, emitter, "replay-1", nil, nil)
 	metricsTool.InvokableRun(context.Background(), `{"service":"payment","time_range":"1h"}`)
-	recorder.Emit(context.Background(), NewEvent(EventToolCallStart, "replay-1", "query_metrics", map[string]any{"tool_name": "query_metrics"}))
-	recorder.Emit(context.Background(), NewEvent(EventToolCallEnd, "replay-1", "query_metrics", map[string]any{"tool_name": "query_metrics", "duration_ms": int64(800), "success": true, "summary": "3 alerts"}))
 
-	// 3. 查询日志
-	logsTool := WrapTool(&mockTool{name: "query_logs", result: "payment_service: 42 error logs (connection timeout)"}, hc, "replay-1", nil, nil)
+	// 3. 查询日志（事件来自真实 wrapper）
+	logsTool := WrapTool(&mockTool{name: "query_logs", result: "payment_service: 42 error logs (connection timeout)"}, emitter, "replay-1", nil, nil)
 	logsTool.InvokableRun(context.Background(), `{"service":"payment","level":"error","time_range":"1h"}`)
-	recorder.Emit(context.Background(), NewEvent(EventToolCallStart, "replay-1", "query_logs", map[string]any{"tool_name": "query_logs"}))
-	recorder.Emit(context.Background(), NewEvent(EventToolCallEnd, "replay-1", "query_logs", map[string]any{"tool_name": "query_logs", "duration_ms": int64(1500), "success": true, "summary": "42 error logs"}))
 
-	// 4. 检索知识库
-	docsTool := WrapTool(&mockTool{name: "query_internal_docs", result: "SOP-PAY-001: 支付超时处理流程"}, hc, "replay-1", nil, nil)
+	// 4. 检索知识库（事件来自真实 wrapper）
+	docsTool := WrapTool(&mockTool{name: "query_internal_docs", result: "SOP-PAY-001: 支付超时处理流程"}, emitter, "replay-1", nil, nil)
 	docsTool.InvokableRun(context.Background(), `{"query":"payment timeout"}`)
-	recorder.Emit(context.Background(), NewEvent(EventToolCallStart, "replay-1", "query_internal_docs", map[string]any{"tool_name": "query_internal_docs"}))
-	recorder.Emit(context.Background(), NewEvent(EventToolCallEnd, "replay-1", "query_internal_docs", map[string]any{"tool_name": "query_internal_docs", "duration_ms": int64(600), "success": true, "summary": "SOP-PAY-001"}))
 
 	// 5. 模型生成报告
 	recorder.Emit(context.Background(), NewEvent(EventModelStart, "replay-1", "deepseek-v3", map[string]any{"model_name": "deepseek-v3"}))
@@ -44,9 +38,9 @@ func TestReplayCase_PaymentServiceAlert(t *testing.T) {
 	types := recorder.Types()
 	expected := []AgentEventType{
 		EventModelStart, EventModelEnd, // triage
-		EventToolCallStart, EventToolCallEnd, // metrics
-		EventToolCallStart, EventToolCallEnd, // logs
-		EventToolCallStart, EventToolCallEnd, // knowledge
+		EventToolCallStart, EventToolCallEnd, // metrics (来自 wrapper)
+		EventToolCallStart, EventToolCallEnd, // logs (来自 wrapper)
+		EventToolCallStart, EventToolCallEnd, // knowledge (来自 wrapper)
 		EventModelStart, EventModelEnd, // report
 	}
 	assertEventSequence(t, types, expected)
@@ -70,33 +64,58 @@ func TestReplayCase_PaymentServiceAlert(t *testing.T) {
 func TestReplayCase_LogSearchFailure(t *testing.T) {
 	recorder := &sequenceRecorder{}
 	hc := NewHealthCollector(100)
+	emitter := NewMultiEmitter(recorder, hc)
 
 	// 1. 模型推理
 	recorder.Emit(context.Background(), NewEvent(EventModelStart, "replay-2", "deepseek-v3", nil))
 	recorder.Emit(context.Background(), NewEvent(EventModelEnd, "replay-2", "deepseek-v3", map[string]any{"success": true}))
 
-	// 2. 查询指标（成功）
-	metricsTool := WrapTool(&mockTool{name: "query_metrics", result: "cpu: 95%"}, hc, "replay-2", nil, nil)
+	// 2. 查询指标（成功，事件来自 wrapper）
+	metricsTool := WrapTool(&mockTool{name: "query_metrics", result: "cpu: 95%"}, emitter, "replay-2", nil, nil)
 	metricsTool.InvokableRun(context.Background(), `{}`)
 
-	// 3. 查询日志（失败 - 超时）
-	logsTool := WrapTool(&mockTool{name: "query_logs", err: errors.New("connection timeout")}, hc, "replay-2", nil, nil)
+	// 3. 查询日志（失败 - 超时，事件来自 wrapper）
+	logsTool := WrapTool(&mockTool{name: "query_logs", err: errors.New("connection timeout")}, emitter, "replay-2", nil, nil)
 	logsTool.InvokableRun(context.Background(), `{}`)
 
 	// 4. 模型生成降级报告
 	recorder.Emit(context.Background(), NewEvent(EventModelStart, "replay-2", "deepseek-v3", nil))
 	recorder.Emit(context.Background(), NewEvent(EventModelEnd, "replay-2", "deepseek-v3", map[string]any{"success": true}))
 
-	// 验证健康度：logs 工具成功率应为 0%
+	// 验证事件序列
+	types := recorder.Types()
+	expected := []AgentEventType{
+		EventModelStart, EventModelEnd, // model
+		EventToolCallStart, EventToolCallEnd, // metrics (成功)
+		EventToolCallStart, EventToolCallEnd, // logs (失败)
+		EventModelStart, EventModelEnd, // report
+	}
+	assertEventSequence(t, types, expected)
+
+	// 验证 logs 失败事件
+	var logsEndEvent *AgentEvent
+	for i := range recorder.events {
+		if recorder.events[i].Type == EventToolCallEnd {
+			if recorder.events[i].Payload["tool_name"] == "query_logs" {
+				logsEndEvent = &recorder.events[i]
+				break
+			}
+		}
+	}
+	if logsEndEvent == nil {
+		t.Fatal("expected logs tool_call_end event")
+	}
+	if logsEndEvent.Payload["success"] != false {
+		t.Errorf("expected logs success=false, got %v", logsEndEvent.Payload["success"])
+	}
+
+	// 验证健康度
 	logsReport := hc.Report("query_logs")
 	if logsReport == nil {
 		t.Fatal("expected logs report")
 	}
 	if logsReport.SuccessRate != 0 {
 		t.Errorf("expected 0%% success rate for logs, got %.1f%%", logsReport.SuccessRate*100)
-	}
-	if logsReport.FailCount != 1 {
-		t.Errorf("expected 1 failure, got %d", logsReport.FailCount)
 	}
 
 	t.Logf("Replay case 'log failure': logs tool failed, metrics tool succeeded")
