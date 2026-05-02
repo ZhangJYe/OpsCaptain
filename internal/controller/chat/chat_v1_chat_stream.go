@@ -88,7 +88,9 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 	sseEmitter := events.NewSSEEmitter(client, requestID)
 	traceEmitter := events.NewTraceEmitter(requestID)
 	resultCollector := events.NewResultCollector()
-	multiEmitter := events.NewMultiEmitter(sseEmitter, traceEmitter, events.GlobalHealthCollector(), resultCollector)
+	contractCollector := events.NewContractCollector()
+	schemaGateCollector := events.NewSchemaGateCollector()
+	multiEmitter := events.NewMultiEmitter(sseEmitter, traceEmitter, events.GlobalHealthCollector(), resultCollector, contractCollector, schemaGateCollector)
 	ctx = chat_pipeline.WithChatToolEmitter(ctx, multiEmitter, requestID)
 
 	runner, agentBuildErr := buildChatAgent(ctx, msg)
@@ -154,6 +156,33 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 			} else if isOpsRelatedQuery(msg) {
 				// 运维相关问题但没有调用任何工具 → 可能是幻觉
 				g.Log().Warningf(ctx, "[session:%s][req:%s] ops-related query but no tool calls detected, possible hallucination risk", id, requestID)
+			}
+
+			// Contract 校验：轻量级输出合规检查
+			contractResult := events.ValidateContract(
+				completeResponse,
+				contractCollector.ToolResults(),
+				contractCollector.FailedTools(),
+				contractCollector.HasToolCalls(),
+			)
+			if !contractResult.Passed {
+				g.Log().Warningf(ctx, "[session:%s][req:%s] contract check: %s", id, requestID, contractResult.Summary())
+			} else if len(contractResult.Violations) > 0 {
+				g.Log().Infof(ctx, "[session:%s][req:%s] contract check: %s", id, requestID, contractResult.Summary())
+			}
+
+			// Schema Gate：结构化输出校验
+			schemaGate := events.NewSchemaGate()
+			schemaResult := schemaGate.Validate(completeResponse)
+			if !schemaResult.Passed {
+				g.Log().Warningf(ctx, "[session:%s][req:%s] schema gate: %s", id, requestID, schemaResult.Summary())
+			} else {
+				// 检查是否有非阻塞的警告
+				for _, check := range schemaResult.Checks {
+					if !check.Passed {
+						g.Log().Infof(ctx, "[session:%s][req:%s] schema gate warn [%s]: %s", id, requestID, check.Field, check.Detail)
+					}
+				}
 			}
 		}
 	}()

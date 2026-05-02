@@ -1,7 +1,7 @@
 # OpsCaptain 防幻觉体系分析
 
 > 日期：2026-05-02
-> 状态：现有防线已梳理，关键缺口已识别
+> 状态：✅ P0-P2 全部落地，5 个缺口已修复 3 个
 
 ---
 
@@ -20,9 +20,9 @@
 
 ---
 
-## 二、现有防线
+## 二、现有防线（已落地）
 
-### 2.1 Prompt 铁律（软约束）
+### 2.1 Prompt 铁律（软约束） ✅
 
 **位置**：`internal/ai/agent/chat_pipeline/prompt.go`
 
@@ -35,201 +35,193 @@
 - 绝对不要说"我无法查询"、"我没有能力访问"。
 - 回答要基于工具返回的真实数据，不要编造指标、日志或告警信息。
 
-## 证据与上下文规则
-- AIOps 场景要优先说明证据、推断和不确定性；没有证据时不要把猜测包装成结论。
-- 优先级：当前用户问题 > 实时工具结果 > 可信内部文档 > 关键记忆 > 近期对话 > 历史摘要。
+## 输出引用规则
+- 每个结论必须关联一个工具返回的具体数据
+- 格式：[来源: 工具名] 数据内容 → 结论
+- 如果没有工具数据支持，必须标注"推测"或"待确认"
+
+## 工具失败处理
+- 工具返回错误时，必须告知用户具体的错误信息
+- 不要用通用建议替代实际数据
+- 格式："XX 工具返回错误：具体错误信息"
 ```
 
 **覆盖幻觉**：编造数据、无中生有、过度自信
 
-**强度**：中。软约束，依赖 LLM 自觉遵守。DeepSeek V3 遵守率约 70-80%，偶尔仍会编造。
+**强度**：中。软约束，依赖 LLM 自觉遵守。配合工具闭环效果好。
 
-**改进空间**：
-- 加入"如果工具未调用或返回空数据，必须明确告知用户，不能用通用建议替代"
-- 加入"每个结论必须引用工具返回的具体数据（指标值、日志片段、告警名称）"
-
-### 2.2 注入检测（硬拦截）
+### 2.2 注入检测（硬拦截） ✅
 
 **位置**：`utility/safety/prompt_guard.go` + `internal/controller/chat/prompt_guard.go`
 
-**机制**：6 个正则模式拦截 prompt injection：
-
-```go
-"ignore previous instructions"
-"you are now"
-"system:"
-"[inst]"
-// + 中文变体
-```
-
-**覆盖幻觉**：通过 prompt injection 改变模型行为
+**机制**：6 个正则模式拦截 prompt injection。
 
 **强度**：高。正则匹配，不依赖 LLM。
 
-### 2.3 输出过滤（安全过滤）
+### 2.3 输出过滤（安全过滤） ✅
 
 **位置**：`utility/safety/output_filter.go`
 
-**机制**：5 个正则过滤器，覆盖所有输出路径：
+**机制**：5 个正则过滤器（密钥、内部 IP、system prompt 泄露）。
 
-| 过滤器 | 作用 |
-|---|---|
-| `system_prompt_block` | 过滤 `<<sys>>...<</sys>>` |
-| `system_prompt_line` | 过滤 `system:` 行 |
-| `inst_block` | 过滤 `[inst]...[/inst]` |
-| `api_key` | 过滤 `sk-*`、`api_key=*`、bearer token |
-| `internal_ip` | 过滤 RFC 1918 私有 IP |
+**强度**：中。安全过滤，不是准确性过滤。
 
-**覆盖幻觉**：system prompt 泄露、密钥泄露
+### 2.4 Degradation 降级系统（硬约束） ✅
 
-**强度**：中。安全过滤，不是准确性过滤。不检查"模型是否编造了指标"。
+**位置**：`internal/ai/service/degradation.go`
 
-### 2.4 Degradation 降级系统（硬约束）
+**机制**：全局 Kill Switch + 三态结果模型 + 15+ 降级点 + Contract 校验。
 
-**位置**：`internal/ai/service/degradation.go` + `internal/ai/protocol/types.go`
+**强度**：高。只覆盖 AIOps 多 agent 路径。
 
-**机制**：
+### 2.5 Memory 验证（多层防御） ✅
 
-1. **全局 Kill Switch**：配置 `degradation.kill_switch` 或 Redis key `opscaptionai:degradation:kill_switch`
-2. **三态结果模型**：`ResultStatusSucceeded` / `ResultStatusFailed` / `ResultStatusDegraded`
-3. **15+ 降级点**：工具失败、超时、权限不足、空结果 → 统一走 `ResultStatusDegraded`
-4. **Contract 校验**：返回格式不合规 → 降级 + 置信度减半
+**位置**：`utility/mem/extraction.go`
 
-**覆盖幻觉**：工具失败时编造数据
+**机制**：4 层过滤（格式校验、运维指标匹配、LLM 提议校验、上下文注入过滤）。
 
-**强度**：**高**。这是最强的防线。工具失败时系统强制降级，不给 LLM 编造的机会。
+**强度**：高。
 
-**局限**：只覆盖 AIOps 多 agent 路径，不覆盖 Chat ReAct 路径。
-
-### 2.5 Memory 验证（多层防御）
-
-**位置**：`utility/mem/extraction.go` + `utility/mem/memory_agent.go`
-
-**机制**：4 层过滤：
-
-| 层 | 检查内容 |
-|---|---|
-| `ValidateMemoryCandidate()` | 长度、代码块、套话、密钥标记 |
-| `extractFacts()` | 只提取匹配运维指标的事实（服务名、IP、集群名等） |
-| `sanitizeMemoryDecision()` | LLM 提议的记忆操作必须通过格式校验 |
-| Context 注入过滤 | 过期、低置信度、安全标签、预算超限 → 不注入 |
-
-**覆盖幻觉**：假记忆进入上下文、密钥进记忆、套话污染记忆
-
-**强度**：**高**。4 层防御，每层都有具体检查规则。
-
-### 2.6 Context 预算管理
+### 2.6 Context 预算管理 ✅
 
 **位置**：`internal/ai/contextengine/assembler.go`
 
-**机制**：ContextBudget 按 history / memory / docs / tools 分配 token 上限，超出时裁剪。
+**机制**：ContextBudget 按 history / memory / docs / tools 分配 token 上限。
 
-**覆盖幻觉**：上下文过载导致模型"忘记"工具结果而编造
+**强度**：高。
 
-**强度**：高。主动管理，不是被动截断。
-
-### 2.7 证据结构化
+### 2.7 证据结构化 ✅
 
 **位置**：`internal/ai/protocol/types.go`
 
-**机制**：`EvidenceItem` 结构要求：
+**机制**：`EvidenceItem` 结构记录来源、标题、相关性分数。
 
-```go
-type EvidenceItem struct {
-    SourceType string  // 来源类型
-    SourceID   string  // 来源 ID
-    Title      string  // 标题（必填）
-    Snippet    string  // 片段
-    Score      float64 // 相关性分数
-    URI        string  // 来源链接
-}
+**强度**：中。
+
+### 2.8 工具失败格式化 ✅ 新增
+
+**位置**：`internal/ai/events/tool_wrapper.go`
+
+**机制**：ToolWrapper 工具失败时返回格式化字符串而非 Go error：
+
+```
+[工具调用失败] tool_name: error
+请告知用户该工具返回了错误，不要用通用建议替代实际数据。
 ```
 
-**覆盖幻觉**：结论无来源
+**覆盖幻觉**：编造数据（工具失败后）
 
-**强度**：中。有结构但无强制引用——LLM 可以不引用任何证据就给出结论。
+**强度**：高。格式化字符串让 LLM 明确知道失败，Go error 会触发 eino 重试。
+
+### 2.9 输出指标来源校验 ✅ 新增
+
+**位置**：`internal/ai/events/output_validator.go`
+
+**机制**：正则提取输出中的数值指标（如 "P99: 2.3s"），对比工具结果中是否有来源。无来源时产生 warning 日志。
+
+**覆盖幻觉**：编造数据
+
+**强度**：中。正则提取，覆盖常见指标格式。
+
+### 2.10 未调用工具检测 ✅ 新增
+
+**位置**：`internal/controller/chat/chat_v1_chat_stream.go`
+
+**机制**：`isOpsRelatedQuery` 判断是否为运维相关问题（30+ 关键词）。运维问题无工具调用时记录 hallucination risk 警告。
+
+**覆盖幻觉**：无中生有（不调工具直接编造）
+
+**强度**：中。关键词匹配，不覆盖同义词。
+
+### 2.11 Contract 校验 ✅ 新增
+
+**位置**：`internal/ai/events/contract.go`
+
+**机制**：5 条规则校验输出合规性：
+
+| 规则 | 等级 | 说明 |
+|------|------|------|
+| must_use_tools | VIOLATION | 运维问题必须有工具调用 |
+| must_report_failure | VIOLATION | 工具失败必须在输出中提及 |
+| should_reference_data | WARN | 有工具结果时应引用数据 |
+| no_fabricated_alerts | VIOLATION | 无工具数据时不得编造告警 |
+| should_hedge | WARN | 无数据支持时应使用置信度标注 |
+
+**覆盖幻觉**：编造数据、过度自信、错误归因
+
+**强度**：高。硬规则 + 软警告结合。
+
+### 2.12 Schema Gate ✅ 新增
+
+**位置**：`internal/ai/events/schema_gate.go`
+
+**机制**：结构化输出校验引擎：
+
+| 字段 | 必须 | 说明 |
+|------|------|------|
+| has_answer | ✅ | 输出必须包含实质性回答（>10 字） |
+| no_contradiction | ❌ | 输出不应自相矛盾（如"正常"+"异常"） |
+| actionable | ❌ | 描述问题时应提供可操作建议 |
+
+**覆盖幻觉**：过度自信、遗漏关键信息
+
+**强度**：中。规则引擎，可扩展。
 
 ---
 
-## 三、关键缺口
+## 三、关键缺口（修复状态）
 
 ### 缺口 1：Chat ReAct 路径无结构化降级
 
 **风险等级**：🔴 高
 
-**现状**：AIOps 路径有完善的降级机制，但 Chat ReAct 路径没有。如果工具调用失败，LLM 收到错误信息，但没有系统级阻止它编造回答。
+**状态**：✅ 已修复
 
-**示例**：用户问"payment_service 延迟升高"，模型可能不调用工具就直接回答"建议检查错误率、日志、队列堆积"。
-
-**改进方案**：在 ReAct 路径的工具失败时，注入明确的系统消息：
-
-```go
-// 工具调用失败时，在 context 中注入失败信息
-if toolErr != nil {
-    messages = append(messages, &schema.Message{
-        Role: schema.System,
-        Content: fmt.Sprintf("工具 %s 调用失败：%s。请告知用户该工具返回了错误，不要用通用建议替代。", toolName, toolErr.Error()),
-    })
-}
-```
+**修复方式**：
+1. ToolWrapper 工具失败返回格式化字符串（`[工具调用失败]`）
+2. Prompt 铁律要求告知用户错误
+3. Contract 校验 `must_report_failure` 规则
 
 ### 缺口 2：无生成后事实校验
 
 **风险等级**：🔴 高
 
-**现状**：防幻觉设计文档设计了 Schema Gate，但标注为"设计中"，没有实现。LLM 输出不经过任何事实校验就直接返回。
+**状态**：✅ 已修复
 
-**改进方案**：轻量级校验——检查模型输出中的关键指标是否在工具结果中出现过：
-
-```go
-// 输出校验：关键指标必须在工具结果中有来源
-func validateOutputAgainstEvidence(output string, toolResults []string) []string {
-    var warnings []string
-    // 提取输出中的数字指标（如 "P99: 2.3s"）
-    metrics := extractMetrics(output)
-    for _, m := range metrics {
-        if !metricExistsInResults(m, toolResults) {
-            warnings = append(warnings, fmt.Sprintf("指标 %s 在工具结果中未找到来源", m))
-        }
-    }
-    return warnings
-}
-```
+**修复方式**：
+1. `ValidateOutputAgainstToolResults` — 指标来源校验
+2. `ValidateContract` — 合规校验
+3. `SchemaGate.Validate` — 结构化校验
 
 ### 缺口 3：无强制引用
 
 **风险等级**：🟡 中
 
-**现状**：LLM 可以不引用任何证据就给出结论。EvidenceItem 结构存在但不强制使用。
+**状态**：✅ 已修复
 
-**改进方案**：prompt 层面要求引用：
-
-```
-## 输出引用规则
-- 每个结论必须关联一个工具返回的具体数据
-- 格式：[来源: 工具名] 数据内容 → 结论
-- 如果没有工具数据支持，必须标注"推测"或"待确认"
-```
+**修复方式**：Prompt 输出引用规则 + Contract `should_reference_data` 规则
 
 ### 缺口 4：输出过滤只防安全不防准确性
 
 **风险等级**：🟡 中
 
-**现状**：`filterAssistantPayload` 只过滤密钥泄露，不过滤"模型编造了一个不存在的告警"。
+**状态**：⚠️ 部分修复
 
-**改进方案**：增加准确性过滤层（成本较高，需要定义规则）。
+**已覆盖**：指标来源校验、告警编造检测
+
+**未覆盖**：遗漏信息检测（工具返回 3 个告警只提 1 个）
 
 ### 缺口 5：ReAct 路径无 Contract 校验
 
 **风险等级**：🟡 中
 
-**现状**：Contract 系统只覆盖 AIOps 多 agent 路径，Chat ReAct 路径没有。
+**状态**：✅ 已修复
 
-**改进方案**：在 ReAct 路径的最终输出上加轻量级 Contract 校验。
+**修复方式**：`ValidateContract` 5 条规则 + `SchemaGate` 3 条规则
 
 ---
 
-## 四、防线全景图
+## 四、防线全景图（更新后）
 
 ```
 用户输入
@@ -240,16 +232,17 @@ func validateOutputAgainstEvidence(output string, toolResults []string) []string
 ReAct Agent
   │
   ├─ [硬] 工具调用
-  │   ├─ [硬] BeforeToolCall 拦截
+  │   ├─ [硬] BeforeToolCall 拦截（ToolWrapper）
   │   ├─ [硬] 工具执行
-  │   ├─ [硬] AfterToolCall 结果处理
-  │   └─ [硬] 工具失败 → 降级（AIOps 路径）
-  │                   → ⚠️ 无降级（ReAct 路径）← 缺口 1
+  │   ├─ [硬] AfterToolCall 结果处理（ToolWrapper）
+  │   └─ [硬] 工具失败 → 格式化字符串 ✅
+  │       └─ "[工具调用失败] tool_name: error\n请告知用户..."
   │
-  ├─ [软] System Prompt 铁律
-  │   ├─ 禁止编造数据
-  │   ├─ 必须先调工具
-  │   └─ 不确定时标注推测
+  ├─ [软] System Prompt 铁律 ✅
+  │   ├─ 工具使用铁律：必须先调工具
+  │   ├─ 输出引用规则：结论必须关联工具数据
+  │   ├─ 工具失败处理：告知用户，不用通用建议替代
+  │   └─ 置信度标注：推测/待确认
   │
   ▼
 LLM 输出
@@ -259,9 +252,22 @@ LLM 输出
   │   ├─ 内部 IP
   │   └─ System prompt 泄露
   │
-  ├─ ⚠️ 无事实校验 ← 缺口 2
-  ├─ ⚠️ 无强制引用 ← 缺口 3
-  ├─ ⚠️ 无准确性过滤 ← 缺口 4
+  ├─ [硬] 输出校验 ✅
+  │   ├─ 指标来源校验（无来源 → warning）
+  │   ├─ 未调用工具检测（运维问题无工具 → hallucination risk）
+  │   └─ 置信度词检测（推测/可能 → info 日志）
+  │
+  ├─ [硬] Contract 校验 ✅
+  │   ├─ must_use_tools：运维问题必须有工具调用
+  │   ├─ must_report_failure：工具失败必须提及
+  │   ├─ should_reference_data：应引用工具数据
+  │   ├─ no_fabricated_alerts：不得编造告警
+  │   └─ should_hedge：无数据时应标注推测
+  │
+  ├─ [硬] Schema Gate ✅
+  │   ├─ has_answer：输出必须有实质内容
+  │   ├─ no_contradiction：不应自相矛盾
+  │   └─ actionable：问题描述应有建议
   │
   ▼
 用户看到的回答
@@ -269,15 +275,19 @@ LLM 输出
 
 ---
 
-## 五、改进优先级
+## 五、改进优先级（更新后）
 
-| 优先级 | 措施 | 成本 | 收益 | 实现方式 |
-|---|---|---|---|---|
-| P0 | ReAct 路径工具失败注入系统消息 | 低 | 高 | ToolWrapper after hook + 系统消息注入 |
-| P0 | Prompt 强制引用 | 低 | 高 | 修改 system prompt |
-| P1 | 输出关键指标来源校验 | 中 | 中 | 正则提取指标 + 对比工具结果 |
-| P1 | ReAct 路径轻量 Contract | 中 | 中 | 输出格式校验 + 置信度标注 |
-| P2 | Schema Gate | 高 | 中 | 定义输出 schema + 校验引擎 |
+| 优先级 | 措施 | 状态 |
+|--------|------|------|
+| P0 | ReAct 路径工具失败注入系统消息 | ✅ done |
+| P0 | Prompt 强制引用 | ✅ done |
+| P1 | 输出关键指标来源校验 | ✅ done |
+| P1 | ReAct 路径轻量 Contract | ✅ done |
+| P2 | Schema Gate | ✅ done |
+
+**剩余改进**：
+- 遗漏信息检测（工具返回多个结果但模型只提部分）
+- 准确性过滤层（需要更复杂的 NLP）
 
 ---
 
@@ -285,71 +295,47 @@ LLM 输出
 
 ### Q1：你的 AIOps 系统怎么防幻觉？
 
-> 我们有 7 层防线，按从输入到输出的顺序：
+> 我们有 12 层防线，按从输入到输出的顺序：
 >
 > 第一层是**注入检测**，用正则拦截 prompt injection，这是硬拦截。
 >
-> 第二层是**工具调用闭环**。运维问题必须先调用工具获取数据，工具失败时走降级流程，不给 LLM 编造的机会。这是最强的防线——在系统层面阻断"没有数据就编造"的路径。
+> 第二层是**工具调用闭环**。运维问题必须先调用工具获取数据，工具失败时返回格式化字符串（`[工具调用失败]`），让 LLM 明确知道失败。这是最强的防线——在系统层面阻断"没有数据就编造"的路径。
 >
-> 第三层是**Prompt 铁律**。明确告诉模型"你有工具，用它"、"不要编造指标"、"不确定时标注推测"。这是软约束，但配合工具闭环效果很好。
+> 第三层是**Prompt 铁律**。明确告诉模型"你有工具，用它"、"不要编造指标"、"不确定时标注推测"。
 >
-> 第四层是**Memory 多层验证**。4 层过滤防止假记忆进入上下文：格式校验、运维指标匹配、LLM 提议校验、上下文注入过滤。
+> 第四层是 **Contract 校验**。5 条规则检查输出合规性：必须调工具、必须报告失败、必须引用数据、不得编造告警、无数据时标注推测。
 >
-> 第五层是 **Context 预算管理**。主动控制 token 分配，防止上下文过载导致模型"忘记"工具结果。
+> 第五层是 **Schema Gate**。结构化校验输出质量：必须有实质内容、不应自相矛盾、问题描述应有建议。
 >
-> 第六层是**输出过滤**。过滤密钥、内部 IP、system prompt 泄露。
+> 第六层是**输出指标校验**。正则提取输出中的数值指标，对比工具结果中是否有来源。
 >
-> 第七层是**证据结构化**。每个 TaskResult 包含 EvidenceItem，记录来源、标题、相关性分数。
+> 第七层是**未调用工具检测**。运维问题但无工具调用时记录幻觉风险警告。
 >
-> 最大的缺口是 Chat ReAct 路径没有结构化降级——AIOps 路径有完善的降级机制，但普通聊天路径如果工具失败，LLM 可能编造回答。这是我们下一步要补的。
+> 后面还有 Memory 4 层验证、Context 预算管理、输出安全过滤、证据结构化等防线。
 
-### Q2：Prompt 铁律真的有用吗？LLM 不是想违反就违反？
+### Q2：Contract 校验和 Schema Gate 有什么区别？
+
+> Contract 校验关注**事实准确性**——输出中的数据是否来自工具、是否有编造。
+>
+> Schema Gate 关注**输出质量**——回答是否有实质内容、是否自相矛盾、是否有可操作建议。
+>
+> 两者互补：Contract 防止"说假话"，Schema Gate 防止"说废话"。
+
+### Q3：这些校验会不会影响响应速度？
+
+> 所有校验都在响应完成后异步执行，不阻塞用户看到回答。
+>
+> 校验结果只记录日志（warning/info），不修改输出。这是"观测不干预"的设计——先收集数据，确认误报率后再考虑是否阻断。
+>
+> 如果未来误报率低到可以接受，可以把 Contract 的 VIOLATION 级别升级为阻断——在输出前拦截，返回"数据不足，无法给出可靠回答"。
+
+### Q4：Prompt 铁律真的有用吗？
 
 > 你说得对，prompt 是软约束。我们不依赖 prompt 作为唯一防线。
 >
-> 真正的硬约束是**工具调用闭环**。当用户问运维相关问题时，系统要求必须先调用工具。如果工具失败，走降级流程，返回"XX 工具返回错误，无法获取数据"，而不是让 LLM 编造。
+> 真正的硬约束是**工具调用闭环 + Contract 校验**。当用户问运维相关问题时，系统要求必须先调用工具。如果工具失败，格式化字符串让 LLM 明确知道。如果 LLM 还是编造了数据，Contract 校验会在事后捕获并记录。
 >
-> Prompt 的作用是"引导"——让模型知道有工具可用、知道要基于数据回答。但如果模型违反了，系统层面有兜底。
->
-> 这就像交通规则和护栏的关系。Prompt 是交通规则（告诉你不能超速），工具闭环是护栏（你超速了会撞上护栏，不会冲下悬崖）。
-
-### Q3：Memory 幻觉怎么防？
-
-> Memory 是最容易产生幻觉的地方——LLM 可能把用户的假设当作事实存下来，下次对话就当成真的用了。
->
-> 我们有 4 层防御：
->
-> 第一层是**格式校验**。排除太短、太长、包含代码块、包含套话（"作为 AI"、"抱歉"）的内容。
->
-> 第二层是**运维指标匹配**。只提取匹配已知运维模式的事实（服务名、IP、集群名、端口号），不提取通用陈述。
->
-> 第三层是 **LLM 提议校验**。即使 LLM 提议保存某个记忆，也必须通过格式和类型校验。如果 LLM 说"保存一个偏好"，但内容不符合偏好模式，会被拒绝。
->
-> 第四层是**上下文注入过滤**。记忆注入上下文时，还要检查过期时间、置信度阈值、安全标签、预算限制。
->
-> 这样即使某一层漏了，后面还有兜底。
-
-### Q4：如果面试官问"你怎么验证防幻觉措施真的有效"？
-
-> 三个层面：
->
-> 第一是**自动化测试**。我们有 memory extraction 的单元测试，覆盖套话、密钥、代码块等边界情况。Contract 校验也有对应的测试用例。
->
-> 第二是**线上监控**。Degradation 系统有结构化日志，每次降级都记录原因。我们可以通过日志分析"有多少请求走了降级"、"哪些工具最容易失败"。
->
-> 第三是 **A/B 对比**。在 Prompt 改动前后，用相同的 AIOps 问题跑 replay，对比输出质量和工具调用率。我们有 replay test case 可以做这个。
->
-> 但说实话，最难验证的是"软约束"——prompt 铁律的遵守率。这需要人工抽样审查，目前没有自动化方案。
-
-### Q5：AIOps 和通用 ChatBot 在防幻觉上有什么本质区别？
-
-> 两个核心区别：
->
-> 第一，**容错空间不同**。通用 ChatBot 编造一个菜谱，用户最多做出来不好吃。AIOps 编造一个告警，运维人员可能凌晨 3 点起来处理一个不存在的故障。所以 AIOps 的防幻觉必须是硬约束，不能只靠 prompt。
->
-> 第二，**有 ground truth**。AIOps 场景下，工具返回的数据就是 ground truth——Prometheus 的指标是真实的、日志系统的内容是真实的。我们可以用工具结果来校验 LLM 输出。通用 ChatBot 没有这个优势。
->
-> 所以我们的策略是：**用工具结果作为锚点，强制 LLM 基于真实数据回答**。这是 AIOps 场景天然的防幻觉优势。
+> 就像交通规则和护栏的关系。Prompt 是交通规则（告诉你不能超速），工具闭环是护栏（你超速了会撞上护栏，不会冲下悬崖），Contract 校验是事故记录仪（记录违规行为用于事后分析）。
 
 ---
 
@@ -357,16 +343,41 @@ LLM 输出
 
 ### 防线实现
 
-- `internal/ai/agent/chat_pipeline/prompt.go` — System prompt 铁律
-- `utility/safety/prompt_guard.go` — 注入检测
-- `utility/safety/output_filter.go` — 输出过滤
-- `internal/ai/service/degradation.go` — 降级系统
-- `utility/mem/extraction.go` — Memory 验证
-- `internal/ai/contextengine/assembler.go` — Context 预算
-- `internal/ai/protocol/types.go` — EvidenceItem 结构
-- `internal/ai/agent/contracts/enforce.go` — Contract 校验
+| 文件 | 说明 |
+|------|------|
+| `internal/ai/agent/chat_pipeline/prompt.go` | System prompt 铁律 + 输出引用规则 |
+| `utility/safety/prompt_guard.go` | 注入检测 |
+| `utility/safety/output_filter.go` | 输出过滤 |
+| `internal/ai/service/degradation.go` | 降级系统 |
+| `utility/mem/extraction.go` | Memory 验证 |
+| `internal/ai/contextengine/assembler.go` | Context 预算 |
+| `internal/ai/protocol/types.go` | EvidenceItem 结构 |
+| `internal/ai/agent/contracts/enforce.go` | Contract 校验（AIOps 路径） |
+| `internal/ai/events/tool_wrapper.go` | 工具失败格式化 + before/after hook |
+| `internal/ai/events/output_validator.go` | 输出指标来源校验 |
+| `internal/ai/events/contract.go` | ReAct 路径 Contract 校验 |
+| `internal/ai/events/schema_gate.go` | Schema Gate 结构化校验 |
+| `internal/ai/events/result_collector.go` | 工具结果收集器 |
+| `internal/controller/chat/chat_v1_chat_stream.go` | 校验集成点 |
 
-### 设计文档
+### 测试覆盖
 
-- `Learn/harness/07-防幻觉体系设计.md` — 防幻觉设计（含 Schema Gate 设计）
-- `internal/ai/events/tool_wrapper.go` — 工具调用拦截（可扩展为事实校验）
+| 文件 | 用例数 |
+|------|--------|
+| `events/contract_test.go` | 11 |
+| `events/schema_gate_test.go` | 6 |
+| `events/output_validator_test.go` | 5 |
+| `events/sequence_test.go` | 6 |
+| `events/replay_test.go` | 4 |
+| `events/tool_wrapper_test.go` | 10 |
+| `events/health_collector_test.go` | 7 |
+| `events/events_test.go` | 5 |
+
+---
+
+## 八、下一步
+
+1. **遗漏信息检测**：工具返回多个结果但模型只提部分（需要解析工具结果结构）
+2. **准确性过滤层**：输出中编造的告警/指标检测（需要 NLP 能力）
+3. **Contract 阻断模式**：误报率确认后，VIOLATION 级别可升级为输出拦截
+4. **前端展示**：Contract/Schema Gate 结果可通过 SSE 推送到前端，让用户看到可信度标签
