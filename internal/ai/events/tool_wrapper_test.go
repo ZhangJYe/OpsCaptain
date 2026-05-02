@@ -10,6 +10,15 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
+var (
+	errTimeout         = errSentinel("connection timeout")
+	errDesensitization = errSentinel("desensitization failed")
+)
+
+type errSentinel string
+
+func (e errSentinel) Error() string { return string(e) }
+
 // mockTool 模拟工具（实现 InvokableTool）
 type mockTool struct {
 	name    string
