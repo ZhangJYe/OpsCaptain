@@ -87,7 +87,8 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 	// 创建事件发射器（在 buildChatAgent 之前，以便工具包装）
 	sseEmitter := events.NewSSEEmitter(client, requestID)
 	traceEmitter := events.NewTraceEmitter(requestID)
-	multiEmitter := events.NewMultiEmitter(sseEmitter, traceEmitter, events.GlobalHealthCollector())
+	resultCollector := events.NewResultCollector()
+	multiEmitter := events.NewMultiEmitter(sseEmitter, traceEmitter, events.GlobalHealthCollector(), resultCollector)
 	ctx = chat_pipeline.WithChatToolEmitter(ctx, multiEmitter, requestID)
 
 	runner, agentBuildErr := buildChatAgent(ctx, msg)
@@ -143,6 +144,17 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 			memorySvc.PersistOutcome(ctx, id, msg, completeResponse)
 			g.Log().Infof(ctx, "[session:%s][req:%s] ChatStream completed, answer length: %d, turns: %d",
 				id, requestID, len(completeResponse), sessionMem.TurnCount())
+
+			// 输出校验：检查关键指标是否有工具数据来源
+			if resultCollector.HasToolCalls() {
+				toolResults := resultCollector.ToolResults()
+				if warnings := events.ValidateOutputAgainstToolResults(completeResponse, toolResults); len(warnings) > 0 {
+					g.Log().Warningf(ctx, "[session:%s][req:%s] output validation warnings: %v", id, requestID, warnings)
+				}
+			} else if isOpsRelatedQuery(msg) {
+				// 运维相关问题但没有调用任何工具 → 可能是幻觉
+				g.Log().Warningf(ctx, "[session:%s][req:%s] ops-related query but no tool calls detected, possible hallucination risk", id, requestID)
+			}
 		}
 	}()
 
@@ -233,4 +245,24 @@ func sendChatStreamMeta(client *sse.Client, mode, traceID string, details []stri
 		return
 	}
 	client.SendToClient("meta", string(payload))
+}
+
+var opsKeywords = []string{
+	"告警", "alert", "prometheus", "日志", "log", "排查", "故障", "incident",
+	"指标", "metric", "延迟", "latency", "错误率", "error rate", "超时", "timeout",
+	"服务异常", "服务挂了", "报警", "cpu", "内存", "memory", "磁盘",
+	"网络", "network", "数据库", "mysql", "redis", "连接池", "队列", "queue",
+}
+
+func isOpsRelatedQuery(query string) bool {
+	lower := strings.ToLower(strings.TrimSpace(query))
+	if lower == "" {
+		return false
+	}
+	for _, kw := range opsKeywords {
+		if strings.Contains(lower, strings.ToLower(kw)) {
+			return true
+		}
+	}
+	return false
 }
