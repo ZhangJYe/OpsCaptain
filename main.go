@@ -90,8 +90,12 @@ func main() {
 		chatTaskPipelineShutdown = shutdownFn
 	}
 
-	// 启动工具健康度日志聚合（每 5 分钟输出一次）
-	events.StartGlobalHealthReporting(ctx, 5*time.Minute)
+	healthReportingShutdown := func() {}
+	if eventHealthReportingEnabled(ctx) {
+		healthReportCtx, cancel := context.WithCancel(ctx)
+		healthReportingShutdown = cancel
+		events.StartGlobalHealthReporting(healthReportCtx, eventHealthReportInterval(ctx))
+	}
 
 	var shuttingDown atomic.Bool
 	pprofServer := startPprofServer(ctx)
@@ -121,7 +125,7 @@ func main() {
 		panic(err)
 	}
 
-	waitForShutdown(ctx, s, &shuttingDown, pprofServer, traceShutdown, memoryPipelineShutdown, chatTaskPipelineShutdown)
+	waitForShutdown(ctx, s, &shuttingDown, pprofServer, traceShutdown, memoryPipelineShutdown, chatTaskPipelineShutdown, healthReportingShutdown)
 }
 
 func waitForShutdown(
@@ -132,6 +136,7 @@ func waitForShutdown(
 	traceShutdown func(context.Context) error,
 	memoryPipelineShutdown func(context.Context) error,
 	chatTaskPipelineShutdown func(context.Context) error,
+	healthReportingShutdown func(),
 ) {
 	sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -152,6 +157,10 @@ func waitForShutdown(
 		if err := pprofServer.Shutdown(context.Background()); err != nil {
 			g.Log().Warningf(ctx, "pprof server shutdown failed: %v", err)
 		}
+	}
+
+	if healthReportingShutdown != nil {
+		healthReportingShutdown()
 	}
 
 	if memoryPipelineShutdown != nil {
@@ -176,6 +185,23 @@ func waitForShutdown(
 			g.Log().Warningf(ctx, "tracing shutdown failed: %v", err)
 		}
 	}
+}
+
+func eventHealthReportingEnabled(ctx context.Context) bool {
+	v, err := g.Cfg().Get(ctx, "events.health_report_enabled")
+	if err != nil {
+		return true
+	}
+	return v.Bool()
+}
+
+func eventHealthReportInterval(ctx context.Context) time.Duration {
+	const fallback = 5 * time.Minute
+	v, err := g.Cfg().Get(ctx, "events.health_report_interval_ms")
+	if err != nil || v.Int64() <= 0 {
+		return fallback
+	}
+	return time.Duration(v.Int64()) * time.Millisecond
 }
 
 func startPprofServer(ctx context.Context) *http.Server {

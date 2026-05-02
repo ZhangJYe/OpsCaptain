@@ -23,6 +23,10 @@ tracing:
   jaeger_endpoint: ""
   sample_ratio: 1.0
 
+events:
+  health_report_enabled: true
+  health_report_interval_ms: 300000
+
 debug:
   pprof_enabled: false
   pprof_address: "127.0.0.1:6060"
