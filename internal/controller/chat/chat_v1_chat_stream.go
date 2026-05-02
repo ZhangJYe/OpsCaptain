@@ -4,6 +4,7 @@ import (
 	v1 "SuperBizAgent/api/chat/v1"
 	"SuperBizAgent/internal/ai/agent/chat_pipeline"
 	"SuperBizAgent/internal/ai/contextengine"
+	"SuperBizAgent/internal/ai/events"
 	aiservice "SuperBizAgent/internal/ai/service"
 	"SuperBizAgent/internal/ai/skills"
 	"SuperBizAgent/internal/consts"
@@ -107,7 +108,12 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 		id, requestID, time.Since(phaseStart).Milliseconds())
 	sendChatStreamMeta(client, "chat", "", filteredDetail, false, "")
 	streamDetailsToClient(client, filteredDetail)
-	sr, err := runner.Stream(ctx, userMessage, compose.WithCallbacks(log_call_back.LogCallback(nil)))
+	sseEmitter := events.NewSSEEmitter(client, requestID)
+	callbackEmitter := events.NewCallbackEmitter(sseEmitter, requestID)
+	sr, err := runner.Stream(ctx, userMessage, compose.WithCallbacks(
+		log_call_back.LogCallback(nil),
+		callbackEmitter.Handler(),
+	))
 	if err != nil {
 		if fallback := userFacingChatError(ctx, err); fallback != nil {
 			_, detailFiltered := filterAssistantPayload(ctx, "", fallback.Detail)

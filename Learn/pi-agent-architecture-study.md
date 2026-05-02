@@ -219,221 +219,210 @@ SSE 推送的事件类型：
 
 ## 四、改进方案
 
-### 设计思路
+### 4.1 设计结论
 
-**不是抛弃 eino，而是在 eino react.Agent 之上包一层 Pi 风格的 Agent Loop。**
+**可以推进，但不建议第一步就自研 Agent Loop。**
+
+更合理的路线是：先把 Pi Agent 最有价值的部分抽出来，也就是**事件驱动和过程可观测**；等事件层跑稳后，再判断是否真的需要拿回完整 loop 控制权。
 
 ```
 当前：
-  ChatStream → eino react.Agent (黑盒) → SSE
+  ChatStream -> eino react.Agent -> message/done SSE
 
-目标：
-  ChatStream → AgentLoop (Pi 风格) → eino react.Agent (作为 LLM+Tool 引擎) → SSE
-                      ↑
-               这一层是我们自己控制的
+P0 目标：
+  ChatStream -> eino react.Agent + callback adapter -> AgentEvent -> SSE
+
+P2/P3 可选目标：
+  ChatStream -> OpsCaption AgentLoop -> eino model/tool interfaces -> AgentEvent -> SSE
 ```
 
-### P0：Agent Loop 封装层（最高优先级）
+这个分法的关键是把两个目标拆开：
 
-在 eino react.Agent 之上封装一个可控的 agent loop：
+- **可观测性**：先用 Eino callback 和现有 SSE 就能做。
+- **可干预性 / 工具拦截 / 自定义终止**：callback 不一定够，需要后续 spike，再决定是否自研 loop。
 
-```go
-// internal/ai/loop/loop.go
-type AgentLoop struct {
-    model    eino.ToolCallingChatModel   // 底层用 eino 的模型接口
-    tools    []eino.BaseTool              // 工具集
-    hooks    LoopHooks                    // 生命周期钩子
-    config   LoopConfig                   // MaxStep、超时等
-}
+### 4.2 P0：AgentEvent 协议 + Eino Callback Adapter
 
-type LoopHooks struct {
-    OnToolCallStart  func(ctx context.Context, event ToolCallStartEvent)
-    OnToolCallEnd    func(ctx context.Context, event ToolCallEndEvent)
-    OnThinking       func(ctx context.Context, delta string)
-    OnText           func(ctx context.Context, delta string)
-    OnTurnStart      func(ctx context.Context)
-    OnTurnEnd        func(ctx context.Context)
-    BeforeToolCall   func(ctx context.Context, tc ToolCallContext) (*BeforeResult, error)
-    AfterToolCall    func(ctx context.Context, tc ToolCallContext) (*AfterResult, error)
-    GetSteering      func(ctx context.Context) []Message
-}
-
-func (l *AgentLoop) Run(ctx context.Context, messages []Message) <-chan AgentEvent {
-    // 自己实现双层循环，而不是委托给 react.Agent
-    // 1. 调用 LLM（通过 eino 的 model.Generate/Stream）
-    // 2. 解析响应中的 tool_call
-    // 3. 校验参数 schema
-    // 4. 调用 beforeToolCall 钩子（可拦截）
-    // 5. 执行工具
-    // 6. 调用 afterToolCall 钩子（可覆写结果）
-    // 7. 检查 steering 消息
-    // 8. 发射事件到 channel
-    // 9. 循环直到无更多 tool_call 或达到 MaxStep
-}
-```
-
-这样做的好处：
-- 不需要重写 eino 的模型适配（继续用 eino 的 ToolCallingChatModel）
-- 不需要重写工具实现（继续用 eino 的 BaseTool）
-- 但 agent loop 的控制权回到自己手里
-- 可以在每个环节插入钩子、发射事件
-
-### P1：事件流标准化
+P0 不重写 loop，只做事件抽象和回调适配。
 
 ```go
-// internal/ai/loop/events.go
+// internal/ai/events/types.go
 type AgentEventType string
 
 const (
-    EventAgentStart       AgentEventType = "agent_start"
-    EventAgentEnd         AgentEventType = "agent_end"
-    EventTurnStart        AgentEventType = "turn_start"
-    EventTurnEnd          AgentEventType = "turn_end"
-    EventMessageStart     AgentEventType = "message_start"
-    EventTextDelta        AgentEventType = "text_delta"
-    EventThinkingDelta    AgentEventType = "thinking_delta"
-    EventToolCallStart    AgentEventType = "tool_call_start"
-    EventToolCallEnd      AgentEventType = "tool_call_end"
-    EventSteeringInjected AgentEventType = "steering_injected"
-    EventError            AgentEventType = "error"
+    EventAgentStart    AgentEventType = "agent_start"
+    EventAgentEnd      AgentEventType = "agent_end"
+    EventModelStart    AgentEventType = "model_start"
+    EventModelEnd      AgentEventType = "model_end"
+    EventToolCallStart AgentEventType = "tool_call_start"
+    EventToolCallEnd   AgentEventType = "tool_call_end"
+    EventTextDelta     AgentEventType = "text_delta"
+    EventError         AgentEventType = "error"
 )
 
 type AgentEvent struct {
-    Type      AgentEventType
-    Payload   any
-    Timestamp time.Time
+    Type      AgentEventType    `json:"type"`
+    TraceID   string            `json:"trace_id,omitempty"`
+    Name      string            `json:"name,omitempty"`
+    Payload   map[string]any    `json:"payload,omitempty"`
+    Timestamp time.Time         `json:"timestamp"`
 }
 ```
-
-SSE 层订阅这个事件流，前端就能看到完整的 agent 执行过程。
-
-### P2：Steering 机制
 
 ```go
-type SteeringChannel struct {
-    ch chan Message
+// internal/ai/events/eino_callback.go
+type CallbackEmitter struct {
+    Emit func(ctx context.Context, event AgentEvent)
 }
 
-func (s *SteeringChannel) Inject(msg Message) {
-    select {
-    case s.ch <- msg:
-    default:
-    }
-}
-
-// 在 agent loop 的每轮 tool 执行后检查
-pendingSteering := l.hooks.GetSteering(ctx)
-if len(pendingSteering) > 0 {
-    messages = append(messages, pendingSteering...)
-    emit(EventSteeringInjected, pendingSteering)
+func (c *CallbackEmitter) Handler() callbacks.Handler {
+    // 适配 Eino model/tool callback。
+    // 第一阶段只要求拿到 tool name、耗时、错误、结果摘要；
+    // 不要求拿到完整 CoT，也不改变工具执行顺序。
 }
 ```
 
-### P3：工具 Schema 校验
+接入点可以先放在现有流式链路：
 
 ```go
-type ValidatedTool struct {
-    Name        string
-    Description string
-    Schema      *jsonschema.Schema   // JSON Schema 定义
-    Execute     func(ctx context.Context, params any) (*ToolResult, error)
-    ExecutionMode ExecutionMode      // sequential | parallel
+sr, err := runner.Stream(ctx, userMessage, compose.WithCallbacks(
+    events.NewCallbackEmitter(ctx, client).Handler(),
+))
+```
+
+P0 的成功标准：
+
+- 前端能看到“正在调用哪个工具”
+- 后端日志能定位“哪个工具失败 / 超时”
+- SSE 事件有统一 schema
+- 不改变当前 ReAct Agent 的执行结果
+- `go test ./...` 和流式回归通过
+
+### 4.3 P1：事件流标准化 + 前端消费
+
+P1 解决“事件能不能稳定消费”的问题。
+
+SSE 事件建议分两层：
+
+| SSE event | 用途 | 说明 |
+|---|---|---|
+| `meta` | 请求元信息 | trace_id、mode、degraded |
+| `thought` | 当前已有过程提示 | 保留兼容 |
+| `agent_event` | 新增结构化事件 | model/tool lifecycle |
+| `message` | 文本增量 | 继续用于最终回答 |
+| `done` | 流结束 | 客户端明确收尾 |
+| `error` | 错误 | 传输或执行错误 |
+
+前端不要直接依赖工具原始返回，只展示摘要和状态：
+
+- `tool_call_start`：显示“正在查询 Prometheus / 日志 / 知识库”
+- `tool_call_end`：显示耗时、成功/失败、摘要
+- `error`：显示降级原因和 trace_id
+
+### 4.4 P2：控制权可行性 Spike
+
+只有当 P0/P1 证明 callback 不够时，再进入 P2。
+
+重点验证三件事：
+
+1. **Steering**：运行中用户追加消息，是否需要在当前 loop 内被即时消费。
+2. **BeforeToolCall**：工具执行前是否必须做动态审批、参数改写或阻断。
+3. **AfterToolCall**：工具执行后是否必须做结果过滤、证据归一化或覆写。
+
+如果这三件事只是“未来可能需要”，就不要急着自研 loop；继续用 Eino ReAct + callback 更稳。
+
+### 4.5 P3：可选自研 Agent Loop
+
+自研 loop 只能作为 P3，并且必须放在 feature flag 后面灰度。
+
+```go
+type AgentLoop struct {
+    model  model.ToolCallingChatModel
+    tools  []tool.BaseTool
+    hooks  LoopHooks
+    config LoopConfig
 }
 
-func (t *ValidatedTool) ValidateAndExecute(ctx context.Context, rawArgs json.RawMessage) (*ToolResult, error) {
-    var params any
-    if err := jsonschema.Validate(t.Schema, rawArgs, &params); err != nil {
-        return nil, fmt.Errorf("tool %s: schema validation failed: %w", t.Name, err)
-    }
-    return t.Execute(ctx, params)
+type LoopHooks struct {
+    BeforeToolCall func(ctx context.Context, call ToolCallContext) (*BeforeResult, error)
+    AfterToolCall  func(ctx context.Context, call ToolCallContext) (*AfterResult, error)
+    GetSteering    func(ctx context.Context) []schema.Message
+    Emit           func(ctx context.Context, event AgentEvent)
 }
 ```
+
+P3 的迁移要求：
+
+- 先 shadow run，不直接替换线上 Chat
+- 对比 ReAct 输出、工具调用次数、错误率和耗时
+- 保留 fallback：自研 loop 失败时可回退 Eino ReAct
+- 不影响 AIOps Plan-Execute-Replan 路径
 
 ---
 
 ## 五、Trade-off 分析
 
-### 5.1 为什么要拿回 Agent Loop 控制权？
+### 5.1 先做事件层，而不是先自研 loop
 
-**一句话结论：不是为了造轮子，而是因为黑盒模式在 AIOps 场景下不可观测、不可干预、不可扩展。**
+**一句话结论：OpsCaption 当前最缺的是可观测事件层，不是马上替换 Eino ReAct。**
 
-#### 收益
-
-| 收益 | 具体价值 | 不做的后果 |
+| 目标 | Callback 事件层能否解决 | 是否需要自研 loop |
 |---|---|---|
-| **全链路可观测** | 每个工具调用的入参、出参、耗时、错误都可见 | 生产问题只能看最终文本，无法定位是哪个工具出了问题 |
-| **实时过程反馈** | 前端能看到「正在查指标」「正在查日志」「正在推理」 | 用户发一个问题等 30 秒只看到一个 loading，不知道在干嘛 |
-| **运行中干预** | 用户可以在 agent 执行中发消息纠正方向 | agent 跑偏了只能等它跑完再重新问，浪费 token 和时间 |
-| **工具拦截能力** | beforeToolCall 可以做权限校验、参数修正、审计日志 | 工具直接执行，无法在执行前拦截危险操作 |
-| **自定义终止逻辑** | 不只 MaxStep，可以根据业务条件提前终止 | 必须跑满 MaxStep 或等 LLM 自己停止 |
-| **Schema 校验** | 工具参数不符合 schema 直接拒绝，不浪费一次 LLM 调用 | 参数格式错误导致工具崩溃，再用一轮 LLM 重试 |
-| **框架可替换** | 底层可以从 eino 换成其他框架，loop 层不变 | 和 eino 深度耦合，换框架等于重写 |
+| 看见工具调用开始/结束 | 可以 | 暂不需要 |
+| 记录工具耗时/错误 | 可以 | 暂不需要 |
+| 前端展示过程反馈 | 可以 | 暂不需要 |
+| 运行中插入用户纠偏 | 不一定 | 需要 spike |
+| 工具执行前动态拦截 | 不一定 | 需要 spike |
+| 自定义终止策略 | 不一定 | 需要 spike |
+| 完全替换 Eino loop | 不能 | 需要 P3 |
 
-#### 成本
+因此，推进顺序应该是：
 
-| 成本 | 严重程度 | 缓解措施 |
-|---|---|---|
-| **维护负担** | 中 | agent loop 核心逻辑不超过 300 行，复杂度可控 |
-| **重实现 eino 特性** | 中 | 工具执行、重试、消息格式化需要自己写，但逻辑简单 |
-| **引入 bug 风险** | 中 | eino 的 react.Agent 经过社区验证，自研需要充分测试 |
-| **团队学习成本** | 低 | 代码量小，Pi Agent 的设计有成熟参考 |
-| **工程时间** | 中 | 分阶段实施，最小改动只需 1 天（callback 包装） |
-
-#### 核心 Trade-off
-
-```
-黑盒模式（当前）：
-  + 开箱即用，eino 维护 agent loop
-  + 工具调用、重试、错误处理都由框架处理
-  - 不可观测（中间过程是黑盒）
-  - 不可干预（运行中无法注入消息）
-  - 不可扩展（无法在工具调用前后插入逻辑）
-
-可控模式（目标）：
-  + 全链路可观测
-  + 支持 steering 干预
-  + 工具调用前后可插入任意逻辑
-  + 框架可替换
-  - 需要自己维护 agent loop 代码
-  - 需要自己处理工具重试、错误恢复
-  - 需要 2-4 周工程投入
+```text
+可观测事件层 -> 事件消费稳定 -> 控制权缺口验证 -> 自研 loop 灰度
 ```
 
-**判断标准：如果你的场景需要「可观测 + 可干预 + 可扩展」，就值得做。如果只是简单的问答，用黑盒就够了。**
+### 5.2 为什么还值得参考 Pi Agent
 
-OpsCaptain 是 AIOps 场景：
-- 用户需要看到 agent 在查什么指标、查什么日志（可观测）
-- 用户可能在排查过程中说「不是这个服务，是另一个」（可干预）
-- 未来需要在工具调用前做权限校验、审计（可扩展）
+参考 Pi 的重点不是照搬它的完整 runtime，而是学习三个机制：
 
-→ **值得做。**
+1. **事件驱动**：agent 的每一步都能转成结构化事件。
+2. **核心机制下沉**：loop 只管模型、工具、事件，不把业务逻辑写死。
+3. **UI 与执行解耦**：前端消费事件，而不是猜后端状态。
 
-### 5.2 为什么不直接抛弃 eino？
+这些思想可以先落到 P0/P1，不必等自研 loop。
 
-**一句话结论：复用 eino 的模型适配和工具接口，只拿回 loop 控制权。**
+### 5.3 成本重新估计
 
-```
-抛弃 eino（不推荐）：
-  - 需要自己实现所有 LLM provider 的适配（DeepSeek、豆包、OpenAI...）
-  - 需要自己实现工具的 schema 定义、参数解析
-  - 工作量大，且不产生业务价值
-
-复用 eino（推荐）：
-  + 继续用 eino 的 ToolCallingChatModel 接口（模型适配）
-  + 继续用 eino 的 BaseTool 接口（工具定义）
-  + 继续用 eino 的 schema.Message（消息格式）
-  + 只是在上层包一个自己控制的 loop
-  + 工作量小，聚焦在 agent loop 逻辑本身
-```
-
-### 5.3 分阶段实施的 Trade-off
-
-| 阶段 | 做什么 | 收益 | 风险 |
+| 阶段 | 成本 | 风险 | 说明 |
 |---|---|---|---|
-| Phase 1（1天） | 用 eino callback 包装，捕获事件 | 验证事件设计，前端可以看到工具调用 | callback 可能不覆盖所有事件 |
-| Phase 2（1-2周） | 自己实现 agent loop | 完全可控，支持 steering | 需要充分测试 |
-| Phase 3（1周） | 事件流标准化 + SSE 对接 | 前端体验质变 | 前端需要适配 |
-| Phase 4（持续） | Steering + Schema 校验 + 清理废代码 | 架构完整 | 低风险 |
+| P0 事件协议 + callback adapter | 2-4 天 | 低 | 不改执行语义，先拿可观测性 |
+| P1 SSE / 前端事件消费 | 3-5 天 | 中 | 要处理兼容、断流、旧客户端 |
+| P2 steering / interception spike | 1-2 周 | 中 | 只验证必要性，不承诺替换 |
+| P3 自研 loop shadow path | 3-5 周 | 高 | 需要重接工具错误、记忆、缓存、降级、测试 |
+
+原先“自研 loop 核心不超过 300 行”的说法过于乐观。真正成本不在 loop 本体，而在把现有生产能力重新挂回去：
+
+- ContextEngine
+- ProgressiveDisclosure
+- SSE
+- MemoryService.PersistOutcome
+- output filter
+- degradation / approval
+- session lock
+- tool error degrade
+- trace / token audit
+
+### 5.4 推进边界
+
+本方案第一阶段只作用于 Chat ReAct 链路：
+
+- 不恢复 `chat_multi_agent`
+- 不改 AIOps Plan-Execute-Replan 执行方式
+- 不把历史 `supervisor / triage / reporter` 重新接回主链路
+- 不把工具原始结果直接暴露给前端
+
+这样边界清楚，风险可控。
 
 ---
 
@@ -453,30 +442,36 @@ OpsCaptain 是 AIOps 场景：
 
 ### 短期（1 周）
 
-- P0 最小实现：封装一个 AgentLoop，内部仍然调用 eino react.Agent，但在外层包装事件发射
-- 这一步不需要重写 agent loop，只需要 hook 进 eino 的回调机制
+- 定义 `AgentEvent` 协议，先覆盖 model/tool start/end、error、text delta
+- 实现 Eino callback adapter，把 callback 转成 `AgentEvent`
+- 在 `ChatStream` 中新增 `agent_event` SSE 事件，保留现有 `message/thought/done`
+- 增加最小回归测试：事件 schema、工具失败事件、流式收尾
+- 不改当前 ReAct 执行语义
 
 ```go
-// 最小改动：利用 eino 的 compose.WithCallbacks 捕获事件
+// 最小改动：利用 eino callback 捕获事件，再转成 AgentEvent
 sr, err := runner.Stream(ctx, userMessage, compose.WithCallbacks(
-    &AgentEventCallback{emit: eventCh},
+    events.NewCallbackEmitter(ctx, client).Handler(),
 ))
 ```
 
 ### 中期（2-3 周）
 
-- P0 完全实现：自己实现 agent loop，不再依赖 react.Agent 黑盒
-- P1：事件流标准化，SSE 推送完整事件
-- 前端适配新的事件类型
+- 前端适配 `agent_event`，展示工具调用状态、耗时和错误摘要
+- 将事件写入 trace / audit，便于排查线上问题
+- 做一组真实问题 replay，对比有无事件层时的排查效率
+- 做 steering / beforeToolCall / afterToolCall 的可行性 spike，明确是否真的需要自研 loop
 
 ### 长期（1 月+）
 
-- P2：Steering 机制
-- P3：工具 Schema 校验
-- 清理废弃的 multi-agent pipeline 代码
+- 如果 callback 满足需求：继续保留 Eino ReAct，完善事件和前端体验
+- 如果 callback 不满足：实现自研 loop 的 shadow path，先和 Eino ReAct 并行对比
+- 将自研 loop 放在 feature flag 后面灰度，不直接替换主链路
+- AIOps Plan-Execute-Replan 单独评估，不纳入第一阶段改造
 
 ### 不建议做的事
 
+- 不要把“可观测性问题”直接升级成“必须自研 loop”
 - 不要一次性重写所有东西，先用 callback 包装验证事件流设计
 - 不要抛弃 eino 的模型适配和工具接口，复用它们
 - `chat_multi_agent` 入口和聊天条件路由已删除；保留 `supervisor/triage/reporter` 目录的唯一目的，是作为历史实验和复盘材料
@@ -489,34 +484,29 @@ sr, err := runner.Stream(ctx, userMessage, compose.WithCallbacks(
 
 > 我的项目 OpsCaptain 是一个 AIOps 智能运维助手。最初我尝试了 supervisor → triage → specialists → reporter 的多 agent 管道架构，但发现这个设计过于僵化——每个 specialist 是纯确定性的工具调用器，没有 LLM 推理能力，triage 只是关键词匹配，整体灵活性不够。
 >
-> 后来我转向了基于 LLM 的 ReAct 模式，用 cloudwego/eino 框架的 react.Agent 作为执行引擎。但我发现 eino 的 react.Agent 是个黑盒——agent loop 的控制权在框架手里，我看不到中间的工具调用过程，无法在运行中干预，也无法在工具调用前后插入逻辑。
+> 后来我把 Chat 链路收敛到基于 LLM 的 ReAct 模式，用 cloudwego/eino 的 react.Agent 作为执行引擎；复杂 AIOps 分析则保留 Runtime 包装，执行核心是 Plan-Execute-Replan。
 >
-> 所以我参考了 Pi Agent（一个开源的终端编程 harness）的架构，在 eino 之上包了一层自己可控的 Agent Loop。核心思路是：**复用 eino 的模型适配和工具接口，但拿回 agent loop 的控制权。**
+> 现在我正在参考 Pi Agent 的事件驱动设计做下一步演进。我的判断是：第一阶段不急着自研 loop，而是先基于 Eino callback 抽象出统一的 AgentEvent，把模型调用、工具调用、耗时、错误等过程事件通过 SSE 透给前端和 trace。
 >
-> 具体来说，我的 Agent Loop 有三层：
-> - 底层：eino 的 ToolCallingChatModel，负责 LLM 调用
-> - 中间层：自己实现的双层 while 循环，负责 tool call 调度、事件发射、钩子注入
-> - 上层：ProgressiveDisclosure + ContextEngine，负责工具选择和上下文装配
+> 如果后续发现 callback 无法满足运行中 steering、工具调用前拦截或自定义终止策略，再考虑把 ReAct 执行演进成自己可控的 Agent Loop。这样做的好处是分阶段拿收益，不一上来就推翻当前稳定链路。
 
 ### Q2：为什么不直接用 eino 的 react.Agent？自己写 agent loop 有什么好处？
 
-> 两个核心原因：**可观测性**和**可干预性**。
+> 我不会一上来就否定 Eino 的 react.Agent。它的优势是稳定、集成成本低，模型适配和工具调用能力都是现成的。
 >
-> 第一，可观测性。eino 的 react.Agent 运行时是个黑盒，我只能看到最终的文本输出，看不到它调用了哪些工具、参数是什么、返回了什么。但在 AIOps 场景下，用户需要看到「agent 正在查 Prometheus 指标」「agent 正在搜索日志」这样的过程反馈。没有可观测性，前端只能显示一个 loading，用户体验很差，而且生产问题也无法定位是哪个工具出了问题。
+> 真正的问题是：AIOps 场景需要更强的过程可观测性。用户不只想看到最终答案，也想知道系统正在查指标、查日志还是查知识库；工程上也需要知道哪个工具超时、哪个工具返回 degraded。
 >
-> 第二，可干预性。用户在排查故障时可能会中途纠正方向，比如「不是这个服务，是另一个」。eino 的 react.Agent 不支持运行中注入消息，agent 跑偏了只能等它跑完再重新问，浪费 token 和时间。
+> 所以我把演进拆成两步：第一步先用 Eino callback 做事件层，解决可观测性；第二步再评估是否需要自研 loop 来解决可干预性，比如 steering、beforeToolCall、afterToolCall。
 >
-> 我参考了 Pi Agent 的设计，实现了 `getSteeringMessages()` 钩子，在每轮工具执行后检查是否有用户注入的消息。同时通过 `beforeToolCall` / `afterToolCall` 钩子，可以在工具调用前做权限校验、参数修正，调用后做结果过滤、审计日志。
->
-> 当然这有代价——需要自己维护 agent loop 代码，处理工具重试和错误恢复。但核心逻辑不超过 300 行，复杂度可控。而且我复用了 eino 的模型适配和工具接口，没有重新造轮子。
+> 如果只需要知道工具调用过程，就不应该自研 loop；如果要在工具调用前动态审批、运行中注入用户纠偏，才值得进入自研 loop 的阶段。
 
 ### Q3：你的事件流是怎么设计的？
 
-> 我定义了一套 AgentEvent 类型，覆盖 agent 的完整生命周期：agent_start/end、turn_start/end、message_start/update/end、tool_execution_start/end。每个事件携带结构化的 payload。
+> 我计划定义一套统一的 AgentEvent，第一阶段先覆盖 model_start/model_end、tool_call_start/tool_call_end、text_delta、error 等关键事件。每个事件都带 trace_id、事件类型、工具名、耗时、错误和摘要 payload。
 >
-> 前端通过 SSE 订阅这个事件流。当前端收到 `tool_execution_start` 事件时，显示「正在查询 Prometheus 告警」；收到 `text_delta` 时，逐字显示 agent 的推理文本；收到 `tool_execution_end` 时，显示工具返回的摘要。
+> SSE 侧不替换现有 `message/done` 协议，而是新增 `agent_event`。这样老客户端仍然能看到最终回答，新客户端可以额外展示过程状态。
 >
-> 这个设计参考了 Pi Agent 的 AgentEvent 联合类型。Pi 用 TypeScript 的 discriminated union 实现了 10 种事件类型，我用 Go 的 struct + string enum 做了等价实现。
+> 这个设计参考了 Pi Agent 的事件驱动思路，但不会照搬它的完整 runtime。OpsCaption 的重点是先把 AIOps 的过程变得可观察、可审计。
 
 ### Q4：ProgressiveDisclosure 是什么？解决了什么问题？
 
@@ -536,7 +526,7 @@ sr, err := runner.Stream(ctx, userMessage, compose.WithCallbacks(
 > ContextEngine 解决的是 context window 预算管理问题。一个 agent 的 context 由多部分组成：历史对话、记忆、检索到的文档、工具输出。如果不做预算控制，很容易超出模型的 context window 限制。
 >
 > 我设计了 ContextProfile 和 ContextBudget 机制：
-> - ContextProfile 按场景（chat / aiops / reporter）定义不同的预算分配策略
+> - ContextProfile 按场景（chat / aiops）定义不同的预算分配策略
 > - ContextBudget 给每部分（history / memory / docs / tools）分配 token 上限
 > - Assembler 按预算裁剪，优先保留高相关性的内容
 > - ContextTrace 记录装配细节，方便调试
@@ -551,11 +541,238 @@ sr, err := runner.Stream(ctx, userMessage, compose.WithCallbacks(
 >
 > 第二，**事件驱动的设计**。Pi 用 AgentEvent 联合类型覆盖了 agent 的完整生命周期，所有 UI 组件都通过订阅事件来更新。这个模式让同一个 agent loop 可以服务 TUI、Web、聊天 app 等多种前端。
 >
-> 第三，**黑盒 vs 白盒的 trade-off**。Pi 自己实现 agent loop 是因为它要支持 SDK 嵌入（OpenClaw 就是用它的 SDK）。这让我意识到：选择黑盒还是白盒，取决于你是否需要控制 loop 的每个环节。对于 AIOps 这种需要高可观测性和可干预性的场景，白盒是必要的。
+> 第三，**黑盒 vs 白盒的 trade-off**。Pi 自己实现 agent loop 是因为它要支持 SDK 嵌入（OpenClaw 就是用它的 SDK）。这让我意识到：选择黑盒还是白盒，取决于你是否需要控制 loop 的每个环节。对于 AIOps 这种需要高可观测性和可干预性的场景，白盒值得评估，但要分阶段验证。
+
+> 但我不会把“白盒”理解成第一步就重写全部 loop。更稳的路径是先把黑盒外面包出统一事件层；当事件层不能满足 steering 和工具拦截时，再把 loop 自研化。
 
 ---
 
-## 九、参考源码
+## 九、量化设计提升与意义
+
+### 9.1 量化框架：四个维度
+
+```
+                    改进前（黑盒）              改进后（事件驱动）
+                    ─────────────              ─────────────────
+可观测性            最终文本                   全链路事件
+用户感知            等 30s → 一段文字           看到实时进度
+排查效率            看日志猜                    事件链定位
+工具健康            无数据                      耗时/错误率/成功率
+```
+
+### 9.2 核心指标及测量方法
+
+#### 维度一：可观测性 → MTTR（平均故障定位时间）
+
+| 指标 | 改进前 | 改进后 | 测量方法 |
+|---|---|---|---|
+| 工具失败定位时间 | 需查服务端日志，平均 5-15 分钟 | 事件流直接展示哪个工具失败、错误原因，< 30 秒 | 从工具失败到运维人员确认原因的时间 |
+| 工具调用链路可见性 | 0%（黑盒） | 100%（每个 tool_call_start/end 都有事件） | 是否能在不看日志的情况下知道 agent 调了哪些工具 |
+| 耗时瓶颈定位 | 无法定位，只知道「整体慢」 | 每个工具调用有独立耗时，可精确定位慢在哪 | 从「用户反馈慢」到「定位到慢工具」的时间 |
+
+**具体测量方式：**
+
+```go
+// 每个工具调用事件自动携带耗时
+type ToolCallEndPayload struct {
+    ToolName  string        `json:"tool_name"`
+    Duration  time.Duration `json:"duration_ms"`
+    Success   bool          `json:"success"`
+    Error     string        `json:"error,omitempty"`
+    Summary   string        `json:"summary,omitempty"`  // 结果摘要，不暴露原始数据
+}
+```
+
+前后对比实验：
+- 准备 10 个真实 AIOps 问题（告警排查、日志分析、知识检索）
+- 让 3 个运维人员分别在黑盒模式和事件模式下排查
+- 记录：定位时间、操作步骤数、是否需要看服务端日志
+
+#### 维度二：用户体验 → 感知等待时间 + 信任度
+
+| 指标 | 改进前 | 改进后 | 测量方法 |
+|---|---|---|---|
+| 感知等待时间 | 30s 黑盒等待（用户焦虑） | 30s 实时反馈（用户知道在干嘛） | 用户主观问卷：「你觉得等了多久？」 |
+| 中途放弃率 | 高（用户不知道在干嘛，刷新页面） | 低（看到进度，愿意等） | SSE 连接中断率（非网络原因） |
+| 重复提问率 | 高（不知道第一次查了什么，换个问法再问） | 低（知道查了什么，直接补充信息） | 同一 session 内相似 query 的重复次数 |
+| 信任度 | 低（「AI 到底查没查？」） | 高（「它确实查了 Prometheus，但没数据」） | 用户问卷 + 用户是否采纳 AI 建议的比例 |
+
+**心理学依据：** 进度条效应。研究表明，有进度反馈的等待，用户感知时间比实际时间短 30-40%。即使总耗时不变，用户体验显著提升。
+
+#### 维度三：工程效率 → 问题排查成本
+
+| 指标 | 改进前 | 改进后 | 测量方法 |
+|---|---|---|---|
+| 线上问题排查步骤 | 5-8 步（看日志 → 猜 → 重试 → 再看日志） | 1-2 步（看事件流 → 定位） | 排查 checklist 步骤数 |
+| 工具健康度可见性 | 无 | 有（成功率、P50/P95/P99 耗时） | 事件聚合后的工具健康 dashboard |
+| 回归测试覆盖 | 只测最终输出 | 可测中间事件（工具调用序列是否正确） | 测试用例中验证事件序列的比例 |
+| Token 浪费可追踪 | 无法追踪 | 每个工具调用的 token 消耗可统计 | 事件中携带 token usage |
+
+**具体测量方式：**
+
+```go
+// 事件聚合后可生成工具健康报告
+type ToolHealthReport struct {
+    ToolName       string
+    TotalCalls     int
+    SuccessRate    float64       // 成功率
+    P50Duration    time.Duration // P50 耗时
+    P95Duration    time.Duration // P95 耗时
+    P99Duration    time.Duration // P99 耗时
+    CommonErrors   []string      // 常见错误
+    LastFailure    time.Time     // 最近一次失败
+}
+```
+
+#### 维度四：成本优化 → Token 节省 + 重试减少
+
+| 指标 | 改进前 | 改进后 | 测量方法 |
+|---|---|---|---|
+| 工具 schema token 消耗 | 所有工具 schema 都塞进 context | ProgressiveDisclosure 按需暴露 | 对比两种模式下的 input token 数 |
+| 无效重试次数 | 高（不知道哪个工具失败，整体重试） | 低（精确知道失败工具，针对性重试） | session 内的重试次数 |
+| 上下文溢出率 | 被动截断，可能丢关键信息 | ContextEngine 主动预算管理 | context window 超限触发次数 |
+
+**量化计算：**
+
+```
+假设：
+- 平均每次查询调用 3 个工具
+- 每个工具 schema 占 500 tokens
+- ProgressiveDisclosure 平均减少 40% 的工具暴露
+- DeepSeek V3 输入价格：¥1 / 1M tokens
+
+单次查询节省：
+  3 tools × 500 tokens × 40% = 600 tokens
+  ¥0.0006 / 次
+
+日均 1000 次查询：
+  600,000 tokens / 天 = ¥0.6 / 天
+  年化 ¥219（token 节省本身不大）
+
+但真正的节省在重试减少：
+  假设黑盒模式下 20% 的查询需要重试（不知道结果对不对）
+  事件模式下重试率降到 5%
+  每次重试成本 ≈ ¥0.5（3 工具调用 + LLM 推理）
+  日节省：1000 × 15% × ¥0.5 = ¥75 / 天
+  年化 ¥27,375
+```
+
+### 9.3 意义：不止是技术优化
+
+#### 对产品层面
+
+| 意义 | 说明 |
+|---|---|
+| **从工具到伙伴** | 黑盒模式下用户把 AI 当「魔法盒子」，事件模式下用户把 AI 当「可信赖的助手」 |
+| **降低使用门槛** | 运维人员不需要理解 AI 的工作原理，只需要看事件流就知道它在干嘛 |
+| **支撑高级功能** | steering（中途干预）、工具拦截（权限校验）等功能依赖事件层作为基础 |
+
+#### 对工程层面
+
+| 意义 | 说明 |
+|---|---|
+| **可观测性是基础设施** | 事件层不是「锦上添花」，是 agent 系统的「日志系统」。没有它，线上问题无法排查 |
+| **解耦执行与展示** | 事件层让前端和后端独立演进。后端换执行引擎（eino → 自研），前端不需要改 |
+| **支撑评测体系** | RAG 评测、工具评测、端到端评测都需要事件数据。没有事件层，评测只能看最终结果 |
+
+#### 对业务层面
+
+| 意义 | 说明 |
+|---|---|
+| **MTTR 降低** | 运维故障定位时间从分钟级降到秒级，直接影响 SLA |
+| **运维效率提升** | 同样的人力可以处理更多告警，降低 oncall 压力 |
+| **数据驱动优化** | 工具健康度数据可以指导优化方向：哪个工具最慢？哪个最不稳定？ |
+
+### 9.4 面试中的量化表达
+
+**一句话版本：**
+
+> 这个设计的核心价值是把 agent 从黑盒变成白盒。量化来说：工具失败定位时间从 5-15 分钟降到 30 秒内；用户感知等待时间通过进度反馈降低 30-40%；工具健康度从不可见变成可监控（成功率、P95 耗时、常见错误）。同时 ProgressiveDisclosure 和 ContextEngine 的 token 优化，预计年化节省 ¥27,000+ 的重试成本。
+
+**如果面试官问「怎么证明这些数字？」：**
+
+> P0 交付后我会做一组对照实验：准备 10 个真实 AIOps 问题，让运维人员分别在黑盒模式和事件模式下排查，记录定位时间、操作步骤数、是否需要看服务端日志。工具健康度数据通过事件聚合自动产出，不需要人工统计。
+
+---
+
+## 十、人话版本
+
+### 这个项目在干嘛？
+
+OpsCaptain 是一个「AI 运维助手」。运维人员用自然语言问它问题，比如「支付服务最近有没有告警」「帮我查一下昨天的慢查询日志」，它会自动调用 Prometheus、日志系统、知识库等工具，把结果汇总成回答。
+
+### 现在的问题是什么？
+
+现在 AI 调用工具的过程是个黑盒。用户问了一个问题，等 30 秒，看到一段回答。但这 30 秒里 AI 干了什么？查了哪些系统？哪个查询超时了？哪个返回了错误？——全都看不到。
+
+就像你请了一个助手去帮你查资料，他出去了半小时回来给你一份报告，但你不知道他去了哪些地方、遇到了什么困难、是不是走错了路。
+
+### 参考 Pi Agent 学到了什么？
+
+Pi 是一个开源的编程助手，它的设计很聪明：AI 的每一步操作（思考、调用工具、工具返回结果）都会发出一个结构化事件，就像一个实时播报员。前端（网页、终端）订阅这些事件，就能实时显示「AI 正在查 Prometheus」「AI 正在搜索日志」「查完了，耗时 2 秒」。
+
+### 打算怎么做？
+
+**不急着大改。** 分三步走：
+
+1. **第一步（1 周）**：在现有代码上加一层「事件播报」。AI 调用工具时，自动发出事件，前端能看到过程。这一步不改 AI 的执行逻辑，风险很低。
+
+2. **第二步（2-3 周）**：让前端真正消费这些事件，展示「正在查 XX」「耗时 XX 秒」「成功/失败」。同时验证：光有事件播报够不够？还需不需要在 AI 执行过程中让用户干预？
+
+3. **第三步（视情况）**：如果发现事件播报不够（比如需要在工具执行前做权限校验、需要让用户中途纠正方向），再考虑自己实现 AI 的执行循环。这一步工程量大，必须灰度验证。
+
+### 核心判断标准
+
+- **只想看到过程** → 第一步就够了
+- **想在过程中干预** → 需要第三步
+- **想在工具执行前拦截** → 需要第三步
+
+---
+
+## 十一、给面试官解释的版本
+
+### 一句话概括
+
+> 我参考了 Pi Agent 的事件驱动设计，用分阶段的方式解决 AIOps agent 的可观测性问题，而不是一上来就重写执行引擎。
+
+### 完整版本（3 分钟）
+
+> OpsCaptain 是一个 AIOps 智能运维助手，有两条执行链路：Chat 用 eino 的 ReAct Agent，AIOps 用 Plan-Execute-Replan。
+>
+> 我在实践中发现一个核心问题：**agent 的执行过程不可观测**。用户问一个问题，系统可能调用了 3-4 个工具（查指标、查日志、查知识库），但用户只能看到最终答案，看不到中间过程。这对 AIOps 场景是不够的——运维人员需要知道系统在查什么、查到了什么、哪个环节出了问题。
+>
+> 我研究了 Pi Agent 的架构，它用事件驱动的方式解决了这个问题：agent 的每一步（模型调用、工具调用、工具返回）都会发射结构化事件，前端订阅事件流就能实时展示过程。
+>
+> 但我没有照搬 Pi 的做法。Pi 自己实现了完整的 agent loop，这在它的场景（编程助手、需要 SDK 嵌入）是合理的。但 OpsCaptain 的第一步需求只是「看到过程」，不需要控制 loop 的每个环节。
+>
+> 所以我把演进拆成了四个阶段：
+>
+> - **P0**：定义 AgentEvent 协议，用 eino 的 callback 机制把工具调用过程转成事件。不改执行逻辑，1 周内可以交付。
+> - **P1**：前端消费事件，展示工具调用状态。验证事件设计是否合理。
+> - **P2**：做 steering 和工具拦截的 spike，验证是否真的需要自研 loop。
+> - **P3**：如果 P2 证明需要，再自研 loop 的 shadow path，灰度对比。
+>
+> 这个方案的核心判断是：**可观测性和可干预性是两个独立的问题，应该分阶段解决。** 第一步用 callback 就能拿可观测性，不需要自研 loop。只有当 callback 无法满足 steering 和工具拦截需求时，才值得进入自研 loop 阶段。
+>
+> 我还保留了 OpsCaptain 的差异化设计：ProgressiveDisclosure（分层工具暴露，减少 token 浪费）和 ContextEngine（context window 预算管理），这些是 Pi Agent 没有的能力。
+
+### 如果面试官追问
+
+**Q: 为什么不用现成的 observability 方案（如 LangSmith、LangFuse）？**
+
+> 两个原因。第一，这些方案主要面向通用 LLM 应用，对 AIOps 场景的工具调用（Prometheus 查询、日志搜索）没有针对性的展示。第二，我希望事件层和业务逻辑解耦——AgentEvent 是业务语义的（「正在查告警」），不是技术语义的（「tool call #3 returned」）。这样前端可以直接展示有意义的信息，不需要额外映射。
+
+**Q: 你说的 Plan-Execute-Replan 和 ReAct 有什么区别？**
+
+> ReAct 是「思考-行动-观察」的单轮循环，适合简单的工具调用场景。Plan-Execute-Replan 是「先制定计划，再逐步执行，执行中发现问题重新规划」，适合复杂的多步骤 AIOps 分析。比如「分析支付服务最近 1 小时的异常」，ReAct 可能查一次指标就回答了，Plan-Execute-Replan 会先列出需要检查的维度（指标、日志、依赖服务），逐个检查，发现异常后再深入排查。
+
+**Q: 自研 loop 的风险在哪里？**
+
+> 最大的风险不在 loop 本身（核心逻辑 300 行左右），而在需要把现有的生产能力重新挂回去：ContextEngine 的预算管理、ProgressiveDisclosure 的工具筛选、MemoryService 的记忆持久化、错误降级、session 锁、输出过滤、审计日志。这些在 eino 的 react.Agent 里是框架自动处理的，自研 loop 需要自己接。所以我把自研 loop 放在 P3，并且要求 shadow run 对比，不直接替换线上。
+
+---
+
+## 十二、参考源码
 
 ### Pi Agent 核心文件
 
