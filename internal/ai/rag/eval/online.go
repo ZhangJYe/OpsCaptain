@@ -39,6 +39,10 @@ type QuerySummary struct {
 }
 
 func RunQueryEval(ctx context.Context, exec QueryExecutor, cases []EvalCase, ks []int) (QuerySummary, []QueryCaseResult, error) {
+	return RunQueryEvalWithOpts(ctx, exec, cases, ks, defaultRunOptions())
+}
+
+func RunQueryEvalWithOpts(ctx context.Context, exec QueryExecutor, cases []EvalCase, ks []int, opts RunOptions) (QuerySummary, []QueryCaseResult, error) {
 	if exec == nil {
 		return QuerySummary{}, nil, fmt.Errorf("query executor is nil")
 	}
@@ -48,81 +52,68 @@ func RunQueryEval(ctx context.Context, exec QueryExecutor, cases []EvalCase, ks 
 	}
 
 	results := make([]QueryCaseResult, 0, len(cases))
-	summary := QuerySummary{
-		Summary: Summary{
-			Cases:         len(cases),
-			AvgRecallAtK:  make(map[int]float64, len(ks)),
-			HitRateAtK:    make(map[int]float64, len(ks)),
-			FullRecallAtK: make(map[int]int, len(ks)),
-		},
+	qSummary := QuerySummary{
+		Summary: newSummary(len(cases), ks),
 	}
 
 	for _, evalCase := range cases {
 		rankedDocs, metrics, err := exec(ctx, evalCase.Query)
 		if err != nil {
+			if opts.ContinueOnError {
+				qSummary.Failures = append(qSummary.Failures, CaseFailure{
+					CaseID: evalCase.ID,
+					Error:  err.Error(),
+				})
+				qSummary.Failed++
+				continue
+			}
 			return QuerySummary{}, nil, fmt.Errorf("case %s query failed: %w", evalCase.ID, err)
 		}
+
 		rankedIDs := uniqueOrderedRetrievedIDs(rankedDocs)
+		caseResult := buildCaseResult(evalCase, rankedIDs, ks)
+		accumulateMetrics(&qSummary.Summary, caseResult, evalCase, ks)
+		qSummary.Succeeded++
 
-		result := QueryCaseResult{
-			CaseResult: CaseResult{
-				CaseID:      evalCase.ID,
-				Query:       evalCase.Query,
-				RelevantIDs: append([]string(nil), evalCase.RelevantIDs...),
-				RankedIDs:   rankedIDs,
-				HitIDsByK:   make(map[int][]string, len(ks)),
-				RecallAtK:   make(map[int]float64, len(ks)),
-			},
-			Metrics: metrics,
-		}
+		accumulateQueryMetrics(&qSummary, metrics, rankedIDs)
 
-		for _, k := range ks {
-			hits := hitIDs(evalCase.RelevantIDs, rankedIDs, k)
-			recall := computeRecall(evalCase.RelevantIDs, hits)
-			result.HitIDsByK[k] = hits
-			result.RecallAtK[k] = recall
-			summary.AvgRecallAtK[k] += recall
-			if len(hits) > 0 {
-				summary.HitRateAtK[k]++
-			}
-			if len(hits) == len(uniqueIDs(evalCase.RelevantIDs)) && len(evalCase.RelevantIDs) > 0 {
-				summary.FullRecallAtK[k]++
-			}
-		}
-
-		summary.AvgInitLatencyMs += float64(metrics.InitLatencyMs)
-		summary.AvgRewriteLatencyMs += float64(metrics.RewriteLatencyMs)
-		summary.AvgRetrieveLatencyMs += float64(metrics.RetrieveLatencyMs)
-		summary.AvgRerankLatencyMs += float64(metrics.RerankLatencyMs)
-		summary.AvgTotalLatencyMs += float64(metrics.TotalLatencyMs)
-		if metrics.CacheHit {
-			summary.CacheHitRate++
-		}
-		if len(rankedIDs) == 0 {
-			summary.EmptyRate++
-		}
-
-		results = append(results, result)
+		results = append(results, QueryCaseResult{
+			CaseResult: caseResult,
+			Metrics:    metrics,
+		})
 	}
 
-	if len(cases) == 0 {
-		return summary, results, nil
-	}
+	finalizeQuerySummary(&qSummary, ks)
+	return qSummary, results, nil
+}
 
-	caseCount := float64(len(cases))
-	for _, k := range ks {
-		summary.AvgRecallAtK[k] /= caseCount
-		summary.HitRateAtK[k] /= caseCount
+func accumulateQueryMetrics(qSummary *QuerySummary, metrics QueryMetrics, rankedIDs []string) {
+	qSummary.AvgInitLatencyMs += float64(metrics.InitLatencyMs)
+	qSummary.AvgRewriteLatencyMs += float64(metrics.RewriteLatencyMs)
+	qSummary.AvgRetrieveLatencyMs += float64(metrics.RetrieveLatencyMs)
+	qSummary.AvgRerankLatencyMs += float64(metrics.RerankLatencyMs)
+	qSummary.AvgTotalLatencyMs += float64(metrics.TotalLatencyMs)
+	if metrics.CacheHit {
+		qSummary.CacheHitRate++
 	}
-	summary.AvgInitLatencyMs /= caseCount
-	summary.AvgRewriteLatencyMs /= caseCount
-	summary.AvgRetrieveLatencyMs /= caseCount
-	summary.AvgRerankLatencyMs /= caseCount
-	summary.AvgTotalLatencyMs /= caseCount
-	summary.CacheHitRate /= caseCount
-	summary.EmptyRate /= caseCount
+	if len(rankedIDs) == 0 {
+		qSummary.EmptyRate++
+	}
+}
 
-	return summary, results, nil
+func finalizeQuerySummary(qSummary *QuerySummary, ks []int) {
+	finalizeSummary(&qSummary.Summary, ks)
+	if qSummary.Succeeded == 0 {
+		return
+	}
+	caseCount := float64(qSummary.Succeeded)
+	qSummary.AvgInitLatencyMs /= caseCount
+	qSummary.AvgRewriteLatencyMs /= caseCount
+	qSummary.AvgRetrieveLatencyMs /= caseCount
+	qSummary.AvgRerankLatencyMs /= caseCount
+	qSummary.AvgTotalLatencyMs /= caseCount
+	qSummary.CacheHitRate /= caseCount
+	qSummary.EmptyRate /= caseCount
 }
 
 func SchemaDocsToRetrievedDocs(docs []*schema.Document) []RetrievedDoc {

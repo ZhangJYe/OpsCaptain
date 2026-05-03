@@ -6,7 +6,7 @@ type RetrievedDoc struct {
 	ID      string  `json:"id"`
 	Title   string  `json:"title,omitempty"`
 	Content string  `json:"content,omitempty"`
-	Score   float64 `json:"score,omitempty"`
+	Score   float64 `json:"score"`
 }
 
 type EvalCase struct {
@@ -29,9 +29,25 @@ type CaseResult struct {
 	RecallAtK   map[int]float64  `json:"recall_at_k"`
 }
 
+type CaseFailure struct {
+	CaseID string `json:"case_id"`
+	Error  string `json:"error"`
+}
+
 type Summary struct {
 	Cases         int             `json:"cases"`
+	Succeeded     int             `json:"succeeded"`
+	Failed        int             `json:"failed"`
 	AvgRecallAtK  map[int]float64 `json:"avg_recall_at_k"`
 	HitRateAtK    map[int]float64 `json:"hit_rate_at_k"`
 	FullRecallAtK map[int]int     `json:"full_recall_at_k"`
+	Failures      []CaseFailure   `json:"failures,omitempty"`
+}
+
+type RunOptions struct {
+	ContinueOnError bool
+}
+
+func defaultRunOptions() RunOptions {
+	return RunOptions{ContinueOnError: false}
 }

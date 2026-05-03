@@ -13,10 +13,18 @@ import (
 	"SuperBizAgent/internal/ai/runtime"
 )
 
+// MultiAgentRunner executes queries through the supervisor/triage/reporter pipeline.
+//
+// Deprecated: This runner depends on the chat_multi_agent pipeline which has been
+// superseded by the Chat Pipeline (ReAct Agent) and Plan-Execute-Replan paths.
+// Use the active agent pipelines for new evaluation work.
 type MultiAgentRunner struct {
 	rt *runtime.Runtime
 }
 
+// NewMultiAgentRunner creates a new MultiAgentRunner.
+//
+// Deprecated: See MultiAgentRunner deprecation notice.
 func NewMultiAgentRunner() (*MultiAgentRunner, error) {
 	rt := runtime.New()
 	for _, agent := range []runtime.Agent{
@@ -34,7 +42,8 @@ func NewMultiAgentRunner() (*MultiAgentRunner, error) {
 	return &MultiAgentRunner{rt: rt}, nil
 }
 
-func (r *MultiAgentRunner) Run(query string) (*RunResult, error) {
+// Run executes a query through the multi-agent pipeline.
+func (r *MultiAgentRunner) Run(ctx context.Context, query string) (*RunResult, error) {
 	task := protocol.NewRootTask("eval-session", query, supervisor.AgentName)
 	task.Input = map[string]any{
 		"raw_query":     query,
@@ -42,7 +51,7 @@ func (r *MultiAgentRunner) Run(query string) (*RunResult, error) {
 		"entrypoint":    "eval",
 	}
 
-	result, err := r.rt.Dispatch(context.Background(), task)
+	result, err := r.rt.Dispatch(ctx, task)
 	if err != nil {
 		return nil, err
 	}

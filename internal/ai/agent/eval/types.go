@@ -1,6 +1,8 @@
-// Package eval provides evaluation infrastructure for the multi-agent pipeline.
+// Package eval provides evaluation infrastructure for the agent pipeline.
 // It supports Golden Case regression tests, LLM-as-Judge quality scoring, and A/B comparison.
 package eval
+
+import "context"
 
 // DiagCase represents a single diagnostic test case with expected outcomes.
 type DiagCase struct {
@@ -34,9 +36,9 @@ type JudgeResult struct {
 	Delta           DiagScores `json:"delta"`
 }
 
-// Runner executes a diagnostic query through the multi-agent pipeline and returns the report.
+// Runner executes a diagnostic query and returns the report.
 type Runner interface {
-	Run(query string) (*RunResult, error)
+	Run(ctx context.Context, query string) (*RunResult, error)
 }
 
 // RunResult holds the output of a single Runner execution.
