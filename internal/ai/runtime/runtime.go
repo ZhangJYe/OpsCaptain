@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"SuperBizAgent/internal/ai/agent/contracts"
 	"SuperBizAgent/internal/consts"
 	"context"
 	"errors"
@@ -164,6 +165,7 @@ func (r *Runtime) Dispatch(ctx context.Context, task *protocol.TaskEnvelope) (*p
 		}
 	}
 	result = normalizeTaskResult(task, result, startedAt)
+	result = r.enforceContractIfNeeded(ctx, result)
 	span.SetAttributes(
 		attribute.String("task.status", string(taskStatusForResult(result.Status))),
 		attribute.String("result.status", string(result.Status)),
@@ -441,4 +443,19 @@ func taskStatusForResult(status protocol.ResultStatus) protocol.TaskStatus {
 
 func isDispatchTimeout(err error) bool {
 	return errors.Is(err, context.DeadlineExceeded)
+}
+
+func (r *Runtime) enforceContractIfNeeded(ctx context.Context, result *protocol.TaskResult) *protocol.TaskResult {
+	if result == nil {
+		return nil
+	}
+	v, err := g.Cfg().Get(ctx, "harness.validation.enabled")
+	if err == nil && !v.Bool() {
+		return result
+	}
+	ev, err := g.Cfg().Get(ctx, "harness.validation.contract_enforce")
+	if err == nil && !ev.Bool() {
+		return result
+	}
+	return contracts.EnforceContract(result)
 }

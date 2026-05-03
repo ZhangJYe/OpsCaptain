@@ -46,6 +46,38 @@ func (a *replaySpecialist) Handle(_ context.Context, task *protocol.TaskEnvelope
 	}, nil
 }
 
+type configurableSpecialist struct {
+	name      string
+	status    protocol.ResultStatus
+	summary   string
+	evidence  []protocol.EvidenceItem
+	degradeRsn string
+}
+
+func (a *configurableSpecialist) Name() string {
+	return a.name
+}
+
+func (a *configurableSpecialist) Capabilities() []string {
+	return []string{"replay-test"}
+}
+
+func (a *configurableSpecialist) Handle(_ context.Context, task *protocol.TaskEnvelope) (*protocol.TaskResult, error) {
+	result := &protocol.TaskResult{
+		TaskID:     task.TaskID,
+		Agent:      a.name,
+		Status:     a.status,
+		Summary:    a.summary,
+		Confidence: 0.8,
+		Evidence:   a.evidence,
+	}
+	if a.status == protocol.ResultStatusDegraded {
+		result.DegradationReason = a.degradeRsn
+		result.Confidence = 0.3
+	}
+	return result, nil
+}
+
 func TestSupervisorReplayCases(t *testing.T) {
 	cases := []struct {
 		name            string
@@ -107,5 +139,99 @@ func TestSupervisorReplayCases(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestSupervisorReplayDegradedSpecialist(t *testing.T) {
+	rt := runtime.New()
+	for _, agent := range []runtime.Agent{
+		New(),
+		triage.New(),
+		reporter.New(),
+		&configurableSpecialist{
+			name:    metrics.AgentName,
+			status:  protocol.ResultStatusSucceeded,
+			summary: "no active alerts",
+			evidence: []protocol.EvidenceItem{
+				{SourceType: "prometheus", Title: "Metrics OK", Snippet: "no alerts"},
+			},
+		},
+		&configurableSpecialist{
+			name:       logs.AgentName,
+			status:     protocol.ResultStatusDegraded,
+			summary:    "log tool unavailable",
+			degradeRsn: "MCP connection refused",
+		},
+		&configurableSpecialist{
+			name:    knowledge.AgentName,
+			status:  protocol.ResultStatusSucceeded,
+			summary: "found 2 SOP documents",
+			evidence: []protocol.EvidenceItem{
+				{SourceType: "knowledge_base", Title: "SOP-001", Snippet: "check logs first"},
+			},
+		},
+	} {
+		if err := rt.Register(agent); err != nil {
+			t.Fatalf("register %s: %v", agent.Name(), err)
+		}
+	}
+
+	task := protocol.NewRootTask("session-degraded", "payment service 日志报错排查", AgentName)
+	result, err := rt.Dispatch(context.Background(), task)
+	if err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	if result == nil || strings.TrimSpace(result.Summary) == "" {
+		t.Fatalf("expected non-empty result summary, got %#v", result)
+	}
+	if !strings.Contains(result.Summary, "### 指标") && !strings.Contains(result.Summary, "### 日志") {
+		t.Fatalf("expected metrics or logs section in summary, got:\n%s", result.Summary)
+	}
+	if !strings.Contains(result.Summary, "### 知识库") {
+		t.Fatalf("expected knowledge section in summary, got:\n%s", result.Summary)
+	}
+}
+
+func TestSupervisorReplayEmptyKnowledge(t *testing.T) {
+	rt := runtime.New()
+	for _, agent := range []runtime.Agent{
+		New(),
+		triage.New(),
+		reporter.New(),
+		&configurableSpecialist{
+			name:    metrics.AgentName,
+			status:  protocol.ResultStatusSucceeded,
+			summary: "CPU normal",
+			evidence: []protocol.EvidenceItem{
+				{SourceType: "prometheus", Title: "CPU OK", Snippet: "50%"},
+			},
+		},
+		&configurableSpecialist{
+			name:    logs.AgentName,
+			status:  protocol.ResultStatusSucceeded,
+			summary: "no errors found",
+			evidence: []protocol.EvidenceItem{
+				{SourceType: "mcp_log", Title: "Log Search", Snippet: "0 errors"},
+			},
+		},
+		&configurableSpecialist{
+			name:       knowledge.AgentName,
+			status:     protocol.ResultStatusDegraded,
+			summary:    "no matching documents",
+			degradeRsn: "retriever returned 0 results for query",
+		},
+	} {
+		if err := rt.Register(agent); err != nil {
+			t.Fatalf("register %s: %v", agent.Name(), err)
+		}
+	}
+
+	task := protocol.NewRootTask("session-empty-kb", "unknown_error_code_999 排查", AgentName)
+	result, err := rt.Dispatch(context.Background(), task)
+	if err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	if result == nil || strings.TrimSpace(result.Summary) == "" {
+		t.Fatalf("expected non-empty result summary, got %#v", result)
 	}
 }

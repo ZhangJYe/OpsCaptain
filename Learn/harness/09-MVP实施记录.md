@@ -171,3 +171,85 @@ TestContract_ValidPrompt                      PASS (contracts_test.go)
 - ✅ 不改 TaskResult 结构体
 - ✅ 新增配置字段有合理默认值，不设也能跑
 - ⚠️ sonic 兼容性问题为环境预置问题，不影响本次交付的正确性
+
+---
+
+## 9. 第二轮补全（2026-05-03）
+
+> 本轮补全第一轮未完成的三项遗留事项，并新增 RAG 评测框架优化。
+
+### 9.1 交付清单
+
+#### 新增文件
+
+| 文件 | 行数 | 职责 |
+|---|---|---|
+| `internal/ai/tools/contract_test.go` | 120 | 工具契约测试 — 7 个 case |
+| `docs/agents/triage.md` | - | Triage Agent 接口文档 |
+| `docs/agents/metrics.md` | - | Metrics Agent 接口文档 |
+| `docs/agents/logs.md` | - | Logs Agent 接口文档 |
+| `docs/agents/knowledge.md` | - | Knowledge Agent 接口文档 |
+| `docs/agents/reporter.md` | - | Reporter Agent 接口文档 |
+| `docs/tools/query_prometheus_alerts.md` | - | Prometheus 告警查询工具文档 |
+| `docs/tools/query_internal_docs.md` | - | 内部文档检索工具文档 |
+| `docs/tools/query_log.md` | - | MCP 日志查询工具文档 |
+
+#### 修改文件
+
+| 文件 | 变更 |
+|---|---|
+| `internal/ai/runtime/runtime.go` | 集成 EnforceContract，新增 `enforceContractIfNeeded` 方法 |
+| `internal/ai/agent/supervisor/supervisor_replay_test.go` | 从 3 条扩充到 5 条 replay case |
+| `internal/ai/rag/eval/types.go` | 修复 Score omitempty，Summary 增加 Failures 追踪 |
+| `internal/ai/rag/eval/runner.go` | 提取公共 metrics 逻辑，支持 continue-on-error |
+| `internal/ai/rag/eval/online.go` | 复用 runner.go 公共逻辑，消除重复代码 |
+| `internal/ai/rag/eval/runner_test.go` | 测试从 1 个扩展到 17 个 |
+| `internal/ai/agent/eval/types.go` | Runner 接口加 context.Context |
+| `internal/ai/agent/eval/runner.go` | MultiAgentRunner 标记 Deprecated |
+| `internal/ai/cmd/rag_eval_cmd/main.go` | 修复 panic，新增 flag 支持 |
+
+### 9.2 遗留事项完成情况
+
+| 遗留事项 | 状态 | 说明 |
+|---|---|---|
+| `tools/contract_test.go` | ✅ 已完成 | 7 个测试覆盖工具名称、输出结构、Agent 契约匹配 |
+| Runtime 集成 EnforceContract | ✅ 已完成 | `enforceContractIfNeeded` 读取 config 开关，调用 `contracts.EnforceContract` |
+| Replay 用例扩充 | ✅ 已完成 | 新增 degraded specialist + empty knowledge 两个场景 |
+
+### 9.3 RAG 评测框架优化
+
+| 改进项 | 说明 |
+|---|---|
+| Continue-on-error | RunWithOpts / RunQueryEvalWithOpts 支持失败继续 |
+| Failure 追踪 | Summary 新增 Succeeded/Failed/Failures 字段 |
+| 测试覆盖 | 从 1 个扩展到 17 个，覆盖边界和错误场景 |
+| CLI flag | -cases, -ks, -r1-threshold, -r5-threshold, -continue-on-error |
+| Agent Runner | Runner 接口加 context.Context，MultiAgentRunner 标记废弃 |
+
+### 9.4 测试结果
+
+```
+=== tools/contract_test.go (7 tests) ===
+TestPrometheusAlertsQueryToolContract           PASS
+TestQueryInternalDocsToolContract               PASS
+TestGetLogMcpToolReturnsTools                   PASS
+TestPrometheusAlertsOutputStructure             PASS
+TestPrometheusAlertsOutputErrorStructure        PASS
+TestQueryInternalDocsOutputSuccessRequiresNoError PASS
+TestToolNamesMatchAgentContracts                PASS
+
+=== supervisor replay (5 tests) ===
+TestSupervisorReplayCases/alert-analysis-fanout PASS
+TestSupervisorReplayCases/knowledge-only        PASS
+TestSupervisorReplayCases/incident-analysis     PASS
+TestSupervisorReplayDegradedSpecialist          PASS
+TestSupervisorReplayEmptyKnowledge              PASS
+
+=== rag/eval (17 tests) ===
+全部 PASS（详见 runner_test.go）
+
+=== runtime (6 tests) ===
+全部 PASS（含 EnforceContract 集成）
+
+总计: 35/35 PASS
+```
