@@ -36,10 +36,19 @@ func Query(ctx context.Context, pool *RetrieverPool, query string) ([]*schema.Do
 		RewrittenQuery: query,
 	}
 
+	rr, acquisition, err := pool.GetOrCreate(ctx)
+	trace.CacheKey = acquisition.CacheKey
+	trace.CacheHit = acquisition.CacheHit
+	trace.InitFailureCached = acquisition.InitFailureCached
+	trace.InitLatencyMs = acquisition.InitLatencyMs
+	if err != nil {
+		return nil, trace, err
+	}
+
 	lexIdx := SharedBM25Index()
 	cfg := DefaultHybridConfig(ctx)
 
-	docs, hybridTrace, err := HybridRetrieve(ctx, pool, lexIdx, query, cfg)
+	docs, hybridTrace, err := HybridRetrieveWithRetriever(ctx, rr, lexIdx, query, cfg)
 	trace.Hybrid = &hybridTrace
 	trace.RetrieveLatencyMs = hybridTrace.DenseLatencyMs
 	trace.RawResultCount = hybridTrace.FusedCount
@@ -50,7 +59,6 @@ func Query(ctx context.Context, pool *RetrieverPool, query string) ([]*schema.Do
 	return docs, trace, nil
 }
 
-// QueryForEval 供评测命令使用，支持 rewrite / rerank 流程对比。
 func QueryForEval(ctx context.Context, pool *RetrieverPool, query string, wantRewrite, wantRerank bool) ([]*schema.Document, QueryTrace, error) {
 	if strings.TrimSpace(query) == "" {
 		return nil, QueryTrace{}, nil

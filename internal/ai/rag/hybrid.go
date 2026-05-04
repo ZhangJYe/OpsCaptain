@@ -71,6 +71,20 @@ func HybridRetrieve(
 	query string,
 	cfg HybridConfig,
 ) ([]*schema.Document, HybridTrace, error) {
+	rr, _, err := pool.GetOrCreate(ctx)
+	if err != nil {
+		return nil, HybridTrace{}, err
+	}
+	return HybridRetrieveWithRetriever(ctx, rr, lexicalIndex, query, cfg)
+}
+
+func HybridRetrieveWithRetriever(
+	ctx context.Context,
+	rr retrieverapi.Retriever,
+	lexicalIndex *BM25Index,
+	query string,
+	cfg HybridConfig,
+) ([]*schema.Document, HybridTrace, error) {
 	var trace HybridTrace
 
 	type denseResult struct {
@@ -87,11 +101,6 @@ func HybridRetrieve(
 	lexCh := make(chan lexResult, 1)
 
 	go func() {
-		rr, _, err := pool.GetOrCreate(ctx)
-		if err != nil {
-			denseCh <- denseResult{err: err}
-			return
-		}
 		start := time.Now()
 		docs, err := rr.Retrieve(ctx, query, retrieverapi.WithTopK(cfg.DenseTopK))
 		denseCh <- denseResult{docs: docs, err: err, latencyMs: time.Since(start).Milliseconds()}
