@@ -75,6 +75,15 @@ type StageTrace struct {
 	DroppedCount  int
 	Notes         []string
 	Retrieval     *RetrievalStageMetrics
+	Recall        *RecallStageMetrics
+}
+
+// RecallStageMetrics 召回阶段的指标
+type RecallStageMetrics struct {
+	CacheHits int
+	Embedded  int
+	LatencyMs int64
+	Degraded  bool
 }
 
 type RetrievalStageMetrics struct {
@@ -101,6 +110,10 @@ type ContextAssemblyTrace struct {
 	BudgetBefore      BudgetSnapshot
 	BudgetAfter       BudgetSnapshot
 	LatencyMs         int64
+	HistoryRecall     *HistoryRecallResult
+	ToolRecall        *ToolRecallResult
+	ToolRerank        *RerankOutcome
+	Intent            *IntentResult
 }
 
 type ContextPackage struct {

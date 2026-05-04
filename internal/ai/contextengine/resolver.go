@@ -2,6 +2,7 @@ package contextengine
 
 import (
 	"context"
+	"time"
 
 	"SuperBizAgent/utility/mem"
 
@@ -58,6 +59,16 @@ func (r *PolicyResolver) Resolve(ctx context.Context, req ContextRequest) Contex
 		base.MaxMemoryItems = loadPositiveInt(ctx, "context.aiops_max_memory_items", defaultAIOpsMaxMemoryItems)
 		base.Budget.HistoryTokens = 0
 		base.Budget.ToolTokens = 0
+	case "aiops_diagnosis":
+		base.Name = "aiops-diagnosis"
+		base.AllowHistory = true
+		base.AllowDocs = true
+		base.AllowToolResults = true
+		base.Staged = true
+		base.MaxHistoryMessages = loadPositiveInt(ctx, "context.chat_max_history_messages", defaultChatMaxHistoryMessages)
+		base.MaxMemoryItems = loadPositiveInt(ctx, "context.aiops_max_memory_items", defaultAIOpsMaxMemoryItems)
+		base.MaxToolItems = loadPositiveInt(ctx, "context.reporter_max_tool_items", defaultReporterMaxToolItems)
+		base.Budget.ToolTokens = int(float64(budget.MaxTokens) * 0.15)
 	case "reporter":
 		base.Name = "reporter-default"
 		base.AllowHistory = false
@@ -98,4 +109,50 @@ func normalizeUnitFloat(value, fallback float64) float64 {
 		return fallback
 	}
 	return value
+}
+
+func (r *PolicyResolver) ResolveByProfile(ctx context.Context, req ContextRequest, profileName string) ContextProfile {
+	tmpReq := req
+	tmpReq.Mode = profileName
+	return r.Resolve(ctx, tmpReq)
+}
+
+func LoadToolRerankConfig(ctx context.Context) *ToolRerankConfig {
+	cfg := &ToolRerankConfig{
+		Enabled:        false,
+		MinCandidates:  defaultToolRerankMinCandidates,
+		CandidateLimit: defaultToolRerankCandidateMax,
+		TimeoutMs:      int(defaultToolRerankTimeout / time.Millisecond),
+		CacheTTLSecs:   300,
+		Model:          "glm_chat_model_fast",
+	}
+	v, err := g.Cfg().Get(ctx, "context.tool_rerank.enabled")
+	if err == nil && !v.IsNil() {
+		cfg.Enabled = v.Bool()
+	}
+	v, err = g.Cfg().Get(ctx, "context.tool_rerank.min_candidates")
+	if err == nil && v.Int() > 0 {
+		cfg.MinCandidates = v.Int()
+	}
+	v, err = g.Cfg().Get(ctx, "context.tool_rerank.candidate_limit")
+	if err == nil && v.Int() > 0 {
+		cfg.CandidateLimit = v.Int()
+	}
+	v, err = g.Cfg().Get(ctx, "context.tool_rerank.timeout_ms")
+	if err == nil && v.Int() > 0 {
+		cfg.TimeoutMs = v.Int()
+	}
+	v, err = g.Cfg().Get(ctx, "context.tool_rerank.cache_ttl_seconds")
+	if err == nil && v.Int() > 0 {
+		cfg.CacheTTLSecs = v.Int()
+	}
+	v, err = g.Cfg().Get(ctx, "context.tool_rerank.model")
+	if err == nil && v.String() != "" {
+		cfg.Model = v.String()
+	}
+	v, err = g.Cfg().Get(ctx, "context.tool_rerank.profiles")
+	if err == nil && v.Strings() != nil {
+		cfg.Profiles = v.Strings()
+	}
+	return cfg
 }

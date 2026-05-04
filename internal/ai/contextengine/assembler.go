@@ -13,25 +13,37 @@ import (
 )
 
 type Assembler struct {
-	resolver *PolicyResolver
-	now      func() time.Time
+	resolver   *PolicyResolver
+	now        func() time.Time
+	historyRec *HistoryRecaller
+	toolRec    *ToolRecaller
+	toolReranker *ToolReranker
+	intentRec  *IntentRecognizer
 }
 
 func NewAssembler() *Assembler {
 	return &Assembler{
-		resolver: NewPolicyResolver(),
-		now:      time.Now,
+		resolver:   NewPolicyResolver(),
+		now:        time.Now,
+		historyRec: NewHistoryRecaller(),
+		toolRec:    NewToolRecaller(),
 	}
+}
+
+func (a *Assembler) WithToolReranker(r *ToolReranker) *Assembler {
+	a.toolReranker = r
+	return a
+}
+
+func (a *Assembler) WithIntentRecognizer(r *IntentRecognizer) *Assembler {
+	a.intentRec = r
+	return a
 }
 
 func (a *Assembler) Assemble(ctx context.Context, req ContextRequest, history []*schema.Message) (*ContextPackage, error) {
 	start := a.now()
 	profile := a.resolver.Resolve(ctx, req)
-	pkg := &ContextPackage{
-		Request: req,
-		Profile: profile,
-		Query:   strings.TrimSpace(req.Query),
-	}
+
 	trace := ContextAssemblyTrace{
 		Profile: profile.Name,
 		BudgetBefore: BudgetSnapshot{
@@ -42,8 +54,29 @@ func (a *Assembler) Assemble(ctx context.Context, req ContextRequest, history []
 		},
 	}
 
+	if a.intentRec != nil {
+		intentResult := a.intentRec.Recognize(ctx, req.Query)
+		trace.Intent = &intentResult
+		if !intentResult.Degraded && intentResult.Type != IntentUnknown {
+			overridden := a.resolver.ResolveByProfile(ctx, req, ProfileForIntent(intentResult.Type))
+			if overridden.Name != "" {
+				profile = overridden
+				trace.Profile = profile.Name
+			}
+		}
+	}
+
+	pkg := &ContextPackage{
+		Request: req,
+		Profile: profile,
+		Query:   strings.TrimSpace(req.Query),
+	}
+
 	if profile.AllowHistory && len(history) > 0 {
-		selectedHistory, droppedHistory, usedHistory, historyNotes := selectHistory(history, profile)
+		recallResult := a.historyRec.Recall(ctx, req.Query, history, profile.MaxHistoryMessages)
+		trace.HistoryRecall = &recallResult
+
+		selectedHistory, droppedHistory, usedHistory, historyNotes := selectHistory(recallResult.Messages, profile)
 		pkg.HistoryMessages = selectedHistory
 		trace.SourcesConsidered += len(history)
 		trace.SourcesSelected += len(selectedHistory)
@@ -54,6 +87,12 @@ func (a *Assembler) Assemble(ctx context.Context, req ContextRequest, history []
 			SelectedCount: len(selectedHistory),
 			DroppedCount:  len(droppedHistory),
 			Notes:         historyNotes,
+			Recall: &RecallStageMetrics{
+				CacheHits: recallResult.CacheHits,
+				Embedded:  recallResult.Embedded,
+				LatencyMs: recallResult.LatencyMs,
+				Degraded:  recallResult.Degraded,
+			},
 		})
 	}
 
@@ -66,6 +105,7 @@ func (a *Assembler) Assemble(ctx context.Context, req ContextRequest, history []
 			ReadOnly:  true,
 			ScopeRefs: memoryScopeRefs(req),
 		})
+		entries = rankMemoryEntries(entries, profile, a.now())
 		selectedMemory, droppedMemory, usedMemory, memoryNotes := selectMemories(entries, profile, a.now())
 		pkg.MemoryItems = selectedMemory
 		trace.SourcesConsidered += len(entries)
@@ -97,7 +137,19 @@ func (a *Assembler) Assemble(ctx context.Context, req ContextRequest, history []
 	}
 
 	if profile.AllowToolResults && len(req.ToolItems) > 0 {
-		selectedTools, droppedTools, usedTools, toolNotes := selectToolItems(req.ToolItems, profile)
+		toolRecallResult := a.toolRec.Recall(ctx, req.Query, req.ToolItems, profile.MaxToolItems)
+		trace.ToolRecall = &toolRecallResult
+
+		items := toolRecallResult.Items
+		if a.toolReranker != nil {
+			rerankOutcome := a.toolReranker.Rerank(ctx, req.Query, items, profile.MaxToolItems)
+			trace.ToolRerank = &rerankOutcome
+			if !rerankOutcome.Degraded {
+				items = rerankOutcome.Items
+			}
+		}
+
+		selectedTools, droppedTools, usedTools, toolNotes := selectToolItems(items, profile)
 		pkg.ToolItems = selectedTools
 		trace.SourcesConsidered += len(selectedTools) + len(droppedTools)
 		trace.SourcesSelected += len(selectedTools)
@@ -108,6 +160,9 @@ func (a *Assembler) Assemble(ctx context.Context, req ContextRequest, history []
 			SelectedCount: len(selectedTools),
 			DroppedCount:  len(droppedTools),
 			Notes:         toolNotes,
+			Recall: &RecallStageMetrics{
+				LatencyMs: toolRecallResult.LatencyMs,
+			},
 		})
 	}
 
@@ -451,4 +506,48 @@ func hasSummaryPrefix(msg *schema.Message) bool {
 		return false
 	}
 	return strings.HasPrefix(strings.TrimSpace(msg.Content), "[对话历史摘要]")
+}
+
+func rankMemoryEntries(entries []*mem.MemoryEntry, profile ContextProfile, now time.Time) []*mem.MemoryEntry {
+	if len(entries) <= 1 {
+		return entries
+	}
+	type scored struct {
+		entry *mem.MemoryEntry
+		score float64
+	}
+	scoredEntries := make([]scored, len(entries))
+	for i, entry := range entries {
+		scoredEntries[i] = scored{entry: entry, score: memoryCompositeScore(entry, profile, now)}
+	}
+	sort.Slice(scoredEntries, func(i, j int) bool {
+		return scoredEntries[i].score > scoredEntries[j].score
+	})
+	result := make([]*mem.MemoryEntry, len(entries))
+	for i, s := range scoredEntries {
+		result[i] = s.entry
+	}
+	return result
+}
+
+func memoryCompositeScore(entry *mem.MemoryEntry, profile ContextProfile, now time.Time) float64 {
+	confidence := entry.Confidence
+
+	freshness := 1.0
+	hours := now.Sub(entry.LastUsed).Hours()
+	freshness = 1.0 / (1.0 + hours/24.0)
+
+	scopePriority := 0.0
+	switch entry.Scope {
+	case mem.MemoryScopeSession:
+		scopePriority = 0.4
+	case mem.MemoryScopeUser:
+		scopePriority = 0.3
+	case mem.MemoryScopeProject:
+		scopePriority = 0.2
+	case mem.MemoryScopeGlobal:
+		scopePriority = 0.1
+	}
+
+	return confidence*0.5 + freshness*0.3 + scopePriority*0.2
 }

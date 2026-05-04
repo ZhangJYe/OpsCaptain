@@ -199,6 +199,14 @@ context:
   min_memory_confidence: 0.50
   docs_query_timeout_ms: 5000
   docs_init_failure_ttl_ms: 15000
+  tool_rerank:
+    enabled: false
+    profiles: ["ai_ops"]
+    min_candidates: 6
+    candidate_limit: 20
+    timeout_ms: 2000
+    cache_ttl_seconds: 300
+    model: "glm_chat_model_fast"
 
 retriever:
   top_k: 5
