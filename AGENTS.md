@@ -6,6 +6,32 @@ Agent 每次启动时应自动加载本文件。犯错时由人类更新本文�
 
 ---
 
+## ⚡ 行为红线（每次改代码前必须过一遍）
+
+| # | 规则 | 违反后果 |
+|---|------|---------|
+| 1 | **不加注释**，除非用户明确要求 | 代码里出现多余注释 = 噪音 |
+| 2 | **不主动 commit / push**，除非用户明确要求 | 用户可能想先 review |
+| 3 | **推送前必须跑 `go test ./...` 和 `npm run build`** | CI 会挂 |
+| 4 | commit message **用中文** | 团队规范 |
+| 5 | **优先编辑已有文件**，不创建不必要的文件 | 仓库膨胀 |
+| 6 | 配置项**不硬编码**，走 `config.yaml` | 后续改不了 |
+| 7 | 新增能力必须**可配置**（budget / top_k / timeout / feature flag） | 无法调参 |
+| 8 | 错误处理走 `ResultStatusDegraded`，**不直接 fatal** | 服务崩溃 |
+| 9 | **不要暴露或日志记录 secrets / keys** | 安全事故 |
+| 10 | **不要重新接回 `chat_multi_agent`** 路由 | 已废弃的架构 |
+| 11 | 修改 RAG / Agent / ContextEngine 后，**必须跑对应 package 的测试** | 局部改动可能破坏上游 |
+
+**检查清单（每次提交前）：**
+- [ ] `go build ./...` 通过
+- [ ] `go test ./...` 通过
+- [ ] 没有新增注释（除非用户要求）
+- [ ] 没有创建不必要的新文件
+- [ ] commit message 是中文
+- [ ] 配置项走 config.yaml，没有硬编码
+
+---
+
 ## 项目概述
 
 - 项目名称：OpsCaption / OpsCaptionAI

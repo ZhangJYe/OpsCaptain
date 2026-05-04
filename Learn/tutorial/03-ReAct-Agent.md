@@ -24,27 +24,20 @@
 
 ### 1.3 ReAct 循环（核心流程）
 
-```
-用户提问
-    ↓
-┌─────────────────────────────────┐
-│  Step 1: Think（推理）           │
-│  LLM 分析问题，决定下一步行动     │
-│  输出："我需要查 CPU 指标"       │
-├─────────────────────────────────┤
-│  Step 2: Act（执行）             │
-│  调用工具：query_metrics(...)    │
-│  得到结果：{cpu: 73%}           │
-├─────────────────────────────────┤
-│  Step 3: Observe（观察）         │
-│  LLM 看到工具返回结果             │
-├─────────────────────────────────┤
-│  Step 4: Think again（再推理）   │
-│  基于真实数据给出结论             │
-│  或继续调用更多工具               │
-└─────────────────────────────────┘
-    ↓
-最终回答用户
+```mermaid
+graph TD
+    A[用户提问] --> B[Step 1: Think 推理]
+    B --> C[Step 2: Act 执行]
+    C --> D[Step 3: Observe 观察]
+    D --> E{需要更多工具调用？}
+    E -->|是| B
+    E -->|否| F[最终回答用户]
+    
+    style A fill:#4dabf7,stroke:#333,color:#fff
+    style F fill:#51cf66,stroke:#333,color:#fff
+    style B fill:#fff3bf,stroke:#f59f00
+    style C fill:#ffe8cc,stroke:#fd7e14
+    style D fill:#d3f9d8,stroke:#2b8a3e
 ```
 
 这个"**Think → Act → Observe → Think**"的循环，就是 ReAct 的核心。LLM 在每一轮决定是否还需要更多工具调用，还是已经有足够信息可以回答。
@@ -97,31 +90,24 @@ ReAct Agent 执行过程：
 
 OpsCaption 的 Chat Pipeline 使用 **cloudwego/eino** 框架构建为一个 **有向图（Directed Graph）**：
 
+```mermaid
+graph LR
+    A[START] --> B[InputToChat<br/>Lambda 节点]
+    B --> C[ChatTemplate<br/>模板节点]
+    C --> D[ReactAgent<br/>ReAct 节点]
+    D --> E[END]
+    
+    style A fill:#e9ecef,stroke:#495057
+    style B fill:#fff3bf,stroke:#f59f00
+    style C fill:#d3f9d8,stroke:#2b8a3e
+    style D fill:#4dabf7,stroke:#333,color:#fff
+    style E fill:#e9ecef,stroke:#495057
 ```
-    ┌──────────┐
-    │  START   │
-    └────┬─────┘
-         │
-         ▼
-    ┌──────────────┐
-    │ InputToChat  │  ← Lambda 节点：把 UserMessage 拆成模板变量
-    └────┬─────────┘
-         │
-         ▼
-    ┌──────────────┐
-    │ ChatTemplate │  ← 模板节点：组装 System Prompt + 上下文 + 用户输入
-    └────┬─────────┘
-         │
-         ▼
-    ┌──────────────┐
-    │  ReactAgent  │  ← ReAct 节点：推理 + 工具调用循环（最多 25 步）
-    └────┬─────────┘
-         │
-         ▼
-    ┌──────────┐
-    │   END    │
-    └──────────┘
-```
+
+**节点说明：**
+- **InputToChat**：Lambda 节点，把 UserMessage 拆成模板变量 `{content, history, documents, date}`
+- **ChatTemplate**：模板节点，组装 System Prompt + 上下文 + 用户输入
+- **ReactAgent**：ReAct 节点，推理 + 工具调用循环（最多 25 步）
 
 ### 3.2 图的构建代码
 
@@ -249,6 +235,7 @@ func newReactAgentLambdaWithQuery(ctx context.Context, query string) (lba *compo
     config := &react.AgentConfig{
         MaxStep:            25,                       // 最多 25 轮 Think→Act 循环
         ToolReturnDirectly: map[string]struct{}{},    // 没有工具是"直接返回"类型
+        StreamToolCallChecker: fullStreamToolCallChecker,  // 自定义流式 tool call 检测
     }
 
     // 2. 创建 LLM 模型实例
@@ -258,7 +245,7 @@ func newReactAgentLambdaWithQuery(ctx context.Context, query string) (lba *compo
     // 3. 渐进式披露工具：根据用户问题决定暴露哪些工具
     var disclosed skills.DisclosureResult
     if query != "" {
-        disclosed = chatDisclosure.Disclose(query)  // 按需暴露工具，减少 Token 消耗
+        disclosed = chatDisclosure.Disclose(query, selectedSkillIDs)  // 按需暴露工具，减少 Token 消耗
         config.ToolsConfig.Tools = disclosed.Tools
     } else {
         config.ToolsConfig.Tools = chatDisclosure.AllTools()  // 没有 query 时暴露全部工具
@@ -279,7 +266,10 @@ func newReactAgentLambdaWithQuery(ctx context.Context, query string) (lba *compo
 |---|---|---|
 | `MaxStep` | 25 | 防止 Agent 无限循环。超过 25 步还没得出结论就强制终止 |
 | `ToolReturnDirectly` | 空 | 所有工具结果都返回给 LLM 继续思考，没有"一步到位"的工具 |
-| **渐进式披露** | `chatDisclosure.Disclose(query)` | 根据用户问题只暴露相关工具。问日志问题时不暴露 Metrics 工具，节省 Token、减少幻觉 |
+| `StreamToolCallChecker` | `fullStreamToolCallChecker` | 自定义流式 tool call 检测，读取完整流而非仅首个 chunk |
+| **渐进式披露** | `chatDisclosure.Disclose(query, selectedSkillIDs)` | 根据用户问题只暴露相关工具。问日志问题时不暴露 Metrics 工具，节省 Token、减少幻觉 |
+
+**为什么需要自定义 `StreamToolCallChecker`？** Eino 默认的 `firstChunkStreamToolCallChecker` 只检查流式响应的第一个 chunk。如果模型先输出文本再输出 tool call（如 DeepSeek V3），第一个 chunk 是普通文本，checker 判断为"没有 tool call"，导致 Agent 无法触发工具调用。自定义的 `fullStreamToolCallChecker` 读取完整流，只在 EOF 时才返回 false，确保不会因文本先输出而遗漏 tool call。
 
 **Progressive Disclosure（渐进式披露）**的注册：
 
@@ -297,7 +287,7 @@ var chatDisclosure = skills.NewProgressiveDisclosure(
 
 **渐进式披露的价值**：如果不加筛选把 30 个工具全部塞进 System Prompt，每次请求都会浪费大量 Token，且容易让 LLM"眼花缭乱"选错工具。渐进式披露让 LLM 只看到相关工具，减少 Token 消耗约 40%-60%。
 
-### 3.7 Tool Calling 机制：Function Calling 底层是怎么工作的？
+### 3.6 Tool Calling 机制：Function Calling 底层是怎么工作的？
 
 ReAct Agent 的 Think→Act→Observe 循环中，**Act 阶段的核心是 Tool Calling**。
 
@@ -317,8 +307,8 @@ func BuildTieredTools() []skills.TieredTool {
         Tier: skills.TierAlwaysOn,
         Domains: nil,
     })
-    // MCP 日志工具 → TierSkillGate，只有 domain=logs 匹配时才暴露
-    // Prometheus 告警工具 → TierSkillGate，只有 domain=metrics 匹配时才暴露
+    // MCP 日志工具 → TierAlwaysOn，始终暴露
+    // Prometheus 告警工具 → TierAlwaysOn，始终暴露
     return tiered
 }
 ```
@@ -380,40 +370,123 @@ Think: LLM → "基于这3篇文档，建议如下..."
 
 ReAct Agent 配置了 `MaxStep: 25`——最多 25 轮 Think→Act→Observe。当 LLM 认为已有足够信息、不再需要调用工具时，返回纯文本回答，循环结束。
 
+### 3.7 ToolWrapper：工具调用的 before/after 拦截
+
+这是防幻觉体系的关键机制。每个工具在被 Agent 调用前，都要经过 `ToolWrapper` 包装：
+
+```go
+// events/tool_wrapper.go
+type ToolWrapper struct {
+    inner      tool.InvokableTool  // 原始工具
+    before     BeforeToolCallFunc  // 调用前拦截
+    after      AfterToolCallFunc   // 调用后处理
+    emitter    Emitter             // 事件发射（SSE/日志）
+    traceID    string
+    cachedName string
+}
+```
+
+**核心执行流程**：
+
+```go
+func (w *ToolWrapper) InvokableRun(ctx context.Context, args string, opts ...tool.Option) (string, error) {
+    toolName := w.toolName(ctx)
+    startTime := time.Now()
+
+    // ① 发射 tool_call_start 事件（前端可以看到"正在查 Prometheus"）
+    w.emitter.Emit(ctx, NewEvent(EventToolCallStart, ...))
+
+    // ② beforeToolCall 拦截：校验参数格式
+    if w.before != nil {
+        modifiedArgs, err := w.before(ctx, toolName, args)
+        if err != nil {
+            return "", fmt.Errorf("tool %s blocked by beforeToolCall: %w", toolName, err)
+        }
+        args = modifiedArgs
+    }
+
+    // ③ 执行实际工具
+    result, execErr := w.inner.InvokableRun(ctx, args, opts...)
+
+    // ④ afterToolCall 处理（无论成功失败都执行）
+    if w.after != nil {
+        modifiedResult, afterErr := w.after(ctx, toolName, args, result, execErr)
+        if execErr == nil && afterErr != nil {
+            // 工具成功但 after hook 失败（如脱敏/校验失败）
+            return fmt.Sprintf("[工具结果处理失败] %s: %s", toolName, afterErr.Error()), nil
+        }
+        result = modifiedResult
+    }
+
+    // ⑤ 关键设计：工具失败时返回格式化字符串，而非 Go error
+    if execErr != nil {
+        return fmt.Sprintf("[工具调用失败] %s: %s\n请告知用户该工具返回了错误，不要用通用建议替代实际数据。",
+            toolName, execErr.Error()), nil
+    }
+    return result, nil
+}
+```
+
+**两个常用的 before/after 函数**：
+
+```go
+// before: 参数校验 — 防止 LLM 生成无效 JSON 打到后端
+func ValidateBeforeToolCall() BeforeToolCallFunc {
+    return func(ctx context.Context, toolName string, args string) (string, error) {
+        args = strings.TrimSpace(args)
+        if args == "" {
+            return "", fmt.Errorf("tool %s received empty arguments", toolName)
+        }
+        if !json.Valid([]byte(args)) {
+            return "", fmt.Errorf("tool %s received invalid JSON: %.100s", toolName, args)
+        }
+        return args, nil
+    }
+}
+
+// after: 结果截断 — 工具返回太长时截断，减少 token 消耗
+func SummaryAfterToolCall(maxLen int) AfterToolCallFunc {
+    return func(ctx context.Context, toolName string, args string, result string, err error) (string, error) {
+        if err != nil { return result, err }
+        if maxLen > 0 && len(result) > maxLen {
+            return result[:maxLen] + "...", nil
+        }
+        return result, nil
+    }
+}
+```
+
+> **面试要点**：工具失败时返回格式化字符串（`[工具调用失败]`）而非 Go error，是因为 Go error 会触发 eino 框架的重试机制，导致 Agent 死循环。格式化字符串让 LLM 明确知道失败，并自行决定如何处理——这是防幻觉"工具调用闭环"的核心。
+
 ### 3.8 完整请求流程总结
 
-```
-用户输入："支付服务昨晚报错了，帮我看看"
-         │
-         ▼
-┌─────────────────────────────────────────────────────┐
-│  InputToChat Lambda                                  │
-│  输入 → {content, history, documents, date}           │
-└─────────────────┬───────────────────────────────────┘
-                  │
-                  ▼
-┌─────────────────────────────────────────────────────┐
-│  ChatTemplate                                        │
-│  SystemMessage (规则) + History + RuntimeContext + Query │
-└─────────────────┬───────────────────────────────────┘
-                  │
-                  ▼
-┌─────────────────────────────────────────────────────┐
-│  ReAct Agent (最多 25 步)                             │
-│                                                     │
-│  Step 1: LLM 思考 → "先查支付服务指标"                 │
-│  Step 2: 调用 query_metrics(payment, last_24h)       │
-│  Step 3: 结果返回 → "CPU 正常，error_rate=15%"        │
-│  Step 4: LLM 思考 → "错误率高，查错误日志"             │
-│  Step 5: 调用 search_logs(payment, ERROR)             │
-│  Step 6: 结果返回 → "connection timeout to Redis"     │
-│  Step 7: LLM 思考 → "Redis 连接超时，查知识库"        │
-│  Step 8: 调用 search_knowledge("Redis timeout")       │
-│  Step 9: 综合所有信息生成诊断报告                      │
-└─────────────────┬───────────────────────────────────┘
-                  │
-                  ▼
-         最终回答（包含诊断和证据）
+```mermaid
+graph TD
+    A["用户输入：'支付服务昨晚报错了，帮我看看'"] --> B[InputToChat Lambda]
+    B --> C[ChatTemplate]
+    C --> D[ReAct Agent]
+    
+    subgraph D[ReAct Agent 最多25步]
+        D1[Step 1: LLM 思考 → 先查支付服务指标]
+        D2[Step 2: 调用 query_metrics]
+        D3[Step 3: 结果返回 → CPU正常，error_rate=15%]
+        D4[Step 4: LLM 思考 → 错误率高，查错误日志]
+        D5[Step 5: 调用 search_logs]
+        D6[Step 6: 结果返回 → connection timeout to Redis]
+        D7[Step 7: LLM 思考 → Redis连接超时，查知识库]
+        D8[Step 8: 调用 search_knowledge]
+        D9[Step 9: 综合所有信息生成诊断报告]
+        
+        D1 --> D2 --> D3 --> D4 --> D5 --> D6 --> D7 --> D8 --> D9
+    end
+    
+    D --> E[最终回答（包含诊断和证据）]
+    
+    style A fill:#4dabf7,stroke:#333,color:#fff
+    style B fill:#fff3bf,stroke:#f59f00
+    style C fill:#d3f9d8,stroke:#2b8a3e
+    style D fill:#e9ecef,stroke:#495057
+    style E fill:#51cf66,stroke:#333,color:#fff
 ```
 
 ---
@@ -424,25 +497,36 @@ ReAct Agent 配置了 `MaxStep: 25`——最多 25 轮 Think→Act→Observe。�
 
 ### 4.1 三层总览
 
-```
-┌─────────────────────────────────────────────┐
-│ Layer 1: 静态规则（System Prompt）            │  ← 可缓存，不变
-│ - 身份设定（我叫 OpsCaption）                  │
-│ - 语言规则（默认中文）                         │
-│ - 行为准则（证据优先、不编造）                  │
-│ - 输出要求（纯文本、结构清晰）                  │
-├─────────────────────────────────────────────┤
-│ Layer 2: 动态配置（Dynamic Boundary 之后）     │  ← 部署时可配
-│ - 日志主题地域（从 config.yaml 读取）           │
-│ - 日志主题 ID（从 config.yaml 读取）            │
-│ - 标记：SYSTEM_PROMPT_DYNAMIC_BOUNDARY       │
-├─────────────────────────────────────────────┤
-│ Layer 3: 运行时上下文（UserMessage 形式）      │  ← 每次请求不同
-│ - 当前日期：{date}                            │
-│ - RAG 文档：{documents}                       │
-│ - 对话历史：{history}                         │
-│ - 用户问题：{content}                         │
-└─────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph L1["Layer 1: 静态规则（System Prompt）"]
+        direction LR
+        L1A[身份设定：我叫 OpsCaption]
+        L1B[语言规则：默认中文]
+        L1C[行为准则：证据优先、不编造]
+        L1D[输出要求：纯文本、结构清晰]
+    end
+    
+    subgraph L2["Layer 2: 动态配置（Dynamic Boundary 之后）"]
+        direction LR
+        L2A[日志主题地域]
+        L2B[日志主题 ID]
+        L2C[标记：SYSTEM_PROMPT_DYNAMIC_BOUNDARY]
+    end
+    
+    subgraph L3["Layer 3: 运行时上下文（UserMessage 形式）"]
+        direction LR
+        L3A[当前日期：date]
+        L3B[RAG 文档：documents]
+        L3C[对话历史：history]
+        L3D[用户问题：content]
+    end
+    
+    L1 --> L2 --> L3
+    
+    style L1 fill:#e9ecef,stroke:#495057
+    style L2 fill:#fff3bf,stroke:#f59f00
+    style L3 fill:#d3f9d8,stroke:#2b8a3e
 ```
 
 ### 4.2 Layer 1：静态规则
@@ -502,7 +586,7 @@ func buildDynamicSystemPrompt(ctx context.Context) string {
     }
     topicID, err := g.Cfg().Get(ctx, "log_topic.id")
     if err == nil {
-        logHints = append(logHints, fmt.Sprintf("日志主题id：%s", resolved))
+        logHints = append(logHints, fmt.Sprintf("日志主题id：%s", topicID.String()))
     }
     // 组装为 "## 运行时配置" 章节
     return "## 运行时配置\n- " + strings.Join(logHints, "\n- ")

@@ -1,6 +1,14 @@
 # 第 4 章：RAG 检索系统 — "给 LLM 装上企业知识库"
 
-> **本章目标**：理解 OpsCaption 知识检索链路的完整设计，能向面试官清晰解释四种检索模式、Hybrid Retrieval 原理以及全链路超时降级设计。
+> **本章目标**：理解 OpsCaption 知识检索链路的完整设计，能向面试官清晰解释 Hybrid Retrieval 模式、Query Rewrite + Rerank 原理以及全链路超时降级设计。
+
+> **📖 初学者导航**：本章较长（1600+ 行），建议按以下顺序阅读：
+> 1. **先看第 1-2 节**（白话理解 + 为什么需要 RAG）→ 建立直觉，10 分钟
+> 2. **再看第 3 节**（检索模式）→ 理解全景，5 分钟
+> 3. **然后看第 4 节**（Full Pipeline 六步之旅）→ 核心链路，20 分钟
+> 4. **最后按需看第 2.5 节**（离线预处理）和**第 5 节**（Hybrid Retrieval）→ 深入细节
+>
+> 面试时最常问的是：**Hybrid Retrieval 的设计** 和 **Query Rewrite + Rerank 的价值**。先把这两个讲清楚，再展开细节。
 
 ---
 
@@ -24,61 +32,35 @@
 
 ### 1.3 RAG 核心流程（一张图看懂）
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                    离线阶段（索引构建）                              │
-│                                                                  │
-│  内部文档（Markdown/JSON/YAML）    两阶段分块       向量化+元数据     │
-│  ┌────────┐  Loader  ┌────┐  Stage1:  ┌─────┐  embed  ┌───────┐ │
-│  │ SOP    │ ───────→ │全文│ ────────→ │ C1  │ ──────→ │Milvus │ │
-│  │ Runbook│          └────┘ Markdown  │ C2  │         │向量库  │ │
-│  │ 复盘   │                 标题切分   │ C3  │         └───┬───┘ │
-│  │ 配置   │                 Stage2:    └─────┘             │     │
-│  └────────┘                 语义切分   ┌───────────────────┘     │
-│                               (大块)   │                         │
-│                                        ▼                         │
-│                               ┌──────────────────────┐          │
-│                               │  同时构建 BM25 索引    │          │
-│                               │  (关键词倒排+IDF统计)  │          │
-│                               │  sharedBM25Index      │          │
-│                               └──────────────────────┘          │
-│                                                                  │
-│  _source 去重：同一文件重新索引时，先 deleteExistingSource 再写入    │
-└──────────────────────────────────────────────────────────────────┘
-
-┌──────────────────────────────────────────────────────────────────┐
-│                    在线阶段（实时查询）  两路并行                     │
-│                                                                  │
-│   用户提问                                                       │
-│   "Redis 连接超时"                                                │
-│        │                                                         │
-│        ├──────────────────┬────────────────────┐                 │
-│        ▼                  ▼                    ▼                 │
-│   Query Rewrite      向量检索(Dense)      BM25检索(Sparse)       │
-│   LLM改写搜索词     Doubao Embedding      关键词倒排索引           │
-│        │            Milvus ANN检索         BM25公式打分            │
-│        │            candidateTopK篇         candidateTopK篇       │
-│        │                  │                    │                 │
-│        └──────────────────┴────────────────────┘                 │
-│                           │                                      │
-│                           ▼                                      │
-│                    ┌──────────────┐                              │
-│                    │  RRF 融合算法 │  score = Σ 1/(60+rank)       │
-│                    │  两路结果融合  │                              │
-│                    └──────┬───────┘                              │
-│                           │                                      │
-│                           ▼                                      │
-│                    ┌──────────────┐                              │
-│                    │ RetrieveRefine│  token交叉打分+元数据加权      │
-│                    │ 重排序+去噪   │  service/pod名高权重匹配       │
-│                    └──────┬───────┘                              │
-│                           │                                      │
-│                           ▼                                      │
-│                    ┌──────────────┐                              │
-│                    │  LLM Rerank  │  对每篇文档打0-10分            │
-│                    │  最终精排     │  取Top-K返回                  │
-│                    └──────────────┘                              │
-└──────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph Offline["离线阶段（索引构建）"]
+        direction LR
+        Docs["内部文档<br/>Markdown/JSON/YAML"] -->|Loader| FullText["全文"]
+        FullText -->|Stage1: Markdown标题切分| C1["C1, C2, C3..."]
+        C1 -->|Stage2: 语义切分| BigChunks["大块切分"]
+        BigChunks -->|embed| Milvus["Milvus 向量库"]
+        BigChunks -->|同步构建| BM25["BM25 索引<br/>关键词倒排+IDF统计"]
+    end
+    
+    subgraph Online["在线阶段（实时查询）两路并行"]
+        direction TB
+        Query["用户提问<br/>Redis 连接超时"] --> QR["Query Rewrite<br/>LLM改写搜索词"]
+        Query --> VectorSearch["向量检索 Dense<br/>Doubao Embedding<br/>Milvus ANN检索"]
+        Query --> BM25Search["BM25检索 Sparse<br/>关键词倒排索引<br/>BM25公式打分"]
+        
+        QR --> VectorSearch
+        QR --> BM25Search
+        
+        VectorSearch --> RRF["RRF 融合算法<br/>score = Σ 1/(60+rank)"]
+        BM25Search --> RRF
+        
+        RRF --> Refine["RetrieveRefine<br/>重排序+去噪<br/>token交叉打分+元数据加权"]
+        Refine --> Rerank["LLM Rerank<br/>最终精排<br/>对每篇文档打0-10分"]
+    end
+    
+    style Offline fill:#e9ecef,stroke:#495057
+    style Online fill:#d3f9d8,stroke:#2b8a3e
 ```
 
 **核心公式**：
@@ -183,20 +165,21 @@ func newDocumentTransformer(ctx context.Context) (document.Transformer, error) {
 
 **两阶段策略**：
 
-```
-原始文档（可能数万字）
-    │
-    ▼ Stage 1: Markdown 标题切分
-┌────┬────┬────┬────┬────┐
-│ C1 │ C2 │ C3 │ C4 │ C5 │   按 #/##/### 标题边界切
-└────┴────┴────┴──┬─┴────┘
-                   │ C4 超过 800 字符 → 进入 Stage 2
-                   ▼ Stage 2: 语义切分
-            ┌─────┬─────┐
-            │C4.1 │C4.2 │    按语义相似度断点切分
-            └─────┴─────┘
-
-最终输出：[C1, C2, C3, C4.1, C4.2, C5]
+```mermaid
+graph TD
+    A["原始文档（可能数万字）"] --> B["Stage 1: Markdown 标题切分"]
+    B --> C["按 #/##/### 标题边界切<br/>C1, C2, C3, C4, C5"]
+    C --> D{C4 超过 800 字符？}
+    D -->|是| E["Stage 2: 语义切分"]
+    D -->|否| F["保持原样"]
+    E --> G["按语义相似度断点切分<br/>C4.1, C4.2"]
+    F --> H["最终输出"]
+    G --> H
+    
+    style A fill:#4dabf7,stroke:#333,color:#fff
+    style B fill:#fff3bf,stroke:#f59f00
+    style E fill:#d3f9d8,stroke:#2b8a3e
+    style H fill:#51cf66,stroke:#333,color:#fff
 ```
 
 **设计依据**：
@@ -256,177 +239,122 @@ func (s *IndexingService) deleteExistingSource(ctx context.Context, sourceValue 
 
 ---
 
-## 3. 四种检索模式
+## 3. 检索模式
 
-OpsCaption 支持四种检索模式，通过 `QueryMode` 常量定义。默认使用 `full` 模式。
+OpsCaption 使用统一的 Hybrid Retrieval 模式：Query Rewrite → 向量检索 + BM25 关键词检索 → RRF 融合 → RetrieveRefine → Rerank。`Query()` 直接调用 `HybridRetrieve`，不再有多种模式分支。
 
-```go
-// query.go - QueryMode 定义
-const (
-    QueryModeRetrieveOnly          QueryMode = "retrieve"  // 模式一：直接检索
-    QueryModeRewriteRetrieve       QueryMode = "rewrite"   // 模式二：改写后检索
-    QueryModeRewriteRetrieveRerank QueryMode = "full"      // 模式三：改写+检索+重排序（默认）
-    QueryModeHybrid                QueryMode = "hybrid"    // 模式四：向量+关键词混合
-)
+```
+用户 query
+  │
+  ▼
+Query Rewrite（LLM 改写，超时 3s 降级回原始 query）
+  │
+  ▼
+RetrieverPool.GetOrCreate（获取/创建 Milvus 连接）
+  │
+  ├──→ Milvus ANN 向量检索（Dense）
+  └──→ BM25 关键词检索（Sparse）   ← 并行执行
+  │
+  ▼
+RRF 融合（score = Σ 1/(60+rank)）
+  │
+  ▼
+RetrieveRefine（token 交叉打分 + 元数据加权）
+  │
+  ▼
+LLM Rerank（每篇文档打 0-10 分，超时 5s 降级保持原序）
+  │
+  ▼
+返回 top-K 文档 + QueryTrace
 ```
 
-| 模式 | 值 | 流程 | 适用场景 | 耗时 |
-|---|---|---|---|---|
-| **retrieve** | `"retrieve"` | 用户 query → Milvus 向量检索 → top-K | 快速查询，对精度要求不高 | ⚡ 快 |
-| **rewrite** | `"rewrite"` | 用户 query → LLM 改写 → Milvus 检索 → top-K | 用户表达口语化，需要优化搜索词 | ⚡⚡ 较快 |
-| **full** | `"full"` | 用户 query → 改写 → 检索 → 去重过滤 → LLM Rerank → top-K | **默认模式**，精度优先 | ⚡⚡⚡ 较慢 |
-| **hybrid** | `"hybrid"` | 向量检索 ∥ BM25 关键词检索 → RRF 融合 → top-K | 需要精确命中术语（如 error code、pod name） | ⚡⚡ 较快（并行） |
-
-### 模式选择逻辑
-
-```go
-// query.go - ParseQueryMode 与 DefaultQueryMode
-func ParseQueryMode(raw string) (QueryMode, error) {
-    switch strings.ToLower(strings.TrimSpace(raw)) {
-    case "", "full", "query", "rerank":
-        return QueryModeRewriteRetrieveRerank, nil  // 空字符串默认走 full
-    case "rewrite":
-        return QueryModeRewriteRetrieve, nil
-    case "retrieve":
-        return QueryModeRetrieveOnly, nil
-    case "hybrid":
-        return QueryModeHybrid, nil
-    }
-}
-
-func DefaultQueryMode(ctx context.Context) QueryMode {
-    // 从 config.yaml 读取 rag.default_query_mode，若未配置则返回 retrieve
-    return QueryModeRetrieveOnly
-}
-```
-
-> **面试要点**：虽然 `DefaultQueryMode` 返回 `retrieve`，但在 Chat 管道中会显式传入 `full` 模式。显式传参优先于默认值。
+> **面试要点**：早期版本有四种检索模式（retrieve/rewrite/full/hybrid），通过 `QueryMode` 常量切换。经过评测验证，Hybrid 模式在所有维度都优于单一向量检索，因此统一为 Hybrid Retrieval，消除了模式选择的复杂性。`QueryForEval()` 仅用于评测命令，接受 `wantRewrite`/`wantRerank` 布尔参数以支持消融实验。
 
 ---
 
-## 4. 代码拆解：Full Pipeline 的六步之旅
+## 4. 代码拆解：Hybrid Pipeline 的完整链路
 
-下面以 **full 模式**（改写 + 检索 + 重排序）为例，逐步拆解完整链路。
+下面以 Hybrid Retrieval 为例，逐步拆解完整链路。
 
-```
-用户输入: "服务挂了"
-     │
-     ▼
-┌──────────────────────────────────────────────────────────────┐
-│  Step 1: Query Rewrite（查询改写）                             │
-│  "服务挂了" → "服务故障排查 pod failure recovery"               │
-│  超时: 3s，失败则降级回原始 query                               │
-├──────────────────────────────────────────────────────────────┤
-│  Step 2: RetrieverPool.GetOrCreate()                          │
-│  按 Milvus 地址 + top_k 做缓存 key，避免每次新建连接             │
-│  失败走短 TTL 缓存（15s），防止雪崩                              │
-├──────────────────────────────────────────────────────────────┤
-│  Step 3: Milvus ANN 向量检索                                   │
-│  改写后的 query → Doubao Embedding → Milvus 相似度搜索          │
-│  取 candidateTopK（topK × 4，上限 50）篇候选                    │
-├──────────────────────────────────────────────────────────────┤
-│  Step 4: RetrieveRefine（去重 + 相关性过滤）                    │
-│  基于 query token 与文档元数据交叉打分，重新排序                 │
-├──────────────────────────────────────────────────────────────┤
-│  Step 5: Rerank（LLM 重排序）                                  │
-│  LLM 对每篇文档打 0-10 分，按分降序取最终 top-K                 │
-│  超时: 5s，失败则保持 refine 后的顺序                           │
-├──────────────────────────────────────────────────────────────┤
-│  Step 6: 返回 top-K 文档 + QueryTrace                          │
-│  QueryTrace 记录每一步的耗时和状态，便于可观测                    │
-└──────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    A["用户输入: 服务挂了"] --> B["Step 1: Query Rewrite"]
+    B --> C["Step 2: RetrieverPool.GetOrCreate()"]
+    C --> D["Step 3: Milvus ANN 向量检索"]
+    D --> E["Step 4: RetrieveRefine"]
+    E --> F["Step 5: Rerank"]
+    F --> G["Step 6: 返回 top-K 文档"]
+    
+    B -.->|"服务挂了 → 服务故障排查 pod failure recovery"| B1["超时: 3s，失败降级回原始 query"]
+    C -.->|"按 Milvus 地址 + top_k 做缓存 key"| C1["失败走短 TTL 缓存 15s"]
+    D -.->|"Doubao Embedding → Milvus 相似度搜索"| D1["取 candidateTopK 篇候选"]
+    E -.->|"基于 query token 与文档元数据交叉打分"| E1["重新排序"]
+    F -.->|"LLM 对每篇文档打 0-10 分"| F1["超时: 5s，失败保持 refine 顺序"]
+    G -.->|"QueryTrace 记录每一步耗时和状态"| G1["便于可观测"]
+    
+    style A fill:#4dabf7,stroke:#333,color:#fff
+    style G fill:#51cf66,stroke:#333,color:#fff
 ```
 
-### 4.1 入口函数：QueryWithMode
+### 4.1 入口函数：Query
 
-`query.go` 中，`Query` 和 `QueryWithMode` 是 RAG 检索的统一入口：
+`query.go` 中，`Query` 是 RAG 检索的统一入口：
 
 ```go
-// query.go - Query 和 QueryWithMode
+// query.go - Query
 
 func Query(ctx context.Context, pool *RetrieverPool, query string) ([]*schema.Document, QueryTrace, error) {
-    return QueryWithMode(ctx, pool, query, DefaultQueryMode(ctx))
-}
-
-func QueryWithMode(ctx context.Context, pool *RetrieverPool, query string, mode QueryMode) ([]*schema.Document, QueryTrace, error) {
-    if mode == QueryModeHybrid {
-        return hybridQueryWithMode(ctx, pool, query)  // Hybrid 走独立分支
-    }
-    return queryWithMode(ctx, pool, query, mode, RewriteQuery, Rerank)
+    rr, acquisition, err := pool.GetOrCreate(ctx)
+    // QueryTrace 从 acquisition 中获取 CacheKey、CacheHit
+    // 然后调用 HybridRetrieveWithRetriever() 完成完整链路
 }
 ```
 
-**关键设计**：`RewriteQuery` 和 `Rerank` 作为函数参数传入，而非硬编码在 `queryWithMode` 中。这样设计便于测试时注入 mock 函数。
+**关键设计**：`Query()` 直接调用 `pool.GetOrCreate()` 获取 Retriever，再调用 `HybridRetrieveWithRetriever()` 完成 Rewrite → 向量 + BM25 并行检索 → RRF → Refine → Rerank 的完整链路。没有模式分支，路径唯一。评测场景使用 `QueryForEval()`，接受 `wantRewrite`/`wantRerank` 布尔参数。
 
-### 4.2 queryWithMode：核心调度逻辑
+### 4.2 HybridRetrieveWithRetriever：核心调度逻辑
 
 ```go
-// query.go - queryWithMode（核心调度函数）
+// query.go - HybridRetrieveWithRetriever（核心调度函数）
 
-func queryWithMode(ctx context.Context, pool *RetrieverPool, query string,
-    mode QueryMode, rewrite rewriteFunc, rerank rerankFunc,
-) ([]*schema.Document, QueryTrace, error) {
+func HybridRetrieveWithRetriever(ctx context.Context, retriever retrieverapi.Retriever,
+    query string, topK int, trace *QueryTrace,
+) ([]*schema.Document, error) {
 
     if strings.TrimSpace(query) == "" {
-        return nil, QueryTrace{}, nil  // 空查询直接返回
+        return nil, nil
     }
 
-    trace := QueryTrace{
-        Mode:           string(mode),
-        OriginalQuery:  query,
-        RewrittenQuery: query,  // 默认与原 query 相同（降级用）
-    }
-
-    topK := RetrieverTopK(ctx)
     candidateTopK := RetrieverCandidateTopK(ctx)  // = topK × 4，范围 [20, 50]
 
     // ===== Step 1: Query Rewrite =====
-    rewritten := query
-    if mode != QueryModeRetrieveOnly {
-        rewriteStart := time.Now()
-        rewritten = rewrite(ctx, query)       // 调用 RewriteQuery
-        trace.RewriteLatencyMs = time.Since(rewriteStart).Milliseconds()
-        trace.RewrittenQuery = rewritten
-    }
+    rewriteStart := time.Now()
+    rewritten := RewriteQuery(ctx, query)
+    trace.RewriteLatencyMs = time.Since(rewriteStart).Milliseconds()
+    trace.RewrittenQuery = rewritten
 
-    // ===== Step 2: 获取 Retriever（连接池）=====
-    rr, acquisition, err := pool.GetOrCreate(ctx)
-    trace.CacheKey = acquisition.CacheKey
-    trace.CacheHit = acquisition.CacheHit
-    if err != nil {
-        return nil, trace, err
-    }
-
-    // ===== Step 3: Milvus 向量检索 =====
+    // ===== Step 2: 向量 + BM25 并行检索 =====
     retrieveStart := time.Now()
-    docs, err := rr.Retrieve(ctx, rewritten, retrieverapi.WithTopK(candidateTopK))
+    docs, err := retriever.Retrieve(ctx, rewritten, retrieverapi.WithTopK(candidateTopK))
     trace.RetrieveLatencyMs = time.Since(retrieveStart).Milliseconds()
     trace.RawResultCount = len(docs)
     if err != nil {
-        return nil, trace, err
+        return nil, err
     }
 
-    // ===== Step 4: RetrieveRefine =====
+    // ===== Step 3: RetrieveRefine =====
     docs = refineRetrievedDocs(query, docs)
 
-    // ===== 非 full 模式到此结束 =====
-    if mode != QueryModeRewriteRetrieveRerank {
-        finalDocs := trimRetrievedDocs(docs, topK)
-        trace.ResultCount = len(finalDocs)
-        trace.RerankEnabled = false
-        return finalDocs, trace, nil
-    }
-
-    // ===== Step 5: Rerank =====
+    // ===== Step 4: Rerank =====
     rerankStart := time.Now()
-    rerankResult := rerank(ctx, query, docs, topK)  // 调用 Rerank
+    rerankResult := Rerank(ctx, query, docs, topK)
     trace.RerankLatencyMs = time.Since(rerankStart).Milliseconds()
     trace.RerankEnabled = rerankResult.Enabled
 
-    // ===== Step 6: 返回结果 =====
+    // ===== Step 5: 返回结果 =====
     finalDocs := rerankResult.Docs
     trace.ResultCount = len(finalDocs)
-    return finalDocs, trace, nil
+    return finalDocs, nil
 }
 ```
 
@@ -780,21 +708,28 @@ func Rerank(ctx context.Context, query string, docs []*schema.Document, topK int
 
 **Rerank 的价值**：
 
-```
-Milvus 返回的候选（按向量相似度排序）：
-  1. Doc A: "数据库连接池配置指南"       ← 向量相似，但和"服务挂了"关系不大
-  2. Doc B: "Pod 故障恢复流程"           ← 高度相关！
-  3. Doc C: "HTTP 502 排查手册"          ← 可能相关
-  4. Doc D: "K8s 节点运维手册"           ← 不相关
-  ...
-
-LLM Rerank 打分后（0-10 分）：
-  1. Doc B: 9.0  ← 和"服务挂了"最相关
-  2. Doc C: 7.0  ← 有些相关
-  3. Doc A: 3.0  ← 不太相关
-  4. Doc D: 1.0  ← 不相关
-
-取 top-3 → [Doc B, Doc C, Doc A]
+```mermaid
+graph LR
+    subgraph Before["Milvus 返回的候选（按向量相似度排序）"]
+        A1["1. Doc A: 数据库连接池配置指南<br/>向量相似，但和'服务挂了'关系不大"]
+        A2["2. Doc B: Pod 故障恢复流程<br/>高度相关！"]
+        A3["3. Doc C: HTTP 502 排查手册<br/>可能相关"]
+        A4["4. Doc D: K8s 节点运维手册<br/>不相关"]
+    end
+    
+    subgraph After["LLM Rerank 打分后（0-10 分）"]
+        B1["1. Doc B: 9.0<br/>和'服务挂了'最相关"]
+        B2["2. Doc C: 7.0<br/>有些相关"]
+        B3["3. Doc A: 3.0<br/>不太相关"]
+        B4["4. Doc D: 1.0<br/>不相关"]
+    end
+    
+    Before -->|"LLM Rerank"| After
+    After --> C["取 top-3 → [Doc B, Doc C, Doc A]"]
+    
+    style Before fill:#ffe8cc,stroke:#fd7e14
+    style After fill:#d3f9d8,stroke:#2b8a3e
+    style C fill:#51cf66,stroke:#333,color:#fff
 ```
 
 > **面试要点**：Rerank 用 LLM 做——这是 OpsCaption 的特色。相比传统的 Cross-Encoder Reranker（如 BGE-Reranker），LLM Rerank 能理解运维领域的上下文语义，但也更慢、更贵。所以做了 5s 超时和内容截断（200 字符）来平衡性能。
@@ -978,7 +913,7 @@ type ToolTier int
 
 const (
     TierAlwaysOn  ToolTier = 0  // 始终可用（时间查询、文档检索等通用工具）
-    TierSkillGate ToolTier = 1  // 匹配到对应 domain 才暴露（日志 MCP、Prometheus）
+    TierSkillGate ToolTier = 1  // 匹配到对应 domain 才暴露
     TierOnDemand  ToolTier = 2  // 需要时手动扩展（MySQL CRUD 等高风险工具）
 )
 
@@ -994,11 +929,12 @@ type TieredTool struct {
 ```
 TierAlwaysOn（始终暴露）:
   ├── GetCurrentTime           — 获取当前时间
-  └── QueryInternalDocs        — RAG 文档检索
-
-TierSkillGate（域匹配才暴露）:
+  ├── QueryInternalDocs        — RAG 文档检索
   ├── MCP Log Tools (domain: logs)       — 日志查询（由本地 MCP Server 提供）
   └── PrometheusAlertsQuery (domain: metrics) — Prometheus 告警查询
+
+TierSkillGate（域匹配才暴露）:
+  └── （当前为空，MCP 和 Prometheus 已提升至 TierAlwaysOn）
 
 TierOnDemand（手动扩展）:
   └── MySQLCrudTool (domains: logs/metrics/knowledge) — 数据库操作（需配置白名单）
@@ -1025,9 +961,9 @@ func (pd *ProgressiveDisclosure) Disclose(query string) DisclosureResult {
 ```
 
 **效果**：
-- 用户问 "服务 CPU 飙升" → matchDomains 返回 `["metrics"]` → 只暴露 Prometheus 工具，不暴露日志工具
-- 用户问 "支付超时" → matchDomains 返回 `["logs"]` → 只暴露 MCP 日志工具
-- Token 节省：每次请求 LLM 看到的工具列表从 10+ 个缩减到 3-4 个
+- MCP 日志工具和 Prometheus 告警查询已提升至 TierAlwaysOn，始终对 LLM 可见
+- TierSkillGate 当前仅用于可能新增的域特定工具
+- Token 节省：TierAlwaysOn 工具控制在合理数量内，TierOnDemand 工具需要配置白名单才暴露
 
 ### 4.10.4 FocusCollector：给 LLM 注入领域聚焦指令
 
@@ -1446,9 +1382,8 @@ def query_logs(arguments):
    → 提取 Focus: "payment, checkout, gateway timeout, retry, db timeout..."
 
 ② ProgressiveDisclosure 暴露工具
-   Disclose(query) → matchDomains → ["logs"]
-   → TierSkillGate 工具: MCP Log Tools (domain=logs) ✅ 暴露
-   → Prometheus (domain=metrics) ❌ 不暴露
+   Disclose(query) → MCP Log Tools (TierAlwaysOn) ✅ 始终可用
+                   → Prometheus Alerts (TierAlwaysOn) ✅ 始终可用
 
 ③ Agent 调用 MCP 工具
    invokeFocusedLogTool(query="checkoutservice 支付超时",
@@ -1521,20 +1456,13 @@ candidateTopK = topK × 4 = 12 → clamp到 [20, 50] → 实际 = 20
 ### 6.5 函数注入设计
 
 ```go
-// query.go - queryWithMode 签名
-func queryWithMode(
-    ctx context.Context,
-    pool *RetrieverPool,
-    query string,
-    mode QueryMode,
-    rewrite rewriteFunc,    // ← 函数类型，可注入
-    rerank rerankFunc,      // ← 函数类型，可注入
+// query.go - QueryForEval 签名（评测专用）
+func QueryForEval(ctx context.Context, pool *RetrieverPool, query string,
+    wantRewrite bool, wantRerank bool,
 ) ([]*schema.Document, QueryTrace, error)
 ```
 
-`rewriteFunc` 和 `rerankFunc` 作为参数传入而非硬编码，这使得：
-- **单元测试**时可以用 mock 函数替代真实 LLM 调用
-- **未来扩展**时可以替换为不同的 rewrite/rerank 实现（如用本地模型做 rerank）
+`QueryForEval` 通过 `wantRewrite`/`wantRerank` 布尔参数控制是否执行 Query Rewrite 和 Rerank，支持消融实验。生产环境使用 `Query()`，路径固定为完整的 Hybrid Retrieval 链路。
 
 ---
 
@@ -1578,9 +1506,9 @@ func queryWithMode(
 
 > 这正是我们 **ProgressiveDisclosure（渐进暴露）** 解决的问题。
 >
-> 我们把工具分成三层：**TierAlwaysOn**（始终暴露——如时间查询、文档检索，不到 5 个）、**TierSkillGate**（按场景暴露——日志 MCP 工具只在匹配到 logs 域时才暴露，Prometheus 工具只在 metrics 域暴露）、**TierOnDemand**（手动扩展——如 MySQL CRUD，需要配置白名单才暴露）。
+> 我们把工具分成三层：**TierAlwaysOn**（始终暴露——包括时间查询、文档检索、MCP 日志工具、Prometheus 告警查询）、**TierSkillGate**（按场景暴露——当前为预留层，用于未来新增的域特定工具）、**TierOnDemand**（手动扩展——如 MySQL CRUD，需要配置白名单才暴露）。
 >
-> 每次用户 query 进来，先用 **Skills Registry** 做域匹配——"支付超时" 匹配到 logs 域，"CPU 飙升" 匹配到 metrics 域。然后只暴露对应域的工具。这样 LLM 看到的工具从 10+ 个缩减到 3-4 个，选错的概率大幅下降，token 消耗也减少了。
+> MCP 日志工具和 Prometheus 告警查询已从 TierSkillGate 提升至 TierAlwaysOn，因为运维场景中日志和指标查询是高频操作，始终可用能显著提升响应效率。TierSkillGate 保留作为扩展点，未来新增域特定工具时使用。TierOnDemand 工具（如 MySQL CRUD）需要配置白名单才暴露，控制高风险操作的访问。
 >
 > 另外我们还有 **FocusCollector**——匹配到 Skill 后会提取该 Skill 的 Focus 指令（如 "重点看支付、订单、网关超时、下游延迟相关日志"），注入到 LLM 的上下文中。相当于给 LLM 提前画好重点——不需要它从头推理该查什么。
 
@@ -1600,18 +1528,17 @@ func queryWithMode(
 
 ### 问题 1
 
-RAG 的 "full" 模式包含哪几个步骤？每个步骤的作用是什么？
+RAG 的 Hybrid Retrieval 包含哪几个步骤？每个步骤的作用是什么？
 
 <details>
 <summary>点击查看答案</summary>
 
-**六步**：
+**五步**：
 1. **Query Rewrite**：把口语化查询改写为搜索优化关键词
-2. **RetrieverPool.GetOrCreate**：获取/创建 Milvus 连接（带缓存和雪崩防护）
-3. **Milvus ANN 检索**：向量相似度搜索，返回 candidateTopK 篇候选
-4. **RetrieveRefine**：基于 token 与元数据交叉打分，重新排序
-5. **Rerank**：LLM 对每篇文档打 0-10 分，按分降序取 top-K
-6. **返回结果 + QueryTrace**：返回最终文档和全链路追踪信息
+2. **向量 + BM25 并行检索**：Milvus ANN 向量检索（Dense）和 BM25 关键词检索（Sparse）并行执行，返回 candidateTopK 篇候选
+3. **RRF 融合**：使用 Reciprocal Rank Fusion 算法融合两路检索结果
+4. **RetrieveRefine + Rerank**：token 交叉打分重排序 + LLM 对每篇文档打 0-10 分精排
+5. **返回结果 + QueryTrace**：返回 top-K 文档和全链路追踪信息
 </details>
 
 ### 问题 2
