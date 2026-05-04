@@ -611,13 +611,30 @@ flowchart TD
     A["请求到达"] --> B["MemoryService.BuildContextPlan()\nmode, sessionID, query"]
     B --> C["Assembler.Assemble() ← Context Engine"]
 
-    C --> C1["① selectMemories()\nLongTermMemory.RetrieveScoped()\n按 Scope 范围检索"]
-    C1 --> C2["② 六层过滤\n过期检查 / Scope 匹配 / 置信度阈值\n安全标签 / 数量窗口 / Token 预算"]
-    C2 --> C3["③ 组装到 ContextPackage.MemoryItems"]
+    C --> C0["① rankMemoryEntries()\n按 confidence×0.5 + freshness×0.3 + scopePriority×0.2 排序"]
+    C0 --> C1["② selectMemories()\nLongTermMemory.RetrieveScoped()\n按 Scope 范围检索"]
+    C1 --> C2["③ 六层过滤\n过期检查 / Scope 匹配 / 置信度阈值\n安全标签 / 数量窗口 / Token 预算"]
+    C2 --> C3["④ 组装到 ContextPackage.MemoryItems"]
     C3 --> D["返回: contextText + MemoryRef[] + trace[]"]
 ```
 
-### 5.2 RetrieveScoped — 检索 + 排序
+### 5.2 rankMemoryEntries — 复合评分排序
+
+`RetrieveScoped()` 返回候选记忆后，`rankMemoryEntries()` 在六层过滤之前按综合分数排序，确保高价值记忆优先被选中：
+
+```
+memoryCompositeScore = confidence × 0.5 + freshness × 0.3 + scopePriority × 0.2
+```
+
+| 维度 | 公式 | 说明 |
+|------|------|------|
+| **confidence** | 直接使用 `entry.Confidence`（0~1） | LLM 提取时评估的置信度 |
+| **freshness** | `1 / (1 + hours_since_last_used / 24)` | 越近期使用越高，72h 后降到 0.25 |
+| **scopePriority** | session=0.4, user=0.3, project=0.2, global=0.1 | 会话级记忆优先于全局记忆 |
+
+**设计权衡**：confidence 权重最高（0.5）因为低置信度记忆可能是噪音；freshness 次之（0.3）因为近期记忆更可能相关；scope 兜底（0.2）保证会话上下文优先。
+
+### 5.3 RetrieveScoped — 检索 + 排序
 
 ```go
 func (ltm *LongTermMemory) RetrieveScoped(ctx context.Context, query string,
@@ -652,7 +669,7 @@ func (ltm *LongTermMemory) RetrieveScoped(ctx context.Context, query string,
 
 > **面试要点**：检索过程大部分时间只持有 **RLock（读锁）**，仅在最后更新使用统计时才获取 **WLock（写锁）**。这是一个经典的读写分离优化。如果整个检索过程都持有写锁，高并发时所有请求会串行化。
 
-### 5.3 六层过滤（在 Context Engine 的 selectMemories 中）
+### 5.4 六层过滤（在 Context Engine 的 selectMemories 中）
 
 从长期记忆检索出来的候选，还要经过 Context Engine 的六层过滤才能进入最终上下文：
 
@@ -668,7 +685,7 @@ flowchart TD
 
 **每一层被丢弃的记忆都会记录在 ContextTrace 中**，方便排查"为什么 LLM 没看到某条记忆"。
 
-### 5.4 记忆注入上下文
+### 5.5 记忆注入上下文
 
 最终选中的记忆被格式化为 `ContextItem`，放入 `ContextPackage.MemoryItems`：
 
