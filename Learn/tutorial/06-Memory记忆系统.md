@@ -40,59 +40,36 @@
 
 ### 1.3 一张图看懂三层协同
 
+```mermaid
+graph TD
+    subgraph System["OpsCaption 记忆系统"]
+        subgraph Working["③ 工作记忆 (Working Memory) — Token预算: 800 | 生命周期: 当前请求"]
+            W1["查日志结果"]
+            W2["查告警结果"]
+            W3["RAG结果"]
+        end
+
+        subgraph Short["① 短期记忆 (Short-term Memory) — Token预算: 3200 | 生命周期: 当前会话"]
+            S1["User: Redis CPU 飙到 90% 了"]
+            S2["AI: 看到了，是 KEYS * 导致的"]
+            S3["User: 帮我调一下告警阈值到 80%"]
+            S4["AI: 好的，已调整"]
+            S5["[对话历史摘要] 之前讨论了 Redis 慢查询..."]
+        end
+
+        subgraph Long["② 长期记忆 (Long-term Memory) — Token预算: 500 | 生命周期: 跨会话持久"]
+            L1["Session Scope: 本次会话确认 Redis maxconn=1000"]
+            L2["User Scope: 用户 John 偏好告警阈值 80%"]
+            L3["Project Scope: checkoutsvc 部署在 K8s 1.28"]
+            L4["Global Scope: SLA 要求 99.9%，P99 < 500ms"]
+        end
+    end
+
+    Short -->|"会话结束后提取"| Long
+    Short -->|"组装"| Working
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                       OpsCaption 记忆系统                         │
-│                                                                 │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │              ③ 工作记忆 (Working Memory)                  │  │
-│  │  当前任务调用的工具结果：                                      │  │
-│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐                  │  │
-│  │  │ 查日志结果 │ │ 查告警结果 │ │ RAG结果   │                  │  │
-│  │  └──────────┘ └──────────┘ └──────────┘                  │  │
-│  │  Token 预算: 2000 | 生命周期: 当前请求                      │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                            ▲                                     │
-│                            │ 组装                                 │
-│                            │                                     │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │              ① 短期记忆 (Short-term Memory)                │  │
-│  │  ┌─────────────────────────────────────────────────────┐ │  │
-│  │  │ User: "Redis CPU 飙到 90% 了"                        │ │  │
-│  │  │ AI: "看到了，是 KEYS * 导致的"                        │ │  │
-│  │  │ User: "帮我调一下告警阈值到 80%"                       │ │  │
-│  │  │ AI: "好的，已调整"                                    │ │  │
-│  │  │ [对话历史摘要] 之前讨论了 Redis 慢查询...               │ │  │
-│  │  └─────────────────────────────────────────────────────┘ │  │
-│  │  Token 预算: 2000 | 生命周期: 当前会话                      │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                            │                                     │
-│                            │ 会话结束后提取                        │
-│                            ▼                                     │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │              ② 长期记忆 (Long-term Memory)                │  │
-│  │                                                          │  │
-│  │  Session Scope:  ┌──────────────────────────────────┐    │  │
-│  │  (会话级)         │ "本次会话确认 Redis maxconn=1000" │    │  │
-│  │                   └──────────────────────────────────┘    │  │
-│  │                                                          │  │
-│  │  User Scope:     ┌──────────────────────────────────┐    │  │
-│  │  (用户级)         │ "用户 John 偏好告警阈值 80%"      │    │  │
-│  │                   └──────────────────────────────────┘    │  │
-│  │                                                          │  │
-│  │  Project Scope:  ┌──────────────────────────────────┐    │  │
-│  │  (项目级)         │ "checkoutsvc 部署在 K8s 1.28"    │    │  │
-│  │                   └──────────────────────────────────┘    │  │
-│  │                                                          │  │
-│  │  Global Scope:   ┌──────────────────────────────────┐    │  │
-│  │  (全局级)         │ "SLA 要求 99.9%，P99 < 500ms"     │    │  │
-│  │                   └──────────────────────────────────┘    │  │
-│  │                                                          │  │
-│  │  Token 预算: 500 | 生命周期: 跨会话持久                      │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
+
+**当前任务调用的工具结果**作为工作记忆：Token 预算 800，生命周期为当前请求（用完即弃）。
 
 ---
 
@@ -347,46 +324,21 @@ type ContextPackage struct {
 
 对话结束后，记忆写入经历以下阶段：
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                      记忆写入流程                                  │
-│                                                                  │
-│  对话结束（用户消息 + AI 回复）                                     │
-│    │                                                             │
-│    ▼                                                             │
-│  ┌─────────────────────┐                                         │
-│  │ PersistOutcome()     │  ← MemoryService 入口                   │
-│  │ sessionID, query,    │                                         │
-│  │ summary              │                                         │
-│  └─────────┬───────────┘                                         │
-│            │                                                     │
-│            ├──▶ ① SimpleMemory.AddUserAssistantPair (同步)        │
-│            │     └─ 存入短期记忆，更新对话窗口                      │
-│            │                                                     │
-│            ├──▶ ② MQ 异步提取（优先）                              │
-│            │     └─ 消息队列投递 → 异步 worker 处理                │
-│            │     └─ 投递成功 → 直接返回                            │
-│            │                                                     │
-│            └──▶ ③ 本地 goroutine 提取（MQ 不可用时降级）           │
-│                  │                                               │
-│                  ├─ acquireMemoryExtractionSlot                   │
-│                  │  └─ 信号量限流（默认 max 8 并发）                │
-│                  │                                               │
-│                  ├─ go func() { ... }(ctx)                        │
-│                  │  └─ context.WithoutCancel + WithTimeout        │
-│                  │                                               │
-│                  └─ processMemoryEventFunc(ctx, event)            │
-│                     │                                            │
-│                     ├─ ④ Agent.Decide（LLM 或 Rule）               │
-│                     │  └─ 提取 MemoryAction 列表                   │
-│                     │                                            │
-│                     ├─ ⑤ ValidateMemoryCandidate（过滤）           │
-│                     │  └─ 太短/太长/代码块/套话/密钥 → 丢弃        │
-│                     │                                            │
-│                     └─ ⑥ LongTermMemory.StoreWithOptions（写入）   │
-│                        └─ 去重/冲突处理/驱逐/持久化                  │
-│                                                                  │
-└──────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    A["对话结束（用户消息 + AI 回复）"] --> B["PersistOutcome() — MemoryService 入口"]
+
+    B -->|"① 同步"| C["SimpleMemory.AddUserAssistantPair\n存入短期记忆，更新对话窗口"]
+    B -->|"② 优先"| D["MQ 异步提取\n消息队列投递 → 异步 worker 处理\n投递成功 → 直接返回"]
+    B -->|"③ MQ 不可用时降级"| E["本地 goroutine 提取"]
+
+    E --> E1["acquireMemoryExtractionSlot\n信号量限流（默认 max 8 并发）"]
+    E1 --> E2["go func — context.WithoutCancel + WithTimeout"]
+    E2 --> F["processMemoryEventFunc"]
+
+    F -->|"④"| G["Agent.Decide（LLM 或 Rule）\n提取 MemoryAction 列表"]
+    F -->|"⑤"| H["ValidateMemoryCandidate（过滤）\n太短/太长/代码块/套话/密钥 → 丢弃"]
+    F -->|"⑥"| I["LongTermMemory.StoreWithOptions\n去重/冲突处理/驱逐/持久化"]
 ```
 
 ### 4.2 Step-by-Step 详解
@@ -517,6 +469,48 @@ func processMemoryEventWithConfiguredAgent(ctx context.Context, event mem.Memory
 - **偏好提取**：匹配"我喜欢""我希望""请用""不要用""每次都"等表达 → 作为 preference
 - **Scope 推断**：preference 类型 + 有 UserID → 自动提升为 User Scope
 
+**记忆候选验证**（`ValidateMemoryCandidate`）— 过滤掉不合格的记忆：
+
+```go
+// extraction.go - ValidateMemoryCandidate
+func ValidateMemoryCandidate(candidate MemoryCandidate) (bool, string) {
+    content := strings.TrimSpace(candidate.Content)
+
+    // ① 基础长度检查
+    if content == ""           { return false, "empty" }
+    if len(content) < 4       { return false, "too_short" }      // 太短没意义
+    if len(content) > 500     { return false, "too_long" }       // 太长可能是原始日志
+    if strings.Count(content, "\n") > 3 { return false, "too_many_lines" }
+
+    // ② 代码块检查 — 代码不应该作为记忆
+    if strings.Contains(content, "```") { return false, "contains_code_block" }
+
+    // ③ AI 套话检查 — "作为AI"、"抱歉"等模板回复不值得记住
+    lower := strings.ToLower(content)
+    for _, marker := range []string{
+        "作为ai", "作为一个ai", "抱歉", "对不起", "请提供更多信息", "无法直接",
+    } {
+        if strings.Contains(lower, marker) {
+            return false, "assistant_boilerplate"
+        }
+    }
+
+    // ④ 密钥检查 — 绝不让 API Key、密码进入记忆系统
+    for _, marker := range []string{
+        "api_key", "apikey", "access_key", "secret_key", "password", "passwd",
+        "authorization:", "bearer ", "token=", "token:",
+    } {
+        if strings.Contains(lower, marker) {
+            return false, "contains_secret_marker"
+        }
+    }
+
+    return true, ""  // 全部通过，合格
+}
+```
+
+> **面试要点**：记忆写入前有四层过滤——长度检查（防垃圾）、代码块检查（防噪音）、套话检查（防模板）、密钥检查（防泄露）。这是 AGENTS.md 规范"记忆写入前必须做基础过滤"的具体实现。
+
 **LLM Agent 的 System Prompt 核心要求**：
 
 ```go
@@ -612,36 +606,15 @@ func (ltm *LongTermMemory) StoreWithOptions(ctx context.Context, sessionID strin
 
 ### 5.1 整体链路
 
-```
-请求到达
-    │
-    ▼
-┌─────────────────────────────────────────────┐
-│  MemoryService.BuildContextPlan()            │
-│  mode, sessionID, query                      │
-└─────────────────┬───────────────────────────┘
-                  │
-                  ▼
-┌─────────────────────────────────────────────┐
-│  Assembler.Assemble()  ← Context Engine      │
-│  ┌─────────────────────────────────────────┐ │
-│  │ ① selectMemories()                      │ │
-│  │   └─ LongTermMemory.RetrieveScoped()    │ │
-│  │      └─ 按 Scope 范围检索                │ │
-│  │                                         │ │
-│  │ ② 六层过滤                               │ │
-│  │   ├─ 过期检查                             │ │
-│  │   ├─ Scope 匹配                           │ │
-│  │   ├─ 置信度阈值                           │ │
-│  │   ├─ 安全标签                             │ │
-│  │   ├─ 数量窗口                             │ │
-│  │   └─ Token 预算                           │ │
-│  │                                         │ │
-│  │ ③ 组装到 ContextPackage.MemoryItems      │ │
-│  └─────────────────────────────────────────┘ │
-│                                               │
-│  返回: contextText + MemoryRef[] + trace[]    │
-└───────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    A["请求到达"] --> B["MemoryService.BuildContextPlan()\nmode, sessionID, query"]
+    B --> C["Assembler.Assemble() ← Context Engine"]
+
+    C --> C1["① selectMemories()\nLongTermMemory.RetrieveScoped()\n按 Scope 范围检索"]
+    C1 --> C2["② 六层过滤\n过期检查 / Scope 匹配 / 置信度阈值\n安全标签 / 数量窗口 / Token 预算"]
+    C2 --> C3["③ 组装到 ContextPackage.MemoryItems"]
+    C3 --> D["返回: contextText + MemoryRef[] + trace[]"]
 ```
 
 ### 5.2 RetrieveScoped — 检索 + 排序
@@ -683,27 +656,14 @@ func (ltm *LongTermMemory) RetrieveScoped(ctx context.Context, query string,
 
 从长期记忆检索出来的候选，还要经过 Context Engine 的六层过滤才能进入最终上下文：
 
-```
-RetrieveScoped 返回的记忆列表
-    │
-    ├─ ① 过期检查
-    │    ExpiresAt > 0 && ExpiresAt <= now → 丢弃 (memory_expired)
-    │
-    ├─ ② Scope 匹配
-    │    不在 Profile.AllowedMemoryScopes 内 → 丢弃 (memory_scope)
-    │
-    ├─ ③ 置信度过滤
-    │    Confidence < MinMemoryConfidence → 丢弃 (memory_confidence)
-    │
-    ├─ ④ 安全标签过滤
-    │    SafetyLabel 不是 internal/trusted_internal/safe → 丢弃 (memory_safety)
-    │
-    ├─ ⑤ 数量窗口
-    │    已选数量 >= MaxMemoryItems → 丢弃 (memory_window)
-    │
-    └─ ⑥ Token 预算
-         TokenEstimate > remaining budget → 丢弃 (memory_budget)
-         （记忆不裁剪，超预算直接丢弃）
+```mermaid
+flowchart TD
+    A["RetrieveScoped 返回的记忆列表"] --> B["① 过期检查\nExpiresAt > 0 && ExpiresAt <= now → 丢弃"]
+    B --> C["② Scope 匹配\n不在 Profile.AllowedMemoryScopes 内 → 丢弃"]
+    C --> D["③ 置信度过滤\nConfidence < MinMemoryConfidence → 丢弃"]
+    D --> E["④ 安全标签过滤\nSafetyLabel 不是 internal/trusted_internal/safe → 丢弃"]
+    E --> F["⑤ 数量窗口\n已选数量 >= MaxMemoryItems → 丢弃"]
+    F --> G["⑥ Token 预算\nTokenEstimate > remaining budget → 丢弃\n（记忆不裁剪，超预算直接丢弃）"]
 ```
 
 **每一层被丢弃的记忆都会记录在 ContextTrace 中**，方便排查"为什么 LLM 没看到某条记忆"。
@@ -746,19 +706,13 @@ result = append(result, shortTermMsgs...)  // 然后是实际的对话历史
 
 ### 6.1 异步提取：context.WithoutCancel + WithTimeout
 
-```
-用户 HTTP 请求的生命周期:
-  Request → Handler → [PersistOutcome] → Response
-                           │
-                           │ go func(parent) {
-                           │   ctx = context.WithoutCancel(parent)  ← 断掉取消链
-                           │   ctx, cancel = context.WithTimeout(ctx, 1500ms)
-                           │   defer cancel()
-                           │   // 提取记忆...
-                           │ }()
-                           │
-                           ▼ (Request 已返回，但 goroutine 继续跑)
-                    提取结果写入长期记忆
+```mermaid
+flowchart TD
+    A["用户 HTTP 请求生命周期\nRequest → Handler → PersistOutcome → Response"] -->|"go func(parent)"| B["context.WithoutCancel(parent) — 断掉取消链"]
+    B --> C["context.WithTimeout(ctx, 1500ms)"]
+    C --> D["提取记忆..."]
+    D --> E["提取结果写入长期记忆"]
+    A -.->|"Request 已返回，但 goroutine 继续跑"| D
 ```
 
 | 机制 | 作用 |
@@ -801,41 +755,29 @@ func acquireMemoryExtractionSlot(ctx context.Context) (func(), error) {
 
 ### 6.3 Agent 模式：LLM → Rule Fallback
 
-```
-尝试 LLM 提取:
-  ├─ 检查 memory.agent_mode == "llm"
-  ├─ 检查 API Key 是否有效
-  ├─ 创建 LLMMemoryAgent(RuleMemoryAgent 作为 fallback)
-  │
-  ├─ LLM.Generate() 成功 → 解析 JSON → 返回 MemoryDecision
-  │
-  └─ LLM.Generate() 失败 → fallback.Decide() → Rule 提取结果
-       ├─ LLM 返回空
-       ├─ JSON 解析失败
-       ├─ Context 已取消
-       └─ 任何其他错误
+```mermaid
+flowchart TD
+    A["尝试 LLM 提取"] --> B{"检查 memory.agent_mode == llm\n且 API Key 有效？"}
+    B -->|"是"| C["创建 LLMMemoryAgent\nRuleMemoryAgent 作为 fallback"]
+    B -->|"否"| G["RuleMemoryAgent 直接提取"]
+    C --> D{"LLM.Generate()"}
+    D -->|"成功"| E["解析 JSON → 返回 MemoryDecision"]
+    D -->|"失败"| F["fallback.Decide() → Rule 提取结果\nLLM返回空 / JSON解析失败\nContext已取消 / 其他错误"]
+    F --> G
 ```
 
 > **面试要点**：这是典型的 **graceful degradation** 模式。LLM 不可用时系统不会崩溃，而是降级到规则提取。这在运维场景中尤为重要——不能因为记忆提取失败影响主链路。
 
 ### 6.4 容量控制：多级上限
 
-```
-┌─────────────────────────────────────────────┐
-│              容量控制体系                      │
-│                                             │
-│  全局上限: long_term_max_entries (默认 1000)  │
-│  ┌───────────────────────────────────────┐  │
-│  │  会话上限: per_session (默认 100)       │  │
-│  │  ┌─────────────────────────────────┐  │  │
-│  │  │  单条内容: 4 ~ 500 字符           │  │  │
-│  │  │  单条行数: ≤ 3 行               │  │  │
-│  │  └─────────────────────────────────┘  │  │
-│  └───────────────────────────────────────┘  │
-│                                             │
-│  驱逐策略: 按 computeRelevance() 排序         │
-│  淘汰相关性最低的记忆                         │
-└─────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph Capacity["容量控制体系"]
+        subgraph Session["会话上限: per_session（默认 100）"]
+            Content["单条内容: 4 ~ 500 字符\n单条行数: ≤ 3 行"]
+        end
+        Info["全局上限: long_term_max_entries（默认 1000）\n驱逐策略: 按 computeRelevance() 排序\n淘汰相关性最低的记忆"]
+    end
 ```
 
 ```go

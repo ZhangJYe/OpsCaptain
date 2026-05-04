@@ -46,3 +46,7 @@ __pycache__/
 .gotmp*/
 *.go.[0-9]*
 *.tsbuildinfo
+
+# Local agent / hook artifacts
+.claude-audit.log
+rag_eval_cmd

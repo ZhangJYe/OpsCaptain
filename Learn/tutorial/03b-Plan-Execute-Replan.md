@@ -185,24 +185,35 @@ RePlanner 做的事：检查 Executor 的执行结果，判断：
 
 这是 Plan-Execute-Replan 模式的一个重要设计决策：**不同角色用不同能力的模型**。
 
-```
-┌──────────────────────────────────────────────────────┐
-│                 按能力选模型策略                        │
-├─────────────┬──────────────┬──────────────────────────┤
-│   角色       │   模型能力    │       原因               │
-├─────────────┼──────────────┼──────────────────────────┤
-│  Planner    │  强模型(Think)│ 需要把模糊问题拆成可执行   │
-│             │  高推理能力   │ 步骤，这一步的偏差会传导   │
-│             │              │ 到后面所有步骤             │
-├─────────────┼──────────────┼──────────────────────────┤
-│  Executor   │  快模型(Fast) │ 只需要"看懂步骤 → 调工具"  │
-│             │  低延迟低成本 │ 不需要深度推理，10 步工具  │
-│             │              │ 调用以内都能完成           │
-├─────────────┼──────────────┼──────────────────────────┤
-│  RePlanner  │  强模型(Think)│ 需要评估执行结果的质量，   │
-│             │  高判断能力   │ 判断"够不够"需要理解上下   │
-│             │              │ 文，不是简单的是/否         │
-└─────────────┴──────────────┴──────────────────────────┘
+```mermaid
+graph TB
+    subgraph Strategy["按能力选模型策略"]
+        direction LR
+        subgraph Planner["Planner"]
+            P1[强模型 Think]
+            P2[高推理能力]
+            P3[把模糊问题拆成可执行步骤]
+            P4[偏差会传导到所有后续步骤]
+        end
+
+        subgraph Executor["Executor"]
+            E1[快模型 Fast]
+            E2[低延迟低成本]
+            E3[看懂步骤 → 调工具]
+            E4[不需要深度推理]
+        end
+
+        subgraph RePlanner["RePlanner"]
+            R1[强模型 Think]
+            R2[高判断能力]
+            R3[评估执行结果质量]
+            R4[判断"够不够"需要理解上下文]
+        end
+    end
+
+    style Planner fill:#d3f9d8,stroke:#2b8a3e
+    style Executor fill:#fff3bf,stroke:#f59f00
+    style RePlanner fill:#d3f9d8,stroke:#2b8a3e
 ```
 
 **为什么不能全用强模型？**
@@ -239,16 +250,32 @@ RePlanner 每一轮都要回答一个核心问题：**"还需要继续吗？"** 
 
 #### 为什么需要收敛判断
 
-```
-没有收敛判断：
-  Round 1: Plan A → Execute → "还不够" → Plan B
-  Round 2: Plan B → Execute → "还是不够" → Plan C  
-  Round 3: Plan C → Execute → "仍然不够" → ...无限循环
+```mermaid
+graph LR
+    subgraph NoConv["没有收敛判断"]
+        A1[Plan A] --> B1[Execute]
+        B1 --> C1["还不够"]
+        C1 --> D1[Plan B]
+        D1 --> E1[Execute]
+        E1 --> F1["还是不够"]
+        F1 --> G1[Plan C]
+        G1 --> H1[Execute]
+        H1 --> I1["仍然不够"]
+        I1 --> J1[...无限循环]
+    end
 
-有收敛判断：
-  Round 1: Plan A → Execute → Plan B (差异度 0.6，继续)
-  Round 2: Plan B → Execute → Plan C (差异度 0.15，接近收敛)
-  Round 3: Plan C → Execute → Plan D (差异度 0.03，收敛！输出)
+    subgraph WithConv["有收敛判断"]
+        A2[Plan A] --> B2[Execute]
+        B2 --> C2[Plan B<br/>差异度 0.6]
+        C2 --> D2[Execute]
+        D2 --> E2[Plan C<br/>差异度 0.15]
+        E2 --> F2[Execute]
+        F2 --> G2[Plan D<br/>差异度 0.03]
+        G2 --> H2[收敛！输出]
+    end
+
+    style NoConv fill:#ffe8cc,stroke:#fd7e14
+    style WithConv fill:#d3f9d8,stroke:#2b8a3e
 ```
 
 #### 算法设计：基于步骤序列的差异度
@@ -263,53 +290,51 @@ RePlanner 每一轮都要回答一个核心问题：**"还需要继续吗？"** 
 
 **差异度计算分三个层次：**
 
-```
-Level 1 — 动作序列编辑距离（粗粒度，权重 0.5）
-  ┌──────────────────────────────────────┐
-  │ Old: [A, B, C, D]                    │
-  │ New: [A, B, E, D]                    │
-  │ 编辑距离 = 1 (替换 C→E)               │
-  │ 差异度₁ = 1 / max(len(old),len(new)) │
-  │        = 1/4 = 0.25                  │
-  └──────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph L1["Level 1 — 动作序列编辑距离（粗粒度，权重 0.5）"]
+        L1A["Old: [A, B, C, D]"]
+        L1B["New: [A, B, E, D]"]
+        L1C["编辑距离 = 1 (替换 C→E)"]
+        L1D["差异度₁ = 1/4 = 0.25"]
+    end
 
-Level 2 — 目标对象重合度（中粒度，权重 0.3）
-  ┌──────────────────────────────────────┐
-  │ Old targets: {payment-svc, order-svc,│
-  │                gateway, db}          │
-  │ New targets: {payment-svc, order-svc,│
-  │                network, db}          │
-  │ Jaccard = |交集|/|并集| = 3/5 = 0.6 │
-  │ 差异度₂ = 1 - 0.6 = 0.4             │
-  └──────────────────────────────────────┘
+    subgraph L2["Level 2 — 目标对象重合度（中粒度，权重 0.3）"]
+        L2A["Old targets: {payment-svc, order-svc, gateway, db}"]
+        L2B["New targets: {payment-svc, order-svc, network, db}"]
+        L2C["Jaccard = 3/5 = 0.6"]
+        L2D["差异度₂ = 1 - 0.6 = 0.4"]
+    end
 
-Level 3 — 参数变化幅度（细粒度，权重 0.2）
-  ┌──────────────────────────────────────┐
-  │ Old: window=7d, top_k=10             │
-  │ New: window=3d, top_k=10             │
-  │ 参数差异度₃ = 0.3 (仅时间窗口变化)    │
-  └──────────────────────────────────────┘
+    subgraph L3["Level 3 — 参数变化幅度（细粒度，权重 0.2）"]
+        L3A["Old: window=7d, top_k=10"]
+        L3B["New: window=3d, top_k=10"]
+        L3C["参数差异度₃ = 0.3"]
+    end
 
-综合差异度 = 0.5×差异度₁ + 0.3×差异度₂ + 0.2×差异度₃
-           = 0.5×0.25 + 0.3×0.4 + 0.2×0.3
-           = 0.125 + 0.12 + 0.06
-           = 0.305
+    L1 --> Result["综合差异度 = 0.5×0.25 + 0.3×0.4 + 0.2×0.3 = 0.305"]
+    L2 --> Result
+    L3 --> Result
+
+    style L1 fill:#d3f9d8,stroke:#2b8a3e
+    style L2 fill:#fff3bf,stroke:#f59f00
+    style L3 fill:#ffe8cc,stroke:#fd7e14
+    style Result fill:#4dabf7,stroke:#333,color:#fff
 ```
 
 #### 收敛判定规则
 
-```
-综合差异度 < 阈值 T？  ──Yes──▶  收敛 → 输出最终报告
-       │
-       No
-       │
-       ▼
-  迭代次数 < MaxIterations？  ──Yes──▶  继续下一轮
-       │
-       No
-       │
-       ▼
-  强制结束 → 输出当前最优结果
+```mermaid
+graph TD
+    A[综合差异度 < 阈值 T？] -->|Yes| B[收敛 → 输出最终报告]
+    A -->|No| C[迭代次数 < MaxIterations？]
+    C -->|Yes| D[继续下一轮]
+    C -->|No| E[强制结束 → 输出当前最优结果]
+
+    style A fill:#fff3bf,stroke:#f59f00
+    style B fill:#51cf66,stroke:#333,color:#fff
+    style D fill:#4dabf7,stroke:#333,color:#fff
+    style E fill:#ff6b6b,stroke:#333,color:#fff
 ```
 
 **阈值调优经验：**
@@ -335,7 +360,7 @@ func convergenceCheck(oldPlan, newPlan *Plan) (bool, float64) {
 }
 ```
 
-> 当前实现依赖 **MaxIterations=5** 做硬上限保护，收敛判断是下一步优化方向——在达到 5 轮之前就能智能提前结束，节省 token 和延迟。
+> **当前状态**：线上先用了 `MaxIterations=5` 做硬上限保护。收敛判断算法已完成设计（见下方），作为下一步优化方向——在达到 5 轮之前就能智能提前结束，节省 token 和延迟。下面的算法是**设计稿**，尚未落地到代码中。
 
 ---
 

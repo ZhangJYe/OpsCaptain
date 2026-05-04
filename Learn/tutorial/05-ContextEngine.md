@@ -40,23 +40,13 @@
 
 ### 1.3 一张图看懂
 
-```
-                        Context Engine
-┌─────────────────────────────────────────────────────────────┐
-│                                                             │
-│  HistoryMessages ──┐                                        │
-│  (对话历史)         │                                        │
-│                    │      ┌──────────────┐                  │
-│  MemoryItems ──────┼─────▶│   Assembler  │──────▶ LLM       │
-│  (长期记忆)         │      │  装配引擎     │     ContextPackage│
-│                    │      │              │                  │
-│  DocumentItems ────┼─────▶│  Budget 预算  │                  │
-│  (RAG 检索结果)     │      │  Profile策略  │                  │
-│                    │      │  Trace 可追溯  │                  │
-│  ToolItems ────────┘      └──────────────┘                  │
-│  (工具调用结果)                                               │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+graph LR
+    A[HistoryMessages<br/>对话历史] --> C
+    B[MemoryItems<br/>长期记忆] --> C
+    D[DocumentItems<br/>RAG 检索结果] --> C
+    E[ToolItems<br/>工具调用结果] --> C
+    C[Assembler 装配引擎<br/>Budget 预算 / Profile 策略 / Trace 可追溯] --> F[LLM<br/>ContextPackage]
 ```
 
 ---
@@ -130,30 +120,30 @@ type ContextPackage struct {
 - **预算**：默认 3200 token（= MaxTokens × 40%，基于公式 `HistoryReserve = maxTokens × 0.40`，默认 maxTokens=8000）
 - **选择策略**：从最新消息开始逆向选取，优先保留最近的对话
 
-```
-对话历史（10 条消息）:
-┌─────────────────────────────────────────────┐
-│ msg1: 用户: "Redis 怎么查慢查询？"            │  ← 最旧
-│ msg2: AI: "可以用 SLOWLOG GET 命令..."        │
-│ msg3: 用户: "我发现有很多 KEYS * 调用"         │
-│ ...                                         │
-│ msg9: 用户: "帮我分析一下 CPU 飙升的原因"       │  ← 较新
-│ msg10: AI: "好的，请提供时间范围..."           │  ← 最新
-└─────────────────────────────────────────────┘
-         │
-         ▼ selectHistory（从最新开始逆向选取）
-┌─────────────────────────────────────────────┐
-│ msg10 ✓ (300 tokens)                        │
-│ msg9  ✓ (250 tokens)                        │
-│ msg8  ✓ (400 tokens)                        │
-│ msg7  ✓ (350 tokens)  累计 1300 / 3200       │
-│ msg6  ✓ (500 tokens)  累计 1800 / 3200       │
-│ msg5  ✓ (600 tokens)  累计 2400 / 3200       │
-│ msg4  ✓ (550 tokens)  累计 2950 / 3200       │
-│ msg3  ✗ (400 tokens)  超预算 → 丢弃           │  ← 旧消息被裁剪
-│ msg2  ✗ → 丢弃                               │
-│ ...                                         │
-└─────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph 原始对话历史 - 10条消息
+        A1["msg1: Redis 怎么查慢查询？ ← 最旧"]
+        A2["msg2: 可以用 SLOWLOG GET 命令..."]
+        A3["msg3: 我发现有很多 KEYS * 调用"]
+        A4["..."]
+        A5["msg9: 帮我分析一下 CPU 飙升的原因 ← 较新"]
+        A6["msg10: 好的，请提供时间范围... ← 最新"]
+    end
+
+    subgraph selectHistory - 从最新开始逆向选取
+        B1["msg10 ✓ 300 tokens"]
+        B2["msg9 ✓ 250 tokens"]
+        B3["msg8 ✓ 400 tokens"]
+        B4["msg7 ✓ 350 tokens → 累计 1300/3200"]
+        B5["msg6 ✓ 500 tokens → 累计 1800/3200"]
+        B6["msg5 ✓ 600 tokens → 累计 2400/3200"]
+        B7["msg4 ✓ 550 tokens → 累计 2950/3200"]
+        B8["msg3 ✗ 400 tokens → 超预算丢弃"]
+        B9["msg2 ✗ → 丢弃"]
+    end
+
+    原始对话历史 - 10条消息 --> selectHistory - 从最新开始逆向选取
 ```
 
 > **面试要点**：从最新消息开始逆向选取。如果包含 `[对话历史摘要]` 前缀的消息（超长对话摘要），会强制保留。
@@ -193,11 +183,11 @@ for _, entry := range entries {
 
 ### 3.3 DocumentItems — RAG 检索结果
 
-- **来源**：RAG 链路（Query Rewrite → Milvus 检索 → Rerank）
+- **来源**：RAG 链路（当前 ContextEngine 调用 `rag.Query()`，走 hybrid retrieval；Query Rewrite / Rerank 是评测与后续可选增强）
 - **生命周期**：请求级
 - **作用**：让 LLM 参考知识库中的相关文档回答问题
 - **预算**：默认 1200 token（= MaxTokens × 15%，基于公式 `DocumentReserve = maxTokens × 0.15`）
-- **选择策略**：按 Rerank 分数排序，从头开始填充直到预算用完；超预算的文档会被裁剪（trim）后尝试放入
+- **选择策略**：沿用 hybrid retrieval 返回顺序，从头开始填充直到预算用完；超预算的文档会被裁剪（trim）后尝试放入
 
 ```go
 // documents.go - selectDocuments
@@ -250,22 +240,22 @@ type ContextBudget struct {
 }
 ```
 
-```
-┌──────────────────────────────────────────────────────┐
-│                 LLM Token 总预算                      │
-│                 (MaxTotalTokens)                      │
-├────────────┬─────┬──────┬──────┬──────┬──────┬───────┤
-│  System    │History│Memory│ Docs │ Tools│Reserved│     │
-│  Prompt    │ 3200  │ 800  │ 1200 │ 800  │  400   │     │
-│  (固定)    │ (40%) │(10%) │(15%) │(10%) │ (5%)   │     │
-└────────────┴──────┴──────┴──────┴──────┴───────┴─────┘
-      ▲          ▲      ▲      ▲      ▲       ▲
-      │          │      │      │      │       └─ 留给 LLM 输出
-      │          │      │      │      └───────── 工具结果上限
-      │          │      │      └──────────────── RAG 文档上限
-      │          │      └─────────────────────── 长期记忆上限
-      │          └────────────────────────────── 对话历史上限
-      └───────────────────────────────────────── 系统提示词占用
+```mermaid
+graph LR
+    subgraph LLM Token 总预算 MaxTotalTokens
+        A["System Prompt<br/>1600 (20%)"]
+        B["History<br/>3200 (40%)"]
+        C["Memory<br/>800 (10%)"]
+        D["Docs<br/>1200 (15%)"]
+        E["Tools<br/>800 (10%)"]
+        F["Reserved<br/>400 (5%)"]
+    end
+    A -.- G[系统提示词占用]
+    B -.- H[对话历史上限]
+    C -.- I[长期记忆上限]
+    D -.- J[RAG 文档上限]
+    E -.- K[工具结果上限]
+    F -.- L[留给 LLM 输出]
 ```
 
 ### 4.2 预算分配公式（实际实现）
@@ -396,44 +386,46 @@ if item.TokenEstimate > remaining {
 
 #### chat 模式
 
-```
-┌──────────────────────────────────────┐
-│  chat 模式                           │
-│                                      │
-│  ✅ History  → 保留最近对话，保持连贯  │
-│  ✅ Memory   → 注入用户/项目背景      │
-│  ✅ Docs     → RAG 检索相关知识       │
-│  ❌ Tools    → 不需要工具结果         │
-│  ✅ Staged   → 记忆作为消息前置注入    │
-└──────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph chat 模式
+        A["✅ History → 保留最近对话，保持连贯"]
+        B["✅ Memory → 注入用户/项目背景"]
+        C["✅ Docs → RAG 检索相关知识"]
+        D["❌ Tools → 不需要工具结果"]
+        E["✅ Staged → 记忆作为消息前置注入"]
+    end
 ```
 
 #### aiops 模式
 
+```mermaid
+graph TD
+    subgraph aiops 模式
+        A["❌ History → 每次是独立故障场景"]
+        B["✅ Memory → 用户偏好、历史经验"]
+        C["❌ Docs → 不预装配，Agent 自己查"]
+        D["❌ Tools → 不预装配，Agent 自己调"]
+        E["❌ Staged → 记忆不进对话流"]
+    end
 ```
-┌──────────────────────────────────────┐
-│  aiops 模式                          │
-│                                      │
-│  ❌ History  → 每次是独立故障场景      │
-│  ✅ Memory   → 用户偏好、历史经验      │
-│  ✅ Docs     → 故障排查 SOP           │
-│  ✅ Tools    → 实时告警、日志结果      │
-│  ❌ Staged   → 记忆不进对话流         │
-└──────────────────────────────────────┘
-```
+
+> **为什么 aiops 不预装配 Docs 和 Tools？**
+> 因为 aiops 走的是 Plan-Execute-Replan 链路，Agent 在执行过程中会自主调用工具（查 Prometheus、查日志、查知识库）。
+> 这些工具结果是**动态的**——取决于 Planner 制定的执行计划，不可能在请求开始前就预知需要哪些文档。
+> 所以 ContextEngine 只负责装配 Memory（用户偏好），Docs 和 Tools 由 Agent 在 ReAct/Plan-Execute 循环中自行获取。
 
 #### report 模式
 
-```
-┌──────────────────────────────────────┐
-│  report 模式                         │
-│                                      │
-│  ❌ History  → 不需要对话历史         │
-│  ❌ Memory   → 不需要长期记忆         │
-│  ❌ Docs     → 不需要知识检索         │
-│  ✅ Tools    → 只有工具结果作为素材    │
-│  ❌ Staged   → 记忆不进对话流         │
-└──────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph report 模式
+        A["❌ History → 不需要对话历史"]
+        B["❌ Memory → 不需要长期记忆"]
+        C["❌ Docs → 不需要知识检索"]
+        D["✅ Tools → 只有工具结果作为素材"]
+        E["❌ Staged → 记忆不进对话流"]
+    end
 ```
 
 ### 5.3 Profile 解析逻辑
@@ -515,29 +507,22 @@ func (r *PolicyResolver) Resolve(ctx context.Context, req ContextRequest) Contex
 
 #### 5.4.3 各 Profile 预算占比可视化
 
-```
-chat 模式 (maxTokens=8000):
-┌──────────┬────────────┬───────┬─────────┬──────────┬──────┐
-│ System   │  History   │Memory │  Docs   │ Reserved │Tool* │
-│  1600    │   3200     │  800  │  1200   │   400    │ 800  │
-│  (20%)   │   (40%)    │ (10%) │  (15%)  │   (5%)   │(禁用)│
-└──────────┴────────────┴───────┴─────────┴──────────┴──────┘
+```mermaid
+graph TD
+    subgraph chat 模式 maxTokens=8000
+        direction LR
+        C1["System 1600 (20%)"] --- C2["History 3200 (40%)"] --- C3["Memory 800 (10%)"] --- C4["Docs 1200 (15%)"] --- C5["Reserved 400 (5%)"] --- C6["Tool* 800 (禁用)"]
+    end
 
-aiops 模式 (maxTokens=8000):
-┌──────────┬──────────────────────────┬───────┬──────────┐
-│ System   │        (未使用)          │Memory │ Reserved │
-│  1600    │   History=0, Docs=0,     │  800  │   400    │
-│  (20%)   │   Tool=0                 │ (10%) │   (5%)   │
-└──────────┴──────────────────────────┴───────┴──────────┘
-           └─ 5200 token 留空 ─────────┘
+    subgraph aiops 模式 maxTokens=8000
+        direction LR
+        A1["System 1600 (20%)"] --- A2["(未使用) 5200 token 留空<br/>History=0, Docs=0, Tool=0"] --- A3["Memory 800 (10%)"] --- A4["Reserved 400 (5%)"]
+    end
 
-reporter 模式 (maxTokens=8000):
-┌──────────┬──────────────────────────┬──────┬──────────┐
-│ System   │        (未使用)          │ Tool │ Reserved │
-│  1600    │   History=0, Memory=0,   │  800 │   400    │
-│  (20%)   │   Docs=0                 │ (10%)│   (5%)   │
-└──────────┴──────────────────────────┴──────┴──────────┘
-           └─ 5200 token 留空 ────────┘
+    subgraph reporter 模式 maxTokens=8000
+        direction LR
+        R1["System 1600 (20%)"] --- R2["(未使用) 5200 token 留空<br/>History=0, Memory=0, Docs=0"] --- R3["Tool 800 (10%)"] --- R4["Reserved 400 (5%)"]
+    end
 ```
 
 > **设计理念**：aiops 和 reporter 模式下大量 token 留空，不是浪费，而是**明确拒绝了不需要的信息来源**。这些留空的 token 在实际上不会进入 LLM 上下文窗口，让 LLM 可以完全聚焦于当前任务。System Prompt 和 Reserved（答案输出）的空间始终保留。
@@ -577,56 +562,31 @@ return []*schema.Message{
 
 ### 6.1 完整装配流程图
 
-```
-Assembler.Assemble(ctx, req, history)
-│
-├─ Step 0: 记录开始时间，用于计算装配总耗时
-│
-├─ Step 1: PolicyResolver.Resolve(ctx, req)
-│   └─ 根据 req.Mode 选择 Profile（chat / aiops / report）
-│
-├─ Step 2: 初始化 ContextPackage + ContextAssemblyTrace
-│   └─ 记录 BudgetBefore（装配前预算快照）
-│
-├─ Step 3: selectHistory() — 对话历史选择
-│   ├─ 条件：profile.AllowHistory && len(history) > 0
-│   ├─ 逻辑：从最新消息开始逆向选取
-│   │   ├─ 按 MaxHistoryMessages 数量窗口过滤
-│   │   └─ 按 HistoryTokens 预算过滤
-│   ├─ 特殊处理：强制保留 "[对话历史摘要]" 前缀消息
-│   └─ 输出：selectedHistory + droppedHistory + trace
-│
-├─ Step 4: selectMemories() — 长期记忆检索与过滤
-│   ├─ 条件：profile.AllowMemory && req.SessionID != ""
-│   ├─ 检索：LongTermMemory.RetrieveScoped(query, limit*3, policy)
-│   │   └─ 按 Session / User / Project / Global Scope 检索
-│   ├─ 过滤（6 层）：
-│   │   ├─ 过期检查 (ExpiresAt)
-│   │   ├─ Scope 允许列表
-│   │   ├─ 置信度阈值 (MinMemoryConfidence)
-│   │   ├─ 安全标签 (SafetyLabel)
-│   │   ├─ 数量窗口 (MaxMemoryItems)
-│   │   └─ Token 预算 (MemoryTokens)
-│   └─ 输出：selectedMemory + droppedMemory + trace
-│
-├─ Step 5: selectDocuments() — RAG 文档检索
-│   ├─ 条件：profile.AllowDocs
-│   ├─ 检索：rag.Query() → Rewrite + Retrieve + Rerank
-│   │   └─ 超时保护：contextDocsQueryTimeout
-│   ├─ 裁剪：按 DocumentTokens 预算，超出部分 trim 或丢弃
-│   └─ 输出：selectedDocs + droppedDocs + trace
-│
-├─ Step 6: selectToolItems() — 工具结果选择
-│   ├─ 条件：profile.AllowToolResults && len(req.ToolItems) > 0
-│   ├─ 过滤：先数量窗口 (MaxToolItems)，再 Token 预算 (ToolTokens)
-│   ├─ 裁剪：超出预算的 item 尝试 trim
-│   └─ 输出：selectedTools + droppedTools + trace
-│
-├─ Step 7: Staged 处理（如果启用）
-│   └─ memoryItemsAsMessages() → 前置到 HistoryMessages
-│
-└─ Step 8: 返回 ContextPackage（含完整 Trace）
-    └─ 记录 BudgetAfter + LatencyMs
+```mermaid
+graph TD
+    A["Step 0: 记录开始时间"] --> B["Step 1: PolicyResolver.Resolve<br/>根据 req.Mode 选择 Profile"]
+    B --> C["Step 2: 初始化 ContextPackage + Trace<br/>记录 BudgetBefore"]
+    C --> D{"profile.AllowHistory?"}
+    D -->|Yes| E["Step 3: selectHistory<br/>逆向选取 + 预算过滤<br/>输出: selectedHistory + droppedHistory"]
+    D -->|No| E2["跳过"]
+    E --> F{"profile.AllowMemory?"}
+    E2 --> F
+    F -->|Yes| G["Step 4: selectMemories<br/>6层过滤: 过期/Scope/置信度/安全/数量/预算<br/>输出: selectedMemory + droppedMemory"]
+    F -->|No| G2["跳过"]
+    G --> H{"profile.AllowDocs?"}
+    G2 --> H
+    H -->|Yes| I["Step 5: selectDocuments<br/>RAG: hybrid retrieval<br/>超出预算 trim 或丢弃"]
+    H -->|No| I2["跳过"]
+    I --> J{"profile.AllowToolResults?"}
+    I2 --> J
+    J -->|Yes| K["Step 6: selectToolItems<br/>数量窗口 + Token 预算双重限制<br/>超出预算尝试 trim"]
+    J -->|No| K2["跳过"]
+    K --> L{"Staged 启用?"}
+    K2 --> L
+    L -->|Yes| M["Step 7: memoryItemsAsMessages<br/>记忆消息前置到 HistoryMessages"]
+    L -->|No| M2["跳过"]
+    M --> N["Step 8: 返回 ContextPackage<br/>记录 BudgetAfter + LatencyMs"]
+    M2 --> N
 ```
 
 ### 6.2 代码对应
@@ -716,7 +676,7 @@ context profile=chat-default
 context sources selected=15/38
 history selected=6 dropped=5 (tokens=2900/3200)
 memory selected=3 dropped=8 (tokens=750/800; min_confidence=0.50)
-documents selected=4 dropped=12 (tokens=1100/1200; retrieval cache_hit=false init_ms=12 rewrite_ms=350 retrieve_ms=120 rerank_ms=520 raw=20 final=4 rerank=true)
+documents selected=4 dropped=12 (tokens=1100/1200; retrieval cache_hit=false init_ms=12 rewrite_ms=0 retrieve_ms=120 rerank_ms=0 raw=20 final=4 rerank=false)
 context dropped history_window=3, history_budget=2, memory_confidence=5, memory_budget=2, memory_expired=1, document_budget=12
 latency_ms=45
 ```

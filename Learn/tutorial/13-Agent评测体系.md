@@ -54,23 +54,14 @@ Agent 评测 = 厨师考试
 
 ### 2.1 五个维度
 
-```
-                    ┌──────────────┐
-                    │  任务完成度   │ ← 问题解决了吗？
-                    │  (Success)    │
-                    ├──────────────┤
-                    │  过程质量     │ ← 推理正确吗？工具用对了吗？
-                    │  (Process)    │
-                    ├──────────────┤
-                    │  鲁棒性       │ ← 工具挂了他扛得住吗？
-                    │  (Robustness) │
-                    ├──────────────┤
-                    │  效率/成本    │ ← token 花了多少？几步完成的？
-                    │  (Efficiency) │
-                    ├──────────────┤
-                    │  安全性       │ ← 有没有乱调危险的 API？
-                    │  (Safety)     │
-                    └──────────────┘
+```mermaid
+graph TD
+    A["任务完成度 (Success) ← 问题解决了吗？"]
+    B["过程质量 (Process) ← 推理正确吗？工具用对了吗？"]
+    C["鲁棒性 (Robustness) ← 工具挂了他扛得住吗？"]
+    D["效率/成本 (Efficiency) ← token 花了多少？几步完成的？"]
+    E["安全性 (Safety) ← 有没有乱调危险的 API？"]
+    A --> B --> C --> D --> E
 ```
 
 ### 2.2 每个维度的量化指标
@@ -89,23 +80,14 @@ Agent 评测 = 厨师考试
 
 ## 3. 评测金字塔：从快到慢，从便宜到贵
 
-```
-                    ┌─────────┐
-                    │ 人工评测  │  ← 最准但最贵最慢
-                    │  (E2E)   │     每周 50 条，人工打分
-                    ├─────────┤
-                    │ LLM-as- │  ← 自动化但需要校验
-                    │  Judge   │     每夜跑 Golden Case
-                    ├─────────┤
-                    │ 行为指标  │  ← 自动采集，CI 监控
-                    │ (Metrics) │     Prometheus + Trace
-                    ├─────────┤
-                    │ Golden   │  ← 快反馈，每次提交跑
-                    │  Case    │     已知正确答案的回归
-                    ├─────────┤
-                    │ 单元测试  │  ← 秒级，每行代码变更
-                    │ (Unit)    │     单个函数/模块
-                    └─────────┘
+```mermaid
+graph TD
+    A["人工评测 (E2E) ← 最准但最贵最慢，每周 50 条人工打分"]
+    B["LLM-as-Judge ← 自动化但需要校验，每夜跑 Golden Case"]
+    C["行为指标 (Metrics) ← 自动采集，CI 监控，Prometheus + Trace"]
+    D["Golden Case ← 快反馈，每次提交跑，已知正确答案的回归"]
+    E["单元测试 (Unit) ← 秒级，每行代码变更，单个函数/模块"]
+    A --> B --> C --> D --> E
 ```
 
 ### 3.1 Layer 1：单元测试（秒级）
@@ -187,20 +169,16 @@ func TestGoldenCases(t *testing.T) {
 
 不测试"对不对"，而是监控**系统的行为模式**。
 
-```
 每次 Agent 执行自动记录：
 
-┌─────────────────┬──────────┬──────────┐
-│ 指标              │ 当前值    │ 告警阈值   │
-├─────────────────┼──────────┼──────────┤
-│ Agent 步数        │ avg=6.2  │ > 15     │
-│ 工具调用成功率    │ 94%      │ < 85%    │
-│ 降级触发率        │ 3%       │ > 10%    │
-│ LLM 调用 P99 延迟 │ 3200ms   │ > 5000ms │
-│ Token 消耗/task   │ avg=4200 │ > 8000   │
-│ 空回答率          │ 0.5%     │ > 2%     │
-└─────────────────┴──────────┴──────────┘
-```
+| 指标 | 当前值 | 告警阈值 |
+|------|--------|----------|
+| Agent 步数 | avg=6.2 | > 15 |
+| 工具调用成功率 | 94% | < 85% |
+| 降级触发率 | 3% | > 10% |
+| LLM 调用 P99 延迟 | 3200ms | > 5000ms |
+| Token 消耗/task | avg=4200 | > 8000 |
+| 空回答率 | 0.5% | > 2% |
 
 **实现方式：** 利用已有的 `QueryTrace` + Prometheus metrics。每次 Agent 执行完后，QueryTrace 的数据自动写入 Prometheus Counter/Histogram。
 
@@ -210,27 +188,12 @@ func TestGoldenCases(t *testing.T) {
 
 用**一个更强的 LLM 当裁判**，对 Agent 的输出做多维度打分。
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                   LLM-as-Judge 流程                      │
-│                                                         │
-│  待评测 Agent ──→ 处理 Golden Case ──→ 输出诊断报告       │
-│                                              │          │
-│                                              ▼          │
-│                                     Judge LLM (裁判)     │
-│                                     阅读：                │
-│                                     - 原始用户问题        │
-│                                     - Agent 的诊断报告    │
-│                                     - Ground Truth 参考   │
-│                                              │          │
-│                                              ▼          │
-│                               ┌─────────────────────┐   │
-│                               │ 正确性: 8/10         │   │
-│                               │ 完整性: 7/10         │   │
-│                               │ 逻辑性: 9/10         │   │
-│                               │ 可操作性: 6/10       │   │
-│                               └─────────────────────┘   │
-└─────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    A["待评测 Agent"] --> B["处理 Golden Case"]
+    B --> C["输出诊断报告"]
+    C --> D["Judge LLM (裁判)<br>阅读：原始用户问题、Agent 诊断报告、Ground Truth 参考"]
+    D --> E["评分结果<br>正确性: 8/10 | 完整性: 7/10<br>逻辑性: 9/10 | 可操作性: 6/10"]
 ```
 
 **Judge Prompt 模板：**
@@ -343,11 +306,11 @@ func TestGoldenCases(t *testing.T) {
 | Triage 意图分类 | 规则表 + 抽样验证 | ⚠️ 缺自动化 |
 | 行为指标 | ContextTrace（每次请求上下文装配全链路追踪） | ✅ |
 | 安全防护 | Prompt Guard + Output Filter 规则 | ✅ |
-| Agent 输出质量 | Contract Schema Gate（EnforceContract 运行时校验） | ✅ |
-| Agent 评测框架 | eval.MultiAgentRunner（Golden Case 端到端跑） | ✅ 框架就绪 |
+| Agent 输出质量 | Contract Schema Gate（历史 runtime 已验证，当前主链路迁移中） | ⚠️ 迁移中 |
+| Agent 评测框架 | Chat ReAct / AIOps Plan-Execute-Replan replay case | ⚠️ 建设中 |
 | A/B 对比 | JudgeResult + BaselineScores vs CandidateScores | ✅ 类型定义完成 |
 
-### 6.2 实际评测代码结构
+### 6.2 当前评测代码结构
 
 ```go
 // internal/ai/agent/eval/types.go
@@ -379,15 +342,13 @@ type JudgeResult struct {
     CandidateScores DiagScores
     Delta           DiagScores  // 变化量——正数 = 候选更优
 }
-
-// MultiAgentRunner = 端到端跑评测
-// 它注册全部 Agent（supervisor + triage + metrics + logs + knowledge + reporter），
-// 通过 Runtime.Dispatch 跑完整编排，返回 summary + intent + domains
 ```
+
+> 注意：`eval.MultiAgentRunner` 依赖 supervisor / triage / reporter 这条历史 multi-agent pipeline，代码中已标记 Deprecated。它可以作为 Harness 设计的历史样本，但不再代表当前评测主线。
 
 **面试时怎么说：**
 
-> "评测框架已经就绪——`DiagCase` 定义了测试用例的结构，`DiagScores` 定义了四维打分的结构，`MultiAgentRunner` 可以通过完整的 Agent Runtime 跑端到端测试。A/B 对比用 `JudgeResult` 结构——把 baseline 和 candidate 的打分求 delta，快速看到改了 Prompt 后哪些维度进步了、哪些退步了。"
+> "评测体系我按当前主链路来推进：Chat ReAct 看工具调用顺序、回答质量和流式事件；AIOps Plan-Execute-Replan 看计划是否合理、执行是否有证据、失败是否能降级；ContextEngine 通过 ContextTrace 解释用了哪些 history/memory/docs/tool outputs。`DiagCase`、`DiagScores`、`JudgeResult` 已经定义了评测数据结构，后续 replay case 会围绕当前两条主链路建设，而不是继续依赖废弃的 MultiAgentRunner。"
 
 ### 6.3 规划中的
 
@@ -404,7 +365,7 @@ type JudgeResult struct {
 
 ### Q1: "你怎么评价你的 Agent 做得对不对？"
 
-> 我有四层评测。**第一层，Contract Schema Gate**——每个 Agent 的输出在返回前都要经过 `EnforceContract()` 校验，检查摘要非空、降级原因必填、输出不越界。这是**代码层面的确定性检查**，不依赖 LLM 的理解。**第二层，Golden Case 回归**——用 `DiagCase` 定义 10 个典型运维问题，`MultiAgentRunner` 通过完整 Agent Runtime 端到端跑，验证输出包含预期关键词、调了正确的工具、没有胡说八道。**第三层，行为指标监控**——每次 Agent 执行后自动采集步数、工具调用成功率、LLM 延迟、token 消耗，Prometheus 做趋势告警。**第四层，LLM-as-Judge + 人工抽检**——用 `DiagScores` 四维打分（正确性/完整性/逻辑性/可操作性），`JudgeResult` 做 A/B 对比看 delta，每周人工抽查 20 条做一致性校验。
+> 我有四层评测。**第一层，确定性约束**——对可结构化的输出做 Contract / schema 校验，历史 runtime 已接入 `EnforceContract()`，当前主链路会优先把关键输出和降级原因纳入可校验结构。**第二层，Replay Case 回归**——用 `DiagCase` 定义典型运维问题，分别覆盖 Chat ReAct 和 AIOps Plan-Execute-Replan，验证是否调用了正确工具、是否引用证据、是否能降级。**第三层，行为指标监控**——通过 ContextTrace、事件链和 Prometheus 观察工具成功率、LLM 延迟、token 消耗和降级率。**第四层，LLM-as-Judge + 人工抽检**——用 `DiagScores` 四维打分（正确性/完整性/逻辑性/可操作性），`JudgeResult` 做 A/B 对比看 delta，每周人工抽查做一致性校验。
 >
 > 另外 RAG 层面有独立的 Recall@K 评测——当前 Recall@10 = 78%，用 AIOps Challenge 2025 案例集，build/holdout split 严格分开。
 

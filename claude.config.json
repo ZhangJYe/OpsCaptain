@@ -1,0 +1,63 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "name": "init-environment",
+        "command": "./hooks/session-start.sh",
+        "timeout": 5000
+      }
+    ],
+    "PreToolUse": [
+      {
+        "name": "block-dangerous-commands",
+        "command": "./hooks/block-dangerous.sh",
+        "args": ["{{tool_name}}", "{{tool_input}}"],
+        "matcher": "Bash",
+        "timeout": 3000
+      },
+      {
+        "name": "protect-sensitive-files",
+        "command": "./hooks/protect-secrets.sh",
+        "args": ["{{tool_input}}"],
+        "matcher": "Write|Edit",
+        "timeout": 3000
+      },
+      {
+        "name": "protect-go-deps",
+        "command": "./hooks/protect-go-deps.sh",
+        "args": ["{{tool_input}}"],
+        "matcher": "Write|Edit",
+        "timeout": 2000
+      },
+      {
+        "name": "block-direct-push",
+        "command": "./hooks/block-push-main.sh",
+        "args": ["{{tool_input}}"],
+        "matcher": "Bash",
+        "timeout": 3000
+      }
+    ],
+    "PostToolUse": [
+      {
+        "name": "auto-go-vet",
+        "command": "./hooks/auto-vet.sh",
+        "args": ["{{tool_input}}"],
+        "matcher": "Write|Edit",
+        "timeout": 15000
+      },
+      {
+        "name": "audit-log",
+        "command": "./hooks/audit-log.sh",
+        "args": ["{{tool_name}}", "{{tool_input}}", "{{tool_output}}"],
+        "timeout": 3000
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "name": "error-handler",
+        "command": "./hooks/error-handler.sh",
+        "args": ["{{tool_name}}", "{{tool_output}}"]
+      }
+    ]
+  }
+}

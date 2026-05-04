@@ -16,50 +16,42 @@
 
 ### 1.2 一张图看懂三层
 
-```
-用户输入: "告警触发：checkoutservice CPU > 90%"
-    │
-    ▼
-┌─────────────────────────────────────────────┐
-│ Supervisor                                   │
-│   orchestrate(task)                          │
-└───────────────────┬─────────────────────────┘
-                    │
-                    ▼
-┌─────────────────────────────────────────────┐
-│ Triage                                       │
-│   识别任务类型 → 路由到对应 Specialist          │
-└───────────────────┬─────────────────────────┘
-                    │
-                    ▼
-┌─────────────────────────────────────────────┐
-│ Metrics Specialist (Agent)                   │
-│                                              │
-│   职责：接任务 → 选 Skill → 打 Trace           │
-│   ┌───────────────────────────────┐          │
-│   │       Skill Registry          │          │
-│   │                               │          │
-│   │  ┌─────────────────────────┐  │          │
-│   │  │ metrics_alert_triage     │  │  命中   │
-│   │  │ Match: 含"告警/severity" │──┼──────▶ │
-│   │  │ Run: 调Prometheus+组装   │  │          │
-│   │  └─────────────────────────┘  │          │
-│   │                               │          │
-│   │  ┌─────────────────────────┐  │          │
-│   │  │ metrics_incident_snapshot│  │  回退   │
-│   │  │ 默认 skill（兜底）       │  │         │
-│   │  └─────────────────────────┘  │          │
-│   └───────────────────────────────┘          │
-└───────────────────┬─────────────────────────┘
-                    │
-                    ▼
-┌─────────────────────────────────────────────┐
-│ Tools (原子能力)                              │
-│   ├─ Prometheus 指标查询                      │
-│   ├─ Milvus 知识库检索                        │
-│   ├─ MCP 日志查询 ────→ 远程 K8s 日志         │
-│   └─ MySQL CRUD (OnDemand)                   │
-└─────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    User["用户输入: \"告警触发：checkoutservice CPU > 90%\""]
+
+    subgraph Supervisor
+        S1["orchestrate(task)"]
+    end
+
+    subgraph Triage
+        T1["识别任务类型 → 路由到对应 Specialist"]
+    end
+
+    subgraph Specialist["Metrics Specialist (Agent)"]
+        direction TB
+        D1["职责：接任务 → 选 Skill → 打 Trace"]
+        subgraph SkillRegistry["Skill Registry"]
+            direction TB
+            Skill1["metrics_alert_triage\nMatch: 含\"告警/severity\"\nRun: 调Prometheus+组装"]
+            Skill2["metrics_incident_snapshot\n默认 skill（兜底）"]
+        end
+        Skill1 -- 命中 --> D1
+        Skill2 -- 回退 --> D1
+    end
+
+    subgraph Tools["Tools (原子能力)"]
+        direction TB
+        Tool1["Prometheus 指标查询"]
+        Tool2["Milvus 知识库检索"]
+        Tool3["MCP 日志查询 → 远程 K8s 日志"]
+        Tool4["MySQL CRUD (OnDemand)"]
+    end
+
+    User --> Supervisor
+    Supervisor --> Triage
+    Triage --> Specialist
+    Specialist --> Tools
 ```
 
 ### 1.3 三层关系速记
@@ -260,20 +252,26 @@ func (pd *ProgressiveDisclosure) Disclose(query string, selectedSkillIDs []strin
 
 Progressive Disclosure 不只是后端逻辑——前端有 **SkillPanel** 组件让用户主动参与工具选择。
 
-```
-┌─────────────────────────────────────┐
-│  SkillPanel（前端侧栏卡片）          │
-│                                     │
-│  [✓] Metrics  [✓] Logs  [ ] MySQL  │
-│   ├── alert_triage   ├── evidence   │
-│   └── incident       └── raw_review │
-│                                     │
-│  [✓] Knowledge                      │
-│   ├── sop_lookup                     │
-│   └── incident_guidance             │
-└─────────────────────────────────────┘
-  ↓ 用户勾选 / 取消勾选
-  ↓ selectedSkillIDs 传给后端 Disclose()
+```mermaid
+flowchart TB
+    subgraph SkillPanel["SkillPanel（前端侧栏卡片）"]
+        direction TB
+        Metrics["[✓] Metrics"]
+        Logs["[✓] Logs"]
+        MySQL["[ ] MySQL"]
+        Knowledge["[✓] Knowledge"]
+
+        Metrics --> M1["├─ alert_triage"]
+        Metrics --> M2["└─ incident"]
+
+        Logs --> L1["├─ evidence"]
+        Logs --> L2["└─ raw_review"]
+
+        Knowledge --> K1["├─ sop_lookup"]
+        Knowledge --> K2["└─ incident_guidance"]
+    end
+
+    SkillPanel -->|"用户勾选 / 取消勾选"| Backend["selectedSkillIDs 传给后端 Disclose()"]
 ```
 
 **关键设计：双通道匹配。**  后端的 `Disclose()` 接收两个来源的 domain 信号：
@@ -337,21 +335,23 @@ def tool_schema():
 
 **完整交互流程**：
 
-```
-OpsCaption Agent                 MCP Server (K8s 节点)
-      │                                │
-      │── SSE connect ────────────────▶│  建立长连接
-      │◀─ endpoint URL ────────────────│
-      │                                │
-      │── initialize ─────────────────▶│  协议握手
-      │◀─ capabilities: {tools} ──────│
-      │                                │
-      │── tools/list ─────────────────▶│  Agent 想知道有什么工具
-      │◀─ [query_freeexchanged_k8s_logs]
-      │                                │
-      │── tools/call ─────────────────▶│  LLM 决定调日志查询
-      │   {query: "payment error"}     │  → kubectl logs --since=2h --tail=160
-      │◀─ {logs: [...], success: true} │  返回结构化日志
+```mermaid
+sequenceDiagram
+    participant Agent as OpsCaption Agent
+    participant MCP as MCP Server (K8s 节点)
+
+    Agent->>MCP: SSE connect（建立长连接）
+    MCP-->>Agent: endpoint URL
+
+    Agent->>MCP: initialize（协议握手）
+    MCP-->>Agent: capabilities: {tools}
+
+    Agent->>MCP: tools/list（想知道有什么工具）
+    MCP-->>Agent: [query_freeexchanged_k8s_logs]
+
+    Agent->>MCP: tools/call（LLM 决定调日志查询）
+    Note over MCP: kubectl logs --since=2h --tail=160
+    MCP-->>Agent: {logs: [...], success: true}
 ```
 
 ### 5.4 分层集成：MCP 工具的 Tier
