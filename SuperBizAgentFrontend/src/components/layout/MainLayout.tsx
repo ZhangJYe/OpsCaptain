@@ -48,32 +48,42 @@ export function MainLayout({
         {sidebarOpen && (
           <>
             <motion.div
+              key="sidebar-overlay"
               className="fixed inset-0 z-40 bg-black/50 lg:hidden"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={onCloseSidebar}
             />
-            <motion.aside
-              className="fixed bottom-0 left-0 top-0 z-50 w-72 lg:relative lg:z-0"
-              initial={{ x: -288 }}
-              animate={{ x: 0 }}
-              exit={{ x: -288 }}
+            <motion.div
+              key="sidebar-wrapper"
+              className="flex-shrink-0 overflow-hidden"
+              initial={{ maxWidth: 288 }}
+              animate={{ maxWidth: 288 }}
+              exit={{ maxWidth: 0 }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
             >
-              <Sidebar
-                onClose={onCloseSidebar}
-                onNewChat={onNewChat}
-                onLoadSession={onLoadSession}
-                currentSessionId={sessionId}
-                messages={messages}
-                chatMode={chatMode}
-                onModeChange={onModeChange}
-                selectedSkillIds={selectedSkillIds}
-                onSelectedSkillIdsChange={onSelectedSkillIdsChange}
-                isLoading={isLoading}
-              />
-            </motion.aside>
+              <motion.aside
+                className="fixed bottom-0 left-0 top-0 z-50 w-72 lg:absolute lg:z-0"
+                initial={{ x: -288 }}
+                animate={{ x: 0 }}
+                exit={{ x: -288 }}
+                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              >
+                <Sidebar
+                  onClose={onCloseSidebar}
+                  onNewChat={onNewChat}
+                  onLoadSession={onLoadSession}
+                  currentSessionId={sessionId}
+                  messages={messages}
+                  chatMode={chatMode}
+                  onModeChange={onModeChange}
+                  selectedSkillIds={selectedSkillIds}
+                  onSelectedSkillIdsChange={onSelectedSkillIdsChange}
+                  isLoading={isLoading}
+                />
+              </motion.aside>
+            </motion.div>
           </>
         )}
       </AnimatePresence>
