@@ -31,22 +31,172 @@
   }
 }
 
-@layer base {
-  .prose table {
-    @apply text-sm border-collapse w-full my-3;
-  }
-  .prose thead th {
-    @apply text-left font-semibold text-zinc-700 dark:text-zinc-300 border-b border-zinc-200 dark:border-zinc-700 px-3 py-2 bg-zinc-50 dark:bg-zinc-800/50;
-  }
-  .prose tbody td {
-    @apply px-3 py-2 border-b border-zinc-100 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400;
-  }
-  .prose blockquote {
-    @apply border-l-2 border-accent/40 pl-4 italic text-zinc-600 dark:text-zinc-400 my-3;
-  }
-  .prose hr {
-    @apply my-4 border-zinc-200 dark:border-zinc-800;
-  }
+/* ── Chat message typography ───────────────────────────────── */
+
+.prose-chat {
+  @apply max-w-none;
+  font-size: 0.9rem;
+  line-height: 1.7;
+  color: theme('colors.zinc.700');
+}
+
+.dark .prose-chat {
+  color: theme('colors.zinc.300');
+}
+
+/* Headings */
+.prose-chat h1,
+.prose-chat h2,
+.prose-chat h3,
+.prose-chat h4 {
+  font-weight: 600;
+  margin-top: 1.25em;
+  margin-bottom: 0.5em;
+  color: theme('colors.zinc.900');
+}
+.dark .prose-chat h1,
+.dark .prose-chat h2,
+.dark .prose-chat h3,
+.dark .prose-chat h4 {
+  color: theme('colors.white');
+}
+.prose-chat h1 { font-size: 1.3em; }
+.prose-chat h2 { font-size: 1.15em; border-bottom: 1px solid theme('colors.zinc.100'); padding-bottom: 0.3em; }
+.dark .prose-chat h2 { border-bottom-color: theme('colors.zinc.800'); }
+.prose-chat h3 { font-size: 1.05em; }
+.prose-chat h4 { font-size: 1em; }
+
+/* Paragraphs */
+.prose-chat p {
+  margin: 0.5em 0;
+}
+
+/* Lists */
+.prose-chat ul,
+.prose-chat ol {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+.prose-chat ul {
+  list-style-type: disc;
+}
+.prose-chat ol {
+  list-style-type: decimal;
+}
+.prose-chat li {
+  margin: 0.2em 0;
+}
+.prose-chat li::marker {
+  color: theme('colors.zinc.400');
+}
+.dark .prose-chat li::marker {
+  color: theme('colors.zinc.600');
+}
+
+/* Strong / Bold */
+.prose-chat strong {
+  font-weight: 600;
+  color: theme('colors.zinc.900');
+}
+.dark .prose-chat strong {
+  color: theme('colors.white');
+}
+
+/* Inline code */
+.prose-chat code:not(pre code) {
+  font-size: 0.85em;
+  font-weight: 400;
+  padding: 0.15em 0.4em;
+  border-radius: 0.375rem;
+  background: theme('colors.zinc.100');
+  color: theme('colors.accent.DEFAULT');
+}
+.dark .prose-chat code:not(pre code) {
+  background: theme('colors.zinc.800');
+}
+
+/* Code blocks */
+.prose-chat pre {
+  margin: 0.75em 0;
+  padding: 0.85em 1em;
+  border-radius: 0.75rem;
+  border: 1px solid theme('colors.zinc.200');
+  background: theme('colors.zinc.50');
+  overflow-x: auto;
+  font-size: 0.85em;
+  line-height: 1.6;
+}
+.dark .prose-chat pre {
+  border-color: theme('colors.zinc.800');
+  background: rgba(9, 9, 11, 0.8);
+}
+.prose-chat pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* Links */
+.prose-chat a {
+  color: theme('colors.accent.DEFAULT');
+  text-decoration: none;
+}
+.prose-chat a:hover {
+  text-decoration: underline;
+}
+
+/* Blockquote */
+.prose-chat blockquote {
+  margin: 0.75em 0;
+  padding-left: 1em;
+  border-left: 2px solid theme('colors.accent.DEFAULT / 0.4');
+  font-style: italic;
+  color: theme('colors.zinc.600');
+}
+.dark .prose-chat blockquote {
+  color: theme('colors.zinc.400');
+}
+
+/* Tables */
+.prose-chat table {
+  width: 100%;
+  margin: 0.75em 0;
+  border-collapse: collapse;
+  font-size: 0.85em;
+}
+.prose-chat thead th {
+  text-align: left;
+  font-weight: 600;
+  color: theme('colors.zinc.700');
+  border-bottom: 2px solid theme('colors.zinc.200');
+  padding: 0.5em 0.75em;
+  background: theme('colors.zinc.50');
+}
+.dark .prose-chat thead th {
+  color: theme('colors.zinc.300');
+  border-bottom-color: theme('colors.zinc.700');
+  background: theme('colors.zinc.800 / 0.5');
+}
+.prose-chat tbody td {
+  padding: 0.4em 0.75em;
+  border-bottom: 1px solid theme('colors.zinc.100');
+  color: theme('colors.zinc.600');
+}
+.dark .prose-chat tbody td {
+  border-bottom-color: theme('colors.zinc.800');
+  color: theme('colors.zinc.400');
+}
+
+/* Horizontal rule */
+.prose-chat hr {
+  margin: 1em 0;
+  border: none;
+  border-top: 1px solid theme('colors.zinc.200');
+}
+.dark .prose-chat hr {
+  border-top-color: theme('colors.zinc.800');
 }
 
 @layer utilities {
