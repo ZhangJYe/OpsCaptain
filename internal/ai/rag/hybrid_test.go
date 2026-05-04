@@ -154,29 +154,7 @@ func TestHybridRetrieve_Integration(t *testing.T) {
 	}
 }
 
-func TestParseQueryMode_Hybrid(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		raw  string
-		want QueryMode
-	}{
-		{raw: "hybrid", want: QueryModeHybrid},
-		{raw: "hybrid_retrieval", want: QueryModeHybrid},
-		{raw: "hybrid-retrieval", want: QueryModeHybrid},
-	}
-	for _, tt := range tests {
-		got, err := ParseQueryMode(tt.raw)
-		if err != nil {
-			t.Fatalf("ParseQueryMode(%q) returned error: %v", tt.raw, err)
-		}
-		if got != tt.want {
-			t.Fatalf("ParseQueryMode(%q) = %q, want %q", tt.raw, got, tt.want)
-		}
-	}
-}
-
-func TestQueryWithMode_HybridWithPopulatedSharedBM25(t *testing.T) {
+func TestQuery_HybridWithPopulatedSharedBM25(t *testing.T) {
 	ResetSharedBM25Index()
 	defer ResetSharedBM25Index()
 
@@ -204,11 +182,11 @@ func TestQueryWithMode_HybridWithPopulatedSharedBM25(t *testing.T) {
 	sharedPool = pool
 	defer func() { sharedPool = origSharedPool }()
 
-	docs, trace, err := QueryWithMode(context.Background(), pool, "checkoutservice rrt timeout", QueryModeHybrid)
+	docs, trace, err := Query(context.Background(), pool, "checkoutservice rrt timeout")
 	if err != nil {
-		t.Fatalf("QueryWithMode hybrid returned error: %v", err)
+		t.Fatalf("Query returned error: %v", err)
 	}
-	if trace.Mode != string(QueryModeHybrid) {
+	if trace.Mode != "hybrid" {
 		t.Fatalf("expected mode hybrid, got %s", trace.Mode)
 	}
 	if trace.Hybrid == nil {
@@ -225,7 +203,7 @@ func TestQueryWithMode_HybridWithPopulatedSharedBM25(t *testing.T) {
 	}
 }
 
-func TestQueryWithMode_HybridWithEmptySharedBM25FallsBackToDenseOnly(t *testing.T) {
+func TestQuery_HybridWithEmptySharedBM25FallsBackToDenseOnly(t *testing.T) {
 	ResetSharedBM25Index()
 	defer ResetSharedBM25Index()
 
@@ -239,9 +217,9 @@ func TestQueryWithMode_HybridWithEmptySharedBM25FallsBackToDenseOnly(t *testing.
 		nil,
 	)
 
-	docs, trace, err := QueryWithMode(context.Background(), pool, "cpu high", QueryModeHybrid)
+	docs, trace, err := Query(context.Background(), pool, "cpu high")
 	if err != nil {
-		t.Fatalf("QueryWithMode hybrid returned error: %v", err)
+		t.Fatalf("Query returned error: %v", err)
 	}
 	if trace.Hybrid == nil {
 		t.Fatal("expected hybrid trace")

@@ -2,21 +2,11 @@ package rag
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
 	retrieverapi "github.com/cloudwego/eino/components/retriever"
 	"github.com/cloudwego/eino/schema"
-)
-
-type QueryMode string
-
-const (
-	QueryModeRetrieveOnly          QueryMode = "retrieve"
-	QueryModeRewriteRetrieve       QueryMode = "rewrite"
-	QueryModeRewriteRetrieveRerank QueryMode = "full"
-	QueryModeHybrid                QueryMode = "hybrid"
 )
 
 type QueryTrace struct {
@@ -37,40 +27,11 @@ type QueryTrace struct {
 }
 
 func Query(ctx context.Context, pool *RetrieverPool, query string) ([]*schema.Document, QueryTrace, error) {
-	return QueryWithMode(ctx, pool, query, DefaultQueryMode(ctx))
-}
-
-func ParseQueryMode(raw string) (QueryMode, error) {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "", "full", "query", "rerank", "rewrite_retrieve_rerank", "rewrite-retrieve-rerank":
-		return QueryModeRewriteRetrieveRerank, nil
-	case "rewrite", "rewrite_retrieve", "rewrite-retrieve":
-		return QueryModeRewriteRetrieve, nil
-	case "retrieve", "retriever", "retrieve_only", "retrieve-only":
-		return QueryModeRetrieveOnly, nil
-	case "hybrid", "hybrid_retrieval", "hybrid-retrieval":
-		return QueryModeHybrid, nil
-	default:
-		return "", fmt.Errorf("unsupported query mode: %s", raw)
-	}
-}
-
-type rewriteFunc func(context.Context, string) string
-type rerankFunc func(context.Context, string, []*schema.Document, int) RerankResult
-
-func QueryWithMode(ctx context.Context, pool *RetrieverPool, query string, mode QueryMode) ([]*schema.Document, QueryTrace, error) {
-	if mode == QueryModeHybrid {
-		return hybridQueryWithMode(ctx, pool, query)
-	}
-	return queryWithMode(ctx, pool, query, mode, RewriteQuery, Rerank)
-}
-
-func hybridQueryWithMode(ctx context.Context, pool *RetrieverPool, query string) ([]*schema.Document, QueryTrace, error) {
 	if strings.TrimSpace(query) == "" {
 		return nil, QueryTrace{}, nil
 	}
 	trace := QueryTrace{
-		Mode:           string(QueryModeHybrid),
+		Mode:           "hybrid",
 		OriginalQuery:  query,
 		RewrittenQuery: query,
 	}
@@ -89,23 +50,14 @@ func hybridQueryWithMode(ctx context.Context, pool *RetrieverPool, query string)
 	return docs, trace, nil
 }
 
-func queryWithMode(
-	ctx context.Context,
-	pool *RetrieverPool,
-	query string,
-	mode QueryMode,
-	rewrite rewriteFunc,
-	rerank rerankFunc,
-) ([]*schema.Document, QueryTrace, error) {
+// QueryForEval 供评测命令使用，支持 rewrite / rerank 流程对比。
+func QueryForEval(ctx context.Context, pool *RetrieverPool, query string, wantRewrite, wantRerank bool) ([]*schema.Document, QueryTrace, error) {
 	if strings.TrimSpace(query) == "" {
 		return nil, QueryTrace{}, nil
 	}
-	if mode == "" {
-		mode = DefaultQueryMode(ctx)
-	}
 
 	trace := QueryTrace{
-		Mode:           string(mode),
+		Mode:           "eval",
 		OriginalQuery:  query,
 		RewrittenQuery: query,
 	}
@@ -113,9 +65,9 @@ func queryWithMode(
 	candidateTopK := RetrieverCandidateTopK(ctx)
 
 	rewritten := query
-	if mode != QueryModeRetrieveOnly {
+	if wantRewrite {
 		rewriteStart := time.Now()
-		rewritten = rewrite(ctx, query)
+		rewritten = RewriteQuery(ctx, query)
 		trace.RewriteLatencyMs = time.Since(rewriteStart).Milliseconds()
 		trace.RewrittenQuery = rewritten
 	}
@@ -138,7 +90,7 @@ func queryWithMode(
 	}
 	docs = refineRetrievedDocs(query, docs)
 
-	if mode != QueryModeRewriteRetrieveRerank {
+	if !wantRerank {
 		finalDocs := trimRetrievedDocs(docs, topK)
 		trace.ResultCount = len(finalDocs)
 		trace.RerankEnabled = false
@@ -146,7 +98,7 @@ func queryWithMode(
 	}
 
 	rerankStart := time.Now()
-	rerankResult := rerank(ctx, query, docs, topK)
+	rerankResult := Rerank(ctx, query, docs, topK)
 	trace.RerankLatencyMs = time.Since(rerankStart).Milliseconds()
 	trace.RerankEnabled = rerankResult.Enabled
 

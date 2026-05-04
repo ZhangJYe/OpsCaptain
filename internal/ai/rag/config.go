@@ -4,7 +4,6 @@ import (
 	"SuperBizAgent/utility/common"
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/gogf/gf/v2/frame/g"
@@ -41,28 +40,8 @@ func DefaultRetrieverCacheKey(ctx context.Context) string {
 	return fmt.Sprintf("%s|%s|%d", common.GetMilvusAddr(ctx), common.GetMilvusCollectionName(ctx), RetrieverTopK(ctx))
 }
 
-func DefaultQueryMode(ctx context.Context) QueryMode {
-	v, err := g.Cfg().Get(ctx, "rag.default_query_mode")
-	if err == nil {
-		if raw := strings.TrimSpace(v.String()); raw != "" {
-			if mode, parseErr := ParseQueryMode(raw); parseErr == nil {
-				return mode
-			}
-		}
-	}
-	return QueryModeRetrieveOnly
-}
-
 func DefaultInitFailureTTL(context.Context) time.Duration {
 	return DefaultRetrieverInitFailureTTL
-}
-
-func HybridEnabled(ctx context.Context) bool {
-	v, err := g.Cfg().Get(ctx, "rag.hybrid_enabled")
-	if err == nil {
-		return v.Bool()
-	}
-	return false
 }
 
 func DurationFromConfig(ctx context.Context, fallback time.Duration, keys ...string) time.Duration {

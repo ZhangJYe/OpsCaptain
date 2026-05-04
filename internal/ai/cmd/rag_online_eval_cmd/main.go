@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/cloudwego/eino/schema"
 )
 
 type report struct {
@@ -25,7 +27,7 @@ type report struct {
 func main() {
 	evalPath := flag.String("eval", filepath.Join(".", "aiopschallenge2025", "baseline", "eval", "eval_cases.jsonl"), "path to eval_cases.jsonl")
 	ksRaw := flag.String("ks", "1,3,5", "comma-separated k values, e.g. 1,3,5")
-	modeRaw := flag.String("mode", string(rag.QueryModeRetrieveOnly), "eval mode: retrieve, rewrite, or full")
+	modeRaw := flag.String("mode", "hybrid", "eval mode: hybrid, retrieve, rewrite, or full")
 	limit := flag.Int("limit", 0, "optional limit on number of eval cases")
 	perQueryTimeoutMs := flag.Int("timeout-ms", 15000, "per-query timeout in milliseconds")
 	outPath := flag.String("out", "", "optional path to write full JSON report")
@@ -36,11 +38,8 @@ func main() {
 		fmt.Fprintf(os.Stderr, "parse ks failed: %v\n", err)
 		os.Exit(1)
 	}
-	mode, err := rag.ParseQueryMode(*modeRaw)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "parse mode failed: %v\n", err)
-		os.Exit(1)
-	}
+
+	wantRewrite, wantRerank, isHybrid := parseEvalMode(*modeRaw)
 
 	cases, err := eval.LoadEvalCasesJSONL(*evalPath)
 	if err != nil {
@@ -57,7 +56,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "warning: retriever.top_k=%d is smaller than requested max k=%d; recall will be truncated\n", retrieverTopK, maxK)
 	}
 
-	if mode == rag.QueryModeHybrid {
+	if isHybrid {
 		warmupBM25(context.Background(), *evalPath)
 	}
 
@@ -66,7 +65,16 @@ func main() {
 		queryCtx, cancel := context.WithTimeout(ctx, time.Duration(*perQueryTimeoutMs)*time.Millisecond)
 		defer cancel()
 
-		docs, trace, err := rag.QueryWithMode(queryCtx, rag.SharedPool(), query, mode)
+		var docs []*schema.Document
+		var trace rag.QueryTrace
+		var queryErr error
+
+		if isHybrid {
+			docs, trace, queryErr = rag.Query(queryCtx, rag.SharedPool(), query)
+		} else {
+			docs, trace, queryErr = rag.QueryForEval(queryCtx, rag.SharedPool(), query, wantRewrite, wantRerank)
+		}
+
 		metrics := eval.QueryMetrics{
 			CacheHit:          trace.CacheHit,
 			InitFailureCached: trace.InitFailureCached,
@@ -77,8 +85,8 @@ func main() {
 			ResultCount:       trace.ResultCount,
 			TotalLatencyMs:    time.Since(start).Milliseconds(),
 		}
-		if err != nil {
-			return nil, metrics, err
+		if queryErr != nil {
+			return nil, metrics, queryErr
 		}
 		return eval.SchemaDocsToRetrievedDocs(docs), metrics, nil
 	}
@@ -89,10 +97,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	printSummary(mode, summary, ks)
+	printSummary(*modeRaw, summary, ks)
 
 	if strings.TrimSpace(*outPath) != "" {
-		raw, err := json.MarshalIndent(report{Mode: string(mode), Summary: summary, Results: results}, "", "  ")
+		raw, err := json.MarshalIndent(report{Mode: *modeRaw, Summary: summary, Results: results}, "", "  ")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "marshal report failed: %v\n", err)
 			os.Exit(1)
@@ -109,6 +117,21 @@ func main() {
 	}
 }
 
+func parseEvalMode(raw string) (wantRewrite, wantRerank, isHybrid bool) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "hybrid":
+		return false, false, true
+	case "retrieve":
+		return false, false, false
+	case "rewrite":
+		return true, false, false
+	case "full":
+		return true, true, false
+	default:
+		fmt.Fprintf(os.Stderr, "unknown eval mode %q, falling back to hybrid\n", raw)
+		return false, false, true
+	}
+}
 
 func warmupBM25(ctx context.Context, evalPath string) {
 	docsDir := filepath.Dir(filepath.Dir(evalPath))
@@ -136,6 +159,7 @@ func warmupBM25(ctx context.Context, evalPath string) {
 	}
 	fmt.Fprintf(os.Stderr, "BM25 warm-up: indexed %d docs from %s and %s\n", count, evidenceDir, historyDir)
 }
+
 func parseKs(raw string) ([]int, error) {
 	parts := strings.Split(raw, ",")
 	ks := make([]int, 0, len(parts))
@@ -157,7 +181,7 @@ func parseKs(raw string) ([]int, error) {
 	return ks, nil
 }
 
-func printSummary(mode rag.QueryMode, summary eval.QuerySummary, ks []int) {
+func printSummary(mode string, summary eval.QuerySummary, ks []int) {
 	fmt.Println("========================================")
 	fmt.Println("  RAG Online Baseline Report")
 	fmt.Println("========================================")
