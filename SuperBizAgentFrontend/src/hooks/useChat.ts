@@ -331,7 +331,7 @@ export function useChat() {
   const [streamingThoughts, setStreamingThoughts] = useState<string[]>([]);
   const [thinkingSteps, setThinkingSteps] = useState<ThinkingStep[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
-  const [mode, setMode] = useState<ChatMode>("quick");
+  const [mode, setMode] = useState<ChatMode>("stream");
   const [sessionId, setSessionId] = useState(() => generateId());
   const [abortCtrl, setAbortCtrl] = useState<AbortController | null>(null);
 
@@ -716,7 +716,7 @@ export function useChat() {
     setStreamingThoughts([]);
     setThinkingSteps([]);
     setSuggestions([]);
-    setMode("quick");
+    setMode("stream");
     setSessionId(generateId());
     return true;
   }, [isLoading]);

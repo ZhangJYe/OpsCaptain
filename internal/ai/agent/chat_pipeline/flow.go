@@ -8,9 +8,11 @@ import (
 	"SuperBizAgent/internal/ai/skills"
 	"SuperBizAgent/internal/ai/tools"
 	"context"
+	"io"
 
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/flow/agent/react"
+	"github.com/cloudwego/eino/schema"
 	"github.com/gogf/gf/v2/frame/g"
 )
 
@@ -63,14 +65,35 @@ func NormalizeSelectedSkillIDs(selectedSkillIDs []string) []string {
 	return normalized
 }
 
+// fullStreamToolCallChecker 读取完整流再判断是否有 tool_calls。
+// 默认的 firstChunkStreamToolCallChecker 只看第一个 chunk，如果模型先输出文本
+// 再输出 tool_calls（如 GLM 系列），会误判为不需要调工具，导致 Agent 直接结束。
+func fullStreamToolCallChecker(_ context.Context, sr *schema.StreamReader[*schema.Message]) (bool, error) {
+	defer sr.Close()
+	for {
+		msg, err := sr.Recv()
+		if err == io.EOF {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		if len(msg.ToolCalls) > 0 {
+			return true, nil
+		}
+	}
+}
+
 func newReactAgentLambda(ctx context.Context) (lba *compose.Lambda, err error) {
 	return newReactAgentLambdaWithQuery(ctx, "")
 }
 
 func newReactAgentLambdaWithQuery(ctx context.Context, query string) (lba *compose.Lambda, err error) {
 	config := &react.AgentConfig{
-		MaxStep:            25,
-		ToolReturnDirectly: map[string]struct{}{}}
+		MaxStep:                25,
+		ToolReturnDirectly:     map[string]struct{}{},
+		StreamToolCallChecker:  fullStreamToolCallChecker,
+	}
 	chatModelIns11, err := newChatModel(ctx)
 	if err != nil {
 		return nil, err

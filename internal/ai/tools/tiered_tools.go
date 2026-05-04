@@ -29,14 +29,14 @@ func BuildTieredTools() []skills.TieredTool {
 	for _, mt := range mcpTools {
 		tiered = append(tiered, skills.TieredTool{
 			Tool:    mt,
-			Tier:    skills.TierSkillGate,
+			Tier:    skills.TierAlwaysOn,
 			Domains: []string{"logs"},
 		})
 	}
 
 	tiered = append(tiered, skills.TieredTool{
 		Tool:    NewPrometheusAlertsQueryTool(),
-		Tier:    skills.TierSkillGate,
+		Tier:    skills.TierAlwaysOn,
 		Domains: []string{"metrics"},
 	})
 
