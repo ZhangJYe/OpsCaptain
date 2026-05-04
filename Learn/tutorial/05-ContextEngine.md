@@ -148,6 +148,47 @@ graph TD
 
 > **面试要点**：从最新消息开始逆向选取。如果包含 `[对话历史摘要]` 前缀的消息（超长对话摘要），会强制保留。
 
+#### Phase 2: combinedHistoryScore — 多维评分增强
+
+Phase 1 的逆向选取是纯确定性的（越新越优先），Phase 2 在此基础上引入 **embedding 语义相似度 + 确定性权重增强**，让选取结果既保留时间优势，又能召回语义相关的历史消息。
+
+**评分公式**：
+
+```
+combinedScore = cosineSimilarity × (1 + recencyBoost + roleBoost + entityBoost)
+```
+
+其中：
+- **cosineSimilarity**：当前 query 与历史消息的 embedding 余弦相似度（通过 `doubao-embedding` 批量计算）
+- **recencyBoost = 0.3 × 0.9^(distance)**：时间衰减增强，distance=0 表示最近一条消息，越旧衰减越快
+- **roleBoost = 0.2**：对 user 消息的固定加分（用户消息通常比 assistant 回复更具信息量）
+- **entityBoost = 0.3**：当历史消息中包含当前 query 的服务名、实体名（如 `redis-prod`、`payment-service`）时加分
+
+**示例计算**：
+
+```
+query: "redis-prod 的 CPU 为什么飙高？"
+
+msg_recent (user, 距离=0, 含 "redis-prod"):
+  cosineSim=0.65, recencyBoost=0.3, roleBoost=0.2, entityBoost=0.3
+  combinedScore = 0.65 × (1 + 0.3 + 0.2 + 0.3) = 0.65 × 1.8 = 1.17
+
+msg_old (assistant, 距离=5, 含 "redis-prod"):
+  cosineSim=0.70, recencyBoost=0.3×0.9^5=0.177, roleBoost=0, entityBoost=0.3
+  combinedScore = 0.70 × (1 + 0.177 + 0 + 0.3) = 0.70 × 1.477 = 1.034
+
+msg_unrelated (user, 距离=1, 不含相关实体):
+  cosineSim=0.15, recencyBoost=0.27, roleBoost=0.2, entityBoost=0
+  combinedScore = 0.15 × (1 + 0.27 + 0.2 + 0) = 0.15 × 1.47 = 0.221
+```
+
+**关键机制**：
+
+- **pairAwareSelect**：user + assistant 消息作为配对单元选取，不拆散对话对。如果 user 消息被选中，其紧接着的 assistant 回复也一并保留，保证对话语义完整性
+- **recentKeep = 3**：无论评分如何，最近 3 条消息**始终保留**，确保对话连贯性底线
+- **embedding 批量计算**：对所有历史消息做 batch embedding，使用 content hash 做 LRU 缓存（10min TTL），避免重复计算
+- **超时降级**：embedding 计算设置 500ms 超时，超时后降级为纯逆向选取（Phase 1 模式）
+
 ### 3.2 MemoryItems — 长期记忆（跨会话）
 
 - **来源**：`LongTermMemory`，跨会话持久化的重要信息
@@ -181,6 +222,30 @@ for _, entry := range entries {
 }
 ```
 
+#### Phase 2: memoryCompositeScore — 复合评分排序
+
+通过六层过滤的条目，并非直接按原始顺序选取，而是进入 **Phase 2 复合评分**阶段，按综合得分排序后再做预算选取。
+
+**评分公式**：
+
+```
+memoryCompositeScore = confidence × 0.5 + freshness × 0.3 + scopePriority × 0.2
+```
+
+其中：
+- **confidence**：记忆置信度（0~1），来自记忆抽取时 LLM 的评估
+- **freshness = 1 / (1 + hours_since_last_used / 24)**：新鲜度衰减，最近使用过的记忆得分更高。例如：1 小时前使用 → freshness = 1/(1+1/24) ≈ 0.96；3 天前 → 1/(1+72/24) = 0.25
+- **scopePriority**：作用域优先级权重
+
+| Scope | priority | 含义 |
+|-------|:--------:|------|
+| session | 0.4 | 当前会话记忆，最相关 |
+| user | 0.3 | 用户级记忆，跨会话通用 |
+| project | 0.2 | 项目级记忆，团队共享 |
+| global | 0.1 | 全局记忆，最低优先级 |
+
+**排序逻辑**：所有通过过滤的条目先计算 composite score，按得分**降序排列**，然后从高到低依次选取直到预算用完。这样确保在有限的 token 预算内，优先保留"高置信 + 最近使用 + 高优先级作用域"的记忆。
+
 ### 3.3 DocumentItems — RAG 检索结果
 
 - **来源**：RAG 链路（当前 ContextEngine 调用 `rag.Query()`，走 hybrid retrieval；Query Rewrite / Rerank 是评测与后续可选增强）
@@ -210,7 +275,121 @@ if item.TokenEstimate > remaining {
 - **预算**：默认 800 token（= MaxTokens × 10%，基于公式 `ToolTokens = int(MaxTokens × 0.10)`）
 - **选择策略**：按顺序处理，支持数量窗口（MaxToolItems）+ token 预算双重限制
 
-### 3.5 四类来源总结
+### 3.5 Recall Layer — 多路召回
+
+前面 3.1~3.4 描述了四类上下文来源的**静态选取逻辑**（逆向选取、六层过滤、RAG 检索等）。实际上，Context Engine 采用**渐进式多路召回**策略，分三个阶段逐步提升召回质量：
+
+```mermaid
+graph LR
+    A[Phase 1<br/>确定性召回] --> B[Phase 2<br/>优化召回]
+    B --> C[Phase 2.5<br/>LLM Rerank]
+    C --> D[Phase 3<br/>意图识别]
+
+    style A fill:#e8f5e9
+    style B fill:#e3f2fd
+    style C fill:#fff3e0
+    style D fill:#fce4ec
+```
+
+| Phase | 方法 | 延迟 | 成本 | 说明 |
+|-------|------|:----:|:----:|------|
+| Phase 1 | 确定性规则（逆向选取、关键词匹配） | ~1ms | 0 | 始终执行，保证基线 |
+| Phase 2 | embedding 语义召回 + 多维评分增强 | ~200ms | 低 | 批量 embedding + 缓存 |
+| Phase 2.5 | LLM Rerank（可选） | ~500ms | 中 | 配置驱动，默认关闭 |
+| Phase 3 | LLM 意图识别 → Profile 映射 | ~500ms | 中 | 独立 LLM 调用，超时降级 |
+
+**设计理念**：先轻量后重量，先确定性后概率性。Phase 1 保证"不会太差"，Phase 2/2.5/3 逐步"更好"，任何阶段超时或失败都自动降级到上一阶段的结果。
+
+#### Phase 2.5: ToolReranker — LLM 重排序
+
+当 ToolItems 召回结果较多（≥ 阈值）时，可选启用 LLM Rerank 做精细排序：
+
+**触发条件**：
+- 配置项 `tool_reranker.enabled = true`（默认 false）
+- 召回的 ToolItems 数量 ≥ `tool_reranker.min_items`（默认 5）
+
+**处理流程**：
+
+```mermaid
+graph TD
+    A["ToolItems 列表（Phase 1 关键词匹配结果）"] --> B{"数量 ≥ 阈值 且 配置启用？"}
+    B -->|No| C["跳过，直接使用 Phase 1 结果"]
+    B -->|Yes| D["Snippet Sanitizer<br/>脱敏处理"]
+    D --> E["构造 Rerank Prompt<br/>query + snippets"]
+    E --> F["LLM 调用<br/>要求 JSON 输出"]
+    F --> G{"JSON 解析成功？"}
+    G -->|Yes| H["按 LLM 打分重排序"]
+    G -->|No| I["Regex Fallback<br/>从回复中提取排名"]
+    H --> J["返回重排序结果"]
+    I --> J
+    F -->|超时 500ms| K["降级：使用 Phase 1 结果"]
+```
+
+**关键设计**：
+
+- **Snippet Sanitizer**：发送给 LLM 前对 snippet 做脱敏处理，正则替换敏感信息
+  - IP 地址：`192.168.x.x` → `[IP_REDACTED]`
+  - Token/Secret：`sk-abc123...` → `[TOKEN_REDACTED]`
+  - UUID：`550e8400-e29b-41d4-a716-446655440000` → `[UUID_REDACTED]`
+- **JSON 输出约束**：Prompt 明确要求 LLM 返回 `{"rankings": [3, 1, 2, ...]}` 格式
+- **Regex Fallback**：如果 JSON 解析失败，用正则从 LLM 回复中提取数字序列作为排名
+- **超时降级**：500ms 超时后直接使用 Phase 1 关键词匹配结果，不阻塞主流程
+
+#### Phase 3: IntentRecognizer — 意图识别
+
+在装配流程最前端，通过独立 LLM 调用识别用户意图，决定使用哪个 Profile：
+
+**处理流程**：
+
+```go
+// intent_recognizer.go - 核心逻辑
+func (r *IntentRecognizer) Recognize(ctx context.Context, query string) IntentResult {
+    // 1. 构造意图识别 Prompt（轻量，只做分类）
+    // 2. 独立 LLM 调用（500ms 超时）
+    // 3. 解析结果 → 返回 IntentResult
+}
+```
+
+**意图 → Profile 映射**：
+
+| 意图标识 | 映射 Profile | 说明 |
+|---------|-------------|------|
+| `fault_diagnosis` | `aiops_diagnosis` | 故障诊断场景 |
+| `log_analysis` | `aiops_diagnosis` | 日志分析归入诊断 |
+| `general_chat` | `chat-default` | 日常对话 |
+| `report_generate` | `reporter-default` | 报告生成 |
+| 未知/超时 | `chat-default` | 降级到默认 Profile |
+
+**关键设计**：
+
+- **独立 LLM 调用**：不复用主对话的 LLM 调用，避免意图识别结果污染对话上下文
+- **500ms 硬超时**：超时后直接返回默认 Profile（`chat-default`），不阻塞主流程
+- **轻量 Prompt**：意图识别 Prompt 只需要几十个 token，不消耗大量预算
+- **Profile 覆盖**：识别结果可以覆盖 `req.Mode`，例如用户在 chat 模式下问故障问题，自动切换到 `aiops_diagnosis` Profile
+
+#### 多路召回完整流程
+
+```mermaid
+graph TD
+    A["用户 Query"] --> B["IntentRecognizer<br/>意图识别 (LLM, 500ms 超时)"]
+    B --> C["Profile Selection<br/>意图 → Profile 映射"]
+    C --> D{"Profile 决定<br/>各来源开关"}
+    D --> E["History Recall<br/>embedding 召回 + 评分增强"]
+    D --> F["Memory Recall<br/>六层过滤 + 复合评分"]
+    D --> G["Document Recall<br/>RAG hybrid retrieval"]
+    D --> H["Tool Recall<br/>关键词匹配"]
+    H --> I{"ToolReranker<br/>配置启用?"}
+    I -->|Yes| J["LLM Rerank (500ms 超时)"]
+    I -->|No| K["使用 Phase 1 结果"]
+    J --> L["Budget Assembly<br/>预算分配 + 裁剪"]
+    K --> L
+    E --> L
+    F --> L
+    G --> L
+    L --> M["ContextPackage<br/>→ LLM"]
+```
+
+### 3.6 四类来源总结
 
 | 来源 | 作用 | 生命周期 | 预算（maxTokens=8000） | 代码位置 |
 |------|------|---------|------|---------|
@@ -564,41 +743,48 @@ return []*schema.Message{
 
 ```mermaid
 graph TD
-    A["Step 0: 记录开始时间"] --> B["Step 1: PolicyResolver.Resolve<br/>根据 req.Mode 选择 Profile"]
-    B --> C["Step 2: 初始化 ContextPackage + Trace<br/>记录 BudgetBefore"]
-    C --> D{"profile.AllowHistory?"}
-    D -->|Yes| E["Step 3: selectHistory<br/>逆向选取 + 预算过滤<br/>输出: selectedHistory + droppedHistory"]
-    D -->|No| E2["跳过"]
-    E --> F{"profile.AllowMemory?"}
-    E2 --> F
-    F -->|Yes| G["Step 4: selectMemories<br/>6层过滤: 过期/Scope/置信度/安全/数量/预算<br/>输出: selectedMemory + droppedMemory"]
-    F -->|No| G2["跳过"]
-    G --> H{"profile.AllowDocs?"}
-    G2 --> H
-    H -->|Yes| I["Step 5: selectDocuments<br/>RAG: hybrid retrieval<br/>超出预算 trim 或丢弃"]
-    H -->|No| I2["跳过"]
-    I --> J{"profile.AllowToolResults?"}
-    I2 --> J
-    J -->|Yes| K["Step 6: selectToolItems<br/>数量窗口 + Token 预算双重限制<br/>超出预算尝试 trim"]
-    J -->|No| K2["跳过"]
-    K --> L{"Staged 启用?"}
-    K2 --> L
-    L -->|Yes| M["Step 7: memoryItemsAsMessages<br/>记忆消息前置到 HistoryMessages"]
-    L -->|No| M2["跳过"]
-    M --> N["Step 8: 返回 ContextPackage<br/>记录 BudgetAfter + LatencyMs"]
-    M2 --> N
+    A["Step 0: 记录开始时间"] --> B["Step 0.5: IntentRecognizer<br/>独立 LLM 意图识别 (500ms 超时)<br/>意图 → Profile 映射"]
+    B --> C["Step 1: PolicyResolver.Resolve<br/>根据意图 + req.Mode 选择 Profile"]
+    C --> D["Step 2: 初始化 ContextPackage + Trace<br/>记录 BudgetBefore"]
+    D --> E{"profile.AllowHistory?"}
+    E -->|Yes| F["Step 3: History Recall<br/>Phase 1: 逆向选取 (recentKeep=3)<br/>Phase 2: embedding 语义召回<br/>combinedScore 评分增强<br/>pairAwareSelect 配对保留"]
+    E -->|No| F2["跳过"]
+    F --> G{"profile.AllowMemory?"}
+    F2 --> G
+    G -->|Yes| H["Step 4: Memory Recall<br/>六层过滤 (过期/Scope/置信度/安全/数量/预算)<br/>Phase 2: compositeScore 排序<br/>confidence×0.5 + freshness×0.3 + scopePriority×0.2"]
+    G -->|No| H2["跳过"]
+    H --> I{"profile.AllowDocs?"}
+    H2 --> I
+    I -->|Yes| J["Step 5: Document Recall<br/>RAG: hybrid retrieval<br/>超出预算 trim 或丢弃"]
+    I -->|No| J2["跳过"]
+    J --> K{"profile.AllowToolResults?"}
+    J2 --> K
+    K -->|Yes| L["Step 6: Tool Recall<br/>关键词匹配召回<br/>Phase 1 结果"]
+    K -->|No| L2["跳过"]
+    L --> M{"ToolReranker<br/>配置启用?"}
+    M -->|Yes| N["Step 6.5: LLM Rerank<br/>snippet 脱敏 → LLM 重排序<br/>JSON 输出 + Regex fallback<br/>500ms 超时降级"]
+    M -->|No| N2["跳过"]
+    N --> O{"Staged 启用?"}
+    N2 --> O
+    L2 --> O
+    O -->|Yes| P["Step 7: memoryItemsAsMessages<br/>记忆消息前置到 HistoryMessages"]
+    O -->|No| P2["跳过"]
+    P --> Q["Step 8: 返回 ContextPackage<br/>记录 BudgetAfter + LatencyMs"]
+    P2 --> Q
 ```
 
 ### 6.2 代码对应
 
 | 步骤 | 代码位置 | 核心函数 |
 |------|---------|---------|
+| 意图识别 | `intent_recognizer.go` | `IntentRecognizer.Recognize()` |
 | Profile 解析 | `resolver.go:25` | `PolicyResolver.Resolve()` |
-| History 选择 | `assembler.go:234` | `selectHistory()` |
+| History 召回 | `history_recall.go` | `HistoryRecall()` + `combinedHistoryScore()` |
 | Memory 检索 | `assembler.go:65-68` | `mem.GetLongTermMemory().RetrieveScoped()` |
-| Memory 过滤 | `assembler.go:292` | `selectMemories()` |
+| Memory 过滤 | `assembler.go:292` | `selectMemories()` + `memoryCompositeScore()` |
 | Document 检索 | `documents.go:29` | `selectDocuments()` |
-| Tool 选择 | `assembler.go:148` | `selectToolItems()` |
+| Tool 召回 | `tool_recall.go` | `ToolRecall()` |
+| Tool Rerank | `tool_reranker.go` | `ToolReranker.Rerank()` |
 | Staged 注入 | `assembler.go:114-116` | `memoryItemsAsMessages()` |
 
 ---
@@ -833,6 +1019,76 @@ aiops 模式下，为什么 AllowHistory = false，但 AllowMemory = true？这�
 - Memory 包含：\"用户 John 的集群是 Kubernetes 1.28，节点在 us-east-1\"（对当前故障诊断有帮助）
 
 所以 aiops 模式保留了 Memory（有价值的长线信息），去掉了 History（无价值的会话噪音）。
+
+</details>
+
+### 问题 4
+
+讲一下 History Recall 的 embedding 召回 + 确定性权重增强是怎么配合工作的？
+
+<details>
+<summary>点击查看答案</summary>
+
+**Phase 1（确定性）**：从最新消息逆向选取，recentKeep=3 保证最近 3 条消息始终保留，纯规则无依赖
+
+**Phase 2（embedding 增强）**：
+- 对所有历史消息做 batch embedding（content hash LRU 缓存，10min TTL）
+- 计算 query 与每条消息的 cosine similarity
+- 融合评分：`combinedScore = cosineSimilarity × (1 + recencyBoost + roleBoost + entityBoost)`
+  - recencyBoost 确保新消息不会因语义相似度低而被遗漏
+  - roleBoost 倾向保留 user 消息（信息量更大）
+  - entityBoost 命中服务名/实体名时加分（运维场景高频）
+- pairAwareSelect 保证 user+assistant 配对不被拆散
+
+**配合关系**：Phase 1 保证"不会太差"（最近的消息一定在），Phase 2 在此基础上"更好"（语义相关的旧消息也能被召回）。Phase 2 超时（500ms）时自动降级到 Phase 1。
+
+</details>
+
+### 问题 5
+
+Phase 2.5 ToolRerank 的触发条件和降级策略是什么？
+
+<details>
+<summary>点击查看答案</summary>
+
+**触发条件**（两个必须同时满足）：
+- 配置项 `tool_reranker.enabled = true`（默认 false，需要手动开启）
+- 召回的 ToolItems 数量 ≥ `tool_reranker.min_items`（默认 5）
+
+**降级策略**（三级降级）：
+1. **配置未启用**：直接跳过，使用 Phase 1 关键词匹配结果
+2. **LLM 超时（500ms）**：返回 Phase 1 结果，不阻塞主流程
+3. **JSON 解析失败**：Regex Fallback，从 LLM 回复中用正则提取数字序列作为排名；如果正则也失败，返回 Phase 1 结果
+
+**Snippet Sanitizer**：发送给 LLM 前对 IP/Token/UUID 做脱敏，防止敏感信息泄露给 LLM。
+
+</details>
+
+### 问题 6
+
+为什么不一开始就用 LLM？讲讲"先轻量后 LLM"的渐进策略。
+
+<details>
+<summary>点击查看答案</summary>
+
+**核心原因**：延迟、成本、稳定性。
+
+**渐进策略**：
+
+| Phase | 延迟 | 成本 | 失败影响 |
+|-------|:----:|:----:|:--------:|
+| Phase 1（确定性规则） | ~1ms | 0 | 无 |
+| Phase 2（embedding） | ~200ms | 低 | 降级到 Phase 1 |
+| Phase 2.5（LLM Rerank） | ~500ms | 中 | 降级到 Phase 1 |
+| Phase 3（意图识别） | ~500ms | 中 | 降级到默认 Profile |
+
+**为什么这样设计？**
+- **Phase 1 始终可用**：确定性规则无外部依赖，1ms 完成，保证基线质量
+- **Phase 2 性价比高**：embedding 调用便宜（比 LLM 便宜 10-100 倍），结果可缓存（content hash），200ms 可接受
+- **Phase 2.5/3 按需启用**：LLM 调用贵且慢，只在配置启用或必要时触发，且都有超时降级
+- **用户体感**：大多数请求走 Phase 1+2（~200ms），少数复杂请求走 Phase 2.5/3（~500ms），永远不会因为 LLM 调用而卡住
+
+**一句话**：能不用 LLM 就不用，用了必须有降级，降级后结果不能太差。
 
 </details>
 

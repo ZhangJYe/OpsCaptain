@@ -1,14 +1,11 @@
 #!/bin/bash
-# 保护敏感文件
 
 source "$(dirname "$0")/utils.sh"
 
 TOOL_INPUT="$1"
 
-# 敏感文件列表
 SENSITIVE_PATTERNS=(
-  "config\.yaml"
-  "\.env"
+  "\.env$"
   "\.env\."
   "secret"
   "password"
