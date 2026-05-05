@@ -214,10 +214,23 @@ type pooledToolWrapper struct {
 	inner    tool.InvokableTool
 	pool     *pooledClient
 	toolName string // 缓存工具名，避免每次调用都查 Info
+	alias    string
 }
 
 func (w *pooledToolWrapper) Info(ctx context.Context) (*schema.ToolInfo, error) {
-	return w.inner.Info(ctx)
+	info, err := w.inner.Info(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if w.alias == "" {
+		return info, nil
+	}
+	if info == nil {
+		return &schema.ToolInfo{Name: w.alias}, nil
+	}
+	cloned := *info
+	cloned.Name = w.alias
+	return &cloned, nil
 }
 
 func (w *pooledToolWrapper) InvokableRun(ctx context.Context, args string, opts ...tool.Option) (string, error) {
@@ -308,6 +321,7 @@ func GetLogMcpTool() ([]tool.BaseTool, error) {
 
 	// 包装每个工具，实际调用走连接池（超时 + 重连），缓存工具名
 	var tools []tool.BaseTool
+	hasQueryLogsAlias := false
 	for _, t := range einoTools {
 		if it, ok := t.(tool.InvokableTool); ok {
 			info, _ := it.Info(ctx)
@@ -315,9 +329,25 @@ func GetLogMcpTool() ([]tool.BaseTool, error) {
 			if info != nil {
 				name = info.Name
 			}
+			if name == "query_logs" {
+				hasQueryLogsAlias = true
+			}
 			tools = append(tools, &pooledToolWrapper{inner: it, pool: pc, toolName: name})
 		} else {
 			tools = append(tools, t)
+		}
+	}
+	if !hasQueryLogsAlias {
+		for idx, t := range tools {
+			it, ok := t.(*pooledToolWrapper)
+			if !ok {
+				continue
+			}
+			it.alias = "query_logs"
+			tools[idx] = it
+			hasQueryLogsAlias = true
+			g.Log().Infof(ctx, "MCP log tool alias applied: actual=%s alias=query_logs", it.toolName)
+			break
 		}
 	}
 
