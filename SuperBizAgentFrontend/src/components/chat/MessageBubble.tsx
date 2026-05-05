@@ -43,7 +43,7 @@ export function MessageBubble({ message }: Props) {
           className={`rounded-2xl px-4 py-3 ${
             isUser
               ? 'bg-accent text-white shadow-sm shadow-accent/10'
-              : 'border border-zinc-200/80 bg-white/90 text-zinc-800 shadow-sm dark:border-zinc-800/60 dark:bg-zinc-900/70 dark:text-zinc-200'
+              : 'border border-zinc-200/80 bg-white/95 text-zinc-800 shadow-sm shadow-zinc-900/[0.03] dark:border-zinc-800/60 dark:bg-zinc-900/80 dark:text-zinc-200'
           }`}
         >
           {isUser ? (

@@ -111,7 +111,7 @@ export function ChatView({
                     {streamingContent ? '生成中' : '处理中'}
                   </span>
                 </div>
-                <div className="rounded-2xl border border-zinc-200/80 bg-white/90 px-4 py-3 shadow-sm dark:border-zinc-800/60 dark:bg-zinc-900/70">
+                <div className="rounded-2xl border border-zinc-200/80 bg-white/95 px-4 py-3 shadow-sm shadow-zinc-900/[0.03] dark:border-zinc-800/60 dark:bg-zinc-900/80">
 
                   <ThinkingCollapse steps={thinkingSteps} isStreaming />
 
