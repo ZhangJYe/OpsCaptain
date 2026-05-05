@@ -11,6 +11,7 @@ import (
 
 	e_mcp "github.com/cloudwego/eino-ext/components/tool/mcp"
 	"github.com/cloudwego/eino/components/tool"
+	"github.com/cloudwego/eino/components/tool/utils"
 	"github.com/cloudwego/eino/schema"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/mark3labs/mcp-go/client"
@@ -237,6 +238,52 @@ func (w *pooledToolWrapper) InvokableRun(ctx context.Context, args string, opts 
 	return w.pool.CallTool(ctx, w.toolName, args)
 }
 
+type LogQueryInput struct {
+	Query   string `json:"query" jsonschema:"description=日志检索关键词或查询语句，例如 checkout timeout"`
+	Service string `json:"service,omitempty" jsonschema:"description=可选的服务名，例如 checkout、payment、gateway"`
+	Window  string `json:"window,omitempty" jsonschema:"description=可选的时间范围，例如 最近30分钟、1h"`
+}
+
+type LogQueryUnavailableOutput struct {
+	Success  bool   `json:"success"`
+	Degraded bool   `json:"degraded"`
+	Message  string `json:"message"`
+	Error    string `json:"error,omitempty"`
+	Query    string `json:"query,omitempty"`
+	Service  string `json:"service,omitempty"`
+	Window   string `json:"window,omitempty"`
+}
+
+func NewUnavailableLogQueryTool(reason string) tool.InvokableTool {
+	t, err := utils.InferOptionableTool(
+		"query_logs",
+		"Query application logs. When the real log MCP service is unavailable, this tool returns a structured degraded result instead of leaving the agent without a log tool.",
+		func(ctx context.Context, input *LogQueryInput, opts ...tool.Option) (string, error) {
+			if input == nil {
+				input = &LogQueryInput{}
+			}
+			out := LogQueryUnavailableOutput{
+				Success:  false,
+				Degraded: true,
+				Message:  "日志检索工具当前不可用，已返回降级结果。请基于可用告警、知识库和用户提供的上下文继续分析，并明确标注缺少实时日志证据。",
+				Error:    reason,
+				Query:    input.Query,
+				Service:  input.Service,
+				Window:   input.Window,
+			}
+			data, marshalErr := json.Marshal(out)
+			if marshalErr != nil {
+				return "", marshalErr
+			}
+			return string(data), nil
+		},
+	)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create query_logs fallback tool: %v", err))
+	}
+	return t
+}
+
 // --- 工具发现结果缓存 ---
 
 const toolCacheErrorTTL = 5 * time.Minute // 错误缓存 TTL，过期后自动重试
@@ -293,8 +340,8 @@ func GetLogMcpTool() ([]tool.BaseTool, error) {
 		mcpURL = normalizeOptionalURL(os.Getenv("MCP_LOG_URL"))
 	}
 	if mcpURL == "" {
-		g.Log().Warning(ctx, "mcp.log_url is not configured, log query tool will be disabled")
-		return nil, nil
+		g.Log().Warning(ctx, "mcp.log_url is not configured, log query tool will use degraded fallback")
+		return []tool.BaseTool{NewUnavailableLogQueryTool("mcp.log_url is not configured")}, nil
 	}
 
 	// 检查缓存
@@ -308,15 +355,13 @@ func GetLogMcpTool() ([]tool.BaseTool, error) {
 	// 获取复用的连接池客户端
 	pc, err := globalPool.getOrCreate(mcpURL, connectTimeoutMs, toolTimeoutMs)
 	if err != nil {
-		setCachedTools(mcpURL, &cachedTools{err: err})
-		return nil, err
+		return []tool.BaseTool{NewUnavailableLogQueryTool(err.Error())}, nil
 	}
 
 	// 用 eino 适配器发现工具（获取完整 schema）
 	einoTools, err := e_mcp.GetTools(ctx, &e_mcp.Config{Cli: pc.cli})
 	if err != nil {
-		setCachedTools(mcpURL, &cachedTools{err: err})
-		return nil, fmt.Errorf("failed to get MCP tools: %w", err)
+		return []tool.BaseTool{NewUnavailableLogQueryTool(fmt.Sprintf("failed to get MCP tools: %v", err))}, nil
 	}
 
 	// 包装每个工具，实际调用走连接池（超时 + 重连），缓存工具名

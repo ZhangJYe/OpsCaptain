@@ -38,6 +38,17 @@ function extractAnswer(payload: any): string {
   return String(content || "").trim() || "无响应";
 }
 
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function waitForStreamingReveal(content: string): Promise<void> {
+  const length = Array.from(content || "").length;
+  if (length === 0) return;
+  const delay = Math.min(1800, Math.max(260, Math.ceil(length / 12) * 16));
+  await wait(delay);
+}
+
 function parseSSEBlock(block: string): { event: string; data: string } {
   let event = "message";
   const dataLines: string[] = [];
@@ -612,6 +623,7 @@ export function useChat() {
           }
         }
 
+        await waitForStreamingReveal(fullContent);
         commitThinkingSteps(completeExecutionSteps(liveSteps));
         if (fullContent.trim()) {
           setMessages((prev) => [

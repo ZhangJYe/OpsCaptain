@@ -2,6 +2,8 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/cloudwego/eino/components/tool"
@@ -87,5 +89,37 @@ func TestPooledToolWrapperInfoKeepsOriginalNameWithoutAlias(t *testing.T) {
 	}
 	if info.Name != "query_logs" {
 		t.Fatalf("expected original name query_logs, got %q", info.Name)
+	}
+}
+
+func TestUnavailableLogQueryToolReturnsDegradedPayload(t *testing.T) {
+	logTool := NewUnavailableLogQueryTool("mcp.log_url is not configured")
+	info, err := logTool.Info(context.Background())
+	if err != nil {
+		t.Fatalf("Info returned error: %v", err)
+	}
+	if info == nil || info.Name != "query_logs" {
+		t.Fatalf("expected query_logs tool info, got %#v", info)
+	}
+
+	result, err := logTool.InvokableRun(context.Background(), `{"query":"checkout timeout","service":"checkout"}`)
+	if err != nil {
+		t.Fatalf("InvokableRun returned error: %v", err)
+	}
+	var payload LogQueryUnavailableOutput
+	if err := json.Unmarshal([]byte(result), &payload); err != nil {
+		t.Fatalf("failed to unmarshal payload: %v", err)
+	}
+	if payload.Success {
+		t.Fatal("expected success=false")
+	}
+	if !payload.Degraded {
+		t.Fatal("expected degraded=true")
+	}
+	if payload.Query != "checkout timeout" {
+		t.Fatalf("unexpected query: %q", payload.Query)
+	}
+	if !strings.Contains(payload.Error, "mcp.log_url") {
+		t.Fatalf("expected config reason, got %q", payload.Error)
 	}
 }

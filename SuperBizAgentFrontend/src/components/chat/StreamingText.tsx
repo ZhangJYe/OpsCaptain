@@ -8,9 +8,9 @@ interface Props {
 }
 
 export function StreamingText({ content }: Props) {
-  const [visibleContent, setVisibleContent] = useState(content)
+  const [visibleContent, setVisibleContent] = useState('')
   const targetRef = useRef(content)
-  const visibleRef = useRef(content)
+  const visibleRef = useRef('')
   const timerRef = useRef<number | null>(null)
 
   useEffect(() => {
