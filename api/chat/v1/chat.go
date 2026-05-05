@@ -76,6 +76,17 @@ type FileUploadRes struct {
 	FileName string `json:"fileName" dc:"保存的文件名"`
 	FileID   string `json:"fileId"   dc:"文件唯一标识"`
 	FileSize int64  `json:"fileSize" dc:"文件大小(字节)"`
+	Status   string `json:"status"   dc:"索引状态: indexing/ready/failed"`
+}
+
+type UploadStatusReq struct {
+	g.Meta `path:"/upload_status" method:"get" summary:"查询文件索引状态"`
+	FileID string `json:"file_id" v:"required|max-length:128#文件ID不能为空"`
+}
+
+type UploadStatusRes struct {
+	FileID string `json:"file_id"`
+	Status string `json:"status"`
 }
 
 type AIOpsReq struct {

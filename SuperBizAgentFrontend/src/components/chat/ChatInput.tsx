@@ -29,7 +29,7 @@ export function ChatInput({ onSend, onStop, isLoading, mode, selectedSkillIds, o
   const [input, setInput] = useState('')
   const [isFocused, setIsFocused] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const { files, isUploading, uploadError, removeFile, clearFiles, inputId, handleChange, accept, multiple } = useFileUpload()
+  const { files, readyFiles, isUploading, uploadError, removeFile, clearFiles, inputId, handleChange, accept, multiple } = useFileUpload()
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -39,8 +39,8 @@ export function ChatInput({ onSend, onStop, isLoading, mode, selectedSkillIds, o
   }, [input])
 
   const handleSubmit = () => {
-    if ((!input.trim() && files.length === 0) || isLoading) return
-    const names = files.map((f) => f.name)
+    if ((!input.trim() && readyFiles.length === 0) || isLoading) return
+    const names = readyFiles.map((f) => f.name)
     const query = buildQueryWithFiles(input.trim(), names)
     onSend(query || '请分析上传的文件')
     setInput('')
@@ -54,7 +54,7 @@ export function ChatInput({ onSend, onStop, isLoading, mode, selectedSkillIds, o
     }
   }
 
-  const canSend = (input.trim().length > 0 || files.length > 0) && !isLoading
+  const canSend = (input.trim().length > 0 || readyFiles.length > 0) && !isLoading
 
   return (
     <div className="shrink-0 border-t border-zinc-200/80 bg-white/88 px-4 py-4 backdrop-blur-xl dark:border-zinc-900/80 dark:bg-zinc-950/80">
@@ -92,11 +92,18 @@ export function ChatInput({ onSend, onStop, isLoading, mode, selectedSkillIds, o
                 {files.map((file) => (
                   <span
                     key={file.id}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-accent/30 bg-accent/5 px-2.5 py-1 text-xs text-accent"
+                    className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs ${
+                      file.status === 'ready' ? 'border-accent/30 bg-accent/5 text-accent' :
+                      file.status === 'indexing' ? 'border-yellow-300/50 bg-yellow-50/50 text-yellow-600 dark:border-yellow-600/30 dark:bg-yellow-900/20 dark:text-yellow-400' :
+                      file.status === 'failed' ? 'border-red-300/50 bg-red-50/50 text-red-500 dark:border-red-600/30 dark:bg-red-900/20' :
+                      'border-zinc-200 bg-zinc-50 text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800'
+                    }`}
                   >
                     <FileIcon size={12} />
                     <span className="max-w-[120px] truncate">{file.name}</span>
                     <span className="text-zinc-400">({formatFileSize(file.size)})</span>
+                    {file.status === 'indexing' && <Loader2 size={12} className="animate-spin" />}
+                    {file.status === 'failed' && <span className="text-[10px]">索引失败</span>}
                     <button
                       onClick={() => removeFile(file.id)}
                       className="ml-0.5 rounded p-0.5 text-zinc-400 transition-colors hover:bg-red-500/10 hover:text-red-400"

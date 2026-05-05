@@ -1,14 +1,14 @@
 # 第 4 章：RAG 检索系统 — "给 LLM 装上企业知识库"
 
-> **本章目标**：理解 OpsCaption 知识检索链路的完整设计，能向面试官清晰解释 Hybrid Retrieval 模式、Query Rewrite + Rerank 原理以及全链路超时降级设计。
+> **本章目标**：理解 OpsCaption 知识检索链路的完整设计，能向面试官清晰解释生产主链路的 Hybrid Retrieval、RetrieverPool 复用与失败缓存，以及 Query Rewrite / Rerank 作为评测和可选增强时的价值。
 
 > **📖 初学者导航**：本章较长（1600+ 行），建议按以下顺序阅读：
 > 1. **先看第 1-2 节**（白话理解 + 为什么需要 RAG）→ 建立直觉，10 分钟
 > 2. **再看第 3 节**（检索模式）→ 理解全景，5 分钟
-> 3. **然后看第 4 节**（Full Pipeline 六步之旅）→ 核心链路，20 分钟
+> 3. **然后看第 4 节**（Hybrid 主链路）→ 核心链路，20 分钟
 > 4. **最后按需看第 2.5 节**（离线预处理）和**第 5 节**（Hybrid Retrieval）→ 深入细节
 >
-> 面试时最常问的是：**Hybrid Retrieval 的设计** 和 **Query Rewrite + Rerank 的价值**。先把这两个讲清楚，再展开细节。
+> 面试时最常问的是：**Hybrid Retrieval 的设计** 和 **为什么 Query Rewrite / Rerank 没有默认放进生产 `Query()`**。先把当前链路讲准，再展开可选增强。
 
 ---
 
@@ -45,18 +45,15 @@ graph TB
     
     subgraph Online["在线阶段（实时查询）两路并行"]
         direction TB
-        Query["用户提问<br/>Redis 连接超时"] --> QR["Query Rewrite<br/>LLM改写搜索词"]
-        Query --> VectorSearch["向量检索 Dense<br/>Doubao Embedding<br/>Milvus ANN检索"]
+        Query["用户提问<br/>Redis 连接超时"] --> VectorSearch["向量检索 Dense<br/>Doubao Embedding<br/>Milvus ANN检索"]
         Query --> BM25Search["BM25检索 Sparse<br/>关键词倒排索引<br/>BM25公式打分"]
-        
-        QR --> VectorSearch
-        QR --> BM25Search
+        Query -.-> Optional["可选增强 / 评测<br/>Query Rewrite + Rerank"]
         
         VectorSearch --> RRF["RRF 融合算法<br/>score = Σ 1/(60+rank)"]
         BM25Search --> RRF
         
         RRF --> Refine["RetrieveRefine<br/>重排序+去噪<br/>token交叉打分+元数据加权"]
-        Refine --> Rerank["LLM Rerank<br/>最终精排<br/>对每篇文档打0-10分"]
+        Refine --> Final["返回 Top-K 文档<br/>QueryTrace 记录检索过程"]
     end
     
     style Offline fill:#e9ecef,stroke:#495057
@@ -95,14 +92,17 @@ ReAct Agent: 我先去知识库查一下相关文档
     │
     ▼
 RAG 系统：
-    1. Query Rewrite: "Redis 连接超时" → "Redis connection timeout 排查 故障 recovery"
-    2. Milvus 向量检索: 找到 20 篇候选文档
-    3. RetrieveRefine: 去重 + 相关性过滤
-    4. Rerank: LLM 打分重排序，取 Top-5
+    1. RetrieverPool: 复用 Milvus Retriever，失败短 TTL 缓存
+    2. Dense + Sparse: Milvus 向量检索和 BM25 关键词检索并行召回
+    3. RRF: 融合两路结果
+    4. RetrieveRefine: 去重 + 元数据加权 + 相关性过滤
+    5. 返回 Top-K 文档 + QueryTrace
     │
     ▼
 返回 Top-5 最相关文档 → LLM 基于文档生成回答
 ```
+
+> `QueryForEval()` 支持 Query Rewrite 和 Rerank 开关，用于评测和消融实验；生产 `Query()` 当前默认走 Hybrid Retrieval 主链路。
 
 **核心理念**：让 LLM 的回答从"凭记忆发挥"变成"有据可循"。
 
@@ -241,13 +241,10 @@ func (s *IndexingService) deleteExistingSource(ctx context.Context, sourceValue 
 
 ## 3. 检索模式
 
-OpsCaption 使用统一的 Hybrid Retrieval 模式：Query Rewrite → 向量检索 + BM25 关键词检索 → RRF 融合 → RetrieveRefine → Rerank。`Query()` 直接调用 `HybridRetrieve`，不再有多种模式分支。
+OpsCaption 生产环境的 `Query()` 使用统一的 Hybrid Retrieval 主链路：RetrieverPool → 向量检索 + BM25 关键词检索 → RRF 融合 → RetrieveRefine → Top-K 返回。Query Rewrite 和 LLM Rerank 已作为能力保留在 `QueryForEval()` / 可选增强路径中，用来做评测、消融和后续开关化接入，不再描述成生产默认步骤。
 
 ```
 用户 query
-  │
-  ▼
-Query Rewrite（LLM 改写，超时 3s 降级回原始 query）
   │
   ▼
 RetrieverPool.GetOrCreate（获取/创建 Milvus 连接）
@@ -262,35 +259,28 @@ RRF 融合（score = Σ 1/(60+rank)）
 RetrieveRefine（token 交叉打分 + 元数据加权）
   │
   ▼
-LLM Rerank（每篇文档打 0-10 分，超时 5s 降级保持原序）
-  │
-  ▼
 返回 top-K 文档 + QueryTrace
 ```
 
-> **面试要点**：早期版本有四种检索模式（retrieve/rewrite/full/hybrid），通过 `QueryMode` 常量切换。经过评测验证，Hybrid 模式在所有维度都优于单一向量检索，因此统一为 Hybrid Retrieval，消除了模式选择的复杂性。`QueryForEval()` 仅用于评测命令，接受 `wantRewrite`/`wantRerank` 布尔参数以支持消融实验。
+> **面试要点**：早期版本有四种检索模式（retrieve/rewrite/full/hybrid），通过 `QueryMode` 常量切换。现在生产路径统一为 Hybrid Retrieval，消除了模式选择复杂度。`QueryForEval()` 接受 `wantRewrite`/`wantRerank` 布尔参数，用于评测命令和消融实验。
 
 ---
 
 ## 4. 代码拆解：Hybrid Pipeline 的完整链路
 
-下面以 Hybrid Retrieval 为例，逐步拆解完整链路。
+下面以生产 `Query()` 使用的 Hybrid Retrieval 为例，逐步拆解完整链路。
 
 ```mermaid
 graph TD
-    A["用户输入: 服务挂了"] --> B["Step 1: Query Rewrite"]
-    B --> C["Step 2: RetrieverPool.GetOrCreate()"]
-    C --> D["Step 3: Milvus ANN 向量检索"]
-    D --> E["Step 4: RetrieveRefine"]
-    E --> F["Step 5: Rerank"]
-    F --> G["Step 6: 返回 top-K 文档"]
+    A["用户输入: 服务挂了"] --> C["Step 1: RetrieverPool.GetOrCreate()"]
+    C --> D["Step 2: Dense + Sparse 并行检索"]
+    D --> E["Step 3: RRF 融合 + RetrieveRefine"]
+    E --> G["Step 4: 返回 top-K 文档"]
     
-    B -.->|"服务挂了 → 服务故障排查 pod failure recovery"| B1["超时: 3s，失败降级回原始 query"]
     C -.->|"按 Milvus 地址 + top_k 做缓存 key"| C1["失败走短 TTL 缓存 15s"]
-    D -.->|"Doubao Embedding → Milvus 相似度搜索"| D1["取 candidateTopK 篇候选"]
-    E -.->|"基于 query token 与文档元数据交叉打分"| E1["重新排序"]
-    F -.->|"LLM 对每篇文档打 0-10 分"| F1["超时: 5s，失败保持 refine 顺序"]
-    G -.->|"QueryTrace 记录每一步耗时和状态"| G1["便于可观测"]
+    D -.->|"Doubao Embedding + BM25"| D1["两路候选召回"]
+    E -.->|"RRF 排名融合 + 元数据加权"| E1["重新排序"]
+    G -.->|"QueryTrace 记录缓存、耗时和命中数"| G1["便于可观测"]
     
     style A fill:#4dabf7,stroke:#333,color:#fff
     style G fill:#51cf66,stroke:#333,color:#fff
@@ -310,7 +300,7 @@ func Query(ctx context.Context, pool *RetrieverPool, query string) ([]*schema.Do
 }
 ```
 
-**关键设计**：`Query()` 直接调用 `pool.GetOrCreate()` 获取 Retriever，再调用 `HybridRetrieveWithRetriever()` 完成 Rewrite → 向量 + BM25 并行检索 → RRF → Refine → Rerank 的完整链路。没有模式分支，路径唯一。评测场景使用 `QueryForEval()`，接受 `wantRewrite`/`wantRerank` 布尔参数。
+**关键设计**：`Query()` 直接调用 `pool.GetOrCreate()` 获取 Retriever，再调用 `HybridRetrieveWithRetriever()` 完成向量 + BM25 并行检索 → RRF → Refine → Top-K 的生产主链路。没有模式分支，路径唯一。评测场景使用 `QueryForEval()`，接受 `wantRewrite`/`wantRerank` 布尔参数。
 
 ### 4.2 HybridRetrieveWithRetriever：核心调度逻辑
 
@@ -318,47 +308,32 @@ func Query(ctx context.Context, pool *RetrieverPool, query string) ([]*schema.Do
 // query.go - HybridRetrieveWithRetriever（核心调度函数）
 
 func HybridRetrieveWithRetriever(ctx context.Context, retriever retrieverapi.Retriever,
-    query string, topK int, trace *QueryTrace,
-) ([]*schema.Document, error) {
+    lexicalIndex *BM25Index, query string, cfg HybridConfig,
+) ([]*schema.Document, HybridTrace, error) {
+    var trace HybridTrace
 
-    if strings.TrimSpace(query) == "" {
-        return nil, nil
+    docs, err := retriever.Retrieve(ctx, query, retrieverapi.WithTopK(cfg.DenseTopK))
+    if err != nil { return nil, trace, err }
+
+    hits := lexicalIndex.Search(query, cfg.LexicalTopK)
+    fused := rrfFusion(docs, hits, cfg.FusionK)
+
+    finalDocs := make([]*schema.Document, 0, len(fused))
+    for _, item := range fused {
+        finalDocs = append(finalDocs, item.doc)
     }
 
-    candidateTopK := RetrieverCandidateTopK(ctx)  // = topK × 4，范围 [20, 50]
-
-    // ===== Step 1: Query Rewrite =====
-    rewriteStart := time.Now()
-    rewritten := RewriteQuery(ctx, query)
-    trace.RewriteLatencyMs = time.Since(rewriteStart).Milliseconds()
-    trace.RewrittenQuery = rewritten
-
-    // ===== Step 2: 向量 + BM25 并行检索 =====
-    retrieveStart := time.Now()
-    docs, err := retriever.Retrieve(ctx, rewritten, retrieverapi.WithTopK(candidateTopK))
-    trace.RetrieveLatencyMs = time.Since(retrieveStart).Milliseconds()
-    trace.RawResultCount = len(docs)
-    if err != nil {
-        return nil, err
+    if cfg.MetadataBoostEnabled {
+        finalDocs = refineRetrievedDocs(query, finalDocs)
     }
-
-    // ===== Step 3: RetrieveRefine =====
-    docs = refineRetrievedDocs(query, docs)
-
-    // ===== Step 4: Rerank =====
-    rerankStart := time.Now()
-    rerankResult := Rerank(ctx, query, docs, topK)
-    trace.RerankLatencyMs = time.Since(rerankStart).Milliseconds()
-    trace.RerankEnabled = rerankResult.Enabled
-
-    // ===== Step 5: 返回结果 =====
-    finalDocs := rerankResult.Docs
-    trace.ResultCount = len(finalDocs)
-    return finalDocs, nil
+    finalDocs = trimRetrievedDocs(finalDocs, cfg.FinalTopK)
+    return finalDocs, trace, nil
 }
 ```
 
-### 4.3 Step 1: Query Rewrite — 把"人话"变成"搜索词"
+### 4.3 可选增强：Query Rewrite — 把"人话"变成"搜索词"
+
+> 这一节讲的是 `QueryForEval()` 和后续开关化增强里的 Query Rewrite，不是当前生产 `Query()` 的默认步骤。
 
 ```go
 // query_rewrite.go - RewriteQuery
@@ -632,7 +607,9 @@ func scoreRetrievedDocument(query retrievalQueryProfile, doc *schema.Document, i
 
 **设计亮点**：这不是简单的"把 query 和文档内容做文本匹配"，而是利用文档元数据（`service_tokens`、`pod_tokens`、`metric_names` 等）做**结构化交叉打分**。服务名、Pod 名的匹配权重（4,12）远高于普通内容匹配（1,6），因为运维场景中这些字段的匹配意味着"高度相关"。
 
-### 4.7 Step 5: Rerank — LLM 精排
+### 4.7 可选增强：Rerank — LLM 精排
+
+> 这一节讲的是 `QueryForEval()` 中的 LLM Rerank 能力，以及后续可配置接入的精排方案。当前生产 `Query()` 默认在 RRF + RetrieveRefine 后直接返回 Top-K。
 
 ```go
 // rerank.go - Rerank
@@ -732,7 +709,7 @@ graph LR
     style C fill:#51cf66,stroke:#333,color:#fff
 ```
 
-> **面试要点**：Rerank 用 LLM 做——这是 OpsCaption 的特色。相比传统的 Cross-Encoder Reranker（如 BGE-Reranker），LLM Rerank 能理解运维领域的上下文语义，但也更慢、更贵。所以做了 5s 超时和内容截断（200 字符）来平衡性能。
+> **面试要点**：LLM Rerank 是已实现的评测/可选增强能力，不要说成生产默认路径。它的价值是理解运维文档的上下文关系，代价是更慢、更贵，所以需要配置开关、超时和降级。
 
 ### 4.8 Step 6: QueryTrace — 全链路可观测
 
@@ -869,7 +846,7 @@ type Skill interface {
 }
 ```
 
-**示例——Logs Specialist 注册的 6 个 Skill**：
+**示例——日志场景注册的 6 个 Skill**：
 
 | Skill 名称 | 匹配关键词 | 作用 |
 |-----------|-----------|------|
@@ -900,7 +877,7 @@ func (r *Registry) Resolve(task *protocol.TaskEnvelope) (Skill, error) {
 ```
 
 **设计意图**：
-- **首匹配优先**：Logs Specialist 的 6 个 Skill 按**特殊→通用**顺序排列——`service_offline_panic_trace` 排前面（精确匹配 panic+crashloop），`evidence_extract` 排后面（通用错误匹配），`raw_review` 在最后（兜底）。
+- **首匹配优先**：日志 Skill 按**特殊→通用**顺序排列——`service_offline_panic_trace` 排前面（精确匹配 panic+crashloop），`evidence_extract` 排后面（通用错误匹配），`raw_review` 在最后（兜底）。
 - **有 fallback**：即使所有 Skill 都不匹配（resolver 返回 `skills[0]`），也不会返回错误——确保了 Agent 在任何 query 下都有执行路径。
 
 ### 4.10.3 ProgressiveDisclosure：按场景渐进暴露工具
@@ -1414,10 +1391,10 @@ def query_logs(arguments):
 ┌─────────────┬─────────────┬──────────────────────┐
 │   环节       │   超时       │   降级策略             │
 ├─────────────┼─────────────┼──────────────────────┤
-│ Query Rewrite│   3s        │ 返回原始 query        │
 │ Retriever 创建│  取决于Milvus│ 缓存失败，15s 内不重试  │
 │ Milvus 检索  │   取决于Milvus│ 直接返回 error        │
-│ Rerank       │   5s        │ 跳过 rerank，保持原序  │
+│ Query Rewrite│   3s        │ 评测/可选增强，失败用原始 query │
+│ Rerank       │   5s        │ 评测/可选增强，失败保持原序 │
 │ 整体链路     │   无硬上限    │ 每个环节独立降级       │
 └─────────────┴─────────────┴──────────────────────┘
 ```
@@ -1438,19 +1415,17 @@ def query_logs(arguments):
 
 两者合在一起：语义覆盖 + 精确匹配 = **召回最大化**。
 
-### 6.4 candidateTopK × 4 的粗排精排策略
+### 6.4 粗召回 + 轻量精排策略
 
 ```
 topK = 3（最终返回给 LLM 的文档数）
 candidateTopK = topK × 4 = 12 → clamp到 [20, 50] → 实际 = 20
 
-流程：
-  20 篇候选 → RetrieveRefine 重排 → 20 篇 → Rerank LLM 打分 → 取 top-3
+生产流程：
+  Dense TopK + BM25 TopK → RRF 融合 → RetrieveRefine → 取 top-3
 
-为什么中间是 20 而不是 50？
-  - 20 篇已经足够覆盖"遗漏的相关文档"
-  - 给 LLM Rerank 20 篇文档的成本可控（≈几百 Token）
-  - 50 篇会让 Rerank 的 Prompt 过长，增加超时风险
+评测/增强流程：
+  QueryForEval 可在 RetrieveRefine 后追加 LLM Rerank，用于验证精排收益
 ```
 
 ### 6.5 函数注入设计
@@ -1462,7 +1437,7 @@ func QueryForEval(ctx context.Context, pool *RetrieverPool, query string,
 ) ([]*schema.Document, QueryTrace, error)
 ```
 
-`QueryForEval` 通过 `wantRewrite`/`wantRerank` 布尔参数控制是否执行 Query Rewrite 和 Rerank，支持消融实验。生产环境使用 `Query()`，路径固定为完整的 Hybrid Retrieval 链路。
+`QueryForEval` 通过 `wantRewrite`/`wantRerank` 布尔参数控制是否执行 Query Rewrite 和 Rerank，支持消融实验。生产环境使用 `Query()`，路径固定为 Hybrid Retrieval 主链路，不默认启用 Rewrite/Rerank。
 
 ---
 
@@ -1474,7 +1449,7 @@ func QueryForEval(ctx context.Context, pool *RetrieverPool, query string,
 >
 > **离线阶段**，文档经过 Loader 统一加载后，走两阶段分块——先用 Markdown 标题切分保持文档结构，对大块（>800 字符）再按语义相似度补切。分块后用 Doubao Embedding 生成 1024 维向量写入 Milvus，同时构建 BM25 关键词倒排索引。同一文件重复索引时，会先做 _source 去重——删掉旧的 chunk 再写入新的。
 >
-> **在线检索**走六步。第一步 Query Rewrite——LLM 把口语 query 改写为搜索优化关键词，3 秒超时降级。第二步 RetrieverPool 获取连接——按 Milvus 地址缓存连接，失败走 15 秒短 TTL 防雪崩。第三步 Milvus ANN 向量检索——取 candidateTopK（topK × 4）篇候选。第四步 RetrieveRefine——基于 query token 与文档元数据做交叉打分，服务名/Pod 名匹配权重最高（4,12）。第五步 Rerank——LLM 对每篇打 0-10 分，5 秒超时降级。第六步返回文档 + QueryTrace。
+> **在线检索**主链路走四步。第一步 RetrieverPool 获取连接——按 Milvus 地址缓存连接，失败走 15 秒短 TTL 防雪崩。第二步 Dense + Sparse 并行召回——Milvus ANN 向量检索负责语义相似，BM25 负责精确关键词。第三步 RRF 融合和 RetrieveRefine——把两路结果合并，再基于 query token 与文档元数据做轻量重排。第四步返回 Top-K 文档 + QueryTrace。
 >
 > **Hybrid 模式**额外增加 BM25 并行检索——向量 + BM25 两路用 RRF 公式融合（score = Σ 1/(60+rank)），让两边都命中的文档排最前面。当前在 AIOps Challenge 2025 案例集上评测，**Recall@10 = 78%**。
 
@@ -1486,11 +1461,11 @@ func QueryForEval(ctx context.Context, pool *RetrieverPool, query string,
 >
 > **第二，连接池 + 雪崩防护。** RetrieverPool 按缓存 key 复用连接，失败时缓存错误 15 秒，避免 Milvus 不可用时每个请求都超时等待。这本质上是 Circuit Breaker 的简化实现。
 >
-> **第三，全链路超时降级。** 每个环节独立超时——改写 3s、Rerank 5s。任何环节超时或失败，自动降级到下一级策略：改写失败用原始 query，Rerank 失败跳过直接返回 refine 后的顺序。用户无感知。
+> **第三，Hybrid 检索 + BM25 并行。** BM25 关键词检索弥补向量检索的精确匹配短板——Pod 名、error code、IP 地址等精确标识符用 BM25 直接命中。两路并行执行后用 RRF 公式融合（score = Σ 1/(60+rank)），消除了量纲差异。
 >
-> **第四，粗排→精排两阶段检索。** 先用向量检索取 4 倍候选（candidateTopK），再用 RetrieveRefine 做结构化打分，最后用 LLM Rerank 精排。既保证了召回率，又控制了精排成本。
+> **第四，粗召回→轻量精排。** 先用 Dense/BM25 两路扩大召回，再用 RRF 和 RetrieveRefine 做结构化重排。LLM Rerank 作为评测/可选增强保留，用于验证精排收益，不默认放进主请求链路。
 >
-> **第五，Hybrid 检索 + BM25 并行。** BM25 关键词检索弥补向量检索的精确匹配短板——Pod 名、error code、IP 地址等精确标识符用 BM25 直接命中。两路并行执行后用 RRF 公式融合（score = Σ 1/(60+rank)），消除了量纲差异。另外离线阶段同步构建 BM25 索引并做 _source 去重——同一文件重复索引不会残留旧 chunk。
+> **第五，索引更新去重。** 离线阶段同步构建 BM25 索引并做 `_source` 去重，同一文件重复索引时先删除旧 chunk 再写入新 chunk，避免检索结果混入历史版本。
 
 ### Q3: "为什么要加 BM25？向量检索不是够了吗？"
 
@@ -1533,12 +1508,13 @@ RAG 的 Hybrid Retrieval 包含哪几个步骤？每个步骤的作用是什么�
 <details>
 <summary>点击查看答案</summary>
 
-**五步**：
-1. **Query Rewrite**：把口语化查询改写为搜索优化关键词
-2. **向量 + BM25 并行检索**：Milvus ANN 向量检索（Dense）和 BM25 关键词检索（Sparse）并行执行，返回 candidateTopK 篇候选
-3. **RRF 融合**：使用 Reciprocal Rank Fusion 算法融合两路检索结果
-4. **RetrieveRefine + Rerank**：token 交叉打分重排序 + LLM 对每篇文档打 0-10 分精排
-5. **返回结果 + QueryTrace**：返回 top-K 文档和全链路追踪信息
+**四步**：
+1. **RetrieverPool 获取连接**：复用 Milvus Retriever，失败短 TTL 缓存
+2. **向量 + BM25 并行检索**：Milvus ANN 向量检索（Dense）和 BM25 关键词检索（Sparse）并行执行
+3. **RRF 融合 + RetrieveRefine**：融合两路检索结果，再做 token/元数据加权重排
+4. **返回结果 + QueryTrace**：返回 top-K 文档和检索追踪信息
+
+Query Rewrite / Rerank 是 `QueryForEval()` 的可选开关，用于评测和后续增强，不是生产 `Query()` 默认步骤。
 </details>
 
 ### 问题 2

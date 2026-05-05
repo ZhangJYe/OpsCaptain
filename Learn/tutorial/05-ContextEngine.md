@@ -295,8 +295,8 @@ graph LR
 |-------|------|:----:|:----:|------|
 | Phase 1 | 确定性规则（逆向选取、关键词匹配） | ~1ms | 0 | 始终执行，保证基线 |
 | Phase 2 | embedding 语义召回 + 多维评分增强 | ~200ms | 低 | 批量 embedding + 缓存 |
-| Phase 2.5 | LLM Rerank（可选） | ~500ms | 中 | 配置驱动，默认关闭 |
-| Phase 3 | LLM 意图识别 → Profile 映射 | ~500ms | 中 | 独立 LLM 调用，超时降级 |
+| Phase 2.5 | ToolItems LLM Rerank（可选） | 默认 2s 超时 | 中 | `context.tool_rerank.*` 配置驱动，默认关闭 |
+| Phase 3 | LLM 意图识别 → Profile 映射（可选注入） | 500ms | 中 | 只有注入 `IntentRecognizer` 后才执行 |
 
 **设计理念**：先轻量后重量，先确定性后概率性。Phase 1 保证"不会太差"，Phase 2/2.5/3 逐步"更好"，任何阶段超时或失败都自动降级到上一阶段的结果。
 
@@ -305,8 +305,8 @@ graph LR
 当 ToolItems 召回结果较多（≥ 阈值）时，可选启用 LLM Rerank 做精细排序：
 
 **触发条件**：
-- 配置项 `tool_reranker.enabled = true`（默认 false）
-- 召回的 ToolItems 数量 ≥ `tool_reranker.min_items`（默认 5）
+- 配置项 `context.tool_rerank.enabled = true`（默认 false）
+- 召回的 ToolItems 数量 ≥ `context.tool_rerank.min_candidates`（默认 6）
 
 **处理流程**：
 
@@ -319,10 +319,10 @@ graph TD
     E --> F["LLM 调用<br/>要求 JSON 输出"]
     F --> G{"JSON 解析成功？"}
     G -->|Yes| H["按 LLM 打分重排序"]
-    G -->|No| I["Regex Fallback<br/>从回复中提取排名"]
+    G -->|No| I["Regex Fallback<br/>从回复中提取分数"]
     H --> J["返回重排序结果"]
     I --> J
-    F -->|超时 500ms| K["降级：使用 Phase 1 结果"]
+    F -->|默认 2s 超时| K["降级：使用 Phase 1 结果"]
 ```
 
 **关键设计**：
@@ -331,13 +331,13 @@ graph TD
   - IP 地址：`192.168.x.x` → `[IP_REDACTED]`
   - Token/Secret：`sk-abc123...` → `[TOKEN_REDACTED]`
   - UUID：`550e8400-e29b-41d4-a716-446655440000` → `[UUID_REDACTED]`
-- **JSON 输出约束**：Prompt 明确要求 LLM 返回 `{"rankings": [3, 1, 2, ...]}` 格式
-- **Regex Fallback**：如果 JSON 解析失败，用正则从 LLM 回复中提取数字序列作为排名
-- **超时降级**：500ms 超时后直接使用 Phase 1 关键词匹配结果，不阻塞主流程
+- **JSON 输出约束**：Prompt 明确要求 LLM 返回 `{"scores":[{"id":1,"score":9}]}` 格式
+- **Regex Fallback**：如果 JSON 解析失败，用正则从 LLM 回复中提取 `[id] score` 形式的分数
+- **超时降级**：默认 2s 超时后直接使用 Phase 1 关键词匹配结果，不阻塞主流程
 
 #### Phase 3: IntentRecognizer — 意图识别
 
-在装配流程最前端，通过独立 LLM 调用识别用户意图，决定使用哪个 Profile：
+这是可选注入能力：只有调用 `WithIntentRecognizer()` 后，Assembler 才会在装配流程前端通过独立 LLM 调用识别用户意图，决定使用哪个 Profile。`NewAssembler()` 默认不会启用它。
 
 **处理流程**：
 
@@ -355,31 +355,32 @@ func (r *IntentRecognizer) Recognize(ctx context.Context, query string) IntentRe
 | 意图标识 | 映射 Profile | 说明 |
 |---------|-------------|------|
 | `fault_diagnosis` | `aiops_diagnosis` | 故障诊断场景 |
-| `log_analysis` | `aiops_diagnosis` | 日志分析归入诊断 |
-| `general_chat` | `chat-default` | 日常对话 |
-| `report_generate` | `reporter-default` | 报告生成 |
-| 未知/超时 | `chat-default` | 降级到默认 Profile |
+| `knowledge_query` | `chat` | 知识查询场景 |
+| `chat` | `chat` | 日常对话 |
+| 未知/超时 | `chat` | 降级到默认 Profile |
 
 **关键设计**：
 
 - **独立 LLM 调用**：不复用主对话的 LLM 调用，避免意图识别结果污染对话上下文
-- **500ms 硬超时**：超时后直接返回默认 Profile（`chat-default`），不阻塞主流程
+- **500ms 硬超时**：超时后直接返回默认 Profile（`chat`），不阻塞主流程
 - **轻量 Prompt**：意图识别 Prompt 只需要几十个 token，不消耗大量预算
-- **Profile 覆盖**：识别结果可以覆盖 `req.Mode`，例如用户在 chat 模式下问故障问题，自动切换到 `aiops_diagnosis` Profile
+- **Profile 覆盖**：注入启用后，识别结果可以覆盖 `req.Mode`，例如用户在 chat 模式下问故障问题，自动切换到 `aiops_diagnosis` Profile
 
 #### 多路召回完整流程
 
 ```mermaid
 graph TD
-    A["用户 Query"] --> B["IntentRecognizer<br/>意图识别 (LLM, 500ms 超时)"]
-    B --> C["Profile Selection<br/>意图 → Profile 映射"]
+    A["用户 Query"] --> B{"是否注入 IntentRecognizer?"}
+    B -->|Yes| B1["意图识别 (LLM, 500ms 超时)"]
+    B -->|No| C["Profile Selection<br/>按 req.Mode 解析"]
+    B1 --> C["Profile Selection<br/>意图 → Profile 映射"]
     C --> D{"Profile 决定<br/>各来源开关"}
     D --> E["History Recall<br/>embedding 召回 + 评分增强"]
     D --> F["Memory Recall<br/>六层过滤 + 复合评分"]
     D --> G["Document Recall<br/>RAG hybrid retrieval"]
     D --> H["Tool Recall<br/>关键词匹配"]
     H --> I{"ToolReranker<br/>配置启用?"}
-    I -->|Yes| J["LLM Rerank (500ms 超时)"]
+    I -->|Yes| J["LLM Rerank (默认 2s 超时)"]
     I -->|No| K["使用 Phase 1 结果"]
     J --> L["Budget Assembly<br/>预算分配 + 裁剪"]
     K --> L
@@ -743,8 +744,10 @@ return []*schema.Message{
 
 ```mermaid
 graph TD
-    A["Step 0: 记录开始时间"] --> B["Step 0.5: IntentRecognizer<br/>独立 LLM 意图识别 (500ms 超时)<br/>意图 → Profile 映射"]
-    B --> C["Step 1: PolicyResolver.Resolve<br/>根据意图 + req.Mode 选择 Profile"]
+    A["Step 0: 记录开始时间"] --> B{"Step 0.5: 是否注入 IntentRecognizer?"}
+    B -->|Yes| B1["独立 LLM 意图识别 (500ms 超时)<br/>意图 → Profile 映射"]
+    B -->|No| C["Step 1: PolicyResolver.Resolve<br/>根据 req.Mode 选择 Profile"]
+    B1 --> C["Step 1: PolicyResolver.Resolve<br/>根据意图 + req.Mode 选择 Profile"]
     C --> D["Step 2: 初始化 ContextPackage + Trace<br/>记录 BudgetBefore"]
     D --> E{"profile.AllowHistory?"}
     E -->|Yes| F["Step 3: History Recall<br/>Phase 1: 逆向选取 (recentKeep=3)<br/>Phase 2: embedding 语义召回<br/>combinedScore 评分增强<br/>pairAwareSelect 配对保留"]
@@ -762,7 +765,7 @@ graph TD
     K -->|Yes| L["Step 6: Tool Recall<br/>关键词匹配召回<br/>Phase 1 结果"]
     K -->|No| L2["跳过"]
     L --> M{"ToolReranker<br/>配置启用?"}
-    M -->|Yes| N["Step 6.5: LLM Rerank<br/>snippet 脱敏 → LLM 重排序<br/>JSON 输出 + Regex fallback<br/>500ms 超时降级"]
+    M -->|Yes| N["Step 6.5: LLM Rerank<br/>snippet 脱敏 → LLM 重排序<br/>JSON scores + Regex fallback<br/>默认 2s 超时降级"]
     M -->|No| N2["跳过"]
     N --> O{"Staged 启用?"}
     N2 --> O
@@ -1052,13 +1055,13 @@ Phase 2.5 ToolRerank 的触发条件和降级策略是什么？
 <summary>点击查看答案</summary>
 
 **触发条件**（两个必须同时满足）：
-- 配置项 `tool_reranker.enabled = true`（默认 false，需要手动开启）
-- 召回的 ToolItems 数量 ≥ `tool_reranker.min_items`（默认 5）
+- 配置项 `context.tool_rerank.enabled = true`（默认 false，需要手动开启）
+- 召回的 ToolItems 数量 ≥ `context.tool_rerank.min_candidates`（默认 6）
 
 **降级策略**（三级降级）：
 1. **配置未启用**：直接跳过，使用 Phase 1 关键词匹配结果
-2. **LLM 超时（500ms）**：返回 Phase 1 结果，不阻塞主流程
-3. **JSON 解析失败**：Regex Fallback，从 LLM 回复中用正则提取数字序列作为排名；如果正则也失败，返回 Phase 1 结果
+2. **LLM 超时（默认 2s）**：返回 Phase 1 结果，不阻塞主流程
+3. **JSON 解析失败**：Regex Fallback，从 LLM 回复中提取 `[id] score` 分数；如果正则也失败，返回 Phase 1 结果
 
 **Snippet Sanitizer**：发送给 LLM 前对 IP/Token/UUID 做脱敏，防止敏感信息泄露给 LLM。
 
@@ -1079,14 +1082,14 @@ Phase 2.5 ToolRerank 的触发条件和降级策略是什么？
 |-------|:----:|:----:|:--------:|
 | Phase 1（确定性规则） | ~1ms | 0 | 无 |
 | Phase 2（embedding） | ~200ms | 低 | 降级到 Phase 1 |
-| Phase 2.5（LLM Rerank） | ~500ms | 中 | 降级到 Phase 1 |
-| Phase 3（意图识别） | ~500ms | 中 | 降级到默认 Profile |
+| Phase 2.5（ToolItems LLM Rerank） | 默认 2s 超时 | 中 | 降级到 Phase 1 |
+| Phase 3（意图识别，可选注入） | 500ms | 中 | 降级到默认 Profile |
 
 **为什么这样设计？**
 - **Phase 1 始终可用**：确定性规则无外部依赖，1ms 完成，保证基线质量
 - **Phase 2 性价比高**：embedding 调用便宜（比 LLM 便宜 10-100 倍），结果可缓存（content hash），200ms 可接受
-- **Phase 2.5/3 按需启用**：LLM 调用贵且慢，只在配置启用或必要时触发，且都有超时降级
-- **用户体感**：大多数请求走 Phase 1+2（~200ms），少数复杂请求走 Phase 2.5/3（~500ms），永远不会因为 LLM 调用而卡住
+- **Phase 2.5/3 按需启用**：LLM 调用贵且慢，只在配置启用或显式注入时触发，且都有超时降级
+- **用户体感**：大多数请求走 Phase 1+2（~200ms），少数复杂请求才走 Phase 2.5/3，永远不会因为 LLM 调用而卡住
 
 **一句话**：能不用 LLM 就不用，用了必须有降级，降级后结果不能太差。
 

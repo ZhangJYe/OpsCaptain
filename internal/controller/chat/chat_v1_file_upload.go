@@ -61,6 +61,7 @@ type uploadFileRecord struct {
 	Version          int    `json:"version"`
 	FileSize         int64  `json:"file_size"`
 	MIMEType         string `json:"mime_type,omitempty"`
+	IndexStatus      string `json:"index_status"`
 
 	filePath     string
 	metadataPath string
@@ -159,10 +160,15 @@ func (c *ControllerV1) FileUpload(ctx context.Context, req *v1.FileUploadReq) (r
 	}
 	if duplicate, ok := findDuplicateUploadRecord(existingRecords, contentHash); ok {
 		_ = os.Remove(quarantinePath)
+		status := duplicate.IndexStatus
+		if status == "" {
+			status = "ready"
+		}
 		return &v1.FileUploadRes{
 			FileName: safeName,
 			FileSize: duplicate.FileSize,
 			FileID:   duplicate.StoredFilename,
+			Status:   status,
 		}, nil
 	}
 
@@ -182,6 +188,7 @@ func (c *ControllerV1) FileUpload(ctx context.Context, req *v1.FileUploadReq) (r
 		Version:          nextUploadVersion(existingRecords),
 		FileSize:         fileInfo.Size(),
 		MIMEType:         mimeType,
+		IndexStatus:      "indexing",
 	}
 	if err := writeUploadMetadata(finalPath, record); err != nil {
 		_ = os.Remove(finalPath)
@@ -192,19 +199,26 @@ func (c *ControllerV1) FileUpload(ctx context.Context, req *v1.FileUploadReq) (r
 		FileName: safeName,
 		FileSize: fileInfo.Size(),
 		FileID:   uniqueName,
+		Status:   "indexing",
 	}
 
-	err = buildIntoIndex(ctx, finalPath)
-	if err != nil {
-		_ = cleanupUploadRecord(record)
-		return nil, gerror.Wrapf(err, "构建知识库失败")
-	}
-	if err := cleanupReplacedUploadRecords(existingRecords, record.StoredFilename); err != nil {
-		g.Log().Warningf(ctx, "cleanup replaced upload artifacts failed: %v", err)
-	}
-	if len(existingRecords) > 0 {
-		rag.DefaultIndexingService().SyncBM25Index(ctx)
-	}
+	go func() {
+		indexCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+
+		if err := buildIntoIndex(indexCtx, finalPath); err != nil {
+			g.Log().Warningf(indexCtx, "async indexing failed for %s: %v", finalPath, err)
+			record.IndexStatus = "failed"
+			_ = writeUploadMetadata(finalPath, record)
+			return
+		}
+		record.IndexStatus = "ready"
+		_ = writeUploadMetadata(finalPath, record)
+		if err := cleanupReplacedUploadRecords(existingRecords, record.StoredFilename); err != nil {
+			g.Log().Warningf(indexCtx, "cleanup replaced upload artifacts failed: %v", err)
+		}
+	}()
+
 	return res, nil
 }
 
@@ -370,4 +384,20 @@ func cleanupUploadRecord(record uploadFileRecord) error {
 		}
 	}
 	return nil
+}
+
+func (c *ControllerV1) UploadStatus(ctx context.Context, req *v1.UploadStatusReq) (res *v1.UploadStatusRes, err error) {
+	metadataPath := uploadMetadataPath(filepath.Join(common.FileDir, req.FileID))
+	record, readErr := readUploadRecord(metadataPath)
+	if readErr != nil {
+		return nil, gerror.Newf("文件记录不存在: %s", req.FileID)
+	}
+	status := record.IndexStatus
+	if status == "" {
+		status = "ready"
+	}
+	return &v1.UploadStatusRes{
+		FileID: req.FileID,
+		Status: status,
+	}, nil
 }

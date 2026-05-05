@@ -257,7 +257,7 @@ Hook 脚本可以输出 JSON 来控制行为：
         "name": "protect-sensitive-files",
         "command": "./hooks/protect-secrets.sh",
         "args": ["{{tool_input}}"],
-        "matcher": "Write|Edit|Read",
+        "matcher": "Write|Edit",
         "timeout": 3000
       },
       {
@@ -351,17 +351,15 @@ fi
 allow
 ```
 
-#### hooks/protect-secrets.sh（保护敏感文件）
+#### hooks/protect-secrets.sh（保护真正敏感文件）
 ```bash
 #!/bin/bash
 source "$(dirname "$0")/utils.sh"
 
 TOOL_INPUT="$1"
 
-# 敏感文件列表
 SENSITIVE_PATTERNS=(
-  "config\.yaml"
-  "\.env"
+  "\.env$"
   "\.env\."
   "secret"
   "password"
@@ -380,7 +378,9 @@ done
 allow
 ```
 
-#### hooks/block-push-main.sh（阻止直接推送到 main）
+> `config.yaml` 不再默认拦截读取或编辑。项目排障经常需要看配置，真正要保护的是 `.env`、key、pem、secret 等密钥类文件。
+
+#### hooks/block-push-main.sh（提醒直接推送到 main）
 ```bash
 #!/bin/bash
 source "$(dirname "$0")/utils.sh"
@@ -388,7 +388,7 @@ source "$(dirname "$0")/utils.sh"
 TOOL_INPUT="$1"
 
 if echo "$TOOL_INPUT" | grep -qE 'git\s+push.*\b(main|master)\b'; then
-  block "不能直接推送到 main/master 分支，请创建 PR"
+  add_context "⚠️ 检测到推送到 main/master 分支，请确认这是预期操作"
 fi
 
 allow
@@ -531,11 +531,6 @@ source "$(dirname "$0")/utils.sh"
 
 TOOL_INPUT="$1"
 
-# 保护 Go 依赖文件
-if echo "$TOOL_INPUT" | grep -qE '(go\.mod|go\.sum)'; then
-  block "Go 依赖文件需要人工确认修改"
-fi
-
 # 保护 Makefile
 if echo "$TOOL_INPUT" | grep -qE 'Makefile'; then
   block "Makefile 修改需要人工确认"
@@ -548,6 +543,8 @@ fi
 
 allow
 ```
+
+> `go.mod` / `go.sum` 不再硬拦截。正常的 `go mod tidy` 和依赖修复会修改它们，硬拦截会卡住日常 CI 修复。依赖变更改为通过 review 和 CI 控制。
 
 ### 6.3 hooks/go-vet.sh
 
@@ -720,9 +717,9 @@ cat .claude-audit.log
 > **答：** 在 OpsCaptain 项目中：
 >
 > **安全防护：**
-> - 阻止删除 go.mod/go.sum
-> - 保护 config.yaml 中的敏感配置
-> - 阻止直接 push 到 main 分支
+> - 阻止高危删除和磁盘破坏命令
+> - 保护 `.env`、key、pem、secret 等真正敏感文件
+> - 推送 main/master 时提醒确认，但不硬拦截
 >
 > **质量保证：**
 > - 修改 .go 文件后自动运行 go vet
