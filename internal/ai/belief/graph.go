@@ -143,10 +143,25 @@ func (g *BeliefGraph) getActiveNodeCopiesInternal() []Node {
 	var active []Node
 	for _, node := range g.Nodes {
 		if node.Status == StatusActive {
-			active = append(active, *node)
+			active = append(active, g.copyNode(node))
 		}
 	}
 	return active
+}
+
+func (g *BeliefGraph) copyNode(node *Node) Node {
+	copied := *node
+	if node.Attrs != nil {
+		copied.Attrs = make(map[string]interface{}, len(node.Attrs))
+		for k, v := range node.Attrs {
+			copied.Attrs[k] = v
+		}
+	}
+	if node.Source != nil {
+		sourceCopy := *node.Source
+		copied.Source = &sourceCopy
+	}
+	return copied
 }
 
 func (g *BeliefGraph) getActiveEdgeCopies() []Edge {
@@ -177,7 +192,7 @@ func (g *BeliefGraph) toDictInternal() map[string]interface{} {
 
 	nodeCopies := make(map[string]Node, len(g.Nodes))
 	for k, v := range g.Nodes {
-		nodeCopies[k] = *v
+		nodeCopies[k] = g.copyNode(v)
 	}
 
 	return map[string]interface{}{

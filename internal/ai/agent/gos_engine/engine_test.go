@@ -121,7 +121,8 @@ func TestGoSEngine_UpdateGraph(t *testing.T) {
 	logger := &testLogger{}
 	engine := NewGoSEngine(cfg, logger)
 
-	hypoID := engine.graph.AddHypothesis("Test", 0.5, 1, "Initial")
+	graph := belief.NewBeliefGraph()
+	hypoID := graph.AddHypothesis("Test", 0.5, 1, "Initial")
 	frontier := &belief.Frontier{
 		NodeID: hypoID,
 	}
@@ -144,9 +145,47 @@ func TestGoSEngine_UpdateGraph(t *testing.T) {
 		},
 	}
 
-	result := engine.updateGraph(context.Background(), analyses, frontier)
+	result := engine.updateGraph(context.Background(), graph, analyses, frontier)
 	assert.True(t, result.Committed)
-	assert.Len(t, engine.graph.Nodes, 2)
+	assert.Len(t, graph.Nodes, 2)
+}
+
+func TestGoSEngine_Run_TwiceDoesNotReuseState(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.SessionMaxSteps = 2
+	cfg.FSM.GapDelta = 0.1
+	cfg.FSM.MinSupport = 1
+	cfg.FSM.MaxSteps = 2
+
+	logger := &testLogger{}
+	engine := NewGoSEngine(cfg, logger)
+
+	engine.RegisterExpert("linux_sre", &mockExpert{
+		name: "linux_sre",
+		response: &experts.ExpertAnalysis{
+			ExpertName: "linux_sre",
+			Analysis:   "CPU 高负载",
+			Confidence: 0.9,
+			Status:     "succeeded",
+			Evidence: []experts.EvidenceItem{
+				{
+					SourceType: "metric",
+					SourceID:   "cpu-1",
+					Title:      "CPU 使用率 95%",
+					Snippet:    "CPU usage 95%",
+					Score:      1.0,
+				},
+			},
+		},
+	})
+
+	result1 := engine.Run(context.Background(), "第一次请求")
+	require.NotNil(t, result1)
+
+	result2 := engine.Run(context.Background(), "第二次请求")
+	require.NotNil(t, result2)
+
+	assert.NotEqual(t, result1.TaskID, result2.TaskID)
 }
 
 func TestIngestor_Ingest(t *testing.T) {
@@ -178,4 +217,21 @@ func TestPlanner_Plan(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, plan, 1)
 	assert.Equal(t, "linux_sre", plan[0].ExpertName)
+}
+
+func TestGoSEngine_Run_NilExpertResult(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.SessionMaxSteps = 2
+
+	logger := &testLogger{}
+	engine := NewGoSEngine(cfg, logger)
+
+	engine.RegisterExpert("linux_sre", &mockExpert{
+		name:     "linux_sre",
+		response: nil,
+	})
+
+	result := engine.Run(context.Background(), "服务响应超时")
+	require.NotNil(t, result)
+	assert.Equal(t, protocol.ResultStatusDegraded, result.Status)
 }

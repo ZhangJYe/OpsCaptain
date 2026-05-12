@@ -13,12 +13,9 @@ import (
 )
 
 type GoSEngine struct {
-	graph     *belief.BeliefGraph
-	fsm       *belief.BeliefFSM
-	experts   map[string]experts.ExpertAgent
-	cfg       *Config
-	startedAt time.Time
-	logger    Logger
+	cfg     *Config
+	experts map[string]experts.ExpertAgent
+	logger  Logger
 }
 
 type Logger interface {
@@ -34,8 +31,6 @@ type ActResult struct {
 
 func NewGoSEngine(cfg *Config, logger Logger) *GoSEngine {
 	return &GoSEngine{
-		graph:   belief.NewBeliefGraph(),
-		fsm:     belief.NewBeliefFSM(cfg.ToFSMThresholds()),
 		experts: make(map[string]experts.ExpertAgent),
 		cfg:     cfg,
 		logger:  logger,
@@ -47,70 +42,73 @@ func (e *GoSEngine) RegisterExpert(name string, agent experts.ExpertAgent) {
 }
 
 func (e *GoSEngine) Run(ctx context.Context, symptom string) *protocol.TaskResult {
-	e.startedAt = time.Now()
+	startedAt := time.Now()
 
-	if err := e.ingest(ctx, symptom); err != nil {
-		return e.degradedResult("ingest_failed", err, nil, false)
+	graph := belief.NewBeliefGraph()
+	fsm := belief.NewBeliefFSM(e.cfg.ToFSMThresholds())
+
+	if err := e.ingest(ctx, graph, symptom); err != nil {
+		return e.degradedResult(graph, fsm, startedAt, "ingest_failed", err, nil, false)
 	}
 
 	for {
-		if e.fsm.IsFinalState() {
+		if fsm.IsFinalState() {
 			break
 		}
 
-		frontier := e.graph.ExtractFrontier(e.fsm.GetCurrentLevel())
+		frontier := graph.ExtractFrontier(fsm.GetCurrentLevel())
 		if frontier == nil {
-			e.fsm.MarkDone("no frontier")
+			fsm.MarkDone("no frontier")
 			break
 		}
 
 		plan, err := e.plan(ctx, frontier)
 		if err != nil {
-			return e.degradedResult("plan_failed", err, nil, false)
+			return e.degradedResult(graph, fsm, startedAt, "plan_failed", err, nil, false)
 		}
 
-		actRes, err := e.act(ctx, plan, frontier)
+		actRes, err := e.act(ctx, plan, frontier, graph)
 
 		alreadyUpdated := false
 		if actRes != nil && len(actRes.Analyses) > 0 {
-			if res := e.updateGraph(ctx, actRes.Analyses, frontier); res.Committed {
+			if res := e.updateGraph(ctx, graph, actRes.Analyses, frontier); res.Committed {
 				alreadyUpdated = true
 			}
 		}
 
 		if err != nil {
-			return e.degradedResult("act_failed", err, actRes, alreadyUpdated)
+			return e.degradedResult(graph, fsm, startedAt, "act_failed", err, actRes, alreadyUpdated)
 		}
 
-		e.graph.GenerateBeliefText()
-		e.fsm.TickStep(1)
+		graph.GenerateBeliefText()
+		fsm.TickStep(1)
 
-		updatedFrontier := e.graph.ExtractFrontier(e.fsm.GetCurrentLevel())
+		updatedFrontier := graph.ExtractFrontier(fsm.GetCurrentLevel())
 
-		decision := e.fsm.Decide(e.graph)
+		decision := fsm.Decide(graph)
 		switch decision.Action {
 		case "report":
 			if updatedFrontier != nil && e.shouldReport(updatedFrontier) {
-				e.fsm.MarkDone("sufficient granularity")
+				fsm.MarkDone("sufficient granularity")
 				goto DONE
 			}
-			e.fsm.DrillDown(fmt.Sprintf("drill to level %d", e.fsm.CurrentLevel+1))
+			fsm.DrillDown(fmt.Sprintf("drill to level %d", fsm.CurrentLevel+1))
 		case "done":
 			goto DONE
 		}
 
-		if e.fsm.TotalSteps >= e.cfg.SessionMaxSteps {
-			e.fsm.MarkDone("max steps")
+		if fsm.TotalSteps >= e.cfg.SessionMaxSteps {
+			fsm.MarkDone("max steps")
 			break
 		}
 	}
 
 DONE:
-	return e.generateReport(ctx)
+	return e.generateReport(ctx, graph, fsm, startedAt)
 }
 
-func (e *GoSEngine) ingest(ctx context.Context, symptom string) error {
-	ingestor := NewIngestor(e.graph, e.logger)
+func (e *GoSEngine) ingest(ctx context.Context, graph *belief.BeliefGraph, symptom string) error {
+	ingestor := NewIngestor(graph, e.logger)
 	return ingestor.Ingest(ctx, symptom)
 }
 
@@ -119,7 +117,7 @@ func (e *GoSEngine) plan(ctx context.Context, frontier *belief.Frontier) ([]Plan
 	return planner.Plan(ctx, frontier)
 }
 
-func (e *GoSEngine) act(ctx context.Context, plan []PlanItem, frontier *belief.Frontier) (*ActResult, error) {
+func (e *GoSEngine) act(ctx context.Context, plan []PlanItem, frontier *belief.Frontier, graph *belief.BeliefGraph) (*ActResult, error) {
 	result := &ActResult{
 		Analyses: make([]*experts.ExpertAnalysis, 0, len(plan)),
 	}
@@ -136,7 +134,15 @@ func (e *GoSEngine) act(ctx context.Context, plan []PlanItem, frontier *belief.F
 			continue
 		}
 
-		analysis := agent.Run(ctx, frontier, e.graph)
+		analysis := agent.Run(ctx, frontier, graph)
+		if analysis == nil {
+			analysis = &experts.ExpertAnalysis{
+				ExpertName:        item.ExpertName,
+				Status:            "failed",
+				DegradationReason: "expert_nil_result",
+			}
+		}
+
 		result.Analyses = append(result.Analyses, analysis)
 
 		switch analysis.Status {
@@ -154,8 +160,8 @@ func (e *GoSEngine) act(ctx context.Context, plan []PlanItem, frontier *belief.F
 	return result, nil
 }
 
-func (e *GoSEngine) updateGraph(ctx context.Context, analyses []*experts.ExpertAnalysis, frontier *belief.Frontier) *belief.GraphUpdateResult {
-	return e.graph.UpdateCopyOnWrite(func(cp *belief.BeliefGraph) error {
+func (e *GoSEngine) updateGraph(ctx context.Context, graph *belief.BeliefGraph, analyses []*experts.ExpertAnalysis, frontier *belief.Frontier) *belief.GraphUpdateResult {
+	return graph.UpdateCopyOnWrite(func(cp *belief.BeliefGraph) error {
 		for _, a := range analyses {
 			for _, ev := range a.Evidence {
 				src := &belief.EvidenceSource{
@@ -183,10 +189,10 @@ func (e *GoSEngine) shouldReport(frontier *belief.Frontier) bool {
 	return frontier.Score >= 0.7 && frontier.Supports >= 2
 }
 
-func (e *GoSEngine) degradedResult(reason string, err error, actRes *ActResult, alreadyUpdated bool) *protocol.TaskResult {
+func (e *GoSEngine) degradedResult(graph *belief.BeliefGraph, fsm *belief.BeliefFSM, startedAt time.Time, reason string, err error, actRes *ActResult, alreadyUpdated bool) *protocol.TaskResult {
 	if !alreadyUpdated && actRes != nil && len(actRes.Analyses) > 0 {
-		if f := e.graph.ExtractFrontier(e.fsm.GetCurrentLevel()); f != nil {
-			e.updateGraph(context.Background(), actRes.Analyses, f)
+		if f := graph.ExtractFrontier(fsm.GetCurrentLevel()); f != nil {
+			e.updateGraph(context.Background(), graph, actRes.Analyses, f)
 		}
 	}
 
@@ -196,21 +202,21 @@ func (e *GoSEngine) degradedResult(reason string, err error, actRes *ActResult, 
 		Status:            protocol.ResultStatusDegraded,
 		Summary:           "诊断降级",
 		DegradationReason: fmt.Sprintf("%s: %v", reason, err),
-		Evidence:          e.collectEvidence(),
+		Evidence:          e.collectEvidence(graph),
 		Metadata: map[string]any{
-			"belief_graph": e.graph.ToDict(),
-			"fsm_history":  e.fsm.History,
+			"belief_graph": graph.ToDict(),
+			"fsm_history":  fsm.History,
 			"error_phase":  reason,
 		},
-		StartedAt:  e.startedAt.UnixMilli(),
+		StartedAt:  startedAt.UnixMilli(),
 		FinishedAt: time.Now().UnixMilli(),
 	}
 }
 
-func (e *GoSEngine) generateReport(ctx context.Context) *protocol.TaskResult {
-	frontier := e.graph.ExtractFrontier(e.fsm.GetCurrentLevel())
+func (e *GoSEngine) generateReport(ctx context.Context, graph *belief.BeliefGraph, fsm *belief.BeliefFSM, startedAt time.Time) *protocol.TaskResult {
+	frontier := graph.ExtractFrontier(fsm.GetCurrentLevel())
 	if frontier == nil {
-		return e.degradedResult("no_frontier", fmt.Errorf("no frontier found"), nil, false)
+		return e.degradedResult(graph, fsm, startedAt, "no_frontier", fmt.Errorf("no frontier found"), nil, false)
 	}
 
 	return &protocol.TaskResult{
@@ -219,20 +225,20 @@ func (e *GoSEngine) generateReport(ctx context.Context) *protocol.TaskResult {
 		Status:     protocol.ResultStatusSucceeded,
 		Summary:    frontier.Label,
 		Confidence: frontier.Score,
-		Evidence:   e.collectEvidence(),
+		Evidence:   e.collectEvidence(graph),
 		Metadata: map[string]any{
-			"belief_graph": e.graph.ToDict(),
-			"fsm_history":  e.fsm.History,
+			"belief_graph": graph.ToDict(),
+			"fsm_history":  fsm.History,
 			"frontier":     frontier,
 		},
-		StartedAt:  e.startedAt.UnixMilli(),
+		StartedAt:  startedAt.UnixMilli(),
 		FinishedAt: time.Now().UnixMilli(),
 	}
 }
 
-func (e *GoSEngine) collectEvidence() []protocol.EvidenceItem {
+func (e *GoSEngine) collectEvidence(graph *belief.BeliefGraph) []protocol.EvidenceItem {
 	var evidence []protocol.EvidenceItem
-	for _, n := range e.graph.GetActiveNodeCopies() {
+	for _, n := range graph.GetActiveNodeCopies() {
 		if n.Type == belief.NodeEvidence {
 			evidence = append(evidence, protocol.EvidenceItem{
 				SourceType: "graph",
