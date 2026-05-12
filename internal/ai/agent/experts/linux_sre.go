@@ -116,10 +116,12 @@ func (e *BaseExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *
 					Error:    "tool not found",
 				})
 				result.Status = "degraded"
+				result.ToolCalls++
 				continue
 			}
 
 			attemptedTools[toolName] = true
+			result.ToolCalls++
 
 			output, err := adapter.Run(ctx, content)
 			if err != nil {
@@ -175,6 +177,7 @@ func (e *BaseExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *
 			})
 
 		case "retrieve":
+			result.RAGCalls++
 			docs, _, err := rag.Query(ctx, rag.SharedPool(), content)
 			if err != nil {
 				result.ToolErrors = append(result.ToolErrors, ToolError{

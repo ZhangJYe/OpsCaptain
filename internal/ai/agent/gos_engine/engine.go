@@ -157,8 +157,8 @@ func (e *GoSEngine) act(ctx context.Context, plan []PlanItem, frontier *belief.F
 
 		result.Analyses = append(result.Analyses, analysis)
 		stats.LLMCalls += len(analysis.ToolErrors) + 1
-		stats.ToolCalls += countToolCalls(analysis)
-		stats.RAGCalls += countRAGCalls(analysis)
+		stats.ToolCalls += analysis.ToolCalls
+		stats.RAGCalls += analysis.RAGCalls
 
 		switch analysis.Status {
 		case "degraded":
@@ -173,26 +173,6 @@ func (e *GoSEngine) act(ctx context.Context, plan []PlanItem, frontier *belief.F
 	}
 
 	return result, nil
-}
-
-func countToolCalls(analysis *experts.ExpertAnalysis) int {
-	count := 0
-	for _, ev := range analysis.Evidence {
-		if ev.SourceType == "tool" {
-			count++
-		}
-	}
-	return count
-}
-
-func countRAGCalls(analysis *experts.ExpertAnalysis) int {
-	count := 0
-	for _, ev := range analysis.Evidence {
-		if ev.SourceType == "rag" {
-			count++
-		}
-	}
-	return count
 }
 
 func (e *GoSEngine) updateGraph(ctx context.Context, graph *belief.BeliefGraph, analyses []*experts.ExpertAnalysis, frontier *belief.Frontier) *belief.GraphUpdateResult {

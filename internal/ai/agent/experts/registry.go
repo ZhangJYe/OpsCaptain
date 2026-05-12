@@ -22,6 +22,8 @@ type ExpertAnalysis struct {
 	Status            string                 `json:"status"`
 	DegradationReason string                 `json:"degradation_reason,omitempty"`
 	ToolErrors        []ToolError            `json:"tool_errors,omitempty"`
+	ToolCalls         int                    `json:"tool_calls"`
+	RAGCalls          int                    `json:"rag_calls"`
 }
 
 type ToolError struct {
