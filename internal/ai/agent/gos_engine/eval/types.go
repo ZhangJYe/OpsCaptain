@@ -1,6 +1,7 @@
 package eval
 
 import (
+	"strings"
 	"time"
 
 	"SuperBizAgent/internal/ai/protocol"
@@ -18,6 +19,7 @@ type EvalResult struct {
 	Symptom           string        `json:"symptom"`
 	Prediction        string        `json:"prediction"`
 	GroundTruth       string        `json:"ground_truth"`
+	Matched           bool          `json:"matched"`
 	Latency           time.Duration `json:"latency"`
 	LLMCalls          int           `json:"llm_calls"`
 	Status            string        `json:"status"`
@@ -31,6 +33,7 @@ type EvalMetrics struct {
 	Succeeded        int            `json:"succeeded"`
 	Failed           int            `json:"failed"`
 	Degraded         int            `json:"degraded"`
+	Matched          int            `json:"matched"`
 	Accuracy         float64        `json:"accuracy"`
 	EvidenceCoverage float64        `json:"evidence_coverage"`
 	AvgLatency       time.Duration  `json:"avg_latency"`
@@ -38,6 +41,10 @@ type EvalMetrics struct {
 	DegradationRate  float64        `json:"degradation_rate"`
 	Traceability     float64        `json:"traceability"`
 	PerStatus        map[string]int `json:"per_status"`
+	totalLatency     time.Duration
+	totalLLMCalls    int
+	traceComplete    int
+	evidencePresent  int
 }
 
 type GateResult struct {
@@ -71,12 +78,19 @@ func (m *EvalMetrics) AddResult(r *EvalResult) {
 		m.Degraded++
 	}
 
+	if r.Matched {
+		m.Matched++
+	}
+
+	m.totalLatency += r.Latency
+	m.totalLLMCalls += r.LLMCalls
+
 	if r.EvidenceCount > 0 {
-		m.EvidenceCoverage++
+		m.evidencePresent++
 	}
 
 	if r.TraceComplete {
-		m.Traceability++
+		m.traceComplete++
 	}
 }
 
@@ -85,8 +99,55 @@ func (m *EvalMetrics) Finalize() {
 		return
 	}
 
-	m.Accuracy = float64(m.Succeeded) / float64(m.TotalCases)
-	m.EvidenceCoverage = m.EvidenceCoverage / float64(m.TotalCases)
+	m.Accuracy = float64(m.Matched) / float64(m.TotalCases)
+	m.EvidenceCoverage = float64(m.evidencePresent) / float64(m.TotalCases)
 	m.DegradationRate = float64(m.Degraded) / float64(m.TotalCases)
-	m.Traceability = m.Traceability / float64(m.TotalCases)
+	m.Traceability = float64(m.traceComplete) / float64(m.TotalCases)
+
+	m.AvgLatency = m.totalLatency / time.Duration(m.TotalCases)
+	m.AvgLLMCalls = float64(m.totalLLMCalls) / float64(m.TotalCases)
+}
+
+func MatchPrediction(prediction, groundTruth string) bool {
+	predLower := strings.ToLower(prediction)
+	gtLower := strings.ToLower(groundTruth)
+
+	gtKeywords := extractKeywords(gtLower)
+	if len(gtKeywords) == 0 {
+		return strings.Contains(predLower, gtLower)
+	}
+
+	matched := 0
+	for _, kw := range gtKeywords {
+		if strings.Contains(predLower, kw) {
+			matched++
+		}
+	}
+
+	threshold := float64(matched) / float64(len(gtKeywords))
+	return threshold >= 0.5
+}
+
+func extractKeywords(s string) []string {
+	words := strings.Fields(s)
+	var keywords []string
+	stopWords := map[string]bool{
+		"的": true, "了": true, "在": true, "是": true, "和": true,
+		"与": true, "导致": true, "造成": true, "引起": true,
+		"a": true, "an": true, "the": true, "is": true, "are": true,
+		"was": true, "were": true, "be": true, "been": true, "being": true,
+		"have": true, "has": true, "had": true, "do": true, "does": true,
+		"did": true, "will": true, "would": true, "could": true, "should": true,
+		"may": true, "might": true, "must": true, "shall": true, "can": true,
+		"due": true, "to": true, "of": true, "in": true, "on": true,
+		"at": true, "for": true, "with": true, "by": true, "from": true,
+	}
+
+	for _, w := range words {
+		w = strings.Trim(w, ".,;:!?()[]{}\"'")
+		if len(w) >= 2 && !stopWords[w] {
+			keywords = append(keywords, w)
+		}
+	}
+	return keywords
 }

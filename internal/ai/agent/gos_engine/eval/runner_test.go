@@ -49,6 +49,53 @@ func TestRunner_RunFromCases(t *testing.T) {
 	assert.Equal(t, 2, metrics.TotalCases)
 }
 
+func TestMatchPrediction(t *testing.T) {
+	tests := []struct {
+		name        string
+		prediction  string
+		groundTruth string
+		expected    bool
+	}{
+		{
+			name:        "exact match",
+			prediction:  "CPU 资源耗尽导致服务超时",
+			groundTruth: "CPU 资源耗尽导致服务超时",
+			expected:    true,
+		},
+		{
+			name:        "partial match",
+			prediction:  "CPU 使用率过高导致服务响应超时",
+			groundTruth: "CPU 资源耗尽导致服务超时",
+			expected:    true,
+		},
+		{
+			name:        "keyword match",
+			prediction:  "服务器 CPU 负载过高，导致服务超时",
+			groundTruth: "CPU 资源耗尽",
+			expected:    true,
+		},
+		{
+			name:        "no match",
+			prediction:  "网络延迟升高",
+			groundTruth: "CPU 资源耗尽",
+			expected:    false,
+		},
+		{
+			name:        "degraded prediction",
+			prediction:  "[DEGRADED] 信息不足",
+			groundTruth: "CPU 资源耗尽",
+			expected:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := MatchPrediction(tt.prediction, tt.groundTruth)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestCheckGate(t *testing.T) {
 	baseline := &EvalMetrics{
 		Accuracy:         0.8,
@@ -109,12 +156,18 @@ func TestEvalMetrics_AddResult(t *testing.T) {
 
 	metrics.AddResult(&EvalResult{
 		Status:        string(protocol.ResultStatusSucceeded),
+		Matched:       true,
+		Latency:       2 * time.Second,
+		LLMCalls:      3,
 		EvidenceCount: 3,
 		TraceComplete: true,
 	})
 
 	metrics.AddResult(&EvalResult{
 		Status:        string(protocol.ResultStatusDegraded),
+		Matched:       false,
+		Latency:       1 * time.Second,
+		LLMCalls:      2,
 		EvidenceCount: 1,
 		TraceComplete: false,
 	})
@@ -122,8 +175,11 @@ func TestEvalMetrics_AddResult(t *testing.T) {
 	assert.Equal(t, 2, metrics.TotalCases)
 	assert.Equal(t, 1, metrics.Succeeded)
 	assert.Equal(t, 1, metrics.Degraded)
-	assert.Equal(t, float64(2), metrics.EvidenceCoverage)
-	assert.Equal(t, float64(1), metrics.Traceability)
+	assert.Equal(t, 1, metrics.Matched)
+	assert.Equal(t, 2, metrics.evidencePresent)
+	assert.Equal(t, 1, metrics.traceComplete)
+	assert.Equal(t, 3*time.Second, metrics.totalLatency)
+	assert.Equal(t, 5, metrics.totalLLMCalls)
 }
 
 func TestEvalMetrics_Finalize(t *testing.T) {
@@ -131,12 +187,18 @@ func TestEvalMetrics_Finalize(t *testing.T) {
 
 	metrics.AddResult(&EvalResult{
 		Status:        string(protocol.ResultStatusSucceeded),
+		Matched:       true,
+		Latency:       2 * time.Second,
+		LLMCalls:      3,
 		EvidenceCount: 3,
 		TraceComplete: true,
 	})
 
 	metrics.AddResult(&EvalResult{
 		Status:        string(protocol.ResultStatusDegraded),
+		Matched:       false,
+		Latency:       1 * time.Second,
+		LLMCalls:      2,
 		EvidenceCount: 1,
 		TraceComplete: false,
 	})
@@ -147,4 +209,34 @@ func TestEvalMetrics_Finalize(t *testing.T) {
 	assert.Equal(t, 1.0, metrics.EvidenceCoverage)
 	assert.Equal(t, 0.5, metrics.DegradationRate)
 	assert.Equal(t, 0.5, metrics.Traceability)
+	assert.Equal(t, 1500*time.Millisecond, metrics.AvgLatency)
+	assert.Equal(t, 2.5, metrics.AvgLLMCalls)
+}
+
+func TestCheckTraceComplete(t *testing.T) {
+	taskResult := &protocol.TaskResult{
+		Status: protocol.ResultStatusSucceeded,
+		Metadata: map[string]any{
+			"belief_graph": map[string]interface{}{},
+			"fsm_history":  []interface{}{},
+		},
+		Evidence: []protocol.EvidenceItem{
+			{SourceType: "test", Title: "test"},
+		},
+	}
+	assert.True(t, checkTraceComplete(taskResult))
+
+	taskResult2 := &protocol.TaskResult{
+		Status:   protocol.ResultStatusSucceeded,
+		Metadata: map[string]any{},
+	}
+	assert.False(t, checkTraceComplete(taskResult2))
+
+	taskResult3 := &protocol.TaskResult{
+		Status: protocol.ResultStatusSucceeded,
+		Metadata: map[string]any{
+			"belief_graph": map[string]interface{}{},
+		},
+	}
+	assert.False(t, checkTraceComplete(taskResult3))
 }

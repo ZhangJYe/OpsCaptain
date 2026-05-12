@@ -58,7 +58,9 @@ func (r *Runner) runCase(ctx context.Context, c EvalCase) EvalResult {
 
 	evidenceCount := len(taskResult.Evidence)
 
-	traceComplete := taskResult.Status == protocol.ResultStatusSucceeded
+	matched := MatchPrediction(taskResult.Summary, c.GroundTruth)
+
+	traceComplete := checkTraceComplete(taskResult)
 
 	prediction := taskResult.Summary
 	if taskResult.Status == protocol.ResultStatusDegraded {
@@ -70,6 +72,7 @@ func (r *Runner) runCase(ctx context.Context, c EvalCase) EvalResult {
 		Symptom:           c.Symptom,
 		Prediction:        prediction,
 		GroundTruth:       c.GroundTruth,
+		Matched:           matched,
 		Latency:           latency,
 		LLMCalls:          llmCalls,
 		Status:            string(taskResult.Status),
@@ -77,6 +80,27 @@ func (r *Runner) runCase(ctx context.Context, c EvalCase) EvalResult {
 		TraceComplete:     traceComplete,
 		DegradationReason: taskResult.DegradationReason,
 	}
+}
+
+func checkTraceComplete(taskResult *protocol.TaskResult) bool {
+	if taskResult.Metadata == nil {
+		return false
+	}
+
+	hasBeliefGraph := false
+	hasFSMHistory := false
+
+	if _, ok := taskResult.Metadata["belief_graph"]; ok {
+		hasBeliefGraph = true
+	}
+	if _, ok := taskResult.Metadata["fsm_history"]; ok {
+		hasFSMHistory = true
+	}
+
+	hasEvidence := len(taskResult.Evidence) > 0
+	hasArtifacts := len(taskResult.ArtifactRefs) > 0
+
+	return hasBeliefGraph && hasFSMHistory && (hasEvidence || hasArtifacts)
 }
 
 func loadCases(filePath string) ([]EvalCase, error) {
