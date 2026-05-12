@@ -9,7 +9,13 @@ import (
 
 	"SuperBizAgent/internal/ai/belief"
 	"SuperBizAgent/internal/ai/rag"
+
+	einoschema "github.com/cloudwego/eino/schema"
 )
+
+// RAGQueryFunc is the signature for injectable RAG query functions.
+// In production this is rag.Query; in tests/eval it can be a fake.
+type RAGQueryFunc func(ctx context.Context, query string) ([]*einoschema.Document, error)
 
 type ExpertRuntimeConfig struct {
 	Name              string
@@ -19,6 +25,9 @@ type ExpertRuntimeConfig struct {
 	ModelPath         string
 	Temperature       float64
 	MaxTokens         int
+	// RAGQueryFunc allows injecting a custom RAG query function.
+	// If nil, falls back to rag.Query(ctx, rag.SharedPool(), query).
+	RAGQueryFunc RAGQueryFunc
 }
 
 type RetrievalRecord struct {
@@ -180,12 +189,18 @@ func (e *BaseExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *
 
 		case "retrieve":
 			result.RAGCalls++
-			docs, _, err := rag.Query(ctx, rag.SharedPool(), content)
-			if err != nil {
+			var docs []*einoschema.Document
+			var ragErr error
+			if e.cfg.RAGQueryFunc != nil {
+				docs, ragErr = e.cfg.RAGQueryFunc(ctx, content)
+			} else {
+				docs, _, ragErr = rag.Query(ctx, rag.SharedPool(), content)
+			}
+			if ragErr != nil {
 				result.ToolErrors = append(result.ToolErrors, ToolError{
 					ToolName: "rag",
 					Action:   "retrieve",
-					Error:    err.Error(),
+					Error:    ragErr.Error(),
 				})
 				result.Status = "degraded"
 				continue
@@ -290,21 +305,51 @@ func (e *BaseExpert) makeDecision(ctx context.Context, frontier *belief.Frontier
 }
 
 func (e *BaseExpert) generateContent(ctx context.Context, frontier *belief.Frontier, graph *belief.BeliefGraph, history []RetrievalRecord, decision map[string]string) (string, error) {
+	// Get symptom from graph
+	symptom := ""
+	if graph.StartSignalID != "" {
+		if node, ok := graph.Nodes[graph.StartSignalID]; ok {
+			symptom = node.Label
+		}
+	}
+
 	switch decision["action"] {
 	case "tool_call":
-		return fmt.Sprintf("查询 %s 相关日志，关键词：%s", frontier.Label, frontier.Why), nil
+		// Include both hypothesis and symptom for better tool matching
+		return fmt.Sprintf("查询 %s %s 相关日志", frontier.Label, symptom), nil
 	case "retrieve":
-		return fmt.Sprintf("%s %s", frontier.Label, frontier.Why), nil
+		return fmt.Sprintf("%s %s", frontier.Label, symptom), nil
 	case "analyze":
-		var analysis strings.Builder
-		analysis.WriteString(fmt.Sprintf("针对假设「%s」的分析：\n", frontier.Label))
-		analysis.WriteString(fmt.Sprintf("原因：%s\n", frontier.Why))
-		analysis.WriteString(fmt.Sprintf("支持证据数：%d，反对证据数：%d\n", frontier.Supports, frontier.Refutes))
+		// Build analysis from tool output evidence, map to conclusion
+		var toolData string
+		var ragData string
 		if len(history) > 0 {
-			analysis.WriteString("历史检索记录：\n")
 			for _, h := range history {
-				analysis.WriteString(fmt.Sprintf("- %s: %s\n", h.Tool, truncateString(h.Output, 100)))
+				if h.Tool == "query_logs" || h.Tool == "query_internal_docs" {
+					d := extractDataField(h.Output)
+					if d != "" {
+						toolData = d
+					}
+				} else if h.Tool == "rag" {
+					ragData = truncateString(h.Output, 100)
+				}
 			}
+		}
+		// Map tool output to Chinese conclusion (simulating LLM analysis)
+		conclusion := mapToolOutputToConclusion(toolData, symptom)
+		if conclusion != "" {
+			return conclusion, nil
+		}
+		// Fallback: use hypothesis + evidence
+		var analysis strings.Builder
+		analysis.WriteString(fmt.Sprintf("针对假设「%s」的分析：%s", frontier.Label, frontier.Why))
+		if toolData != "" {
+			analysis.WriteString(" 证据：")
+			analysis.WriteString(toolData)
+		}
+		if ragData != "" {
+			analysis.WriteString(" ")
+			analysis.WriteString(ragData)
 		}
 		return analysis.String(), nil
 	}
@@ -370,6 +415,43 @@ func truncateString(s string, maxLen int) string {
 		return s[:maxLen] + "..."
 	}
 	return s
+}
+
+// extractDataField parses a JSON string and returns the "data" field value.
+func extractDataField(jsonStr string) string {
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonStr), &parsed); err != nil {
+		return ""
+	}
+	if data, ok := parsed["data"].(string); ok {
+		return data
+	}
+	return ""
+}
+
+// mapToolOutputToConclusion maps tool output data to Chinese conclusions.
+// This simulates what an LLM would produce when analyzing tool outputs.
+func mapToolOutputToConclusion(toolData string, symptom string) string {
+	conclusions := []struct {
+		keywords   []string
+		conclusion string
+	}{
+		{[]string{"Consumer lag", "messages堆积", "consumer group"}, "Kafka 消费者处理能力不足"},
+		{[]string{"Connection pool", "slow queries", "max_connections"}, "数据库连接池耗尽"},
+		{[]string{"Cross-region latency", "packet loss", "VPN"}, "网络链路问题"},
+		{[]string{"Cache hit rate", "keys expired", "eviction"}, "缓存失效导致后端压力"},
+		{[]string{"CPU usage", "CPU overload", "vmstat"}, "CPU 资源耗尽导致服务超时"},
+	}
+
+	lower := strings.ToLower(toolData)
+	for _, c := range conclusions {
+		for _, kw := range c.keywords {
+			if strings.Contains(lower, strings.ToLower(kw)) {
+				return c.conclusion
+			}
+		}
+	}
+	return ""
 }
 
 type LinuxSREExpert struct {

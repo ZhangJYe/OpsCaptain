@@ -211,8 +211,11 @@ func (e *GoSEngine) updateGraph(ctx context.Context, graph *belief.BeliefGraph, 
 				}
 				node.Attrs["analysis"] = bestAnalysis
 				node.Attrs["confidence"] = bestConfidence
-				node.Score = bestConfidence
 				node.Attrs["why"] = bestAnalysis
+				// Only upgrade score, never downgrade
+				if bestConfidence > node.Score {
+					node.Score = bestConfidence
+				}
 			}
 		}
 
@@ -253,7 +256,16 @@ func (e *GoSEngine) degradedResult(graph *belief.BeliefGraph, fsm *belief.Belief
 }
 
 func (e *GoSEngine) generateReport(ctx context.Context, graph *belief.BeliefGraph, fsm *belief.BeliefFSM, startedAt time.Time, stats *RunStats) *protocol.TaskResult {
+	// Try current level first, then fall back to best frontier across all levels
 	frontier := graph.ExtractFrontier(fsm.GetCurrentLevel())
+	if frontier == nil {
+		for lvl := fsm.GetCurrentLevel() - 1; lvl >= 0; lvl-- {
+			frontier = graph.ExtractFrontier(lvl)
+			if frontier != nil {
+				break
+			}
+		}
+	}
 	if frontier == nil {
 		return e.degradedResult(graph, fsm, startedAt, stats, "no_frontier", fmt.Errorf("no frontier found"), nil, false)
 	}
