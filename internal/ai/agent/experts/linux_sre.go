@@ -78,7 +78,10 @@ func (e *BaseExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *
 	attemptedTools := make(map[string]bool)
 
 	for step := 0; step < e.cfg.MaxRetrievalSteps; step++ {
-		decision, err := e.makeDecision(ctx, frontier, graph, history, attemptedTools)
+		isLastStep := step == e.cfg.MaxRetrievalSteps-1
+		hasEvidence := len(history) > 0 || len(result.Evidence) > 0
+
+		decision, err := e.makeDecision(ctx, frontier, graph, history, attemptedTools, isLastStep, hasEvidence)
 		if err != nil {
 			result.ToolErrors = append(result.ToolErrors, ToolError{
 				ToolName: "llm",
@@ -217,6 +220,22 @@ func (e *BaseExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *
 		}
 	}
 
+	if result.Analysis == "" && (len(history) > 0 || len(result.Evidence) > 0) {
+		analysis, err := e.generateContent(ctx, frontier, graph, history, map[string]string{
+			"action":     "analyze",
+			"confidence": "0.5",
+		})
+		if err == nil {
+			result.Analysis = analysis
+			result.Confidence = 0.5
+			if result.Status == "succeeded" {
+				result.Status = "degraded"
+				result.DegradationReason = "forced_analyze_with_partial_evidence"
+			}
+			return result
+		}
+	}
+
 	if result.Analysis == "" {
 		result.Analysis = "信息不足，无法完成分析"
 		result.Confidence = 0
@@ -228,7 +247,15 @@ func (e *BaseExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *
 	return result
 }
 
-func (e *BaseExpert) makeDecision(ctx context.Context, frontier *belief.Frontier, graph *belief.BeliefGraph, history []RetrievalRecord, attemptedTools map[string]bool) (map[string]string, error) {
+func (e *BaseExpert) makeDecision(ctx context.Context, frontier *belief.Frontier, graph *belief.BeliefGraph, history []RetrievalRecord, attemptedTools map[string]bool, isLastStep bool, hasEvidence bool) (map[string]string, error) {
+	if isLastStep && hasEvidence {
+		return map[string]string{
+			"action":     "analyze",
+			"reason":     "last step with evidence",
+			"confidence": "0.5",
+		}, nil
+	}
+
 	if len(history) == 0 && len(e.adapters) > 0 {
 		for _, toolName := range e.toolNames {
 			if _, ok := e.adapters[toolName]; ok {

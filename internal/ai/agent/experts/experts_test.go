@@ -267,20 +267,46 @@ func TestBaseExpert_MakeDecision(t *testing.T) {
 		Why:    "Test reason",
 	}
 
-	decision, err := expert.makeDecision(context.Background(), frontier, graph, []RetrievalRecord{}, map[string]bool{})
+	decision, err := expert.makeDecision(context.Background(), frontier, graph, []RetrievalRecord{}, map[string]bool{}, false, false)
 	require.NoError(t, err)
 	assert.Equal(t, "retrieve", decision["action"])
 
-	decision, err = expert.makeDecision(context.Background(), frontier, graph, []RetrievalRecord{{Query: "q1", Output: "o1"}}, map[string]bool{})
+	decision, err = expert.makeDecision(context.Background(), frontier, graph, []RetrievalRecord{{Query: "q1", Output: "o1"}}, map[string]bool{}, false, true)
 	require.NoError(t, err)
 	assert.Equal(t, "retrieve", decision["action"])
 
 	decision, err = expert.makeDecision(context.Background(), frontier, graph, []RetrievalRecord{
 		{Query: "q1", Output: "o1"},
 		{Query: "q2", Output: "o2"},
-	}, map[string]bool{})
+	}, map[string]bool{}, false, true)
 	require.NoError(t, err)
 	assert.Equal(t, "analyze", decision["action"])
+}
+
+func TestBaseExpert_MakeDecision_LastStepWithEvidence(t *testing.T) {
+	cfg := ExpertRuntimeConfig{
+		Name:              "test",
+		ToolNames:         []string{"query_logs"},
+		MaxRetrievalSteps: 3,
+	}
+	toolReg := NewToolRegistry()
+	expert := NewBaseExpert(cfg, toolReg)
+
+	graph := belief.NewBeliefGraph()
+	frontier := &belief.Frontier{
+		NodeID: "test",
+		Label:  "Test hypothesis",
+		Why:    "Test reason",
+	}
+
+	decision, err := expert.makeDecision(context.Background(), frontier, graph, []RetrievalRecord{}, map[string]bool{}, true, true)
+	require.NoError(t, err)
+	assert.Equal(t, "analyze", decision["action"])
+	assert.Equal(t, "0.5", decision["confidence"])
+
+	decision, err = expert.makeDecision(context.Background(), frontier, graph, []RetrievalRecord{}, map[string]bool{}, true, false)
+	require.NoError(t, err)
+	assert.Equal(t, "retrieve", decision["action"])
 }
 
 func TestBaseExpert_GenerateContent(t *testing.T) {
