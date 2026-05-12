@@ -24,6 +24,7 @@ type ExpertAnalysis struct {
 	ToolErrors        []ToolError            `json:"tool_errors,omitempty"`
 	ToolCalls         int                    `json:"tool_calls"`
 	RAGCalls          int                    `json:"rag_calls"`
+	LLMCalls          int                    `json:"llm_calls"`
 }
 
 type ToolError struct {

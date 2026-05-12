@@ -82,6 +82,7 @@ func (e *BaseExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *
 		hasEvidence := len(history) > 0 || len(result.Evidence) > 0
 
 		decision, err := e.makeDecision(ctx, frontier, graph, history, attemptedTools, isLastStep, hasEvidence)
+		result.LLMCalls++
 		if err != nil {
 			result.ToolErrors = append(result.ToolErrors, ToolError{
 				ToolName: "llm",
@@ -94,6 +95,7 @@ func (e *BaseExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *
 		}
 
 		content, err := e.generateContent(ctx, frontier, graph, history, decision)
+		result.LLMCalls++
 		if err != nil {
 			result.ToolErrors = append(result.ToolErrors, ToolError{
 				ToolName: "llm",

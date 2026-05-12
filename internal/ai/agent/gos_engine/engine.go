@@ -156,7 +156,7 @@ func (e *GoSEngine) act(ctx context.Context, plan []PlanItem, frontier *belief.F
 		}
 
 		result.Analyses = append(result.Analyses, analysis)
-		stats.LLMCalls += len(analysis.ToolErrors) + 1
+		stats.LLMCalls += analysis.LLMCalls
 		stats.ToolCalls += analysis.ToolCalls
 		stats.RAGCalls += analysis.RAGCalls
 
