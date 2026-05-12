@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"SuperBizAgent/internal/ai/agent/experts"
 	"SuperBizAgent/internal/ai/agent/gos_engine"
 	"SuperBizAgent/internal/ai/agent/gos_engine/eval"
+	"SuperBizAgent/internal/ai/belief"
 
 	"github.com/cloudwego/eino/components/tool"
 	einoschema "github.com/cloudwego/eino/schema"
@@ -237,6 +239,94 @@ func contains(s, substr string) bool {
 }
 
 // ---------------------------------------------------------------------------
+// eval-only content generation (simulates LLM analysis)
+// ---------------------------------------------------------------------------
+
+// evalGenerateContent is injected into experts via GenerateContentFunc.
+// It maps tool outputs to Chinese conclusions, simulating what an LLM would produce.
+func evalGenerateContent(ctx context.Context, frontier *belief.Frontier, graph *belief.BeliefGraph, history []experts.RetrievalRecord, decision map[string]string) (string, error) {
+	symptom := ""
+	if graph.StartSignalID != "" {
+		if node, ok := graph.Nodes[graph.StartSignalID]; ok {
+			symptom = node.Label
+		}
+	}
+
+	switch decision["action"] {
+	case "tool_call":
+		return fmt.Sprintf("查询 %s %s 相关日志", frontier.Label, symptom), nil
+	case "retrieve":
+		return fmt.Sprintf("%s %s", frontier.Label, symptom), nil
+	case "analyze":
+		var toolData string
+		var ragData string
+		for _, h := range history {
+			if h.Tool == "query_logs" || h.Tool == "query_internal_docs" {
+				d := extractDataFieldEval(h.Output)
+				if d != "" {
+					toolData = d
+				}
+			} else if h.Tool == "rag" {
+				ragData = h.Output
+				if len(ragData) > 100 {
+					ragData = ragData[:100]
+				}
+			}
+		}
+		conclusion := mapToolOutputToConclusion(toolData)
+		if conclusion != "" {
+			return conclusion, nil
+		}
+		var analysis strings.Builder
+		analysis.WriteString(fmt.Sprintf("针对假设「%s」的分析：%s", frontier.Label, frontier.Why))
+		if toolData != "" {
+			analysis.WriteString(" 证据：")
+			analysis.WriteString(toolData)
+		}
+		if ragData != "" {
+			analysis.WriteString(" ")
+			analysis.WriteString(ragData)
+		}
+		return analysis.String(), nil
+	}
+	return "", fmt.Errorf("unknown action: %s", decision["action"])
+}
+
+func extractDataFieldEval(jsonStr string) string {
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonStr), &parsed); err != nil {
+		return ""
+	}
+	if data, ok := parsed["data"].(string); ok {
+		return data
+	}
+	return ""
+}
+
+func mapToolOutputToConclusion(toolData string) string {
+	type mapping struct {
+		keywords   []string
+		conclusion string
+	}
+	mappings := []mapping{
+		{[]string{"Consumer lag", "messages堆积", "consumer group"}, "Kafka 消费者处理能力不足"},
+		{[]string{"Connection pool", "slow queries", "max_connections"}, "数据库连接池耗尽"},
+		{[]string{"Cross-region latency", "packet loss", "VPN"}, "网络链路问题"},
+		{[]string{"Cache hit rate", "keys expired", "eviction"}, "缓存失效导致后端压力"},
+		{[]string{"CPU usage", "CPU overload", "vmstat"}, "CPU 资源耗尽导致服务超时"},
+	}
+	lower := strings.ToLower(toolData)
+	for _, m := range mappings {
+		for _, kw := range m.keywords {
+			if strings.Contains(lower, strings.ToLower(kw)) {
+				return m.conclusion
+			}
+		}
+	}
+	return ""
+}
+
+// ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
 
@@ -258,29 +348,34 @@ func main() {
 
 	ragFunc := experts.RAGQueryFunc(fakeRAGQuery)
 
+	contentFunc := experts.GenerateContentFunc(evalGenerateContent)
+
 	// --- real experts with injected dependencies ---
 	linuxSRE := experts.NewLinuxSREExpert(experts.ExpertRuntimeConfig{
-		Name:              "linux_sre",
-		Description:       "Linux SRE expert",
-		ToolNames:         []string{"query_logs", "query_internal_docs"},
-		MaxRetrievalSteps: 3,
-		RAGQueryFunc:      ragFunc,
+		Name:                "linux_sre",
+		Description:         "Linux SRE expert",
+		ToolNames:           []string{"query_logs", "query_internal_docs"},
+		MaxRetrievalSteps:   3,
+		RAGQueryFunc:        ragFunc,
+		GenerateContentFunc: contentFunc,
 	}, toolReg)
 
 	networkSRE := experts.NewNetworkSREExpert(experts.ExpertRuntimeConfig{
-		Name:              "network_sre",
-		Description:       "Network SRE expert",
-		ToolNames:         []string{"query_logs", "query_internal_docs"},
-		MaxRetrievalSteps: 3,
-		RAGQueryFunc:      ragFunc,
+		Name:                "network_sre",
+		Description:         "Network SRE expert",
+		ToolNames:           []string{"query_logs", "query_internal_docs"},
+		MaxRetrievalSteps:   3,
+		RAGQueryFunc:        ragFunc,
+		GenerateContentFunc: contentFunc,
 	}, toolReg)
 
 	databaseSRE := experts.NewDatabaseSREExpert(experts.ExpertRuntimeConfig{
-		Name:              "database_sre",
-		Description:       "Database SRE expert",
-		ToolNames:         []string{"query_logs", "query_internal_docs"},
-		MaxRetrievalSteps: 3,
-		RAGQueryFunc:      ragFunc,
+		Name:                "database_sre",
+		Description:         "Database SRE expert",
+		ToolNames:           []string{"query_logs", "query_internal_docs"},
+		MaxRetrievalSteps:   3,
+		RAGQueryFunc:        ragFunc,
+		GenerateContentFunc: contentFunc,
 	}, toolReg)
 
 	engine.RegisterExpert("linux_sre", linuxSRE)

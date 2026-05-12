@@ -17,6 +17,10 @@ import (
 // In production this is rag.Query; in tests/eval it can be a fake.
 type RAGQueryFunc func(ctx context.Context, query string) ([]*einoschema.Document, error)
 
+// GenerateContentFunc is the signature for injectable content generation.
+// In production this would be an LLM call; in eval it can be a template/mapper.
+type GenerateContentFunc func(ctx context.Context, frontier *belief.Frontier, graph *belief.BeliefGraph, history []RetrievalRecord, decision map[string]string) (string, error)
+
 type ExpertRuntimeConfig struct {
 	Name              string
 	Description       string
@@ -28,6 +32,9 @@ type ExpertRuntimeConfig struct {
 	// RAGQueryFunc allows injecting a custom RAG query function.
 	// If nil, falls back to rag.Query(ctx, rag.SharedPool(), query).
 	RAGQueryFunc RAGQueryFunc
+	// GenerateContentFunc allows injecting a custom content generation function.
+	// If nil, falls back to the default template-based generation.
+	GenerateContentFunc GenerateContentFunc
 }
 
 type RetrievalRecord struct {
@@ -305,7 +312,12 @@ func (e *BaseExpert) makeDecision(ctx context.Context, frontier *belief.Frontier
 }
 
 func (e *BaseExpert) generateContent(ctx context.Context, frontier *belief.Frontier, graph *belief.BeliefGraph, history []RetrievalRecord, decision map[string]string) (string, error) {
-	// Get symptom from graph
+	// Use injected content generation if available
+	if e.cfg.GenerateContentFunc != nil {
+		return e.cfg.GenerateContentFunc(ctx, frontier, graph, history, decision)
+	}
+
+	// Default template-based generation (placeholder for LLM)
 	symptom := ""
 	if graph.StartSignalID != "" {
 		if node, ok := graph.Nodes[graph.StartSignalID]; ok {
@@ -315,41 +327,23 @@ func (e *BaseExpert) generateContent(ctx context.Context, frontier *belief.Front
 
 	switch decision["action"] {
 	case "tool_call":
-		// Include both hypothesis and symptom for better tool matching
 		return fmt.Sprintf("查询 %s %s 相关日志", frontier.Label, symptom), nil
 	case "retrieve":
 		return fmt.Sprintf("%s %s", frontier.Label, symptom), nil
 	case "analyze":
-		// Build analysis from tool output evidence, map to conclusion
-		var toolData string
-		var ragData string
+		var analysis strings.Builder
+		analysis.WriteString(fmt.Sprintf("针对假设「%s」的分析：%s", frontier.Label, frontier.Why))
 		if len(history) > 0 {
+			analysis.WriteString(" 证据：")
 			for _, h := range history {
 				if h.Tool == "query_logs" || h.Tool == "query_internal_docs" {
 					d := extractDataField(h.Output)
 					if d != "" {
-						toolData = d
+						analysis.WriteString(d)
+						analysis.WriteString(" ")
 					}
-				} else if h.Tool == "rag" {
-					ragData = truncateString(h.Output, 100)
 				}
 			}
-		}
-		// Map tool output to Chinese conclusion (simulating LLM analysis)
-		conclusion := mapToolOutputToConclusion(toolData, symptom)
-		if conclusion != "" {
-			return conclusion, nil
-		}
-		// Fallback: use hypothesis + evidence
-		var analysis strings.Builder
-		analysis.WriteString(fmt.Sprintf("针对假设「%s」的分析：%s", frontier.Label, frontier.Why))
-		if toolData != "" {
-			analysis.WriteString(" 证据：")
-			analysis.WriteString(toolData)
-		}
-		if ragData != "" {
-			analysis.WriteString(" ")
-			analysis.WriteString(ragData)
 		}
 		return analysis.String(), nil
 	}
@@ -425,31 +419,6 @@ func extractDataField(jsonStr string) string {
 	}
 	if data, ok := parsed["data"].(string); ok {
 		return data
-	}
-	return ""
-}
-
-// mapToolOutputToConclusion maps tool output data to Chinese conclusions.
-// This simulates what an LLM would produce when analyzing tool outputs.
-func mapToolOutputToConclusion(toolData string, symptom string) string {
-	conclusions := []struct {
-		keywords   []string
-		conclusion string
-	}{
-		{[]string{"Consumer lag", "messages堆积", "consumer group"}, "Kafka 消费者处理能力不足"},
-		{[]string{"Connection pool", "slow queries", "max_connections"}, "数据库连接池耗尽"},
-		{[]string{"Cross-region latency", "packet loss", "VPN"}, "网络链路问题"},
-		{[]string{"Cache hit rate", "keys expired", "eviction"}, "缓存失效导致后端压力"},
-		{[]string{"CPU usage", "CPU overload", "vmstat"}, "CPU 资源耗尽导致服务超时"},
-	}
-
-	lower := strings.ToLower(toolData)
-	for _, c := range conclusions {
-		for _, kw := range c.keywords {
-			if strings.Contains(lower, strings.ToLower(kw)) {
-				return c.conclusion
-			}
-		}
 	}
 	return ""
 }

@@ -144,15 +144,15 @@ func CheckGate(metrics *EvalMetrics, baseline *EvalMetrics) *GateReport {
 
 	report.Gates = append(report.Gates, GateResult{
 		Name:     "latency",
-		Passed:   metrics.AvgLatency <= baseline.AvgLatency*100,
-		Expected: fmt.Sprintf("<= %v", baseline.AvgLatency*100),
+		Passed:   metrics.AvgLatency <= baseline.AvgLatency*3/2,
+		Expected: fmt.Sprintf("<= %v", baseline.AvgLatency*3/2),
 		Actual:   fmt.Sprintf("%v", metrics.AvgLatency),
 	})
 
 	report.Gates = append(report.Gates, GateResult{
 		Name:     "llm_calls",
-		Passed:   metrics.AvgLLMCalls <= baseline.AvgLLMCalls*10,
-		Expected: fmt.Sprintf("<= %.1f", baseline.AvgLLMCalls*10),
+		Passed:   metrics.AvgLLMCalls <= baseline.AvgLLMCalls*2,
+		Expected: fmt.Sprintf("<= %.1f", baseline.AvgLLMCalls*2),
 		Actual:   fmt.Sprintf("%.1f", metrics.AvgLLMCalls),
 	})
 
