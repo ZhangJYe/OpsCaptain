@@ -133,7 +133,13 @@ func (g *BeliefGraph) SupersedeNode(oldNodeID string, newNodeID string, reason s
 	g.takeSnapshotInternal("supersede_node")
 }
 
-func (g *BeliefGraph) getActiveNodeCopies() []Node {
+func (g *BeliefGraph) GetActiveNodeCopies() []Node {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	return g.getActiveNodeCopiesInternal()
+}
+
+func (g *BeliefGraph) getActiveNodeCopiesInternal() []Node {
 	var active []Node
 	for _, node := range g.Nodes {
 		if node.Status == StatusActive {

@@ -85,10 +85,12 @@ func (e *GoSEngine) Run(ctx context.Context, symptom string) *protocol.TaskResul
 		e.graph.GenerateBeliefText()
 		e.fsm.TickStep(1)
 
+		updatedFrontier := e.graph.ExtractFrontier(e.fsm.GetCurrentLevel())
+
 		decision := e.fsm.Decide(e.graph)
 		switch decision.Action {
 		case "report":
-			if e.shouldReport(frontier) {
+			if updatedFrontier != nil && e.shouldReport(updatedFrontier) {
 				e.fsm.MarkDone("sufficient granularity")
 				goto DONE
 			}
@@ -230,8 +232,8 @@ func (e *GoSEngine) generateReport(ctx context.Context) *protocol.TaskResult {
 
 func (e *GoSEngine) collectEvidence() []protocol.EvidenceItem {
 	var evidence []protocol.EvidenceItem
-	for _, n := range e.graph.Nodes {
-		if n.Type == belief.NodeEvidence && n.Status == belief.StatusActive {
+	for _, n := range e.graph.GetActiveNodeCopies() {
+		if n.Type == belief.NodeEvidence {
 			evidence = append(evidence, protocol.EvidenceItem{
 				SourceType: "graph",
 				Title:      n.Label,
