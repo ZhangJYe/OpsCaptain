@@ -31,6 +31,8 @@ type ToolOutput struct {
 	Success  bool        `json:"success"`
 	Degraded bool        `json:"degraded"`
 	Error    string      `json:"error"`
+	IsError  bool        `json:"isError"`
+	Content  interface{} `json:"content"`
 	Data     interface{} `json:"data"`
 }
 
@@ -123,6 +125,16 @@ func (e *BaseExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *
 			}
 
 			toolOutput := parseToolOutput(output)
+			if toolOutput.IsError {
+				result.ToolErrors = append(result.ToolErrors, ToolError{
+					ToolName: toolName,
+					Action:   "execute",
+					Error:    fmt.Sprintf("tool error: %s", toolOutput.Error),
+				})
+				result.Status = "failed"
+				result.DegradationReason = fmt.Sprintf("tool %s failed", toolName)
+				continue
+			}
 			if toolOutput.Degraded {
 				result.ToolErrors = append(result.ToolErrors, ToolError{
 					ToolName: toolName,
@@ -133,23 +145,14 @@ func (e *BaseExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *
 				result.DegradationReason = fmt.Sprintf("tool %s degraded", toolName)
 				continue
 			}
-			if !toolOutput.Success {
-				result.ToolErrors = append(result.ToolErrors, ToolError{
-					ToolName: toolName,
-					Action:   "execute",
-					Error:    fmt.Sprintf("tool failed: %s", toolOutput.Error),
-				})
-				result.Status = "failed"
-				result.DegradationReason = fmt.Sprintf("tool %s failed", toolName)
-				continue
-			}
 
-			history = append(history, RetrievalRecord{Query: content, Output: output, Tool: toolName})
+			sanitizedOutput := redactSecrets(output)
+			history = append(history, RetrievalRecord{Query: content, Output: sanitizedOutput, Tool: toolName})
 			result.Evidence = append(result.Evidence, EvidenceItem{
 				SourceType: "tool",
 				SourceID:   fmt.Sprintf("%s-%d", toolName, step),
 				Title:      fmt.Sprintf("%s output", toolName),
-				Snippet:    redactSecrets(output),
+				Snippet:    truncateString(sanitizedOutput, 500),
 				Score:      1.0,
 			})
 
@@ -165,16 +168,28 @@ func (e *BaseExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *
 				continue
 			}
 
+			if len(docs) == 0 {
+				result.ToolErrors = append(result.ToolErrors, ToolError{
+					ToolName: "rag",
+					Action:   "retrieve",
+					Error:    "no documents found",
+				})
+				result.Status = "degraded"
+				result.DegradationReason = "no_rag_hits"
+				continue
+			}
+
 			var combined string
 			for _, d := range docs {
 				combined += d.Content + "\n"
 			}
-			history = append(history, RetrievalRecord{Query: content, Output: combined, Tool: "rag"})
+			sanitizedCombined := redactSecrets(combined)
+			history = append(history, RetrievalRecord{Query: content, Output: sanitizedCombined, Tool: "rag"})
 			result.Evidence = append(result.Evidence, EvidenceItem{
 				SourceType: "rag",
 				SourceID:   fmt.Sprintf("rag-%d", step),
 				Title:      "RAG retrieval",
-				Snippet:    redactSecrets(combined),
+				Snippet:    truncateString(sanitizedCombined, 500),
 				Score:      1.0,
 			})
 
@@ -249,10 +264,30 @@ func parseToolOutput(output string) ToolOutput {
 	var toolOutput ToolOutput
 	if err := json.Unmarshal([]byte(output), &toolOutput); err != nil {
 		return ToolOutput{
-			Success: true,
-			Data:    output,
+			Content: output,
 		}
 	}
+
+	hasExplicitFields := false
+	var raw map[string]interface{}
+	if err := json.Unmarshal([]byte(output), &raw); err == nil {
+		if _, ok := raw["success"]; ok {
+			hasExplicitFields = true
+		}
+		if _, ok := raw["degraded"]; ok {
+			hasExplicitFields = true
+		}
+		if _, ok := raw["isError"]; ok {
+			hasExplicitFields = true
+		}
+	}
+
+	if !hasExplicitFields {
+		return ToolOutput{
+			Content: output,
+		}
+	}
+
 	return toolOutput
 }
 

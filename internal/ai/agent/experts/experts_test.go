@@ -122,8 +122,29 @@ func TestParseToolOutput_Failed(t *testing.T) {
 func TestParseToolOutput_InvalidJSON(t *testing.T) {
 	output := `not json`
 	result := parseToolOutput(output)
-	assert.True(t, result.Success)
-	assert.Equal(t, output, result.Data)
+	assert.False(t, result.Success)
+	assert.NotNil(t, result.Content)
+}
+
+func TestParseToolOutput_MCPCallToolResult(t *testing.T) {
+	output := `{"content": [{"type": "text", "text": "log output"}], "isError": false}`
+	result := parseToolOutput(output)
+	assert.False(t, result.Success)
+	assert.NotNil(t, result.Content)
+	assert.False(t, result.IsError)
+}
+
+func TestParseToolOutput_MCPCallToolResultError(t *testing.T) {
+	output := `{"content": [{"type": "text", "text": "error message"}], "isError": true}`
+	result := parseToolOutput(output)
+	assert.True(t, result.IsError)
+}
+
+func TestParseToolOutput_UnknownJSON(t *testing.T) {
+	output := `{"foo": "bar", "baz": 123}`
+	result := parseToolOutput(output)
+	assert.False(t, result.Success)
+	assert.NotNil(t, result.Content)
 }
 
 func TestRedactSecrets(t *testing.T) {
