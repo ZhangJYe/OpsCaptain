@@ -177,6 +177,8 @@ func (e *GoSEngine) act(ctx context.Context, plan []PlanItem, frontier *belief.F
 
 func (e *GoSEngine) updateGraph(ctx context.Context, graph *belief.BeliefGraph, analyses []*experts.ExpertAnalysis, frontier *belief.Frontier) *belief.GraphUpdateResult {
 	return graph.UpdateCopyOnWrite(func(cp *belief.BeliefGraph) error {
+		bestAnalysis := ""
+		bestConfidence := 0.0
 		for _, a := range analyses {
 			for _, ev := range a.Evidence {
 				src := &belief.EvidenceSource{
@@ -195,16 +197,31 @@ func (e *GoSEngine) updateGraph(ctx context.Context, graph *belief.BeliefGraph, 
 				}
 				cp.AddEdgeCopy(eid, frontier.NodeID, edgeType, ev.Score, "expert_analysis")
 			}
-			if a.Confidence > 0 {
-				cp.UpdateNodeCopy(frontier.NodeID, a.Confidence, a.Analysis)
+			if a.Confidence > bestConfidence {
+				bestConfidence = a.Confidence
+				bestAnalysis = a.Analysis
 			}
 		}
+
+		if bestConfidence > 0 {
+			node := cp.Nodes[frontier.NodeID]
+			if node != nil {
+				if node.Attrs == nil {
+					node.Attrs = make(map[string]interface{})
+				}
+				node.Attrs["analysis"] = bestAnalysis
+				node.Attrs["confidence"] = bestConfidence
+				node.Score = bestConfidence
+				node.Attrs["why"] = bestAnalysis
+			}
+		}
+
 		return nil
 	})
 }
 
 func (e *GoSEngine) shouldReport(frontier *belief.Frontier) bool {
-	return frontier.Score >= 0.7 && frontier.Supports >= 2
+	return frontier.Score >= 0.6 && frontier.Supports >= 1
 }
 
 func (e *GoSEngine) degradedResult(graph *belief.BeliefGraph, fsm *belief.BeliefFSM, startedAt time.Time, stats *RunStats, reason string, err error, actRes *ActResult, alreadyUpdated bool) *protocol.TaskResult {
@@ -241,12 +258,31 @@ func (e *GoSEngine) generateReport(ctx context.Context, graph *belief.BeliefGrap
 		return e.degradedResult(graph, fsm, startedAt, stats, "no_frontier", fmt.Errorf("no frontier found"), nil, false)
 	}
 
+	summary := frontier.Label
+	confidence := frontier.Score
+
+	analysisText := ""
+	if attrs := graph.Nodes[frontier.NodeID].Attrs; attrs != nil {
+		if a, ok := attrs["analysis"].(string); ok {
+			analysisText = a
+		}
+	}
+	if analysisText != "" {
+		summary = analysisText
+	}
+
+	if attrs := graph.Nodes[frontier.NodeID].Attrs; attrs != nil {
+		if c, ok := attrs["confidence"].(float64); ok {
+			confidence = c
+		}
+	}
+
 	return &protocol.TaskResult{
 		TaskID:     uuid.NewString(),
 		Agent:      "gos_engine",
 		Status:     protocol.ResultStatusSucceeded,
-		Summary:    frontier.Label,
-		Confidence: frontier.Score,
+		Summary:    summary,
+		Confidence: confidence,
 		Evidence:   e.collectEvidence(graph),
 		Metadata: map[string]any{
 			"belief_graph": graph.ToDict(),
