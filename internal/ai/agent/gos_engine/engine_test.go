@@ -179,13 +179,22 @@ func TestGoSEngine_Run_TwiceDoesNotReuseState(t *testing.T) {
 		},
 	})
 
-	result1 := engine.Run(context.Background(), "第一次请求")
+	result1 := engine.Run(context.Background(), "第一次请求-服务A超时")
 	require.NotNil(t, result1)
 
-	result2 := engine.Run(context.Background(), "第二次请求")
+	result2 := engine.Run(context.Background(), "第二次请求-数据库连接失败")
 	require.NotNil(t, result2)
 
 	assert.NotEqual(t, result1.TaskID, result2.TaskID)
+
+	if result1.Metadata != nil && result2.Metadata != nil {
+		graph2, ok2 := result2.Metadata["belief_graph"].(map[string]interface{})
+		if ok2 {
+			belief2, _ := graph2["belief"].(string)
+			assert.NotContains(t, belief2, "服务A超时")
+			assert.NotContains(t, belief2, "第一次请求")
+		}
+	}
 }
 
 func TestIngestor_Ingest(t *testing.T) {
@@ -229,6 +238,29 @@ func TestGoSEngine_Run_NilExpertResult(t *testing.T) {
 	engine.RegisterExpert("linux_sre", &mockExpert{
 		name:     "linux_sre",
 		response: nil,
+	})
+
+	result := engine.Run(context.Background(), "服务响应超时")
+	require.NotNil(t, result)
+	assert.Equal(t, protocol.ResultStatusDegraded, result.Status)
+}
+
+func TestGoSEngine_Run_AllExpertsDegraded(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.SessionMaxSteps = 2
+
+	logger := &testLogger{}
+	engine := NewGoSEngine(cfg, logger)
+
+	engine.RegisterExpert("linux_sre", &mockExpert{
+		name: "linux_sre",
+		response: &experts.ExpertAnalysis{
+			ExpertName:        "linux_sre",
+			Status:            "degraded",
+			DegradationReason: "partial_data",
+			Analysis:          "部分数据",
+			Confidence:        0.3,
+		},
 	})
 
 	result := engine.Run(context.Background(), "服务响应超时")

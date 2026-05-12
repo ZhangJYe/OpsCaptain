@@ -153,8 +153,8 @@ func (e *GoSEngine) act(ctx context.Context, plan []PlanItem, frontier *belief.F
 		}
 	}
 
-	if result.FailedCount == len(plan) {
-		return result, fmt.Errorf("all experts failed (%d/%d)", result.FailedCount, len(plan))
+	if result.FailedCount+result.DegradedCount == len(plan) {
+		return result, fmt.Errorf("all experts failed or degraded (%d failed, %d degraded)", result.FailedCount, result.DegradedCount)
 	}
 
 	return result, nil
@@ -240,11 +240,17 @@ func (e *GoSEngine) collectEvidence(graph *belief.BeliefGraph) []protocol.Eviden
 	var evidence []protocol.EvidenceItem
 	for _, n := range graph.GetActiveNodeCopies() {
 		if n.Type == belief.NodeEvidence {
-			evidence = append(evidence, protocol.EvidenceItem{
+			item := protocol.EvidenceItem{
 				SourceType: "graph",
 				Title:      n.Label,
 				Snippet:    n.Label,
-			})
+			}
+			if n.Source != nil {
+				item.SourceType = n.Source.SourceType
+				item.SourceID = n.Source.SourceID
+				item.Snippet = n.Source.SummarySnippet
+			}
+			evidence = append(evidence, item)
 		}
 	}
 	return evidence
