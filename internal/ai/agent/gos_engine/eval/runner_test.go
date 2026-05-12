@@ -49,12 +49,42 @@ func TestRunner_RunFromCases(t *testing.T) {
 	assert.Equal(t, 2, metrics.TotalCases)
 }
 
+func TestRunner_RunFromCases_NonZeroLLMCalls(t *testing.T) {
+	cfg := gos_engine.DefaultConfig()
+	cfg.SessionMaxSteps = 2
+	cfg.FSM.GapDelta = 0.1
+	cfg.FSM.MinSupport = 1
+	cfg.FSM.MaxSteps = 2
+
+	logger := &testLogger{}
+	engine := gos_engine.NewGoSEngine(cfg, logger)
+
+	runner := NewRunner(engine)
+
+	cases := []EvalCase{
+		{
+			ID:          "case-1",
+			Symptom:     "服务响应超时",
+			GroundTruth: "服务响应超时",
+		},
+	}
+
+	metrics, results, err := runner.RunFromCases(context.Background(), cases)
+	require.NoError(t, err)
+	assert.NotNil(t, metrics)
+	assert.Len(t, results, 1)
+
+	assert.Greater(t, results[0].LLMCalls, 0, "LLMCalls should be non-zero")
+	assert.Greater(t, metrics.AvgLLMCalls, float64(0), "AvgLLMCalls should be non-zero")
+}
+
 func TestMatchPrediction(t *testing.T) {
 	tests := []struct {
-		name        string
-		prediction  string
-		groundTruth string
-		expected    bool
+		name             string
+		prediction       string
+		groundTruth      string
+		expectedKeywords []string
+		expected         bool
 	}{
 		{
 			name:        "exact match",
@@ -86,11 +116,32 @@ func TestMatchPrediction(t *testing.T) {
 			groundTruth: "CPU 资源耗尽",
 			expected:    false,
 		},
+		{
+			name:             "with expected keywords match",
+			prediction:       "数据库连接池耗尽导致服务超时",
+			groundTruth:      "数据库连接问题",
+			expectedKeywords: []string{"数据库", "连接池"},
+			expected:         true,
+		},
+		{
+			name:             "with expected keywords no match",
+			prediction:       "网络延迟升高",
+			groundTruth:      "数据库连接问题",
+			expectedKeywords: []string{"数据库", "连接池"},
+			expected:         false,
+		},
+		{
+			name:             "with expected keywords partial",
+			prediction:       "数据库负载过高",
+			groundTruth:      "数据库连接问题",
+			expectedKeywords: []string{"数据库", "连接池"},
+			expected:         true,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := MatchPrediction(tt.prediction, tt.groundTruth)
+			result := MatchPrediction(tt.prediction, tt.groundTruth, tt.expectedKeywords)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

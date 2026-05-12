@@ -8,10 +8,11 @@ import (
 )
 
 type EvalCase struct {
-	ID          string `json:"id"`
-	Symptom     string `json:"symptom"`
-	GroundTruth string `json:"ground_truth"`
-	Notes       string `json:"notes,omitempty"`
+	ID               string   `json:"id"`
+	Symptom          string   `json:"symptom"`
+	GroundTruth      string   `json:"ground_truth"`
+	ExpectedKeywords []string `json:"expected_keywords,omitempty"`
+	Notes            string   `json:"notes,omitempty"`
 }
 
 type EvalResult struct {
@@ -108,10 +109,21 @@ func (m *EvalMetrics) Finalize() {
 	m.AvgLLMCalls = float64(m.totalLLMCalls) / float64(m.TotalCases)
 }
 
-func MatchPrediction(prediction, groundTruth string) bool {
+func MatchPrediction(prediction, groundTruth string, expectedKeywords []string) bool {
 	predLower := strings.ToLower(prediction)
-	gtLower := strings.ToLower(groundTruth)
 
+	if len(expectedKeywords) > 0 {
+		matched := 0
+		for _, kw := range expectedKeywords {
+			if strings.Contains(predLower, strings.ToLower(kw)) {
+				matched++
+			}
+		}
+		threshold := float64(matched) / float64(len(expectedKeywords))
+		return threshold >= 0.5
+	}
+
+	gtLower := strings.ToLower(groundTruth)
 	gtKeywords := extractKeywords(gtLower)
 	if len(gtKeywords) == 0 {
 		return strings.Contains(predLower, gtLower)

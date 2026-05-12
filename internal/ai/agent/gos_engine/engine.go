@@ -29,6 +29,13 @@ type ActResult struct {
 	FailedCount   int
 }
 
+type RunStats struct {
+	LLMCalls  int
+	ToolCalls int
+	RAGCalls  int
+	Steps     int
+}
+
 func NewGoSEngine(cfg *Config, logger Logger) *GoSEngine {
 	return &GoSEngine{
 		experts: make(map[string]experts.ExpertAgent),
@@ -43,13 +50,15 @@ func (e *GoSEngine) RegisterExpert(name string, agent experts.ExpertAgent) {
 
 func (e *GoSEngine) Run(ctx context.Context, symptom string) *protocol.TaskResult {
 	startedAt := time.Now()
+	stats := &RunStats{}
 
 	graph := belief.NewBeliefGraph()
 	fsm := belief.NewBeliefFSM(e.cfg.ToFSMThresholds())
 
 	if err := e.ingest(ctx, graph, symptom); err != nil {
-		return e.degradedResult(graph, fsm, startedAt, "ingest_failed", err, nil, false)
+		return e.degradedResult(graph, fsm, startedAt, stats, "ingest_failed", err, nil, false)
 	}
+	stats.LLMCalls++
 
 	for {
 		if fsm.IsFinalState() {
@@ -64,10 +73,11 @@ func (e *GoSEngine) Run(ctx context.Context, symptom string) *protocol.TaskResul
 
 		plan, err := e.plan(ctx, frontier)
 		if err != nil {
-			return e.degradedResult(graph, fsm, startedAt, "plan_failed", err, nil, false)
+			return e.degradedResult(graph, fsm, startedAt, stats, "plan_failed", err, nil, false)
 		}
+		stats.LLMCalls++
 
-		actRes, err := e.act(ctx, plan, frontier, graph)
+		actRes, err := e.act(ctx, plan, frontier, graph, stats)
 
 		alreadyUpdated := false
 		if actRes != nil && len(actRes.Analyses) > 0 {
@@ -77,15 +87,17 @@ func (e *GoSEngine) Run(ctx context.Context, symptom string) *protocol.TaskResul
 		}
 
 		if err != nil {
-			return e.degradedResult(graph, fsm, startedAt, "act_failed", err, actRes, alreadyUpdated)
+			return e.degradedResult(graph, fsm, startedAt, stats, "act_failed", err, actRes, alreadyUpdated)
 		}
 
 		graph.GenerateBeliefText()
 		fsm.TickStep(1)
+		stats.Steps++
 
 		updatedFrontier := graph.ExtractFrontier(fsm.GetCurrentLevel())
 
 		decision := fsm.Decide(graph)
+		stats.LLMCalls++
 		switch decision.Action {
 		case "report":
 			if updatedFrontier != nil && e.shouldReport(updatedFrontier) {
@@ -104,7 +116,7 @@ func (e *GoSEngine) Run(ctx context.Context, symptom string) *protocol.TaskResul
 	}
 
 DONE:
-	return e.generateReport(ctx, graph, fsm, startedAt)
+	return e.generateReport(ctx, graph, fsm, startedAt, stats)
 }
 
 func (e *GoSEngine) ingest(ctx context.Context, graph *belief.BeliefGraph, symptom string) error {
@@ -117,7 +129,7 @@ func (e *GoSEngine) plan(ctx context.Context, frontier *belief.Frontier) ([]Plan
 	return planner.Plan(ctx, frontier)
 }
 
-func (e *GoSEngine) act(ctx context.Context, plan []PlanItem, frontier *belief.Frontier, graph *belief.BeliefGraph) (*ActResult, error) {
+func (e *GoSEngine) act(ctx context.Context, plan []PlanItem, frontier *belief.Frontier, graph *belief.BeliefGraph, stats *RunStats) (*ActResult, error) {
 	result := &ActResult{
 		Analyses: make([]*experts.ExpertAnalysis, 0, len(plan)),
 	}
@@ -144,6 +156,9 @@ func (e *GoSEngine) act(ctx context.Context, plan []PlanItem, frontier *belief.F
 		}
 
 		result.Analyses = append(result.Analyses, analysis)
+		stats.LLMCalls += len(analysis.ToolErrors) + 1
+		stats.ToolCalls += countToolCalls(analysis)
+		stats.RAGCalls += countRAGCalls(analysis)
 
 		switch analysis.Status {
 		case "degraded":
@@ -158,6 +173,26 @@ func (e *GoSEngine) act(ctx context.Context, plan []PlanItem, frontier *belief.F
 	}
 
 	return result, nil
+}
+
+func countToolCalls(analysis *experts.ExpertAnalysis) int {
+	count := 0
+	for _, ev := range analysis.Evidence {
+		if ev.SourceType == "tool" {
+			count++
+		}
+	}
+	return count
+}
+
+func countRAGCalls(analysis *experts.ExpertAnalysis) int {
+	count := 0
+	for _, ev := range analysis.Evidence {
+		if ev.SourceType == "rag" {
+			count++
+		}
+	}
+	return count
 }
 
 func (e *GoSEngine) updateGraph(ctx context.Context, graph *belief.BeliefGraph, analyses []*experts.ExpertAnalysis, frontier *belief.Frontier) *belief.GraphUpdateResult {
@@ -192,7 +227,7 @@ func (e *GoSEngine) shouldReport(frontier *belief.Frontier) bool {
 	return frontier.Score >= 0.7 && frontier.Supports >= 2
 }
 
-func (e *GoSEngine) degradedResult(graph *belief.BeliefGraph, fsm *belief.BeliefFSM, startedAt time.Time, reason string, err error, actRes *ActResult, alreadyUpdated bool) *protocol.TaskResult {
+func (e *GoSEngine) degradedResult(graph *belief.BeliefGraph, fsm *belief.BeliefFSM, startedAt time.Time, stats *RunStats, reason string, err error, actRes *ActResult, alreadyUpdated bool) *protocol.TaskResult {
 	if !alreadyUpdated && actRes != nil && len(actRes.Analyses) > 0 {
 		if f := graph.ExtractFrontier(fsm.GetCurrentLevel()); f != nil {
 			e.updateGraph(context.Background(), graph, actRes.Analyses, f)
@@ -210,16 +245,20 @@ func (e *GoSEngine) degradedResult(graph *belief.BeliefGraph, fsm *belief.Belief
 			"belief_graph": graph.ToDict(),
 			"fsm_history":  fsm.History,
 			"error_phase":  reason,
+			"llm_calls":    stats.LLMCalls,
+			"tool_calls":   stats.ToolCalls,
+			"rag_calls":    stats.RAGCalls,
+			"steps":        stats.Steps,
 		},
 		StartedAt:  startedAt.UnixMilli(),
 		FinishedAt: time.Now().UnixMilli(),
 	}
 }
 
-func (e *GoSEngine) generateReport(ctx context.Context, graph *belief.BeliefGraph, fsm *belief.BeliefFSM, startedAt time.Time) *protocol.TaskResult {
+func (e *GoSEngine) generateReport(ctx context.Context, graph *belief.BeliefGraph, fsm *belief.BeliefFSM, startedAt time.Time, stats *RunStats) *protocol.TaskResult {
 	frontier := graph.ExtractFrontier(fsm.GetCurrentLevel())
 	if frontier == nil {
-		return e.degradedResult(graph, fsm, startedAt, "no_frontier", fmt.Errorf("no frontier found"), nil, false)
+		return e.degradedResult(graph, fsm, startedAt, stats, "no_frontier", fmt.Errorf("no frontier found"), nil, false)
 	}
 
 	return &protocol.TaskResult{
@@ -233,6 +272,10 @@ func (e *GoSEngine) generateReport(ctx context.Context, graph *belief.BeliefGrap
 			"belief_graph": graph.ToDict(),
 			"fsm_history":  fsm.History,
 			"frontier":     frontier,
+			"llm_calls":    stats.LLMCalls,
+			"tool_calls":   stats.ToolCalls,
+			"rag_calls":    stats.RAGCalls,
+			"steps":        stats.Steps,
 		},
 		StartedAt:  startedAt.UnixMilli(),
 		FinishedAt: time.Now().UnixMilli(),

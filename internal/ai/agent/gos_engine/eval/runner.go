@@ -58,7 +58,7 @@ func (r *Runner) runCase(ctx context.Context, c EvalCase) EvalResult {
 
 	evidenceCount := len(taskResult.Evidence)
 
-	matched := MatchPrediction(taskResult.Summary, c.GroundTruth)
+	matched := MatchPrediction(taskResult.Summary, c.GroundTruth, c.ExpectedKeywords)
 
 	traceComplete := checkTraceComplete(taskResult)
 
