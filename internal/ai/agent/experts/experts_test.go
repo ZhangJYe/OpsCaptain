@@ -100,6 +100,7 @@ func TestParseToolOutput_Success(t *testing.T) {
 	result := parseToolOutput(output)
 	assert.True(t, result.Success)
 	assert.True(t, result.HasExplicitFields)
+	assert.True(t, result.HasSuccess)
 	assert.False(t, result.Degraded)
 	assert.Empty(t, result.Error)
 }
@@ -109,6 +110,7 @@ func TestParseToolOutput_Degraded(t *testing.T) {
 	result := parseToolOutput(output)
 	assert.False(t, result.Success)
 	assert.True(t, result.HasExplicitFields)
+	assert.True(t, result.HasSuccess)
 	assert.True(t, result.Degraded)
 	assert.Equal(t, "partial data", result.Error)
 }
@@ -118,6 +120,7 @@ func TestParseToolOutput_Failed(t *testing.T) {
 	result := parseToolOutput(output)
 	assert.False(t, result.Success)
 	assert.True(t, result.HasExplicitFields)
+	assert.True(t, result.HasSuccess)
 	assert.False(t, result.Degraded)
 	assert.Equal(t, "connection timeout", result.Error)
 }
@@ -136,6 +139,7 @@ func TestParseToolOutput_MCPCallToolResult(t *testing.T) {
 	assert.NotNil(t, result.Content)
 	assert.False(t, result.IsError)
 	assert.True(t, result.HasExplicitFields)
+	assert.False(t, result.HasSuccess)
 }
 
 func TestParseToolOutput_MCPCallToolResultError(t *testing.T) {
@@ -143,6 +147,7 @@ func TestParseToolOutput_MCPCallToolResultError(t *testing.T) {
 	result := parseToolOutput(output)
 	assert.True(t, result.IsError)
 	assert.True(t, result.HasExplicitFields)
+	assert.False(t, result.HasSuccess)
 }
 
 func TestParseToolOutput_UnknownJSON(t *testing.T) {
@@ -151,6 +156,7 @@ func TestParseToolOutput_UnknownJSON(t *testing.T) {
 	assert.False(t, result.Success)
 	assert.NotNil(t, result.Content)
 	assert.False(t, result.HasExplicitFields)
+	assert.False(t, result.HasSuccess)
 }
 
 func TestParseToolOutput_SuccessFalse(t *testing.T) {
@@ -158,7 +164,50 @@ func TestParseToolOutput_SuccessFalse(t *testing.T) {
 	result := parseToolOutput(output)
 	assert.False(t, result.Success)
 	assert.True(t, result.HasExplicitFields)
+	assert.True(t, result.HasSuccess)
 	assert.Equal(t, "query failed", result.Error)
+}
+
+func TestParseToolOutput_HasSuccess(t *testing.T) {
+	tests := []struct {
+		name       string
+		output     string
+		hasSuccess bool
+		success    bool
+	}{
+		{
+			name:       "explicit success true",
+			output:     `{"success": true}`,
+			hasSuccess: true,
+			success:    true,
+		},
+		{
+			name:       "explicit success false",
+			output:     `{"success": false}`,
+			hasSuccess: true,
+			success:    false,
+		},
+		{
+			name:       "MCP isError false",
+			output:     `{"content": [], "isError": false}`,
+			hasSuccess: false,
+			success:    false,
+		},
+		{
+			name:       "unknown JSON",
+			output:     `{"foo": "bar"}`,
+			hasSuccess: false,
+			success:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseToolOutput(tt.output)
+			assert.Equal(t, tt.hasSuccess, result.HasSuccess)
+			assert.Equal(t, tt.success, result.Success)
+		})
+	}
 }
 
 func TestRedactSecrets(t *testing.T) {
@@ -218,18 +267,18 @@ func TestBaseExpert_MakeDecision(t *testing.T) {
 		Why:    "Test reason",
 	}
 
-	decision, err := expert.makeDecision(context.Background(), frontier, graph, []RetrievalRecord{})
+	decision, err := expert.makeDecision(context.Background(), frontier, graph, []RetrievalRecord{}, map[string]bool{})
 	require.NoError(t, err)
 	assert.Equal(t, "retrieve", decision["action"])
 
-	decision, err = expert.makeDecision(context.Background(), frontier, graph, []RetrievalRecord{{Query: "q1", Output: "o1"}})
+	decision, err = expert.makeDecision(context.Background(), frontier, graph, []RetrievalRecord{{Query: "q1", Output: "o1"}}, map[string]bool{})
 	require.NoError(t, err)
 	assert.Equal(t, "retrieve", decision["action"])
 
 	decision, err = expert.makeDecision(context.Background(), frontier, graph, []RetrievalRecord{
 		{Query: "q1", Output: "o1"},
 		{Query: "q2", Output: "o2"},
-	})
+	}, map[string]bool{})
 	require.NoError(t, err)
 	assert.Equal(t, "analyze", decision["action"])
 }

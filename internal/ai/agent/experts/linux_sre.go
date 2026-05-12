@@ -35,6 +35,7 @@ type ToolOutput struct {
 	Content           interface{} `json:"content"`
 	Data              interface{} `json:"data"`
 	HasExplicitFields bool        `json:"-"`
+	HasSuccess        bool        `json:"-"`
 }
 
 type BaseExpert struct {
@@ -74,9 +75,10 @@ func (e *BaseExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *
 	}
 
 	history := []RetrievalRecord{}
+	attemptedTools := make(map[string]bool)
 
 	for step := 0; step < e.cfg.MaxRetrievalSteps; step++ {
-		decision, err := e.makeDecision(ctx, frontier, graph, history)
+		decision, err := e.makeDecision(ctx, frontier, graph, history, attemptedTools)
 		if err != nil {
 			result.ToolErrors = append(result.ToolErrors, ToolError{
 				ToolName: "llm",
@@ -114,6 +116,8 @@ func (e *BaseExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *
 				continue
 			}
 
+			attemptedTools[toolName] = true
+
 			output, err := adapter.Run(ctx, content)
 			if err != nil {
 				result.ToolErrors = append(result.ToolErrors, ToolError{
@@ -146,7 +150,7 @@ func (e *BaseExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *
 				result.DegradationReason = fmt.Sprintf("tool %s degraded", toolName)
 				continue
 			}
-			if toolOutput.HasExplicitFields && !toolOutput.Success {
+			if toolOutput.HasSuccess && !toolOutput.Success {
 				result.ToolErrors = append(result.ToolErrors, ToolError{
 					ToolName: toolName,
 					Action:   "execute",
@@ -224,15 +228,17 @@ func (e *BaseExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *
 	return result
 }
 
-func (e *BaseExpert) makeDecision(ctx context.Context, frontier *belief.Frontier, graph *belief.BeliefGraph, history []RetrievalRecord) (map[string]string, error) {
+func (e *BaseExpert) makeDecision(ctx context.Context, frontier *belief.Frontier, graph *belief.BeliefGraph, history []RetrievalRecord, attemptedTools map[string]bool) (map[string]string, error) {
 	if len(history) == 0 && len(e.adapters) > 0 {
 		for _, toolName := range e.toolNames {
 			if _, ok := e.adapters[toolName]; ok {
-				return map[string]string{
-					"action": "tool_call",
-					"tool":   toolName,
-					"reason": "initial tool call",
-				}, nil
+				if !attemptedTools[toolName] {
+					return map[string]string{
+						"action": "tool_call",
+						"tool":   toolName,
+						"reason": "initial tool call",
+					}, nil
+				}
 			}
 		}
 	}
@@ -282,10 +288,12 @@ func parseToolOutput(output string) ToolOutput {
 	}
 
 	hasExplicitFields := false
+	hasSuccess := false
 	var raw map[string]interface{}
 	if err := json.Unmarshal([]byte(output), &raw); err == nil {
 		if _, ok := raw["success"]; ok {
 			hasExplicitFields = true
+			hasSuccess = true
 		}
 		if _, ok := raw["degraded"]; ok {
 			hasExplicitFields = true
@@ -296,6 +304,7 @@ func parseToolOutput(output string) ToolOutput {
 	}
 
 	toolOutput.HasExplicitFields = hasExplicitFields
+	toolOutput.HasSuccess = hasSuccess
 
 	if !hasExplicitFields {
 		return ToolOutput{
