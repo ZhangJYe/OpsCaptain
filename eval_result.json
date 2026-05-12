@@ -16,7 +16,7 @@
     }
   },
   "gate": {
-    "all_passed": false,
+    "all_passed": true,
     "gates": [
       {
         "name": "accuracy",
@@ -34,13 +34,13 @@
         "name": "latency",
         "passed": true,
         "expected": "\u003c= 7.5ms",
-        "actual": "139.783µs"
+        "actual": "81.025µs"
       },
       {
         "name": "llm_calls",
-        "passed": false,
+        "passed": true,
         "expected": "\u003c= 8.0",
-        "actual": "9.0"
+        "actual": "6.0"
       },
       {
         "name": "degradation_rate",
@@ -64,8 +64,8 @@
     "matched": 4,
     "accuracy": 0.8,
     "evidence_coverage": 1,
-    "avg_latency": 139783,
-    "avg_llm_calls": 9,
+    "avg_latency": 81025,
+    "avg_llm_calls": 6,
     "degradation_rate": 0,
     "traceability": 1,
     "per_status": {
@@ -79,10 +79,10 @@
       "prediction": "CPU 资源耗尽导致服务超时",
       "ground_truth": "CPU 资源耗尽导致服务超时",
       "matched": true,
-      "latency": 237875,
-      "llm_calls": 9,
+      "latency": 139125,
+      "llm_calls": 6,
       "status": "succeeded",
-      "evidence_count": 10,
+      "evidence_count": 4,
       "trace_complete": true
     },
     {
@@ -91,10 +91,10 @@
       "prediction": "数据库连接池耗尽",
       "ground_truth": "数据库连接池耗尽",
       "matched": true,
-      "latency": 124167,
-      "llm_calls": 9,
+      "latency": 65167,
+      "llm_calls": 6,
       "status": "succeeded",
-      "evidence_count": 10,
+      "evidence_count": 4,
       "trace_complete": true
     },
     {
@@ -103,10 +103,10 @@
       "prediction": "网络链路问题",
       "ground_truth": "网络链路问题",
       "matched": true,
-      "latency": 93167,
-      "llm_calls": 9,
+      "latency": 69125,
+      "llm_calls": 6,
       "status": "succeeded",
-      "evidence_count": 7,
+      "evidence_count": 4,
       "trace_complete": true
     },
     {
@@ -115,10 +115,10 @@
       "prediction": "缓存失效导致后端压力",
       "ground_truth": "缓存失效导致后端压力",
       "matched": true,
-      "latency": 89458,
-      "llm_calls": 9,
+      "latency": 68333,
+      "llm_calls": 6,
       "status": "succeeded",
-      "evidence_count": 7,
+      "evidence_count": 4,
       "trace_complete": true
     },
     {
@@ -127,10 +127,10 @@
       "prediction": "CPU 资源耗尽导致服务超时",
       "ground_truth": "Kafka 消费者处理能力不足",
       "matched": false,
-      "latency": 154250,
-      "llm_calls": 9,
+      "latency": 63375,
+      "llm_calls": 6,
       "status": "succeeded",
-      "evidence_count": 10,
+      "evidence_count": 4,
       "trace_complete": true
     }
   ]

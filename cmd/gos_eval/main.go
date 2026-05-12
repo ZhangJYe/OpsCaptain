@@ -11,6 +11,9 @@ import (
 	"SuperBizAgent/internal/ai/agent/gos_engine"
 	"SuperBizAgent/internal/ai/agent/gos_engine/eval"
 	"SuperBizAgent/internal/ai/belief"
+
+	"github.com/cloudwego/eino/components/tool"
+	einoschema "github.com/cloudwego/eino/schema"
 )
 
 type testLogger struct{}
@@ -23,92 +26,222 @@ func (l *testLogger) Error(msg string, keysAndValues ...interface{}) {
 	fmt.Printf("[ERROR] %s %v\n", msg, keysAndValues)
 }
 
-type fakeExpert struct {
-	name string
+type fakeLogTool struct {
+	responses map[string]string
 }
 
-func newFakeExpert(name string) *fakeExpert {
-	return &fakeExpert{name: name}
+func newFakeLogTool() *fakeLogTool {
+	return &fakeLogTool{
+		responses: map[string]string{
+			"CPU":   `{"success": true, "data": "CPU usage 95%, memory 80%"}`,
+			"数据库":   `{"success": true, "data": "Connection pool exhausted, slow queries increased"}`,
+			"网络":    `{"success": true, "data": "Cross-region latency high, packet loss 5%"}`,
+			"缓存":    `{"success": true, "data": "Cache hit rate decreased, keys expired"}`,
+			"Kafka": `{"success": true, "data": "Consumer lag increased, messages堆积"}`,
+		},
+	}
 }
 
-func (f *fakeExpert) Name() string {
-	return f.name
+func (f *fakeLogTool) Info(ctx context.Context) (*einoschema.ToolInfo, error) {
+	return &einoschema.ToolInfo{
+		Name: "query_logs",
+		Desc: "Query logs",
+	}, nil
 }
 
-func (f *fakeExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *belief.BeliefGraph) *experts.ExpertAnalysis {
+func (f *fakeLogTool) InvokableRun(ctx context.Context, args string, opts ...tool.Option) (string, error) {
+	for keyword, resp := range f.responses {
+		if contains(args, keyword) {
+			return resp, nil
+		}
+	}
+	return `{"success": true, "data": "No relevant logs found"}`, nil
+}
+
+type fakeInternalDocsTool struct {
+	responses map[string]string
+}
+
+func newFakeInternalDocsTool() *fakeInternalDocsTool {
+	return &fakeInternalDocsTool{
+		responses: map[string]string{
+			"CPU":   `{"success": true, "data": "CPU overload troubleshooting: check top, vmstat, sar"}`,
+			"数据库":   `{"success": true, "data": "Database connection pool: check max_connections, wait_timeout"}`,
+			"网络":    `{"success": true, "data": "Network latency: check traceroute, mtr, tcpdump"}`,
+			"缓存":    `{"success": true, "data": "Redis cache: check hit rate, eviction policy"}`,
+			"Kafka": `{"success": true, "data": "Kafka consumer: check lag, partition count, consumer group"}`,
+		},
+	}
+}
+
+func (f *fakeInternalDocsTool) Info(ctx context.Context) (*einoschema.ToolInfo, error) {
+	return &einoschema.ToolInfo{
+		Name: "query_internal_docs",
+		Desc: "Query internal docs",
+	}, nil
+}
+
+func (f *fakeInternalDocsTool) InvokableRun(ctx context.Context, args string, opts ...tool.Option) (string, error) {
+	for keyword, resp := range f.responses {
+		if contains(args, keyword) {
+			return resp, nil
+		}
+	}
+	return `{"success": true, "data": "No relevant docs found"}`, nil
+}
+
+type fakeBaseExpert struct {
+	name      string
+	cfg       experts.ExpertRuntimeConfig
+	adapters  map[string]*experts.ToolAdapter
+	toolNames []string
+}
+
+func newFakeBaseExpert(cfg experts.ExpertRuntimeConfig, toolReg *experts.ToolRegistry) *fakeBaseExpert {
+	adapters := make(map[string]*experts.ToolAdapter)
+	for _, tn := range cfg.ToolNames {
+		if t, ok := toolReg.Get(tn); ok {
+			if a, err := experts.NewToolAdapter(tn, t); err == nil {
+				adapters[tn] = a
+			}
+		}
+	}
+	return &fakeBaseExpert{
+		name:      cfg.Name,
+		cfg:       cfg,
+		adapters:  adapters,
+		toolNames: cfg.ToolNames,
+	}
+}
+
+func (e *fakeBaseExpert) Name() string {
+	return e.name
+}
+
+func (e *fakeBaseExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *belief.BeliefGraph) *experts.ExpertAnalysis {
+	result := &experts.ExpertAnalysis{
+		ExpertName: e.name,
+		Status:     "succeeded",
+		Evidence:   []experts.EvidenceItem{},
+		ToolErrors: []experts.ToolError{},
+	}
+
+	history := []string{}
+
+	for step := 0; step < e.cfg.MaxRetrievalSteps; step++ {
+		isLastStep := step == e.cfg.MaxRetrievalSteps-1
+		hasEvidence := len(history) > 0 || len(result.Evidence) > 0
+
+		if isLastStep && hasEvidence {
+			analysis := e.generateAnalysis(frontier, graph, history)
+			result.Analysis = analysis
+			result.Confidence = 0.8
+			result.LLMCalls++
+			return result
+		}
+
+		if len(history) == 0 && len(e.adapters) > 0 {
+			for _, toolName := range e.toolNames {
+				if adapter, ok := e.adapters[toolName]; ok {
+					result.ToolCalls++
+					query := fmt.Sprintf("%s %s", frontier.Label, frontier.Why)
+					output, err := adapter.Run(ctx, query)
+					if err != nil {
+						result.ToolErrors = append(result.ToolErrors, experts.ToolError{
+							ToolName: toolName,
+							Action:   "execute",
+							Error:    err.Error(),
+						})
+						result.Status = "degraded"
+						continue
+					}
+
+					history = append(history, output)
+					result.Evidence = append(result.Evidence, experts.EvidenceItem{
+						SourceType: "tool",
+						SourceID:   fmt.Sprintf("%s-%d", toolName, step),
+						Title:      fmt.Sprintf("%s output", toolName),
+						Snippet:    truncateString(output, 500),
+						Score:      1.0,
+					})
+					break
+				}
+			}
+		} else {
+			analysis := e.generateAnalysis(frontier, graph, history)
+			result.Analysis = analysis
+			result.Confidence = 0.8
+			result.LLMCalls++
+			return result
+		}
+	}
+
+	if result.Analysis == "" {
+		result.Analysis = "需要进一步诊断"
+		result.Confidence = 0.5
+		result.Status = "degraded"
+		result.DegradationReason = "max_steps_reached"
+	}
+
+	return result
+}
+
+func (e *fakeBaseExpert) generateAnalysis(frontier *belief.Frontier, graph *belief.BeliefGraph, history []string) string {
 	symptomNode := graph.Nodes[graph.StartSignalID]
 	signalText := ""
 	if symptomNode != nil {
 		signalText = symptomNode.Label
 	}
 
-	analysis := "需要进一步诊断"
-	confidence := 0.7
-	evidence := []experts.EvidenceItem{
-		{SourceType: "log", SourceID: "default-1", Title: "症状分析", Snippet: frontier.Why, Score: 0.7},
-	}
-	toolCalls := 1
-	ragCalls := 0
-
 	if contains(signalText, "CPU") {
-		analysis = "CPU 资源耗尽导致服务超时"
-		confidence = 0.85
-		evidence = []experts.EvidenceItem{
-			{SourceType: "tool", SourceID: "log-1", Title: "CPU 使用率 95%", Snippet: "CPU usage 95%", Score: 1.0},
-			{SourceType: "tool", SourceID: "log-2", Title: "内存使用率 80%", Snippet: "Memory usage 80%", Score: 0.8},
-			{SourceType: "rag", SourceID: "doc-1", Title: "CPU 故障排查", Snippet: "Check top, vmstat, sar", Score: 0.9},
-		}
-		toolCalls = 2
-		ragCalls = 1
+		return "CPU 资源耗尽导致服务超时"
 	} else if contains(signalText, "数据库") || contains(signalText, "连接池") {
-		analysis = "数据库连接池耗尽"
-		confidence = 0.9
-		evidence = []experts.EvidenceItem{
-			{SourceType: "tool", SourceID: "log-1", Title: "连接池已满", Snippet: "Connection pool exhausted", Score: 1.0},
-			{SourceType: "tool", SourceID: "log-2", Title: "慢查询增加", Snippet: "Slow queries increased", Score: 0.9},
-			{SourceType: "rag", SourceID: "doc-1", Title: "数据库连接池配置", Snippet: "Check max_connections", Score: 0.8},
-		}
-		toolCalls = 2
-		ragCalls = 1
+		return "数据库连接池耗尽"
 	} else if contains(signalText, "网络") || contains(signalText, "跨区域") {
-		analysis = "网络链路问题"
-		confidence = 0.75
-		evidence = []experts.EvidenceItem{
-			{SourceType: "tool", SourceID: "log-1", Title: "跨区域延迟升高", Snippet: "Cross-region latency high", Score: 1.0},
-			{SourceType: "rag", SourceID: "doc-1", Title: "网络诊断", Snippet: "Check traceroute, mtr", Score: 0.7},
-		}
-		toolCalls = 1
-		ragCalls = 1
+		return "网络链路问题"
 	} else if contains(signalText, "缓存") || contains(signalText, "Redis") {
-		analysis = "缓存失效导致后端压力"
-		confidence = 0.8
-		evidence = []experts.EvidenceItem{
-			{SourceType: "tool", SourceID: "log-1", Title: "缓存命中率下降", Snippet: "Cache hit rate decreased", Score: 1.0},
-			{SourceType: "rag", SourceID: "doc-1", Title: "Redis 优化", Snippet: "Check eviction policy", Score: 0.8},
-		}
-		toolCalls = 1
-		ragCalls = 1
+		return "缓存失效导致后端压力"
 	} else if contains(signalText, "Kafka") || contains(signalText, "消息堆积") {
-		analysis = "Kafka 消费者处理能力不足"
-		confidence = 0.85
-		evidence = []experts.EvidenceItem{
-			{SourceType: "tool", SourceID: "log-1", Title: "消费延迟增加", Snippet: "Consumer lag increased", Score: 1.0},
-			{SourceType: "tool", SourceID: "log-2", Title: "消息堆积", Snippet: "Messages堆积", Score: 0.9},
-			{SourceType: "rag", SourceID: "doc-1", Title: "Kafka 消费者优化", Snippet: "Check partition count", Score: 0.8},
-		}
-		toolCalls = 2
-		ragCalls = 1
+		return "Kafka 消费者处理能力不足"
 	}
 
-	return &experts.ExpertAnalysis{
-		ExpertName: f.name,
-		Analysis:   analysis,
-		Confidence: confidence,
-		Status:     "succeeded",
-		Evidence:   evidence,
-		ToolCalls:  toolCalls,
-		RAGCalls:   ragCalls,
-		LLMCalls:   2,
+	return "需要进一步诊断"
+}
+
+func truncateString(s string, maxLen int) string {
+	if len(s) > maxLen {
+		return s[:maxLen] + "..."
+	}
+	return s
+}
+
+type fakeLinuxSREExpert struct {
+	*fakeBaseExpert
+}
+
+func newFakeLinuxSREExpert(cfg experts.ExpertRuntimeConfig, toolReg *experts.ToolRegistry) *fakeLinuxSREExpert {
+	return &fakeLinuxSREExpert{
+		fakeBaseExpert: newFakeBaseExpert(cfg, toolReg),
+	}
+}
+
+type fakeNetworkSREExpert struct {
+	*fakeBaseExpert
+}
+
+func newFakeNetworkSREExpert(cfg experts.ExpertRuntimeConfig, toolReg *experts.ToolRegistry) *fakeNetworkSREExpert {
+	return &fakeNetworkSREExpert{
+		fakeBaseExpert: newFakeBaseExpert(cfg, toolReg),
+	}
+}
+
+type fakeDatabaseSREExpert struct {
+	*fakeBaseExpert
+}
+
+func newFakeDatabaseSREExpert(cfg experts.ExpertRuntimeConfig, toolReg *experts.ToolRegistry) *fakeDatabaseSREExpert {
+	return &fakeDatabaseSREExpert{
+		fakeBaseExpert: newFakeBaseExpert(cfg, toolReg),
 	}
 }
 
@@ -130,20 +263,46 @@ func main() {
 	cfg.FSM.GapDelta = 0.2
 	cfg.FSM.MinSupport = 1
 	cfg.FSM.MaxSteps = 3
+	cfg.FSM.MinConfidence = 0.6
 
 	logger := &testLogger{}
 	engine := gos_engine.NewGoSEngine(cfg, logger)
 
-	engine.RegisterExpert("linux_sre", newFakeExpert("linux_sre"))
-	engine.RegisterExpert("network_sre", newFakeExpert("network_sre"))
-	engine.RegisterExpert("database_sre", newFakeExpert("database_sre"))
+	toolReg := experts.NewToolRegistry()
+	toolReg.Register("query_logs", newFakeLogTool())
+	toolReg.Register("query_internal_docs", newFakeInternalDocsTool())
+
+	linuxSRE := newFakeLinuxSREExpert(experts.ExpertRuntimeConfig{
+		Name:              "linux_sre",
+		Description:       "Linux SRE expert",
+		ToolNames:         []string{"query_logs", "query_internal_docs"},
+		MaxRetrievalSteps: 3,
+	}, toolReg)
+
+	networkSRE := newFakeNetworkSREExpert(experts.ExpertRuntimeConfig{
+		Name:              "network_sre",
+		Description:       "Network SRE expert",
+		ToolNames:         []string{"query_logs", "query_internal_docs"},
+		MaxRetrievalSteps: 3,
+	}, toolReg)
+
+	databaseSRE := newFakeDatabaseSREExpert(experts.ExpertRuntimeConfig{
+		Name:              "database_sre",
+		Description:       "Database SRE expert",
+		ToolNames:         []string{"query_logs", "query_internal_docs"},
+		MaxRetrievalSteps: 3,
+	}, toolReg)
+
+	engine.RegisterExpert("linux_sre", linuxSRE)
+	engine.RegisterExpert("network_sre", networkSRE)
+	engine.RegisterExpert("database_sre", databaseSRE)
 
 	runner := eval.NewRunner(engine)
 
 	fmt.Println("=== GoS Engine 评测 ===")
-	fmt.Printf("配置: SessionMaxSteps=%d, GapDelta=%.2f, MinSupport=%d\n",
-		cfg.SessionMaxSteps, cfg.FSM.GapDelta, cfg.FSM.MinSupport)
-	fmt.Printf("专家: linux_sre, network_sre, database_sre (GoS 链路 + fake tool/RAG)\n")
+	fmt.Printf("配置: SessionMaxSteps=%d, GapDelta=%.2f, MinSupport=%d, MinConfidence=%.2f\n",
+		cfg.SessionMaxSteps, cfg.FSM.GapDelta, cfg.FSM.MinSupport, cfg.FSM.MinConfidence)
+	fmt.Printf("专家: linux_sre, network_sre, database_sre (GoS 链路 + fake tool)\n")
 	fmt.Println()
 
 	start := time.Now()
@@ -220,6 +379,10 @@ func main() {
 	}, "", "  ")
 	os.WriteFile("eval_result.json", resultJSON, 0644)
 	fmt.Println("\n详细结果已保存到 eval_result.json")
+
+	if !gateReport.AllPassed {
+		os.Exit(1)
+	}
 }
 
 func runBaselineSimulation(gosResults []eval.EvalResult) *eval.EvalMetrics {

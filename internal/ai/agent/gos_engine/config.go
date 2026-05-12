@@ -15,9 +15,10 @@ type Config struct {
 }
 
 type FSMConfig struct {
-	GapDelta   float64 `yaml:"gap_delta"`
-	MinSupport int     `yaml:"min_support"`
-	MaxSteps   int     `yaml:"max_steps"`
+	GapDelta      float64 `yaml:"gap_delta"`
+	MinSupport    int     `yaml:"min_support"`
+	MaxSteps      int     `yaml:"max_steps"`
+	MinConfidence float64 `yaml:"min_confidence"`
 }
 
 type ExpertConfig struct {
@@ -36,9 +37,10 @@ func DefaultConfig() *Config {
 		SessionMaxSteps:   5,
 		MaxRetrievalSteps: 3,
 		FSM: FSMConfig{
-			GapDelta:   0.3,
-			MinSupport: 2,
-			MaxSteps:   3,
+			GapDelta:      0.3,
+			MinSupport:    2,
+			MaxSteps:      3,
+			MinConfidence: 0.7,
 		},
 		Experts: []ExpertConfig{
 			{
