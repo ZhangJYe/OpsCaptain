@@ -339,10 +339,13 @@ func printDetails(results []eval.EvalResult) {
 }
 
 // ---------------------------------------------------------------------------
-// build GoS engine with real experts + fake deps
+// build GoS engine
 // ---------------------------------------------------------------------------
 
-func buildGoSEngine() (*gos_engine.GoSEngine, *gos_engine.Config) {
+// buildGoSEngine creates a GoS engine. When evalProfile is true, injects fake
+// RAG and eval content generation (for smoke/eval only). When false, uses
+// production defaults (no injection — real RAG and template content).
+func buildGoSEngine(evalProfile bool) (*gos_engine.GoSEngine, *gos_engine.Config) {
 	cfg := gos_engine.DefaultConfig()
 	cfg.SessionMaxSteps = 3
 	cfg.FSM.GapDelta = 0.2
@@ -354,42 +357,35 @@ func buildGoSEngine() (*gos_engine.GoSEngine, *gos_engine.Config) {
 	engine := gos_engine.NewGoSEngine(cfg, logger)
 
 	toolReg := experts.NewToolRegistry()
-	toolReg.Register("query_logs", newFakeLogTool())
-	toolReg.Register("query_internal_docs", newFakeInternalDocsTool())
+	if evalProfile {
+		toolReg.Register("query_logs", newFakeLogTool())
+		toolReg.Register("query_internal_docs", newFakeInternalDocsTool())
+	}
 
-	ragFunc := experts.RAGQueryFunc(fakeRAGQuery)
-	contentFunc := experts.GenerateContentFunc(evalGenerateContent)
+	var ragFunc experts.RAGQueryFunc
+	var contentFunc experts.GenerateContentFunc
+	if evalProfile {
+		ragFunc = experts.RAGQueryFunc(fakeRAGQuery)
+		contentFunc = experts.GenerateContentFunc(evalGenerateContent)
+	}
 
-	linuxSRE := experts.NewLinuxSREExpert(experts.ExpertRuntimeConfig{
+	expertCfg := experts.ExpertRuntimeConfig{
 		Name:                "linux_sre",
 		Description:         "Linux SRE expert",
 		ToolNames:           []string{"query_logs", "query_internal_docs"},
 		MaxRetrievalSteps:   3,
 		RAGQueryFunc:        ragFunc,
 		GenerateContentFunc: contentFunc,
-	}, toolReg)
+	}
+	engine.RegisterExpert("linux_sre", experts.NewLinuxSREExpert(expertCfg, toolReg))
 
-	networkSRE := experts.NewNetworkSREExpert(experts.ExpertRuntimeConfig{
-		Name:                "network_sre",
-		Description:         "Network SRE expert",
-		ToolNames:           []string{"query_logs", "query_internal_docs"},
-		MaxRetrievalSteps:   3,
-		RAGQueryFunc:        ragFunc,
-		GenerateContentFunc: contentFunc,
-	}, toolReg)
+	expertCfg.Name = "network_sre"
+	expertCfg.Description = "Network SRE expert"
+	engine.RegisterExpert("network_sre", experts.NewNetworkSREExpert(expertCfg, toolReg))
 
-	databaseSRE := experts.NewDatabaseSREExpert(experts.ExpertRuntimeConfig{
-		Name:                "database_sre",
-		Description:         "Database SRE expert",
-		ToolNames:           []string{"query_logs", "query_internal_docs"},
-		MaxRetrievalSteps:   3,
-		RAGQueryFunc:        ragFunc,
-		GenerateContentFunc: contentFunc,
-	}, toolReg)
-
-	engine.RegisterExpert("linux_sre", linuxSRE)
-	engine.RegisterExpert("network_sre", networkSRE)
-	engine.RegisterExpert("database_sre", databaseSRE)
+	expertCfg.Name = "database_sre"
+	expertCfg.Description = "Database SRE expert"
+	engine.RegisterExpert("database_sre", experts.NewDatabaseSREExpert(expertCfg, toolReg))
 
 	return engine, cfg
 }
@@ -403,15 +399,16 @@ func main() {
 	baselineFile := flag.String("baseline", "baseline_result.json", "baseline artifact 文件路径")
 	holdoutPath := flag.String("holdout", "internal/ai/agent/gos_engine/eval/testdata/holdout.json", "holdout 数据集路径")
 	outputFile := flag.String("output", "eval_result.json", "输出文件路径")
+	gosProfile := flag.String("gos-profile", "eval", "GoS 配置: real|eval (real=生产行为, eval=fake deps)")
 	flag.Parse()
 
 	switch *mode {
 	case "gos":
-		runGoSOnly(*holdoutPath, *outputFile)
+		runGoSOnly(*holdoutPath, *outputFile, *gosProfile)
 	case "baseline":
 		runBaseline(*holdoutPath, *outputFile)
 	case "compare":
-		runCompare(*holdoutPath, *baselineFile, *outputFile)
+		runCompare(*holdoutPath, *baselineFile, *outputFile, *gosProfile)
 	case "smoke":
 		runSmoke(*holdoutPath, *outputFile)
 	default:
@@ -425,11 +422,13 @@ func main() {
 // gos: 只跑 GoS，输出 metrics，不判定 gate
 // ---------------------------------------------------------------------------
 
-func runGoSOnly(holdoutPath, outputFile string) {
+func runGoSOnly(holdoutPath, outputFile, gosProfile string) {
 	fmt.Println("=== GoS 评测 (gos 模式) ===")
 	fmt.Println("注意: 此模式不判定 gate，需要 --mode=compare 对照 baseline")
 
-	engine, cfg := buildGoSEngine()
+	evalProfile := gosProfile == "eval"
+	engine, cfg := buildGoSEngine(evalProfile)
+	fmt.Printf("GoS profile: %s\n", gosProfile)
 	fmt.Printf("配置: SessionMaxSteps=%d, GapDelta=%.2f, MinSupport=%d, MinConfidence=%.2f\n",
 		cfg.SessionMaxSteps, cfg.FSM.GapDelta, cfg.FSM.MinSupport, cfg.FSM.MinConfidence)
 
@@ -451,7 +450,10 @@ func runGoSOnly(holdoutPath, outputFile string) {
 		"metrics": metrics,
 		"results": results,
 	}, "", "  ")
-	os.WriteFile(outputFile, resultJSON, 0644)
+	if err := os.WriteFile(outputFile, resultJSON, 0644); err != nil {
+		fmt.Printf("ERROR: 写入结果文件失败: %v\n", err)
+		os.Exit(1)
+	}
 	fmt.Printf("\n结果已保存到 %s\n", outputFile)
 }
 
@@ -488,7 +490,7 @@ func runBaseline(holdoutPath, outputFile string) {
 // compare: 跑 GoS + 读取 baseline artifact，判定 gate
 // ---------------------------------------------------------------------------
 
-func runCompare(holdoutPath, baselineFile, outputFile string) {
+func runCompare(holdoutPath, baselineFile, outputFile, gosProfile string) {
 	// 读取 baseline artifact
 	data, err := os.ReadFile(baselineFile)
 	if err != nil {
@@ -504,6 +506,42 @@ func runCompare(holdoutPath, baselineFile, outputFile string) {
 		os.Exit(1)
 	}
 
+	// Validate artifact
+	if artifact.Metrics == nil {
+		fmt.Println("ERROR: baseline artifact 缺少 metrics 字段")
+		os.Exit(1)
+	}
+	if len(artifact.Results) == 0 {
+		fmt.Println("ERROR: baseline artifact results 为空")
+		os.Exit(1)
+	}
+	if artifact.HoldoutPath != "" && artifact.HoldoutPath != holdoutPath {
+		fmt.Printf("ERROR: baseline artifact holdout 路径不匹配\n")
+		fmt.Printf("  artifact: %s\n", artifact.HoldoutPath)
+		fmt.Printf("  current:  %s\n", holdoutPath)
+		fmt.Println("请使用匹配的 baseline artifact，或重新采集 baseline")
+		os.Exit(1)
+	}
+
+	// Validate case alignment
+	cases, err := eval.LoadCases(holdoutPath)
+	if err != nil {
+		fmt.Printf("ERROR: 无法加载 holdout: %v\n", err)
+		os.Exit(1)
+	}
+	if len(artifact.Results) != len(cases) {
+		fmt.Printf("ERROR: baseline artifact 结果数量 (%d) 与 holdout (%d) 不匹配\n",
+			len(artifact.Results), len(cases))
+		os.Exit(1)
+	}
+	for i, r := range artifact.Results {
+		if r.CaseID != cases[i].ID {
+			fmt.Printf("ERROR: baseline artifact case_id 不匹配 (index %d: %s vs %s)\n",
+				i, r.CaseID, cases[i].ID)
+			os.Exit(1)
+		}
+	}
+
 	fmt.Println("=== GoS vs Baseline 对比 (compare 模式) ===")
 	fmt.Printf("Baseline 来源: %s\n", baselineFile)
 	fmt.Printf("Baseline commit: %s\n", artifact.Commit)
@@ -512,7 +550,9 @@ func runCompare(holdoutPath, baselineFile, outputFile string) {
 	fmt.Println()
 
 	// 跑 GoS
-	engine, cfg := buildGoSEngine()
+	evalProfile := gosProfile == "eval"
+	engine, cfg := buildGoSEngine(evalProfile)
+	fmt.Printf("GoS profile: %s\n", gosProfile)
 	fmt.Printf("GoS 配置: SessionMaxSteps=%d, GapDelta=%.2f, MinSupport=%d, MinConfidence=%.2f\n",
 		cfg.SessionMaxSteps, cfg.FSM.GapDelta, cfg.FSM.MinSupport, cfg.FSM.MinConfidence)
 
@@ -564,7 +604,10 @@ func runCompare(holdoutPath, baselineFile, outputFile string) {
 		"baseline":        artifact,
 		"gate":            gateReport,
 	}, "", "  ")
-	os.WriteFile(outputFile, resultJSON, 0644)
+	if err := os.WriteFile(outputFile, resultJSON, 0644); err != nil {
+		fmt.Printf("ERROR: 写入结果文件失败: %v\n", err)
+		os.Exit(1)
+	}
 	fmt.Printf("\n详细结果已保存到 %s\n", outputFile)
 
 	if !gateReport.AllPassed {
@@ -580,11 +623,7 @@ func runSmoke(holdoutPath, outputFile string) {
 	fmt.Println("=== Smoke 评测 (smoke 模式) ===")
 	fmt.Println("注意: baseline 是确定性模拟，仅用于开发回归，不能作为 Phase 3 gate")
 
-	engine, cfg := buildGoSEngine()
-	fmt.Printf("配置: SessionMaxSteps=%d, GapDelta=%.2f, MinSupport=%d, MinConfidence=%.2f\n",
-		cfg.SessionMaxSteps, cfg.FSM.GapDelta, cfg.FSM.MinSupport, cfg.FSM.MinConfidence)
-
-	// GoS
+	engine, _ := buildGoSEngine(true) // smoke always uses eval profile
 	runner := eval.NewRunner(engine)
 	start := time.Now()
 	gosMetrics, gosResults, err := runner.RunFromFile(context.Background(), holdoutPath)
@@ -639,6 +678,9 @@ func runSmoke(holdoutPath, outputFile string) {
 		"smoke_results": smokeResults,
 		"gate":          gateReport,
 	}, "", "  ")
-	os.WriteFile(outputFile, resultJSON, 0644)
+	if err := os.WriteFile(outputFile, resultJSON, 0644); err != nil {
+		fmt.Printf("ERROR: 写入结果文件失败: %v\n", err)
+		os.Exit(1)
+	}
 	fmt.Printf("\n结果已保存到 %s\n", outputFile)
 }
