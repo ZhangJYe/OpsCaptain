@@ -99,6 +99,7 @@ func TestParseToolOutput_Success(t *testing.T) {
 	output := `{"success": true, "data": "test data"}`
 	result := parseToolOutput(output)
 	assert.True(t, result.Success)
+	assert.True(t, result.HasExplicitFields)
 	assert.False(t, result.Degraded)
 	assert.Empty(t, result.Error)
 }
@@ -107,6 +108,7 @@ func TestParseToolOutput_Degraded(t *testing.T) {
 	output := `{"success": false, "degraded": true, "error": "partial data"}`
 	result := parseToolOutput(output)
 	assert.False(t, result.Success)
+	assert.True(t, result.HasExplicitFields)
 	assert.True(t, result.Degraded)
 	assert.Equal(t, "partial data", result.Error)
 }
@@ -115,6 +117,7 @@ func TestParseToolOutput_Failed(t *testing.T) {
 	output := `{"success": false, "error": "connection timeout"}`
 	result := parseToolOutput(output)
 	assert.False(t, result.Success)
+	assert.True(t, result.HasExplicitFields)
 	assert.False(t, result.Degraded)
 	assert.Equal(t, "connection timeout", result.Error)
 }
@@ -132,12 +135,14 @@ func TestParseToolOutput_MCPCallToolResult(t *testing.T) {
 	assert.False(t, result.Success)
 	assert.NotNil(t, result.Content)
 	assert.False(t, result.IsError)
+	assert.True(t, result.HasExplicitFields)
 }
 
 func TestParseToolOutput_MCPCallToolResultError(t *testing.T) {
 	output := `{"content": [{"type": "text", "text": "error message"}], "isError": true}`
 	result := parseToolOutput(output)
 	assert.True(t, result.IsError)
+	assert.True(t, result.HasExplicitFields)
 }
 
 func TestParseToolOutput_UnknownJSON(t *testing.T) {
@@ -145,6 +150,15 @@ func TestParseToolOutput_UnknownJSON(t *testing.T) {
 	result := parseToolOutput(output)
 	assert.False(t, result.Success)
 	assert.NotNil(t, result.Content)
+	assert.False(t, result.HasExplicitFields)
+}
+
+func TestParseToolOutput_SuccessFalse(t *testing.T) {
+	output := `{"success": false, "error": "query failed"}`
+	result := parseToolOutput(output)
+	assert.False(t, result.Success)
+	assert.True(t, result.HasExplicitFields)
+	assert.Equal(t, "query failed", result.Error)
 }
 
 func TestRedactSecrets(t *testing.T) {

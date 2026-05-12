@@ -28,12 +28,13 @@ type RetrievalRecord struct {
 }
 
 type ToolOutput struct {
-	Success  bool        `json:"success"`
-	Degraded bool        `json:"degraded"`
-	Error    string      `json:"error"`
-	IsError  bool        `json:"isError"`
-	Content  interface{} `json:"content"`
-	Data     interface{} `json:"data"`
+	Success           bool        `json:"success"`
+	Degraded          bool        `json:"degraded"`
+	Error             string      `json:"error"`
+	IsError           bool        `json:"isError"`
+	Content           interface{} `json:"content"`
+	Data              interface{} `json:"data"`
+	HasExplicitFields bool        `json:"-"`
 }
 
 type BaseExpert struct {
@@ -145,6 +146,16 @@ func (e *BaseExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *
 				result.DegradationReason = fmt.Sprintf("tool %s degraded", toolName)
 				continue
 			}
+			if toolOutput.HasExplicitFields && !toolOutput.Success {
+				result.ToolErrors = append(result.ToolErrors, ToolError{
+					ToolName: toolName,
+					Action:   "execute",
+					Error:    fmt.Sprintf("tool success=false: %s", toolOutput.Error),
+				})
+				result.Status = "degraded"
+				result.DegradationReason = fmt.Sprintf("tool %s success=false", toolName)
+				continue
+			}
 
 			sanitizedOutput := redactSecrets(output)
 			history = append(history, RetrievalRecord{Query: content, Output: sanitizedOutput, Tool: toolName})
@@ -215,12 +226,14 @@ func (e *BaseExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *
 
 func (e *BaseExpert) makeDecision(ctx context.Context, frontier *belief.Frontier, graph *belief.BeliefGraph, history []RetrievalRecord) (map[string]string, error) {
 	if len(history) == 0 && len(e.adapters) > 0 {
-		for toolName := range e.adapters {
-			return map[string]string{
-				"action": "tool_call",
-				"tool":   toolName,
-				"reason": "initial tool call",
-			}, nil
+		for _, toolName := range e.toolNames {
+			if _, ok := e.adapters[toolName]; ok {
+				return map[string]string{
+					"action": "tool_call",
+					"tool":   toolName,
+					"reason": "initial tool call",
+				}, nil
+			}
 		}
 	}
 
@@ -281,6 +294,8 @@ func parseToolOutput(output string) ToolOutput {
 			hasExplicitFields = true
 		}
 	}
+
+	toolOutput.HasExplicitFields = hasExplicitFields
 
 	if !hasExplicitFields {
 		return ToolOutput{
