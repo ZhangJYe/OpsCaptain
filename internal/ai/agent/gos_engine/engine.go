@@ -169,7 +169,10 @@ func (e *GoSEngine) updateGraph(ctx context.Context, graph *belief.BeliefGraph, 
 					SourceID:       ev.SourceID,
 					SummarySnippet: ev.Snippet,
 				}
-				eid := cp.AddEvidenceCopy(ev.Title, src)
+				attrs := map[string]interface{}{
+					"score": ev.Score,
+				}
+				eid := cp.AddNodeCopy(belief.NodeEvidence, ev.Title, ev.Score, 0, attrs, src)
 
 				edgeType := belief.EdgeSupport
 				if a.Confidence < 0.5 {
@@ -244,11 +247,15 @@ func (e *GoSEngine) collectEvidence(graph *belief.BeliefGraph) []protocol.Eviden
 				SourceType: "graph",
 				Title:      n.Label,
 				Snippet:    n.Label,
+				Score:      n.Score,
 			}
 			if n.Source != nil {
 				item.SourceType = n.Source.SourceType
 				item.SourceID = n.Source.SourceID
 				item.Snippet = n.Source.SummarySnippet
+			}
+			if score, ok := n.Attrs["score"].(float64); ok {
+				item.Score = score
 			}
 			evidence = append(evidence, item)
 		}
