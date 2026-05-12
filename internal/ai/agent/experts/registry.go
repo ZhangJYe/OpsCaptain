@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"SuperBizAgent/internal/ai/belief"
+
+	"github.com/cloudwego/eino/components/tool"
 )
 
 type ExpertAgent interface {
@@ -34,4 +36,23 @@ type EvidenceItem struct {
 	Title      string  `json:"title"`
 	Snippet    string  `json:"snippet"`
 	Score      float64 `json:"score"`
+}
+
+type ToolRegistry struct {
+	tools map[string]tool.InvokableTool
+}
+
+func NewToolRegistry() *ToolRegistry {
+	return &ToolRegistry{
+		tools: make(map[string]tool.InvokableTool),
+	}
+}
+
+func (r *ToolRegistry) Register(name string, t tool.InvokableTool) {
+	r.tools[name] = t
+}
+
+func (r *ToolRegistry) Get(name string) (tool.InvokableTool, bool) {
+	t, ok := r.tools[name]
+	return t, ok
 }
