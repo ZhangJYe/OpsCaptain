@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -18,6 +20,20 @@ import (
 )
 
 // ---------------------------------------------------------------------------
+// types
+// ---------------------------------------------------------------------------
+
+type BaselineArtifact struct {
+	Commit      string            `json:"commit"`
+	Model       string            `json:"model"`
+	ToolConfig  string            `json:"tool_config"`
+	HoldoutPath string            `json:"holdout_path"`
+	Timestamp   string            `json:"timestamp"`
+	Metrics     *eval.EvalMetrics `json:"metrics"`
+	Results     []eval.EvalResult `json:"results"`
+}
+
+// ---------------------------------------------------------------------------
 // test logger
 // ---------------------------------------------------------------------------
 
@@ -26,16 +42,14 @@ type testLogger struct{}
 func (l *testLogger) Info(msg string, keysAndValues ...interface{}) {
 	fmt.Printf("[INFO] %s %v\n", msg, keysAndValues)
 }
-
 func (l *testLogger) Error(msg string, keysAndValues ...interface{}) {
 	fmt.Printf("[ERROR] %s %v\n", msg, keysAndValues)
 }
 
 // ---------------------------------------------------------------------------
-// fake tools — shared between GoS experts and baseline runner
+// fake tools — shared between GoS experts and smoke baseline
 // ---------------------------------------------------------------------------
 
-// keywordResponse pairs keyword with response, checked in order (most specific first)
 type keywordResponse struct {
 	keyword  string
 	response string
@@ -110,7 +124,7 @@ func (f *fakeInternalDocsTool) InvokableRun(ctx context.Context, args string, op
 }
 
 // ---------------------------------------------------------------------------
-// fake RAG — injected into real experts via RAGQueryFunc
+// fake RAG
 // ---------------------------------------------------------------------------
 
 func fakeRAGQuery(ctx context.Context, query string) ([]*einoschema.Document, error) {
@@ -126,7 +140,6 @@ func fakeRAGQuery(ctx context.Context, query string) ([]*einoschema.Document, er
 		"消息堆积":  "Runbook: Consumer lag → increase consumers, check partition count",
 		"消费者":   "Runbook: Consumer lag → increase consumers, check partition count",
 	}
-
 	for keyword, content := range ragData {
 		if contains(query, keyword) {
 			return []*einoschema.Document{{Content: content}}, nil
@@ -136,117 +149,12 @@ func fakeRAGQuery(ctx context.Context, query string) ([]*einoschema.Document, er
 }
 
 // ---------------------------------------------------------------------------
-// Plan-Execute-Replan baseline — same tools, deterministic plan→execute→analyze
-// ---------------------------------------------------------------------------
-
-type baselineRunner struct {
-	logTool *fakeLogTool
-	docTool *fakeInternalDocsTool
-}
-
-func newBaselineRunner() *baselineRunner {
-	return &baselineRunner{
-		logTool: newFakeLogTool(),
-		docTool: newFakeInternalDocsTool(),
-	}
-}
-
-// baselineAnalysis maps symptom keywords to baseline predictions.
-// This simulates what a Plan-Execute-Replan pipeline would produce given
-// the same tool outputs — a single-pass plan→execute→analyze with no
-// graph-based hypothesis tracking.
-func (b *baselineRunner) runCase(ctx context.Context, c eval.EvalCase) *eval.EvalResult {
-	start := time.Now()
-
-	// Plan: select tools based on symptom keywords
-	planTools := []string{"query_logs", "query_internal_docs"}
-
-	// Execute: call each tool
-	var toolOutputs []string
-	llmCalls := 0
-	evidenceCount := 0
-
-	for _, toolName := range planTools {
-		var output string
-		var err error
-		switch toolName {
-		case "query_logs":
-			output, err = b.logTool.InvokableRun(ctx, c.Symptom)
-		case "query_internal_docs":
-			output, err = b.docTool.InvokableRun(ctx, c.Symptom)
-		}
-		llmCalls++ // one LLM call per tool selection in plan-execute
-		if err == nil {
-			toolOutputs = append(toolOutputs, output)
-			evidenceCount++
-		}
-	}
-
-	// Analyze: single-pass LLM analysis (simulated)
-	llmCalls++ // final analysis call
-
-	prediction := b.analyzeSymptom(c.Symptom, toolOutputs)
-
-	return &eval.EvalResult{
-		CaseID:        c.ID,
-		Symptom:       c.Symptom,
-		GroundTruth:   c.GroundTruth,
-		Prediction:    prediction,
-		Status:        "succeeded",
-		Latency:       time.Since(start),
-		LLMCalls:      llmCalls,
-		EvidenceCount: evidenceCount,
-		Matched:       eval.MatchPrediction(prediction, c.GroundTruth, c.ExpectedKeywords),
-		TraceComplete: true,
-	}
-}
-
-func (b *baselineRunner) analyzeSymptom(symptom string, toolOutputs []string) string {
-	// Single-pass analysis: no graph, no hypothesis tracking, no drill-down.
-	// Keyword matching on symptom, most specific first.
-	if contains(symptom, "Kafka") || contains(symptom, "消息堆积") || contains(symptom, "消费者") {
-		return "Kafka 消费者处理能力不足"
-	}
-	if contains(symptom, "连接池") || contains(symptom, "数据库") || contains(symptom, "慢查询") {
-		return "数据库连接池耗尽"
-	}
-	if contains(symptom, "跨区域") || contains(symptom, "网络延迟") || contains(symptom, "packet loss") {
-		return "网络链路问题"
-	}
-	if contains(symptom, "缓存") || contains(symptom, "Redis") || contains(symptom, "命中率") {
-		return "缓存失效导致后端压力"
-	}
-	if contains(symptom, "CPU") || contains(symptom, "95%") {
-		return "CPU 资源耗尽导致服务超时"
-	}
-	return "需要进一步诊断"
-}
-
-// ---------------------------------------------------------------------------
-// helpers
-// ---------------------------------------------------------------------------
-
-func contains(s, substr string) bool {
-	if len(s) < len(substr) {
-		return false
-	}
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
-
-// ---------------------------------------------------------------------------
 // eval-only content generation (simulates LLM analysis)
 // ---------------------------------------------------------------------------
 
-// evalGenerateContent is injected into experts via GenerateContentFunc.
-// It maps tool outputs to Chinese conclusions, simulating what an LLM would produce.
 func evalGenerateContent(ctx context.Context, frontier *belief.Frontier, graph *belief.BeliefGraph, history []experts.RetrievalRecord, decision map[string]string) (string, error) {
 	symptom := ""
-	if graph.StartSignalID != "" {
+	if graph != nil && graph.StartSignalID != "" {
 		if node, ok := graph.Nodes[graph.StartSignalID]; ok {
 			symptom = node.Label
 		}
@@ -259,17 +167,11 @@ func evalGenerateContent(ctx context.Context, frontier *belief.Frontier, graph *
 		return fmt.Sprintf("%s %s", frontier.Label, symptom), nil
 	case "analyze":
 		var toolData string
-		var ragData string
 		for _, h := range history {
 			if h.Tool == "query_logs" || h.Tool == "query_internal_docs" {
 				d := extractDataFieldEval(h.Output)
 				if d != "" {
 					toolData = d
-				}
-			} else if h.Tool == "rag" {
-				ragData = h.Output
-				if len(ragData) > 100 {
-					ragData = ragData[:100]
 				}
 			}
 		}
@@ -277,17 +179,7 @@ func evalGenerateContent(ctx context.Context, frontier *belief.Frontier, graph *
 		if conclusion != "" {
 			return conclusion, nil
 		}
-		var analysis strings.Builder
-		analysis.WriteString(fmt.Sprintf("针对假设「%s」的分析：%s", frontier.Label, frontier.Why))
-		if toolData != "" {
-			analysis.WriteString(" 证据：")
-			analysis.WriteString(toolData)
-		}
-		if ragData != "" {
-			analysis.WriteString(" ")
-			analysis.WriteString(ragData)
-		}
-		return analysis.String(), nil
+		return fmt.Sprintf("针对假设「%s」的分析：%s", frontier.Label, frontier.Why), nil
 	}
 	return "", fmt.Errorf("unknown action: %s", decision["action"])
 }
@@ -327,10 +219,130 @@ func mapToolOutputToConclusion(toolData string) string {
 }
 
 // ---------------------------------------------------------------------------
-// main
+// smoke baseline (deterministic, for dev regression only)
 // ---------------------------------------------------------------------------
 
-func main() {
+type smokeBaselineRunner struct {
+	logTool *fakeLogTool
+	docTool *fakeInternalDocsTool
+}
+
+func newSmokeBaselineRunner() *smokeBaselineRunner {
+	return &smokeBaselineRunner{
+		logTool: newFakeLogTool(),
+		docTool: newFakeInternalDocsTool(),
+	}
+}
+
+func (b *smokeBaselineRunner) runCase(ctx context.Context, c eval.EvalCase) *eval.EvalResult {
+	start := time.Now()
+	llmCalls := 0
+	evidenceCount := 0
+
+	for _, toolName := range []string{"query_logs", "query_internal_docs"} {
+		var output string
+		var err error
+		switch toolName {
+		case "query_logs":
+			output, err = b.logTool.InvokableRun(ctx, c.Symptom)
+		case "query_internal_docs":
+			output, err = b.docTool.InvokableRun(ctx, c.Symptom)
+		}
+		llmCalls++
+		if err == nil {
+			_ = output
+			evidenceCount++
+		}
+	}
+	llmCalls++
+
+	prediction := b.analyzeSymptom(c.Symptom)
+
+	return &eval.EvalResult{
+		CaseID:        c.ID,
+		Symptom:       c.Symptom,
+		GroundTruth:   c.GroundTruth,
+		Prediction:    prediction,
+		Status:        "succeeded",
+		Latency:       time.Since(start),
+		LLMCalls:      llmCalls,
+		EvidenceCount: evidenceCount,
+		Matched:       eval.MatchPrediction(prediction, c.GroundTruth, c.ExpectedKeywords),
+		TraceComplete: true,
+	}
+}
+
+func (b *smokeBaselineRunner) analyzeSymptom(symptom string) string {
+	if contains(symptom, "Kafka") || contains(symptom, "消息堆积") || contains(symptom, "消费者") {
+		return "Kafka 消费者处理能力不足"
+	}
+	if contains(symptom, "连接池") || contains(symptom, "数据库") || contains(symptom, "慢查询") {
+		return "数据库连接池耗尽"
+	}
+	if contains(symptom, "跨区域") || contains(symptom, "网络延迟") || contains(symptom, "packet loss") {
+		return "网络链路问题"
+	}
+	if contains(symptom, "缓存") || contains(symptom, "Redis") || contains(symptom, "命中率") {
+		return "缓存失效导致后端压力"
+	}
+	if contains(symptom, "CPU") || contains(symptom, "95%") {
+		return "CPU 资源耗尽导致服务超时"
+	}
+	return "需要进一步诊断"
+}
+
+// ---------------------------------------------------------------------------
+// helpers
+// ---------------------------------------------------------------------------
+
+func contains(s, substr string) bool {
+	if len(s) < len(substr) {
+		return false
+	}
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
+func gitCommit() string {
+	out, err := exec.Command("git", "rev-parse", "--short", "HEAD").Output()
+	if err != nil {
+		return "unknown"
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func printMetrics(label string, m *eval.EvalMetrics) {
+	fmt.Printf("\n--- %s ---\n", label)
+	fmt.Printf("  总用例: %d\n", m.TotalCases)
+	fmt.Printf("  成功: %d | 降级: %d | 失败: %d\n", m.Succeeded, m.Degraded, m.Failed)
+	fmt.Printf("  准确率: %.2f%%\n", m.Accuracy*100)
+	fmt.Printf("  证据覆盖率: %.2f%%\n", m.EvidenceCoverage*100)
+	fmt.Printf("  平均延迟: %v\n", m.AvgLatency)
+	fmt.Printf("  平均 LLM 调用: %.1f\n", m.AvgLLMCalls)
+	fmt.Printf("  降级率: %.2f%%\n", m.DegradationRate*100)
+	fmt.Printf("  可追溯性: %.2f%%\n", m.Traceability*100)
+}
+
+func printDetails(results []eval.EvalResult) {
+	fmt.Println("\n  详细结果:")
+	for _, r := range results {
+		match := "✓"
+		if !r.Matched {
+			match = "✗"
+		}
+		fmt.Printf("  %s %s: pred=%q truth=%q (%v)\n", match, r.CaseID, r.Prediction, r.GroundTruth, r.Latency)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// build GoS engine with real experts + fake deps
+// ---------------------------------------------------------------------------
+
+func buildGoSEngine() (*gos_engine.GoSEngine, *gos_engine.Config) {
 	cfg := gos_engine.DefaultConfig()
 	cfg.SessionMaxSteps = 3
 	cfg.FSM.GapDelta = 0.2
@@ -341,16 +353,13 @@ func main() {
 	logger := &testLogger{}
 	engine := gos_engine.NewGoSEngine(cfg, logger)
 
-	// --- shared fake tools + fake RAG ---
 	toolReg := experts.NewToolRegistry()
 	toolReg.Register("query_logs", newFakeLogTool())
 	toolReg.Register("query_internal_docs", newFakeInternalDocsTool())
 
 	ragFunc := experts.RAGQueryFunc(fakeRAGQuery)
-
 	contentFunc := experts.GenerateContentFunc(evalGenerateContent)
 
-	// --- real experts with injected dependencies ---
 	linuxSRE := experts.NewLinuxSREExpert(experts.ExpertRuntimeConfig{
 		Name:                "linux_sre",
 		Description:         "Linux SRE expert",
@@ -382,53 +391,150 @@ func main() {
 	engine.RegisterExpert("network_sre", networkSRE)
 	engine.RegisterExpert("database_sre", databaseSRE)
 
-	// --- GoS eval ---
-	runner := eval.NewRunner(engine)
+	return engine, cfg
+}
 
-	fmt.Println("=== GoS Engine 评测 ===")
+// ---------------------------------------------------------------------------
+// main
+// ---------------------------------------------------------------------------
+
+func main() {
+	mode := flag.String("mode", "gos", "运行模式: gos|baseline|compare|smoke")
+	baselineFile := flag.String("baseline", "baseline_result.json", "baseline artifact 文件路径")
+	holdoutPath := flag.String("holdout", "internal/ai/agent/gos_engine/eval/testdata/holdout.json", "holdout 数据集路径")
+	outputFile := flag.String("output", "eval_result.json", "输出文件路径")
+	flag.Parse()
+
+	switch *mode {
+	case "gos":
+		runGoSOnly(*holdoutPath, *outputFile)
+	case "baseline":
+		runBaseline(*holdoutPath, *outputFile)
+	case "compare":
+		runCompare(*holdoutPath, *baselineFile, *outputFile)
+	case "smoke":
+		runSmoke(*holdoutPath, *outputFile)
+	default:
+		fmt.Printf("未知模式: %s\n", *mode)
+		fmt.Println("可用模式: gos, baseline, compare, smoke")
+		os.Exit(1)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// gos: 只跑 GoS，输出 metrics，不判定 gate
+// ---------------------------------------------------------------------------
+
+func runGoSOnly(holdoutPath, outputFile string) {
+	fmt.Println("=== GoS 评测 (gos 模式) ===")
+	fmt.Println("注意: 此模式不判定 gate，需要 --mode=compare 对照 baseline")
+
+	engine, cfg := buildGoSEngine()
 	fmt.Printf("配置: SessionMaxSteps=%d, GapDelta=%.2f, MinSupport=%d, MinConfidence=%.2f\n",
 		cfg.SessionMaxSteps, cfg.FSM.GapDelta, cfg.FSM.MinSupport, cfg.FSM.MinConfidence)
-	fmt.Printf("专家: linux_sre, network_sre, database_sre (真实 BaseExpert + fake tool/RAG)\n")
-	fmt.Println()
 
+	runner := eval.NewRunner(engine)
 	start := time.Now()
-	gosMetrics, gosResults, err := runner.RunFromFile(context.Background(), "internal/ai/agent/gos_engine/eval/testdata/holdout.json")
+	metrics, results, err := runner.RunFromFile(context.Background(), holdoutPath)
 	if err != nil {
 		fmt.Printf("GoS 评测失败: %v\n", err)
 		os.Exit(1)
 	}
-	gosDuration := time.Since(start)
+	fmt.Printf("耗时: %v\n", time.Since(start))
 
-	fmt.Printf("GoS 评测完成，耗时: %v\n", gosDuration)
-	printMetrics("GoS", gosMetrics)
-	printDetails(gosResults)
+	printMetrics("GoS", metrics)
+	printDetails(results)
 
-	// --- Plan-Execute-Replan baseline (same tools, no graph) ---
-	fmt.Println("=== Plan-Execute-Replan Baseline (同工具, 无因果图) ===")
-	baseline := newBaselineRunner()
+	resultJSON, _ := json.MarshalIndent(map[string]interface{}{
+		"mode":    "gos",
+		"commit":  gitCommit(),
+		"metrics": metrics,
+		"results": results,
+	}, "", "  ")
+	os.WriteFile(outputFile, resultJSON, 0644)
+	fmt.Printf("\n结果已保存到 %s\n", outputFile)
+}
 
-	cases, err := eval.LoadCases("internal/ai/agent/gos_engine/eval/testdata/holdout.json")
+// ---------------------------------------------------------------------------
+// baseline: 跑真实 Plan-Execute-Replan，产出版本化 artifact
+// ---------------------------------------------------------------------------
+
+func runBaseline(holdoutPath, outputFile string) {
+	fmt.Println("=== Baseline 采集 (baseline 模式) ===")
+	fmt.Println("注意: 此模式需要 LLM 环境 (models.OpenAIForGLM)")
+	fmt.Println("如果当前环境没有 LLM，请在有 LLM 的环境中运行，然后用 --mode=compare 对照")
+
+	// TODO: 接入真实 BuildPlanAgent
+	// 需要:
+	// 1. 加载 holdout cases
+	// 2. 对每个 case 调用 BuildPlanAgent(ctx, case.Symptom)
+	// 3. 记录 prediction、latency、LLM calls
+	// 4. 产出版本化 artifact
+
+	fmt.Println()
+	fmt.Println("ERROR: baseline 模式尚未实现")
+	fmt.Println("需要接入 plan_execute_replan.BuildPlanAgent")
+	fmt.Println("当前 Plan-Execute-Replan 依赖 models.OpenAIForGLM (真实 LLM)")
+	fmt.Println("")
+	fmt.Println("实现步骤:")
+	fmt.Println("  1. 在有 LLM 的环境中运行此命令")
+	fmt.Println("  2. 对每个 holdout case 调用 BuildPlanAgent")
+	fmt.Println("  3. 记录结果到 baseline_result.json")
+	fmt.Println("  4. 用 --mode=compare 对照 GoS 结果")
+	os.Exit(1)
+}
+
+// ---------------------------------------------------------------------------
+// compare: 跑 GoS + 读取 baseline artifact，判定 gate
+// ---------------------------------------------------------------------------
+
+func runCompare(holdoutPath, baselineFile, outputFile string) {
+	// 读取 baseline artifact
+	data, err := os.ReadFile(baselineFile)
 	if err != nil {
-		fmt.Printf("加载 holdout 失败: %v\n", err)
+		fmt.Printf("ERROR: 无法读取 baseline 文件 %s: %v\n", baselineFile, err)
+		fmt.Println("请先用 --mode=baseline 生成 baseline artifact")
+		fmt.Println("或用 --mode=gos 只看 GoS metrics")
 		os.Exit(1)
 	}
 
-	baselineMetrics := eval.NewEvalMetrics()
-	var baselineResults []eval.EvalResult
-	for _, c := range cases {
-		r := baseline.runCase(context.Background(), c)
-		baselineMetrics.AddResult(r)
-		baselineResults = append(baselineResults, *r)
+	var artifact BaselineArtifact
+	if err := json.Unmarshal(data, &artifact); err != nil {
+		fmt.Printf("ERROR: baseline 文件格式错误: %v\n", err)
+		os.Exit(1)
 	}
-	baselineMetrics.Finalize()
 
-	printMetrics("Baseline", baselineMetrics)
-	printDetails(baselineResults)
+	fmt.Println("=== GoS vs Baseline 对比 (compare 模式) ===")
+	fmt.Printf("Baseline 来源: %s\n", baselineFile)
+	fmt.Printf("Baseline commit: %s\n", artifact.Commit)
+	fmt.Printf("Baseline model: %s\n", artifact.Model)
+	fmt.Printf("Baseline 时间: %s\n", artifact.Timestamp)
+	fmt.Println()
 
-	// --- Gate check ---
-	gateReport := eval.CheckGate(gosMetrics, baselineMetrics)
+	// 跑 GoS
+	engine, cfg := buildGoSEngine()
+	fmt.Printf("GoS 配置: SessionMaxSteps=%d, GapDelta=%.2f, MinSupport=%d, MinConfidence=%.2f\n",
+		cfg.SessionMaxSteps, cfg.FSM.GapDelta, cfg.FSM.MinSupport, cfg.FSM.MinConfidence)
 
-	fmt.Println("=== Gate 检查 (GoS vs 真实 Baseline) ===")
+	runner := eval.NewRunner(engine)
+	start := time.Now()
+	gosMetrics, gosResults, err := runner.RunFromFile(context.Background(), holdoutPath)
+	if err != nil {
+		fmt.Printf("GoS 评测失败: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("GoS 耗时: %v\n", time.Since(start))
+
+	printMetrics("GoS", gosMetrics)
+	printDetails(gosResults)
+
+	printMetrics("Baseline", artifact.Metrics)
+	printDetails(artifact.Results)
+
+	// Gate check
+	gateReport := eval.CheckGate(gosMetrics, artifact.Metrics)
+
+	fmt.Println("\n=== Gate 检查 (GoS vs Baseline) ===")
 	for _, g := range gateReport.Gates {
 		status := "✓ PASS"
 		if !g.Passed {
@@ -437,48 +543,102 @@ func main() {
 		fmt.Printf("  %s %s: expected %s, actual %s\n", status, g.Name, g.Expected, g.Actual)
 	}
 	fmt.Println()
-
 	if gateReport.AllPassed {
-		fmt.Println("✓ 所有 Gate 通过，GoS 不劣于 Baseline，可以进入灰度阶段")
+		fmt.Println("✓ 所有 Gate 通过，GoS 不劣于 Baseline")
 	} else {
-		fmt.Println("✗ 部分 Gate 未通过，GoS 需要继续优化")
+		fmt.Println("✗ 部分 Gate 未通过")
+		for _, g := range gateReport.Gates {
+			if !g.Passed {
+				fmt.Printf("  需优化: %s (%s)\n", g.Name, g.Actual)
+			}
+		}
 	}
 
-	// --- save results ---
 	resultJSON, _ := json.MarshalIndent(map[string]interface{}{
-		"gos_metrics":      gosMetrics,
-		"gos_results":      gosResults,
-		"baseline_metrics": baselineMetrics,
-		"baseline_results": baselineResults,
-		"gate":             gateReport,
+		"mode":            "compare",
+		"commit":          gitCommit(),
+		"baseline_commit": artifact.Commit,
+		"baseline_model":  artifact.Model,
+		"gos_metrics":     gosMetrics,
+		"gos_results":     gosResults,
+		"baseline":        artifact,
+		"gate":            gateReport,
 	}, "", "  ")
-	os.WriteFile("eval_result.json", resultJSON, 0644)
-	fmt.Println("\n详细结果已保存到 eval_result.json")
+	os.WriteFile(outputFile, resultJSON, 0644)
+	fmt.Printf("\n详细结果已保存到 %s\n", outputFile)
 
 	if !gateReport.AllPassed {
 		os.Exit(1)
 	}
 }
 
-func printMetrics(label string, m *eval.EvalMetrics) {
-	fmt.Printf("\n--- %s ---\n", label)
-	fmt.Printf("  总用例: %d\n", m.TotalCases)
-	fmt.Printf("  成功: %d | 降级: %d | 失败: %d\n", m.Succeeded, m.Degraded, m.Failed)
-	fmt.Printf("  准确率: %.2f%%\n", m.Accuracy*100)
-	fmt.Printf("  证据覆盖率: %.2f%%\n", m.EvidenceCoverage*100)
-	fmt.Printf("  平均延迟: %v\n", m.AvgLatency)
-	fmt.Printf("  平均 LLM 调用: %.1f\n", m.AvgLLMCalls)
-	fmt.Printf("  降级率: %.2f%%\n", m.DegradationRate*100)
-	fmt.Printf("  可追溯性: %.2f%%\n", m.Traceability*100)
-}
+// ---------------------------------------------------------------------------
+// smoke: 确定性 baseline，仅用于开发回归
+// ---------------------------------------------------------------------------
 
-func printDetails(results []eval.EvalResult) {
-	fmt.Println("\n  详细结果:")
-	for _, r := range results {
-		match := "✓"
-		if !r.Matched {
-			match = "✗"
-		}
-		fmt.Printf("  %s %s: pred=%q truth=%q (%v)\n", match, r.CaseID, r.Prediction, r.GroundTruth, r.Latency)
+func runSmoke(holdoutPath, outputFile string) {
+	fmt.Println("=== Smoke 评测 (smoke 模式) ===")
+	fmt.Println("注意: baseline 是确定性模拟，仅用于开发回归，不能作为 Phase 3 gate")
+
+	engine, cfg := buildGoSEngine()
+	fmt.Printf("配置: SessionMaxSteps=%d, GapDelta=%.2f, MinSupport=%d, MinConfidence=%.2f\n",
+		cfg.SessionMaxSteps, cfg.FSM.GapDelta, cfg.FSM.MinSupport, cfg.FSM.MinConfidence)
+
+	// GoS
+	runner := eval.NewRunner(engine)
+	start := time.Now()
+	gosMetrics, gosResults, err := runner.RunFromFile(context.Background(), holdoutPath)
+	if err != nil {
+		fmt.Printf("GoS 评测失败: %v\n", err)
+		os.Exit(1)
 	}
+	fmt.Printf("GoS 耗时: %v\n", time.Since(start))
+
+	printMetrics("GoS", gosMetrics)
+	printDetails(gosResults)
+
+	// Smoke baseline
+	smoke := newSmokeBaselineRunner()
+	cases, err := eval.LoadCases(holdoutPath)
+	if err != nil {
+		fmt.Printf("加载 holdout 失败: %v\n", err)
+		os.Exit(1)
+	}
+
+	smokeMetrics := eval.NewEvalMetrics()
+	var smokeResults []eval.EvalResult
+	for _, c := range cases {
+		r := smoke.runCase(context.Background(), c)
+		smokeMetrics.AddResult(r)
+		smokeResults = append(smokeResults, *r)
+	}
+	smokeMetrics.Finalize()
+
+	printMetrics("Smoke Baseline (确定性模拟)", smokeMetrics)
+	printDetails(smokeResults)
+
+	gateReport := eval.CheckGate(gosMetrics, smokeMetrics)
+
+	fmt.Println("\n=== Gate 检查 (仅开发参考) ===")
+	for _, g := range gateReport.Gates {
+		status := "✓ PASS"
+		if !g.Passed {
+			status = "✗ FAIL"
+		}
+		fmt.Printf("  %s %s: expected %s, actual %s\n", status, g.Name, g.Expected, g.Actual)
+	}
+	fmt.Println()
+	fmt.Println("注意: 此 gate 仅用于开发回归，不能作为 Phase 3 准入依据")
+
+	resultJSON, _ := json.MarshalIndent(map[string]interface{}{
+		"mode":          "smoke",
+		"commit":        gitCommit(),
+		"gos_metrics":   gosMetrics,
+		"gos_results":   gosResults,
+		"smoke_metrics": smokeMetrics,
+		"smoke_results": smokeResults,
+		"gate":          gateReport,
+	}, "", "  ")
+	os.WriteFile(outputFile, resultJSON, 0644)
+	fmt.Printf("\n结果已保存到 %s\n", outputFile)
 }
