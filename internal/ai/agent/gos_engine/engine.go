@@ -221,7 +221,7 @@ func (e *GoSEngine) updateGraph(ctx context.Context, graph *belief.BeliefGraph, 
 }
 
 func (e *GoSEngine) shouldReport(frontier *belief.Frontier) bool {
-	return frontier.Score >= 0.6 && frontier.Supports >= 1
+	return frontier.Score >= e.cfg.FSM.GapDelta && frontier.Supports >= e.cfg.FSM.MinSupport
 }
 
 func (e *GoSEngine) degradedResult(graph *belief.BeliefGraph, fsm *belief.BeliefFSM, startedAt time.Time, stats *RunStats, reason string, err error, actRes *ActResult, alreadyUpdated bool) *protocol.TaskResult {

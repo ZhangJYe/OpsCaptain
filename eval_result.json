@@ -1,35 +1,51 @@
 {
+  "baseline": {
+    "total_cases": 5,
+    "succeeded": 5,
+    "failed": 0,
+    "degraded": 0,
+    "matched": 4,
+    "accuracy": 0.8,
+    "evidence_coverage": 1,
+    "avg_latency": 5000000,
+    "avg_llm_calls": 4,
+    "degradation_rate": 0,
+    "traceability": 1,
+    "per_status": {
+      "succeeded": 5
+    }
+  },
   "gate": {
-    "all_passed": true,
+    "all_passed": false,
     "gates": [
       {
         "name": "accuracy",
         "passed": true,
-        "expected": "\u003e= 60.00%",
+        "expected": "\u003e= 80.00%",
         "actual": "80.00%"
       },
       {
         "name": "evidence_coverage",
         "passed": true,
-        "expected": "\u003e= 80.00%",
+        "expected": "\u003e= 100.00%",
         "actual": "100.00%"
       },
       {
         "name": "latency",
         "passed": true,
-        "expected": "\u003c= 15s",
-        "actual": "97.841µs"
+        "expected": "\u003c= 7.5ms",
+        "actual": "139.783µs"
       },
       {
         "name": "llm_calls",
-        "passed": true,
-        "expected": "\u003c= 20.0",
+        "passed": false,
+        "expected": "\u003c= 8.0",
         "actual": "9.0"
       },
       {
         "name": "degradation_rate",
         "passed": true,
-        "expected": "\u003c= 30.00%",
+        "expected": "\u003c= 0.00%",
         "actual": "0.00%"
       },
       {
@@ -40,7 +56,7 @@
       }
     ]
   },
-  "metrics": {
+  "gos_metrics": {
     "total_cases": 5,
     "succeeded": 5,
     "failed": 0,
@@ -48,7 +64,7 @@
     "matched": 4,
     "accuracy": 0.8,
     "evidence_coverage": 1,
-    "avg_latency": 97841,
+    "avg_latency": 139783,
     "avg_llm_calls": 9,
     "degradation_rate": 0,
     "traceability": 1,
@@ -56,17 +72,17 @@
       "succeeded": 5
     }
   },
-  "results": [
+  "gos_results": [
     {
       "case_id": "holdout-001",
       "symptom": "服务 response timeout，CPU 使用率 95%，内存使用率 80%",
       "prediction": "CPU 资源耗尽导致服务超时",
       "ground_truth": "CPU 资源耗尽导致服务超时",
       "matched": true,
-      "latency": 166542,
+      "latency": 237875,
       "llm_calls": 9,
       "status": "succeeded",
-      "evidence_count": 7,
+      "evidence_count": 10,
       "trace_complete": true
     },
     {
@@ -75,10 +91,10 @@
       "prediction": "数据库连接池耗尽",
       "ground_truth": "数据库连接池耗尽",
       "matched": true,
-      "latency": 97375,
+      "latency": 124167,
       "llm_calls": 9,
       "status": "succeeded",
-      "evidence_count": 7,
+      "evidence_count": 10,
       "trace_complete": true
     },
     {
@@ -87,10 +103,10 @@
       "prediction": "网络链路问题",
       "ground_truth": "网络链路问题",
       "matched": true,
-      "latency": 60792,
+      "latency": 93167,
       "llm_calls": 9,
       "status": "succeeded",
-      "evidence_count": 4,
+      "evidence_count": 7,
       "trace_complete": true
     },
     {
@@ -99,10 +115,10 @@
       "prediction": "缓存失效导致后端压力",
       "ground_truth": "缓存失效导致后端压力",
       "matched": true,
-      "latency": 67917,
+      "latency": 89458,
       "llm_calls": 9,
       "status": "succeeded",
-      "evidence_count": 4,
+      "evidence_count": 7,
       "trace_complete": true
     },
     {
@@ -111,10 +127,10 @@
       "prediction": "CPU 资源耗尽导致服务超时",
       "ground_truth": "Kafka 消费者处理能力不足",
       "matched": false,
-      "latency": 96583,
+      "latency": 154250,
       "llm_calls": 9,
       "status": "succeeded",
-      "evidence_count": 7,
+      "evidence_count": 10,
       "trace_complete": true
     }
   ]
