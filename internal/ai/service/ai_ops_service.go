@@ -107,13 +107,15 @@ func RunAIOpsMultiAgent(ctx context.Context, query string) (ExecutionResponse, e
 		}, err
 	}
 
-	rootTask := protocol.NewRootTask(sessionID, query, aiOpsPlanAgentName)
+	agentName := selectAIOpsAgentName(ctx)
+	rootTask := protocol.NewRootTask(sessionID, query, agentName)
 	rootTask.Input = map[string]any{
 		"raw_query":        query,
 		"executable_query": enrichedQuery,
 		"context_detail":   append([]string{}, contextDetail...),
 		"response_mode":    "ai_ops",
 		"entrypoint":       "ai_ops",
+		"engine":           agentName,
 	}
 
 	g.Log().Infof(ctx, "[AIOps] runtime dispatch started, trace_id=%s", rootTask.TraceID)

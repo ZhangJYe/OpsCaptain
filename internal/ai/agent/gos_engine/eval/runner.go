@@ -114,7 +114,6 @@ func checkTraceComplete(taskResult *protocol.TaskResult) bool {
 	return hasBeliefGraph && hasFSMHistory && (hasEvidence || hasArtifacts)
 }
 
-// LoadCases loads eval cases from a JSON file. Exported for use by external baselines.
 func LoadCases(filePath string) ([]EvalCase, error) {
 	return loadCases(filePath)
 }

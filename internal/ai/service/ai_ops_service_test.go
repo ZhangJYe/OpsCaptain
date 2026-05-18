@@ -71,6 +71,71 @@ func TestRunAIOpsMultiAgentDisabledByConfig(t *testing.T) {
 	}
 }
 
+func TestSelectAIOpsAgentNameDefaultsToPlan(t *testing.T) {
+	oldString := aiOpsConfigString
+	oldBool := aiOpsConfigBool
+	aiOpsConfigString = func(context.Context, string) (string, bool) { return "", false }
+	aiOpsConfigBool = func(context.Context, string) (bool, bool) { return false, false }
+	t.Cleanup(func() {
+		aiOpsConfigString = oldString
+		aiOpsConfigBool = oldBool
+	})
+
+	if got := selectAIOpsAgentName(context.Background()); got != aiOpsPlanAgentName {
+		t.Fatalf("expected default agent %q, got %q", aiOpsPlanAgentName, got)
+	}
+}
+
+func TestSelectAIOpsAgentNameRequiresEnabledGOS(t *testing.T) {
+	oldString := aiOpsConfigString
+	oldBool := aiOpsConfigBool
+	aiOpsConfigString = func(_ context.Context, key string) (string, bool) {
+		if key == "aiops.engine" {
+			return "gos_engine", true
+		}
+		return "", false
+	}
+	aiOpsConfigBool = func(_ context.Context, key string) (bool, bool) {
+		if key == "aiops.gos.enabled" {
+			return false, true
+		}
+		return false, false
+	}
+	t.Cleanup(func() {
+		aiOpsConfigString = oldString
+		aiOpsConfigBool = oldBool
+	})
+
+	if got := selectAIOpsAgentName(context.Background()); got != aiOpsPlanAgentName {
+		t.Fatalf("expected disabled gos to fall back to %q, got %q", aiOpsPlanAgentName, got)
+	}
+}
+
+func TestSelectAIOpsAgentNameUsesGOSWhenEnabled(t *testing.T) {
+	oldString := aiOpsConfigString
+	oldBool := aiOpsConfigBool
+	aiOpsConfigString = func(_ context.Context, key string) (string, bool) {
+		if key == "aiops.engine" {
+			return "gos_engine", true
+		}
+		return "", false
+	}
+	aiOpsConfigBool = func(_ context.Context, key string) (bool, bool) {
+		if key == "aiops.gos.enabled" {
+			return true, true
+		}
+		return false, false
+	}
+	t.Cleanup(func() {
+		aiOpsConfigString = oldString
+		aiOpsConfigBool = oldBool
+	})
+
+	if got := selectAIOpsAgentName(context.Background()); got != aiOpsGOSAgentName {
+		t.Fatalf("expected gos agent %q, got %q", aiOpsGOSAgentName, got)
+	}
+}
+
 func TestRunAIOpsCallsBuildPlanAgent(t *testing.T) {
 	enableMultiAgentForTest(t)
 	oldBuild := buildPlanAgent

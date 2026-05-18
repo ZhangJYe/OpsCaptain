@@ -21,10 +21,6 @@ import (
 	einoschema "github.com/cloudwego/eino/schema"
 )
 
-// ---------------------------------------------------------------------------
-// types
-// ---------------------------------------------------------------------------
-
 type BaselineArtifact struct {
 	Commit      string            `json:"commit"`
 	Model       string            `json:"model"`
@@ -35,10 +31,6 @@ type BaselineArtifact struct {
 	Results     []eval.EvalResult `json:"results"`
 }
 
-// ---------------------------------------------------------------------------
-// test logger
-// ---------------------------------------------------------------------------
-
 type testLogger struct{}
 
 func (l *testLogger) Info(msg string, keysAndValues ...interface{}) {
@@ -47,10 +39,6 @@ func (l *testLogger) Info(msg string, keysAndValues ...interface{}) {
 func (l *testLogger) Error(msg string, keysAndValues ...interface{}) {
 	fmt.Printf("[ERROR] %s %v\n", msg, keysAndValues)
 }
-
-// ---------------------------------------------------------------------------
-// fake tools — shared between GoS experts and smoke baseline
-// ---------------------------------------------------------------------------
 
 type keywordResponse struct {
 	keyword  string
@@ -125,10 +113,6 @@ func (f *fakeInternalDocsTool) InvokableRun(ctx context.Context, args string, op
 	return `{"success": true, "data": "No relevant docs found"}`, nil
 }
 
-// ---------------------------------------------------------------------------
-// fake RAG
-// ---------------------------------------------------------------------------
-
 func fakeRAGQuery(ctx context.Context, query string) ([]*einoschema.Document, error) {
 	ragData := map[string]string{
 		"CPU":   "Runbook: CPU > 90% → check runaway processes, scale replicas",
@@ -149,10 +133,6 @@ func fakeRAGQuery(ctx context.Context, query string) ([]*einoschema.Document, er
 	}
 	return []*einoschema.Document{{Content: "Generic troubleshooting: check logs, metrics, recent deployments"}}, nil
 }
-
-// ---------------------------------------------------------------------------
-// eval-only content generation (simulates LLM analysis)
-// ---------------------------------------------------------------------------
 
 func evalGenerateContent(ctx context.Context, frontier *belief.Frontier, graph *belief.BeliefGraph, history []experts.RetrievalRecord, decision map[string]string) (string, error) {
 	symptom := ""
@@ -219,10 +199,6 @@ func mapToolOutputToConclusion(toolData string) string {
 	}
 	return ""
 }
-
-// ---------------------------------------------------------------------------
-// smoke baseline (deterministic, for dev regression only)
-// ---------------------------------------------------------------------------
 
 type smokeBaselineRunner struct {
 	logTool *fakeLogTool
@@ -293,10 +269,6 @@ func (b *smokeBaselineRunner) analyzeSymptom(symptom string) string {
 	return "需要进一步诊断"
 }
 
-// ---------------------------------------------------------------------------
-// helpers
-// ---------------------------------------------------------------------------
-
 func contains(s, substr string) bool {
 	if len(s) < len(substr) {
 		return false
@@ -340,13 +312,6 @@ func printDetails(results []eval.EvalResult) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// build GoS engine
-// ---------------------------------------------------------------------------
-
-// buildGoSEngine creates a GoS engine. When evalProfile is true, injects fake
-// RAG and eval content generation (for smoke/eval only). When false, uses
-// production defaults (no injection — real RAG and template content).
 func buildGoSEngine(evalProfile bool) (*gos_engine.GoSEngine, *gos_engine.Config) {
 	cfg := gos_engine.DefaultConfig()
 	cfg.SessionMaxSteps = 3
@@ -429,10 +394,6 @@ func logToolUnavailableReason(err error) string {
 	return "query_logs invokable tool is unavailable"
 }
 
-// ---------------------------------------------------------------------------
-// main
-// ---------------------------------------------------------------------------
-
 func main() {
 	mode := flag.String("mode", "gos", "运行模式: gos|baseline|compare|smoke")
 	baselineFile := flag.String("baseline", "baseline_result.json", "baseline artifact 文件路径")
@@ -456,10 +417,6 @@ func main() {
 		os.Exit(1)
 	}
 }
-
-// ---------------------------------------------------------------------------
-// gos: 只跑 GoS，输出 metrics，不判定 gate
-// ---------------------------------------------------------------------------
 
 func runGoSOnly(holdoutPath, outputFile, gosProfile string) {
 	fmt.Println("=== GoS 评测 (gos 模式) ===")
@@ -499,10 +456,6 @@ func runGoSOnly(holdoutPath, outputFile, gosProfile string) {
 	}
 	fmt.Printf("\n结果已保存到 %s\n", outputFile)
 }
-
-// ---------------------------------------------------------------------------
-// baseline: 跑真实 Plan-Execute-Replan，产出版本化 artifact
-// ---------------------------------------------------------------------------
 
 func runBaseline(holdoutPath, outputFile string) {
 	fmt.Println("=== Baseline 采集 (baseline 模式) ===")
@@ -588,17 +541,12 @@ func truncateSymptom(s string, maxLen int) string {
 	return s
 }
 
-// ---------------------------------------------------------------------------
-// compare: 跑 GoS + 读取 baseline artifact，判定 gate
-// ---------------------------------------------------------------------------
-
 func runCompare(holdoutPath, baselineFile, outputFile, gosProfile string) {
 	if gosProfile != "real" {
 		fmt.Println("ERROR: compare 模式只允许 --gos-profile=real；eval profile 只能用于 smoke/gos 开发回归")
 		os.Exit(1)
 	}
 
-	// 读取 baseline artifact
 	data, err := os.ReadFile(baselineFile)
 	if err != nil {
 		fmt.Printf("ERROR: 无法读取 baseline 文件 %s: %v\n", baselineFile, err)
@@ -613,7 +561,6 @@ func runCompare(holdoutPath, baselineFile, outputFile, gosProfile string) {
 		os.Exit(1)
 	}
 
-	// Validate artifact
 	if artifact.Metrics == nil {
 		fmt.Println("ERROR: baseline artifact 缺少 metrics 字段")
 		os.Exit(1)
@@ -630,7 +577,6 @@ func runCompare(holdoutPath, baselineFile, outputFile, gosProfile string) {
 		os.Exit(1)
 	}
 
-	// Validate case alignment
 	cases, err := eval.LoadCases(holdoutPath)
 	if err != nil {
 		fmt.Printf("ERROR: 无法加载 holdout: %v\n", err)
@@ -656,7 +602,6 @@ func runCompare(holdoutPath, baselineFile, outputFile, gosProfile string) {
 	fmt.Printf("Baseline 时间: %s\n", artifact.Timestamp)
 	fmt.Println()
 
-	// 跑 GoS
 	evalProfile := gosProfile == "eval"
 	engine, cfg := buildGoSEngine(evalProfile)
 	fmt.Printf("GoS profile: %s\n", gosProfile)
@@ -678,7 +623,6 @@ func runCompare(holdoutPath, baselineFile, outputFile, gosProfile string) {
 	printMetrics("Baseline", artifact.Metrics)
 	printDetails(artifact.Results)
 
-	// Gate check
 	gateReport := eval.CheckGate(gosMetrics, artifact.Metrics)
 
 	fmt.Println("\n=== Gate 检查 (GoS vs Baseline) ===")
@@ -726,15 +670,11 @@ func runCompare(holdoutPath, baselineFile, outputFile, gosProfile string) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// smoke: 确定性 baseline，仅用于开发回归
-// ---------------------------------------------------------------------------
-
 func runSmoke(holdoutPath, outputFile string) {
 	fmt.Println("=== Smoke 评测 (smoke 模式) ===")
 	fmt.Println("注意: baseline 是确定性模拟，仅用于开发回归，不能作为 Phase 3 gate")
 
-	engine, _ := buildGoSEngine(true) // smoke always uses eval profile
+	engine, _ := buildGoSEngine(true)
 	runner := eval.NewRunner(engine)
 	start := time.Now()
 	gosMetrics, gosResults, err := runner.RunFromFile(context.Background(), holdoutPath)
@@ -747,7 +687,6 @@ func runSmoke(holdoutPath, outputFile string) {
 	printMetrics("GoS", gosMetrics)
 	printDetails(gosResults)
 
-	// Smoke baseline
 	smoke := newSmokeBaselineRunner()
 	cases, err := eval.LoadCases(holdoutPath)
 	if err != nil {

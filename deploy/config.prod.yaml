@@ -110,6 +110,22 @@ context:
 retriever:
   top_k: 5
 
+aiops:
+  engine: "plan_execute_replan"
+  gos:
+    enabled: false
+    model_path: "chat_model_fast"
+    temperature: 0.8
+    max_tokens: 4096
+    session_max_steps: 5
+    max_retrieval_steps: 3
+    call_timeout_ms: 5000
+    fsm:
+      gap_delta: 0.3
+      min_support: 2
+      max_steps: 3
+      min_confidence: 0.7
+
 multi_agent:
   enabled: true
   data_dir: "/app/var/runtime"
