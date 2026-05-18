@@ -9,21 +9,21 @@ logger:
   level: "all"
   stdout: true
 
-glm_chat_model:
+chat_model:
+  api_key: ""
+  base_url: "https://api.deepseek.com"
+  model: "deepseek-v4-pro"
+
+chat_model_fast:
+  api_key: ""
+  base_url: "https://api.deepseek.com"
+  model: "deepseek-v4-flash"
+
+embedding_model:
   api_key: ""
   base_url: "https://ark.cn-beijing.volces.com/api/v3"
-  model: "deepseek-v3-1-terminus"
-
-glm_chat_model_fast:
-  api_key: ""
-  base_url: "https://ark.cn-beijing.volces.com/api/v3"
-  model: "deepseek-v3-1-terminus"
-
-doubao_embedding_model:
-  api_key: ""
-  base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
-  model: "text-embedding-v4"
-  dimension: 2048
+  model: "doubao-embedding-text-240515"
+  dimension: 1024
 
 file_dir: "/你的路径/SuperBizAgent/internal/ai/cmd/knowledge_cmd/docs"
 

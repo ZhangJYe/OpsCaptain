@@ -127,7 +127,7 @@ func HallucinationConfigFromYAML(ctx context.Context) (*HallucinationConfig, err
 	// LLM 校验配置
 	llmVal := &LLMValidationConfig{
 		Enabled:           false,
-		Model:             "glm_chat_model_fast",
+		Model:             "chat_model_fast",
 		TimeoutMs:         5000,
 		MaxTokens:         512,
 		OmissionDetection: true,

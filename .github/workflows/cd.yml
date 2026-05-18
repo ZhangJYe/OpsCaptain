@@ -150,6 +150,24 @@ jobs:
             mv "$tmp_file" dist-deploy/.env.production
           }
 
+          delete_env_value() {
+            key="$1"
+            tmp_file="dist-deploy/.env.production.tmp"
+            grep -v "^${key}=" dist-deploy/.env.production > "$tmp_file" || true
+            mv "$tmp_file" dist-deploy/.env.production
+          }
+
+          reject_placeholder_secret() {
+            key="$1"
+            value="$2"
+            case "$value" in
+              your*|YOUR*|你*|填*|replace-*|example*|'${'*'}'|"<"*">")
+                echo "::error::$key in PROD_ENV_FILE still looks like a placeholder."
+                exit 1
+                ;;
+            esac
+          }
+
           mkdir -p dist-deploy
           mkdir -p dist-deploy/prometheus
           cp deploy/docker-compose.prod.yml dist-deploy/docker-compose.prod.yml
@@ -172,7 +190,13 @@ jobs:
           domain_name="$(require_env_value DOMAIN_NAME)"
           tls_email="$(require_env_value TLS_EMAIL)"
           cors_allowed_origin="$(require_env_value CORS_ALLOWED_ORIGIN)"
+          deepseek_api_key="$(require_env_value DEEPSEEK_API_KEY)"
+          ark_api_key="$(require_env_value ARK_API_KEY)"
+          milvus_address="$(require_env_value MILVUS_ADDRESS)"
           app_base_path="$(trim_value "$(read_env_value APP_BASE_PATH)")"
+
+          delete_env_value GLM_API_KEY
+          delete_env_value SILICONFLOW_API_KEY
 
           if ! printf '%s' "$tls_email" | grep -Eq '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$'; then
             echo "::error::TLS_EMAIL in PROD_ENV_FILE is invalid."
@@ -195,6 +219,9 @@ jobs:
             exit 1
           fi
 
+          reject_placeholder_secret DEEPSEEK_API_KEY "$deepseek_api_key"
+          reject_placeholder_secret ARK_API_KEY "$ark_api_key"
+
           echo "Deploying DOMAIN_NAME=$domain_name"
           if [ -n "$app_base_path" ]; then
             echo "Deploying APP_BASE_PATH=$app_base_path"
@@ -202,6 +229,9 @@ jobs:
             echo "Deploying APP_BASE_PATH=<root>"
           fi
           echo "Deploying CORS_ALLOWED_ORIGIN=$cors_allowed_origin"
+          echo "Deploying MILVUS_ADDRESS=$milvus_address"
+          echo "Deploying LLM provider=DeepSeek"
+          echo "Deploying embedding provider=Doubao"
 
           {
             echo "### Deployment Target"
@@ -213,6 +243,9 @@ jobs:
               echo "- APP_BASE_PATH: <root>"
             fi
             printf -- "- CORS_ALLOWED_ORIGIN: %s\n" "$cors_allowed_origin"
+            printf -- "- MILVUS_ADDRESS: %s\n" "$milvus_address"
+            echo "- LLM provider: DeepSeek"
+            echo "- Embedding provider: Doubao"
           } >> "$GITHUB_STEP_SUMMARY"
 
           printf '%s' "${ACR_PASSWORD}" > dist-deploy/.acr-password
