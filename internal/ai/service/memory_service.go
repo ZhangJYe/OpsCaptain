@@ -236,12 +236,17 @@ func loadMemoryAgentMode(ctx context.Context) string {
 }
 
 func memoryAgentLLMConfigured(ctx context.Context) bool {
-	v, err := g.Cfg().Get(ctx, "glm_chat_model_fast.api_key")
-	if err != nil {
-		return false
+	for _, path := range []string{"chat_model_fast.api_key", "glm_chat_model_fast.api_key"} {
+		v, err := g.Cfg().Get(ctx, path)
+		if err != nil {
+			continue
+		}
+		resolved, ok := common.ResolveOptionalEnv(v.String())
+		if ok && !common.LooksLikePlaceholderSecret(resolved) {
+			return true
+		}
 	}
-	resolved, ok := common.ResolveOptionalEnv(v.String())
-	return ok && !common.LooksLikePlaceholderSecret(resolved)
+	return false
 }
 
 func loadMemoryExtractionTimeout(ctx context.Context) time.Duration {

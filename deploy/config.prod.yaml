@@ -64,24 +64,24 @@ milvus:
     m: 16
     ef_construction: 200
 
-glm_chat_model:
-  model: "GLM-4.5-AIR"
-  api_key: "${GLM_API_KEY}"
-  base_url: "https://open.bigmodel.cn/api/paas/v4"
+chat_model:
+  model: "deepseek-v4-pro"
+  api_key: "${DEEPSEEK_API_KEY}"
+  base_url: "https://api.deepseek.com"
 
-glm_chat_model_fast:
-  model: "GLM-4.5-AIR"
-  api_key: "${GLM_API_KEY}"
-  base_url: "https://open.bigmodel.cn/api/paas/v4"
+chat_model_fast:
+  model: "deepseek-v4-flash"
+  api_key: "${DEEPSEEK_API_KEY}"
+  base_url: "https://api.deepseek.com"
 
 llm:
   max_concurrent_calls: 10
   concurrent_wait_timeout_ms: 5000
 
-doubao_embedding_model:
-  model: "BAAI/bge-m3"
-  api_key: "${SILICONFLOW_API_KEY}"
-  base_url: "https://api.siliconflow.cn/v1"
+embedding_model:
+  model: "doubao-embedding-text-240515"
+  api_key: "${ARK_API_KEY}"
+  base_url: "https://ark.cn-beijing.volces.com/api/v3"
   dimension: 1024
 
 memory:

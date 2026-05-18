@@ -124,7 +124,7 @@ func LoadToolRerankConfig(ctx context.Context) *ToolRerankConfig {
 		CandidateLimit: defaultToolRerankCandidateMax,
 		TimeoutMs:      int(defaultToolRerankTimeout / time.Millisecond),
 		CacheTTLSecs:   300,
-		Model:          "glm_chat_model_fast",
+		Model:          "chat_model_fast",
 	}
 	v, err := g.Cfg().Get(ctx, "context.tool_rerank.enabled")
 	if err == nil && !v.IsNil() {
