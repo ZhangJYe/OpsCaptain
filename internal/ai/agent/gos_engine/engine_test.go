@@ -228,6 +228,44 @@ func TestPlanner_Plan(t *testing.T) {
 	assert.Equal(t, "linux_sre", plan[0].ExpertName)
 }
 
+func TestPlanner_Plan_SelectsSingleMatchingExpert(t *testing.T) {
+	expertsMap := map[string]experts.ExpertAgent{
+		"linux_sre":    &mockExpert{name: "linux_sre"},
+		"network_sre":  &mockExpert{name: "network_sre"},
+		"database_sre": &mockExpert{name: "database_sre"},
+	}
+	cfg := DefaultConfig()
+	logger := &testLogger{}
+	planner := NewPlanner(expertsMap, cfg, logger)
+
+	plan, err := planner.Plan(context.Background(), &belief.Frontier{
+		NodeID: "test",
+		Label:  "网络问题",
+		Why:    "跨区域延迟升高",
+	})
+	require.NoError(t, err)
+	assert.Len(t, plan, 1)
+	assert.Equal(t, "network_sre", plan[0].ExpertName)
+}
+
+func TestPlanner_Plan_FallsBackDeterministically(t *testing.T) {
+	expertsMap := map[string]experts.ExpertAgent{
+		"z_sre": &mockExpert{name: "z_sre"},
+		"a_sre": &mockExpert{name: "a_sre"},
+	}
+	cfg := DefaultConfig()
+	logger := &testLogger{}
+	planner := NewPlanner(expertsMap, cfg, logger)
+
+	plan, err := planner.Plan(context.Background(), &belief.Frontier{
+		NodeID: "test",
+		Label:  "资源耗尽",
+	})
+	require.NoError(t, err)
+	assert.Len(t, plan, 1)
+	assert.Equal(t, "a_sre", plan[0].ExpertName)
+}
+
 func TestGoSEngine_Run_NilExpertResult(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.SessionMaxSteps = 2

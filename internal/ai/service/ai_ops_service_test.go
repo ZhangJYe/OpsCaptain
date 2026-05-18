@@ -5,6 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"SuperBizAgent/internal/ai/agent/experts"
+	"SuperBizAgent/internal/ai/agent/gos_engine"
+	"SuperBizAgent/internal/ai/belief"
 	"SuperBizAgent/internal/ai/protocol"
 	"SuperBizAgent/internal/ai/runtime"
 	"SuperBizAgent/internal/consts"
@@ -240,6 +243,100 @@ func TestRunAIOpsWithEmptyMemoryContext(t *testing.T) {
 	}
 	if strings.Contains(capturedQuery, "历史上下文") {
 		t.Fatalf("expected no memory context, got %q", capturedQuery)
+	}
+}
+
+type serviceTestGOSLogger struct{}
+
+func (serviceTestGOSLogger) Info(string, ...interface{})  {}
+func (serviceTestGOSLogger) Error(string, ...interface{}) {}
+
+type serviceTestGOSExpert struct{}
+
+func (serviceTestGOSExpert) Name() string {
+	return "linux_sre"
+}
+
+func (serviceTestGOSExpert) Run(context.Context, *belief.Frontier, *belief.BeliefGraph) *experts.ExpertAnalysis {
+	return &experts.ExpertAnalysis{
+		ExpertName: "linux_sre",
+		Status:     "succeeded",
+		Analysis:   "GoS analysis complete",
+		Confidence: 0.9,
+		Evidence: []experts.EvidenceItem{{
+			SourceType: "test",
+			SourceID:   "evidence-1",
+			Title:      "evidence",
+			Snippet:    "supporting evidence",
+			Score:      1,
+		}},
+	}
+}
+
+func TestRunAIOpsUsesGOSWhenEnabled(t *testing.T) {
+	enableMultiAgentForTest(t)
+	oldBuildGOS := buildAIOpsGoSEngine
+	oldMemoryFactory := newMemoryService
+	oldCfgBool := degradationConfigBool
+	oldCfgString := degradationConfigString
+	oldAIOpsString := aiOpsConfigString
+	oldAIOpsBool := aiOpsConfigBool
+	oldFactory := newPersistentRuntime
+	oldAIOpsRuntimes := aiOpsRuntimes
+	defer func() {
+		buildAIOpsGoSEngine = oldBuildGOS
+		newMemoryService = oldMemoryFactory
+		degradationConfigBool = oldCfgBool
+		degradationConfigString = oldCfgString
+		aiOpsConfigString = oldAIOpsString
+		aiOpsConfigBool = oldAIOpsBool
+		newPersistentRuntime = oldFactory
+		aiOpsRuntimes = oldAIOpsRuntimes
+	}()
+
+	degradationConfigBool = func(context.Context, string) bool { return false }
+	degradationConfigString = func(context.Context, string) string { return "" }
+	aiOpsRuntimes = make(map[string]*runtime.Runtime)
+	newPersistentRuntime = func(string) (*runtime.Runtime, error) { return runtime.New(), nil }
+	newMemoryService = func() aiOpsMemory {
+		return &stubAIOpsMemory{sessionID: "gos-session"}
+	}
+	aiOpsConfigString = func(_ context.Context, key string) (string, bool) {
+		if key == "aiops.engine" {
+			return "gos_engine", true
+		}
+		return "", false
+	}
+	aiOpsConfigBool = func(_ context.Context, key string) (bool, bool) {
+		if key == "aiops.gos.enabled" {
+			return true, true
+		}
+		return false, false
+	}
+	buildAIOpsGoSEngine = func(context.Context) *gos_engine.GoSEngine {
+		cfg := gos_engine.DefaultConfig()
+		cfg.SessionMaxSteps = 1
+		cfg.FSM.GapDelta = 0.1
+		cfg.FSM.MinSupport = 1
+		cfg.FSM.MaxSteps = 1
+		cfg.FSM.MinConfidence = 0.1
+		engine := gos_engine.NewGoSEngine(cfg, serviceTestGOSLogger{})
+		engine.RegisterExpert("linux_sre", serviceTestGOSExpert{})
+		return engine
+	}
+
+	response, err := RunAIOpsMultiAgent(context.Background(), "check gos")
+	if err != nil {
+		t.Fatalf("run aiops: %v", err)
+	}
+	if response.Status != protocol.ResultStatusSucceeded {
+		t.Fatalf("expected succeeded status, got %q", response.Status)
+	}
+	if response.Content != "GoS analysis complete" {
+		t.Fatalf("expected gos result, got %q", response.Content)
+	}
+	if response.TraceID == "" {
+		t.Fatal("expected trace id to be set")
 	}
 }
 
