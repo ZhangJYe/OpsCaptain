@@ -139,6 +139,32 @@ func TestSelectAIOpsAgentNameUsesGOSWhenEnabled(t *testing.T) {
 	}
 }
 
+func TestSelectAIOpsAgentNameUsesRequestOverride(t *testing.T) {
+	oldString := aiOpsConfigString
+	oldBool := aiOpsConfigBool
+	aiOpsConfigString = func(_ context.Context, key string) (string, bool) {
+		if key == "aiops.engine" {
+			return "plan_execute_replan", true
+		}
+		return "", false
+	}
+	aiOpsConfigBool = func(_ context.Context, key string) (bool, bool) {
+		if key == "aiops.gos.enabled" {
+			return true, true
+		}
+		return false, false
+	}
+	t.Cleanup(func() {
+		aiOpsConfigString = oldString
+		aiOpsConfigBool = oldBool
+	})
+
+	ctx := WithAIOpsEngine(context.Background(), "gos_engine")
+	if got := selectAIOpsAgentName(ctx); got != aiOpsGOSAgentName {
+		t.Fatalf("expected request override to use gos agent %q, got %q", aiOpsGOSAgentName, got)
+	}
+}
+
 func TestRunAIOpsCallsBuildPlanAgent(t *testing.T) {
 	enableMultiAgentForTest(t)
 	oldBuild := buildPlanAgent

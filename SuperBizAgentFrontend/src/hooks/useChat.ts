@@ -1,5 +1,5 @@
 import { useCallback, useState, type Dispatch, type SetStateAction } from "react";
-import type { ChatExecutionStep, ChatMessage, ChatMode, ChatSession } from "../types/chat";
+import type { AIOpsEngine, ChatExecutionStep, ChatMessage, ChatMode, ChatSession } from "../types/chat";
 import { generateId, getApiBaseUrl } from "../lib/utils";
 import { generateSuggestions } from "../components/agent/SuggestionChips";
 import type { Suggestion } from "../components/agent/SuggestionChips";
@@ -11,11 +11,30 @@ interface SendOptions {
   selectedSkillIds?: string[];
 }
 
+interface AIOpsOptions {
+  aiOpsEngine?: AIOpsEngine;
+}
+
 interface QuickAnswerRequest {
   baseUrl: string;
   sessionId: string;
   question: string;
   selectedSkillIds: string[];
+}
+
+interface AIOpsRequest {
+  baseUrl: string;
+  query: string;
+  engine: AIOpsEngine;
+}
+
+interface AIOpsPayload {
+  result: string;
+  trace_id?: string;
+  detail?: string[];
+  engine?: string;
+  degraded?: boolean;
+  degradation_reason?: string;
 }
 
 function parseJsonSafe(raw: string): any {
@@ -104,6 +123,36 @@ async function requestQuickAnswer({
   return extractAnswer(payload);
 }
 
+async function requestAIOps({ baseUrl, query, engine }: AIOpsRequest): Promise<AIOpsPayload> {
+  const res = await fetch(`${baseUrl}/ai_ops`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      query,
+      engine,
+    }),
+  });
+  const data = await res.json();
+  const payload = normalizeResponsePayload(data);
+  if (!res.ok) {
+    throw new Error(String(data?.message || payload?.result || `HTTP ${res.status}`));
+  }
+  return {
+    result: String(payload?.result || "").trim() || "无响应",
+    trace_id: payload?.trace_id,
+    detail: Array.isArray(payload?.detail) ? payload.detail : [],
+    engine: payload?.engine,
+    degraded: Boolean(payload?.degraded),
+    degradation_reason: payload?.degradation_reason,
+  };
+}
+
+function aiOpsEngineLabel(engine: AIOpsEngine | string | undefined): string {
+  return engine === "gos_engine" || engine === "aiops_gos_engine"
+    ? "GoS Belief"
+    : "Plan-Execute";
+}
+
 function buildExecutionSteps(): ThinkingStep[] {
   return [
     {
@@ -117,6 +166,20 @@ function buildExecutionSteps(): ThinkingStep[] {
     { id: "logs", label: "检索日志特征", status: "pending" },
     { id: "knowledge", label: "检索知识与案例", status: "pending" },
     { id: "reporter", label: "生成回复", status: "pending" },
+  ];
+}
+
+function buildAIOpsSteps(engine: AIOpsEngine): ThinkingStep[] {
+  return [
+    {
+      id: "engine",
+      label: "选择引擎",
+      status: "active",
+      detail: aiOpsEngineLabel(engine),
+    },
+    { id: "dispatch", label: "调度 Runtime", status: "pending" },
+    { id: "evidence", label: "收集证据", status: "pending" },
+    { id: "reporter", label: "生成报告", status: "pending" },
   ];
 }
 
@@ -708,6 +771,115 @@ export function useChat() {
     [isLoading, mode, sessionId],
   );
 
+  const sendAIOps = useCallback(
+    async (query: string, options: AIOpsOptions = {}) => {
+      const trimmed = String(query || "").trim();
+      if (!trimmed || isLoading) return;
+
+      const engine = options.aiOpsEngine || "plan_execute_replan";
+      const userMsg: ChatMessage = {
+        id: generateId(),
+        role: "user",
+        content: trimmed,
+        timestamp: Date.now(),
+      };
+
+      let liveSteps = buildAIOpsSteps(engine);
+      const commitThinkingSteps: SetThinkingSteps = (update) => {
+        liveSteps =
+          typeof update === "function"
+            ? (update as (prev: ThinkingStep[]) => ThinkingStep[])(liveSteps)
+            : update;
+        setThinkingSteps(liveSteps);
+      };
+
+      setMessages((prev) => [...prev, userMsg]);
+      setIsLoading(true);
+      setStreamingContent("");
+      setStreamingThoughts([`AIOps 使用 ${aiOpsEngineLabel(engine)} 引擎`]);
+      setSuggestions([]);
+      commitThinkingSteps(liveSteps);
+
+      try {
+        const baseUrl = getApiBaseUrl();
+        commitThinkingSteps((prev) =>
+          upsertStep(
+            prev.map((step) =>
+              step.id === "engine"
+                ? { ...step, status: "done" as const, detail: aiOpsEngineLabel(engine) }
+                : step,
+            ),
+            "dispatch",
+            "调度 Runtime",
+            { status: "active", detail: "提交 AIOps 诊断任务..." },
+          ),
+        );
+
+        const payload = await requestAIOps({ baseUrl, query: trimmed, engine });
+        const actualEngine = payload.engine || engine;
+        const detailItems = payload.detail || [];
+        const reportDetail =
+          payload.degraded && payload.degradation_reason
+            ? `降级完成：${payload.degradation_reason}`
+            : "诊断报告已生成";
+
+        commitThinkingSteps((prev) =>
+          upsertStep(
+            upsertStep(
+              prev.map((step) =>
+                step.id === "engine"
+                  ? { ...step, status: "done" as const, detail: aiOpsEngineLabel(actualEngine) }
+                  : step.id === "dispatch"
+                  ? {
+                      ...step,
+                      status: "done" as const,
+                      detail: payload.trace_id ? `trace ${payload.trace_id}` : "Runtime 已返回",
+                    }
+                  : step,
+              ),
+              "evidence",
+              "收集证据",
+              {
+                status: "done",
+                detail: detailItems.length > 0 ? `${detailItems.length} 条执行细节` : aiOpsEngineLabel(actualEngine),
+              },
+            ),
+            "reporter",
+            "生成报告",
+            { status: payload.degraded ? "error" : "done", detail: reportDetail },
+          ),
+        );
+
+        const assistantMsg: ChatMessage = {
+          id: generateId(),
+          role: "assistant",
+          content: payload.result,
+          timestamp: Date.now(),
+          executionSteps: visibleExecutionSteps(liveSteps),
+        };
+        setMessages((prev) => [...prev, assistantMsg]);
+        setSuggestions(generateSuggestions(payload.result, mode));
+      } catch (err: any) {
+        commitThinkingSteps((prev) => markActiveAsError(prev, err?.message));
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: generateId(),
+            role: "assistant",
+            content: `AIOps 请求失败: ${err?.message || "未知错误"}`,
+            timestamp: Date.now(),
+            executionSteps: visibleExecutionSteps(liveSteps),
+          },
+        ]);
+      } finally {
+        setIsLoading(false);
+        setStreamingContent("");
+        setStreamingThoughts([]);
+      }
+    },
+    [isLoading, mode],
+  );
+
   const stop = useCallback(() => {
     abortCtrl?.abort();
     setIsLoading(false);
@@ -760,6 +932,7 @@ export function useChat() {
     mode,
     sessionId,
     send,
+    sendAIOps,
     stop,
     newSession,
     loadSession,

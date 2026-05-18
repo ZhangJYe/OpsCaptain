@@ -1,11 +1,14 @@
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Send, Paperclip, X, Loader2, FileIcon, ArrowRight, AlertTriangle, Activity, BookOpen } from 'lucide-react'
+import { Send, Paperclip, X, Loader2, FileIcon, ArrowRight, AlertTriangle, Activity, BookOpen, GitBranch } from 'lucide-react'
 import { useFileUpload } from '../../hooks/useFileUpload'
 import { formatFileSize } from '../../lib/utils'
+import type { AIOpsEngine } from '../../types/chat'
 
 interface Props {
   onSend: (query: string) => void
+  onStartAIOps: (query: string) => void
+  aiOpsEngine: AIOpsEngine
 }
 
 function buildQueryWithFiles(query: string, fileNames: string[]): string {
@@ -47,7 +50,11 @@ const aiopsDraftQuery = `请按一次真实值班排障的方式分析这个问�
 
 异常现象：paymentservice p95 延迟升高，错误率开始抬升，checkout path 出现 timeout。`
 
-export function WelcomeScreen({ onSend }: Props) {
+function aiOpsEngineLabel(engine: AIOpsEngine): string {
+  return engine === 'gos_engine' ? 'GoS Belief' : 'Plan-Execute'
+}
+
+export function WelcomeScreen({ onSend, onStartAIOps, aiOpsEngine }: Props) {
   const [input, setInput] = useState('')
   const [isFocused, setIsFocused] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -230,9 +237,15 @@ export function WelcomeScreen({ onSend }: Props) {
           className="mt-6 overflow-hidden rounded-2xl border border-zinc-200/80 bg-white/70 dark:border-zinc-800/60 dark:bg-zinc-900/50"
         >
           <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">
-            <div className="text-xs font-medium text-zinc-500 dark:text-zinc-400">AIOps Draft</div>
+            <div className="flex items-center gap-2">
+              <div className="text-xs font-medium text-zinc-500 dark:text-zinc-400">AIOps Draft</div>
+              <span className="inline-flex items-center gap-1 rounded-md border border-zinc-200/80 px-2 py-1 text-[10px] font-medium text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
+                <GitBranch size={11} />
+                {aiOpsEngineLabel(aiOpsEngine)}
+              </span>
+            </div>
             <button
-              onClick={() => onSend(aiopsDraftQuery)}
+              onClick={() => onStartAIOps(aiopsDraftQuery)}
               className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-accent dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-accent"
             >
               直接开始

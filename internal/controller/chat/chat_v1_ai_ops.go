@@ -30,6 +30,7 @@ func (c *ControllerV1) AIOps(ctx context.Context, req *v1.AIOpsReq) (res *v1.AIO
 	}
 
 	query := req.Query
+	ctx = service.WithAIOpsEngine(ctx, req.Engine)
 	if query == "" {
 		query = `你是一个 AIOps 事故分析助手，请严格按以下顺序执行：
 1. 查询当前活跃的 Prometheus 告警。
@@ -67,6 +68,7 @@ func (c *ControllerV1) AIOps(ctx context.Context, req *v1.AIOpsReq) (res *v1.AIO
 		TraceID:           response.TraceID,
 		Result:            result,
 		Detail:            detail,
+		Engine:            response.Engine,
 		ApprovalRequired:  response.ApprovalRequired,
 		ApprovalRequestID: response.ApprovalRequestID,
 		ApprovalStatus:    response.ApprovalStatus,

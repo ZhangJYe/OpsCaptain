@@ -4,7 +4,7 @@ import { ModeSelector } from './ModeSelector'
 import { HistoryPanel } from './HistoryPanel'
 import { ObservabilityPanel } from './ObservabilityPanel'
 import { SkillPanel } from './SkillPanel'
-import type { ChatMessage, ChatMode, ChatSession } from '../../types/chat'
+import type { AIOpsEngine, ChatMessage, ChatMode, ChatSession } from '../../types/chat'
 
 interface Props {
   onClose: () => void
@@ -14,6 +14,8 @@ interface Props {
   messages: ChatMessage[]
   chatMode: ChatMode
   onModeChange: (m: ChatMode) => void
+  aiOpsEngine: AIOpsEngine
+  onAIOpsEngineChange: (engine: AIOpsEngine) => void
   selectedSkillIds: string[]
   onSelectedSkillIdsChange: (ids: string[]) => void
   isLoading: boolean
@@ -27,6 +29,8 @@ export function Sidebar({
   messages,
   chatMode,
   onModeChange,
+  aiOpsEngine,
+  onAIOpsEngineChange,
   selectedSkillIds,
   onSelectedSkillIdsChange,
   isLoading,
@@ -55,7 +59,12 @@ export function Sidebar({
       {/* Content */}
       <div className="flex-1 overflow-y-auto scrollbar-thin px-3 space-y-3">
         <OperatorCard />
-        <ModeSelector value={chatMode} onChange={onModeChange} />
+        <ModeSelector
+          value={chatMode}
+          onChange={onModeChange}
+          aiOpsEngine={aiOpsEngine}
+          onAIOpsEngineChange={onAIOpsEngineChange}
+        />
         <SkillPanel selectedSkillIds={selectedSkillIds} onChange={onSelectedSkillIdsChange} />
         <ObservabilityPanel />
         <HistoryPanel

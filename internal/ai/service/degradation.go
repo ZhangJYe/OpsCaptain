@@ -19,6 +19,7 @@ type ExecutionResponse struct {
 	Content           string
 	Detail            []string
 	TraceID           string
+	Engine            string
 	Status            protocol.ResultStatus
 	DegradationReason string
 	ApprovalRequired  bool
@@ -118,6 +119,7 @@ func ExecutionResponseFromResult(result *protocol.TaskResult, detail []string, t
 		return response
 	}
 	response.Content = result.Summary
+	response.Engine = result.Agent
 	if result.Status != "" {
 		response.Status = result.Status
 	}

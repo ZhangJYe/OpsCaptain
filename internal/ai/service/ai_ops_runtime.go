@@ -61,6 +61,8 @@ var (
 	}
 )
 
+type aiOpsEngineContextKey struct{}
+
 type aiOpsPlanAgent struct{}
 
 func (a *aiOpsPlanAgent) Name() string {
@@ -188,7 +190,10 @@ var gCfgGet = func(ctx context.Context, key string) (string, error) {
 }
 
 func selectAIOpsAgentName(ctx context.Context) string {
-	engine, configured := aiOpsConfigString(ctx, "aiops.engine")
+	engine, configured := requestedAIOpsEngine(ctx)
+	if !configured {
+		engine, configured = aiOpsConfigString(ctx, "aiops.engine")
+	}
 	if !configured {
 		return aiOpsPlanAgentName
 	}
@@ -201,6 +206,25 @@ func selectAIOpsAgentName(ctx context.Context) string {
 		return aiOpsPlanAgentName
 	}
 	return aiOpsGOSAgentName
+}
+
+func WithAIOpsEngine(ctx context.Context, engine string) context.Context {
+	engine = strings.ToLower(strings.TrimSpace(engine))
+	if engine == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, aiOpsEngineContextKey{}, engine)
+}
+
+func requestedAIOpsEngine(ctx context.Context) (string, bool) {
+	if ctx == nil {
+		return "", false
+	}
+	engine, ok := ctx.Value(aiOpsEngineContextKey{}).(string)
+	if !ok || strings.TrimSpace(engine) == "" {
+		return "", false
+	}
+	return strings.TrimSpace(engine), true
 }
 
 func newAIOpsGoSEngine(ctx context.Context) *gos_engine.GoSEngine {

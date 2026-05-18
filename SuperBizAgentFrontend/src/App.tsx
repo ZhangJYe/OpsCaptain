@@ -5,9 +5,10 @@ import { MainLayout } from './components/layout/MainLayout'
 import { ChatView } from './components/chat/ChatView'
 import { WelcomeScreen } from './components/welcome/WelcomeScreen'
 import { saveSession } from './lib/storage'
-import type { ChatSession } from './types/chat'
+import type { AIOpsEngine, ChatSession } from './types/chat'
 
 const SKILL_STORAGE_KEY = 'opscaptain-selected-skills'
+const AIOPS_ENGINE_STORAGE_KEY = 'opscaptain-aiops-engine'
 
 export default function App() {
   const { theme, toggle: toggleTheme } = useTheme()
@@ -27,6 +28,11 @@ export default function App() {
       return []
     }
   })
+  const [aiOpsEngine, setAIOpsEngine] = useState<AIOpsEngine>(() => {
+    if (typeof window === 'undefined') return 'plan_execute_replan'
+    const raw = localStorage.getItem(AIOPS_ENGINE_STORAGE_KEY)
+    return raw === 'gos_engine' ? 'gos_engine' : 'plan_execute_replan'
+  })
 
   useEffect(() => {
     try {
@@ -35,6 +41,14 @@ export default function App() {
       return
     }
   }, [selectedSkillIds])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(AIOPS_ENGINE_STORAGE_KEY, aiOpsEngine)
+    } catch {
+      return
+    }
+  }, [aiOpsEngine])
 
   useEffect(() => {
     if (chat.messages.length === 0) {
@@ -52,6 +66,14 @@ export default function App() {
       chat.send(query, { selectedSkillIds })
     },
     [chat, selectedSkillIds]
+  )
+
+  const handleStartAIOps = useCallback(
+    (query: string) => {
+      setShowWelcome(false)
+      chat.sendAIOps(query, { aiOpsEngine })
+    },
+    [chat, aiOpsEngine]
   )
 
   const handleLoadSession = useCallback(
@@ -85,6 +107,8 @@ export default function App() {
       onLoadSession={handleLoadSession}
       chatMode={chat.mode}
       onModeChange={chat.setMode}
+      aiOpsEngine={aiOpsEngine}
+      onAIOpsEngineChange={setAIOpsEngine}
       sessionId={chat.sessionId}
       messages={chat.messages}
       selectedSkillIds={selectedSkillIds}
@@ -92,7 +116,11 @@ export default function App() {
       isLoading={chat.isLoading}
     >
       {showWelcome && chat.messages.length === 0 ? (
-        <WelcomeScreen onSend={handleSend} />
+        <WelcomeScreen
+          onSend={handleSend}
+          onStartAIOps={handleStartAIOps}
+          aiOpsEngine={aiOpsEngine}
+        />
       ) : (
         <ChatView
           messages={chat.messages}

@@ -92,12 +92,14 @@ type UploadStatusRes struct {
 type AIOpsReq struct {
 	g.Meta `path:"/ai_ops" method:"post" summary:"AI运维"`
 	Query  string `json:"query,omitempty" v:"max-length:8000#自定义分析指令长度不能超过8000"`
+	Engine string `json:"engine,omitempty" v:"in:plan_execute_replan,gos_engine,gos#AIOps引擎不合法"`
 }
 
 type AIOpsRes struct {
 	TraceID           string   `json:"trace_id"`
 	Result            string   `json:"result"`
 	Detail            []string `json:"detail"`
+	Engine            string   `json:"engine,omitempty"`
 	ApprovalRequired  bool     `json:"approval_required,omitempty"`
 	ApprovalRequestID string   `json:"approval_request_id,omitempty"`
 	ApprovalStatus    string   `json:"approval_status,omitempty"`

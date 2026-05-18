@@ -28,6 +28,8 @@ export interface ChatSession {
 
 export type ChatMode = 'quick' | 'stream'
 
+export type AIOpsEngine = 'plan_execute_replan' | 'gos_engine'
+
 export type SkillDomain = 'metrics' | 'logs' | 'knowledge'
 
 export interface SkillOption {

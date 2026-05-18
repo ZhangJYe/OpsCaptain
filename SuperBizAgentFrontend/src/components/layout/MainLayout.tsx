@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { TopBar } from './TopBar'
 import { Sidebar } from '../sidebar/Sidebar'
 import type { ReactNode } from 'react'
-import type { ChatMessage, ChatMode, ChatSession } from '../../types/chat'
+import type { AIOpsEngine, ChatMessage, ChatMode, ChatSession } from '../../types/chat'
 import { getSiteRecord } from '../../lib/utils'
 
 interface Props {
@@ -15,6 +15,8 @@ interface Props {
   onLoadSession: (s: ChatSession) => void
   chatMode: ChatMode
   onModeChange: (m: ChatMode) => void
+  aiOpsEngine: AIOpsEngine
+  onAIOpsEngineChange: (engine: AIOpsEngine) => void
   sessionId: string
   messages: ChatMessage[]
   selectedSkillIds: string[]
@@ -33,6 +35,8 @@ export function MainLayout({
   onLoadSession,
   chatMode,
   onModeChange,
+  aiOpsEngine,
+  onAIOpsEngineChange,
   sessionId,
   messages,
   selectedSkillIds,
@@ -76,6 +80,8 @@ export function MainLayout({
             messages={messages}
             chatMode={chatMode}
             onModeChange={onModeChange}
+            aiOpsEngine={aiOpsEngine}
+            onAIOpsEngineChange={onAIOpsEngineChange}
             selectedSkillIds={selectedSkillIds}
             onSelectedSkillIdsChange={onSelectedSkillIdsChange}
             isLoading={isLoading}

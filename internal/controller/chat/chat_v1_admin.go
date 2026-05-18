@@ -81,6 +81,7 @@ func (c *ControllerV1) ApproveApprovalRequest(ctx context.Context, req *v1.Appro
 		TraceID:           response.TraceID,
 		Result:            result,
 		Detail:            detail,
+		Engine:            response.Engine,
 		ApprovalRequired:  response.ApprovalRequired,
 		ApprovalRequestID: response.ApprovalRequestID,
 		ApprovalStatus:    response.ApprovalStatus,
