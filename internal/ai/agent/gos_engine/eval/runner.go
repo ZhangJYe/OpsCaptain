@@ -56,7 +56,7 @@ func (r *Runner) runCase(ctx context.Context, c EvalCase) EvalResult {
 		llmCalls = meta
 	}
 
-	evidenceCount := len(taskResult.Evidence)
+	evidenceCount := countDiagnosticEvidence(taskResult.Evidence)
 
 	matched := MatchPrediction(taskResult.Summary, c.GroundTruth, c.ExpectedKeywords)
 
@@ -80,6 +80,17 @@ func (r *Runner) runCase(ctx context.Context, c EvalCase) EvalResult {
 		TraceComplete:     traceComplete,
 		DegradationReason: taskResult.DegradationReason,
 	}
+}
+
+func countDiagnosticEvidence(evidence []protocol.EvidenceItem) int {
+	count := 0
+	for _, item := range evidence {
+		if item.SourceType == "" || item.SourceType == "graph" {
+			continue
+		}
+		count++
+	}
+	return count
 }
 
 func checkTraceComplete(taskResult *protocol.TaskResult) bool {

@@ -2,13 +2,37 @@ package experts
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 
+	einomodel "github.com/cloudwego/eino/components/model"
+	einoschema "github.com/cloudwego/eino/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"SuperBizAgent/internal/ai/belief"
 )
+
+type fakeExpertChatModel struct {
+	content string
+	err     error
+}
+
+func (f *fakeExpertChatModel) Generate(ctx context.Context, input []*einoschema.Message, opts ...einomodel.Option) (*einoschema.Message, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return einoschema.AssistantMessage(f.content, nil), nil
+}
+
+func (f *fakeExpertChatModel) Stream(ctx context.Context, input []*einoschema.Message, opts ...einomodel.Option) (*einoschema.StreamReader[*einoschema.Message], error) {
+	return nil, fmt.Errorf("stream not implemented")
+}
+
+func (f *fakeExpertChatModel) WithTools(tools []*einoschema.ToolInfo) (einomodel.ToolCallingChatModel, error) {
+	return f, nil
+}
 
 func TestGetArgBuilder(t *testing.T) {
 	builder := GetArgBuilder("query_internal_docs")
@@ -313,6 +337,9 @@ func TestBaseExpert_GenerateContent(t *testing.T) {
 	cfg := ExpertRuntimeConfig{
 		Name:      "test",
 		ToolNames: []string{"query_logs"},
+		ChatModelFactory: func(ctx context.Context) (einomodel.ToolCallingChatModel, error) {
+			return &fakeExpertChatModel{content: "CPU 高负载分析结果"}, nil
+		},
 	}
 	toolReg := NewToolRegistry()
 	expert := NewBaseExpert(cfg, toolReg)
@@ -342,4 +369,35 @@ func TestBaseExpert_GenerateContent(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Contains(t, content, "CPU 高负载")
+}
+
+func TestBaseExpert_Run_RAGTimeoutDegrades(t *testing.T) {
+	cfg := ExpertRuntimeConfig{
+		Name:              "test",
+		MaxRetrievalSteps: 1,
+		CallTimeout:       20 * time.Millisecond,
+		GenerateContentFunc: func(ctx context.Context, frontier *belief.Frontier, graph *belief.BeliefGraph, history []RetrievalRecord, decision map[string]string) (string, error) {
+			return "CPU 高负载", nil
+		},
+		RAGQueryFunc: func(ctx context.Context, query string) ([]*einoschema.Document, error) {
+			time.Sleep(200 * time.Millisecond)
+			return []*einoschema.Document{{Content: "late result"}}, nil
+		},
+	}
+	toolReg := NewToolRegistry()
+	expert := NewBaseExpert(cfg, toolReg)
+	graph := belief.NewBeliefGraph()
+	frontier := &belief.Frontier{
+		NodeID: "test",
+		Label:  "CPU 高负载",
+		Why:    "CPU 使用率超过 90%",
+	}
+
+	start := time.Now()
+	result := expert.Run(context.Background(), frontier, graph)
+
+	assert.Less(t, time.Since(start), 150*time.Millisecond)
+	assert.Equal(t, "degraded", result.Status)
+	assert.Equal(t, "rag_retrieve_failed", result.DegradationReason)
+	assert.NotEmpty(t, result.ToolErrors)
 }

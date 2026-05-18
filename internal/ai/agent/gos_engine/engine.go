@@ -58,7 +58,6 @@ func (e *GoSEngine) Run(ctx context.Context, symptom string) *protocol.TaskResul
 	if err := e.ingest(ctx, graph, symptom); err != nil {
 		return e.degradedResult(graph, fsm, startedAt, stats, "ingest_failed", err, nil, false)
 	}
-	stats.LLMCalls++
 
 	for {
 		if fsm.IsFinalState() {
@@ -75,7 +74,6 @@ func (e *GoSEngine) Run(ctx context.Context, symptom string) *protocol.TaskResul
 		if err != nil {
 			return e.degradedResult(graph, fsm, startedAt, stats, "plan_failed", err, nil, false)
 		}
-		stats.LLMCalls++
 
 		actRes, err := e.act(ctx, plan, frontier, graph, stats)
 
@@ -97,7 +95,6 @@ func (e *GoSEngine) Run(ctx context.Context, symptom string) *protocol.TaskResul
 		updatedFrontier := graph.ExtractFrontier(fsm.GetCurrentLevel())
 
 		decision := fsm.Decide(graph)
-		stats.LLMCalls++
 		switch decision.Action {
 		case "report":
 			if updatedFrontier != nil && e.shouldReport(updatedFrontier) {

@@ -8,7 +8,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"SuperBizAgent/internal/ai/agent/experts"
 	"SuperBizAgent/internal/ai/agent/gos_engine"
+	"SuperBizAgent/internal/ai/belief"
 	"SuperBizAgent/internal/ai/protocol"
 )
 
@@ -16,6 +18,25 @@ type testLogger struct{}
 
 func (l *testLogger) Info(msg string, keysAndValues ...interface{})  {}
 func (l *testLogger) Error(msg string, keysAndValues ...interface{}) {}
+
+type llmCountExpert struct{}
+
+func (e *llmCountExpert) Name() string {
+	return "llm_count_expert"
+}
+
+func (e *llmCountExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *belief.BeliefGraph) *experts.ExpertAnalysis {
+	return &experts.ExpertAnalysis{
+		ExpertName: "llm_count_expert",
+		Analysis:   "服务响应超时",
+		Confidence: 0.9,
+		Status:     "succeeded",
+		LLMCalls:   2,
+		Evidence: []experts.EvidenceItem{
+			{SourceType: "test", SourceID: "ev-1", Title: "test evidence", Snippet: "服务响应超时", Score: 1},
+		},
+	}
+}
 
 func TestRunner_RunFromCases(t *testing.T) {
 	cfg := gos_engine.DefaultConfig()
@@ -26,6 +47,7 @@ func TestRunner_RunFromCases(t *testing.T) {
 
 	logger := &testLogger{}
 	engine := gos_engine.NewGoSEngine(cfg, logger)
+	engine.RegisterExpert("llm_count_expert", &llmCountExpert{})
 
 	runner := NewRunner(engine)
 
@@ -58,6 +80,7 @@ func TestRunner_RunFromCases_NonZeroLLMCalls(t *testing.T) {
 
 	logger := &testLogger{}
 	engine := gos_engine.NewGoSEngine(cfg, logger)
+	engine.RegisterExpert("llm_count_expert", &llmCountExpert{})
 
 	runner := NewRunner(engine)
 
@@ -290,4 +313,15 @@ func TestCheckTraceComplete(t *testing.T) {
 		},
 	}
 	assert.False(t, checkTraceComplete(taskResult3))
+}
+
+func TestCountDiagnosticEvidenceSkipsInputGraphEvidence(t *testing.T) {
+	evidence := []protocol.EvidenceItem{
+		{SourceType: "graph", Title: "user symptom"},
+		{SourceType: "tool", Title: "query_logs"},
+		{SourceType: "rag", Title: "runbook"},
+		{Title: "unknown"},
+	}
+
+	assert.Equal(t, 2, countDiagnosticEvidence(evidence))
 }

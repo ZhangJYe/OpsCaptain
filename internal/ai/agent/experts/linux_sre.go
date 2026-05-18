@@ -6,35 +6,33 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"time"
 
 	"SuperBizAgent/internal/ai/belief"
+	"SuperBizAgent/internal/ai/models"
 	"SuperBizAgent/internal/ai/rag"
 
+	einomodel "github.com/cloudwego/eino/components/model"
 	einoschema "github.com/cloudwego/eino/schema"
 )
 
-// RAGQueryFunc is the signature for injectable RAG query functions.
-// In production this is rag.Query; in tests/eval it can be a fake.
 type RAGQueryFunc func(ctx context.Context, query string) ([]*einoschema.Document, error)
 
-// GenerateContentFunc is the signature for injectable content generation.
-// In production this would be an LLM call; in eval it can be a template/mapper.
 type GenerateContentFunc func(ctx context.Context, frontier *belief.Frontier, graph *belief.BeliefGraph, history []RetrievalRecord, decision map[string]string) (string, error)
+type ChatModelFactory func(ctx context.Context) (einomodel.ToolCallingChatModel, error)
 
 type ExpertRuntimeConfig struct {
-	Name              string
-	Description       string
-	ToolNames         []string
-	MaxRetrievalSteps int
-	ModelPath         string
-	Temperature       float64
-	MaxTokens         int
-	// RAGQueryFunc allows injecting a custom RAG query function.
-	// If nil, falls back to rag.Query(ctx, rag.SharedPool(), query).
-	RAGQueryFunc RAGQueryFunc
-	// GenerateContentFunc allows injecting a custom content generation function.
-	// If nil, falls back to the default template-based generation.
+	Name                string
+	Description         string
+	ToolNames           []string
+	MaxRetrievalSteps   int
+	ModelPath           string
+	Temperature         float64
+	MaxTokens           int
+	RAGQueryFunc        RAGQueryFunc
 	GenerateContentFunc GenerateContentFunc
+	ChatModelFactory    ChatModelFactory
+	CallTimeout         time.Duration
 }
 
 type RetrievalRecord struct {
@@ -98,7 +96,6 @@ func (e *BaseExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *
 		hasEvidence := len(history) > 0 || len(result.Evidence) > 0
 
 		decision, err := e.makeDecision(ctx, frontier, graph, history, attemptedTools, isLastStep, hasEvidence)
-		result.LLMCalls++
 		if err != nil {
 			result.ToolErrors = append(result.ToolErrors, ToolError{
 				ToolName: "llm",
@@ -141,7 +138,7 @@ func (e *BaseExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *
 			attemptedTools[toolName] = true
 			result.ToolCalls++
 
-			output, err := adapter.Run(ctx, content)
+			output, err := e.runTool(ctx, adapter, content)
 			if err != nil {
 				result.ToolErrors = append(result.ToolErrors, ToolError{
 					ToolName: toolName,
@@ -149,6 +146,7 @@ func (e *BaseExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *
 					Error:    err.Error(),
 				})
 				result.Status = "degraded"
+				result.DegradationReason = fmt.Sprintf("tool %s failed", toolName)
 				continue
 			}
 
@@ -196,13 +194,7 @@ func (e *BaseExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *
 
 		case "retrieve":
 			result.RAGCalls++
-			var docs []*einoschema.Document
-			var ragErr error
-			if e.cfg.RAGQueryFunc != nil {
-				docs, ragErr = e.cfg.RAGQueryFunc(ctx, content)
-			} else {
-				docs, _, ragErr = rag.Query(ctx, rag.SharedPool(), content)
-			}
+			docs, ragErr := e.runRAG(ctx, content)
 			if ragErr != nil {
 				result.ToolErrors = append(result.ToolErrors, ToolError{
 					ToolName: "rag",
@@ -210,6 +202,7 @@ func (e *BaseExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *
 					Error:    ragErr.Error(),
 				})
 				result.Status = "degraded"
+				result.DegradationReason = "rag_retrieve_failed"
 				continue
 			}
 
@@ -274,6 +267,63 @@ func (e *BaseExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *
 	return result
 }
 
+func (e *BaseExpert) callTimeout() time.Duration {
+	if e.cfg.CallTimeout > 0 {
+		return e.cfg.CallTimeout
+	}
+	return 5 * time.Second
+}
+
+func (e *BaseExpert) runTool(ctx context.Context, adapter *ToolAdapter, content string) (string, error) {
+	callCtx, cancel := context.WithTimeout(ctx, e.callTimeout())
+	defer cancel()
+
+	type result struct {
+		output string
+		err    error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		output, err := adapter.Run(callCtx, content)
+		ch <- result{output: output, err: err}
+	}()
+
+	select {
+	case res := <-ch:
+		return res.output, res.err
+	case <-callCtx.Done():
+		return "", callCtx.Err()
+	}
+}
+
+func (e *BaseExpert) runRAG(ctx context.Context, content string) ([]*einoschema.Document, error) {
+	callCtx, cancel := context.WithTimeout(ctx, e.callTimeout())
+	defer cancel()
+
+	type result struct {
+		docs []*einoschema.Document
+		err  error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		var docs []*einoschema.Document
+		var err error
+		if e.cfg.RAGQueryFunc != nil {
+			docs, err = e.cfg.RAGQueryFunc(callCtx, content)
+		} else {
+			docs, _, err = rag.Query(callCtx, rag.SharedPool(), content)
+		}
+		ch <- result{docs: docs, err: err}
+	}()
+
+	select {
+	case res := <-ch:
+		return res.docs, res.err
+	case <-callCtx.Done():
+		return nil, callCtx.Err()
+	}
+}
+
 func (e *BaseExpert) makeDecision(ctx context.Context, frontier *belief.Frontier, graph *belief.BeliefGraph, history []RetrievalRecord, attemptedTools map[string]bool, isLastStep bool, hasEvidence bool) (map[string]string, error) {
 	if isLastStep && hasEvidence {
 		return map[string]string{
@@ -312,12 +362,25 @@ func (e *BaseExpert) makeDecision(ctx context.Context, frontier *belief.Frontier
 }
 
 func (e *BaseExpert) generateContent(ctx context.Context, frontier *belief.Frontier, graph *belief.BeliefGraph, history []RetrievalRecord, decision map[string]string) (string, error) {
-	// Use injected content generation if available
 	if e.cfg.GenerateContentFunc != nil {
 		return e.cfg.GenerateContentFunc(ctx, frontier, graph, history, decision)
 	}
+	return e.generateContentWithLLM(ctx, frontier, graph, history, decision)
+}
 
-	// Default template-based generation (placeholder for LLM)
+func (e *BaseExpert) generateContentWithLLM(ctx context.Context, frontier *belief.Frontier, graph *belief.BeliefGraph, history []RetrievalRecord, decision map[string]string) (string, error) {
+	callCtx, cancel := context.WithTimeout(ctx, e.callTimeout())
+	defer cancel()
+
+	factory := e.cfg.ChatModelFactory
+	if factory == nil {
+		factory = models.OpenAIForGLMFast
+	}
+	chatModel, err := factory(callCtx)
+	if err != nil {
+		return "", err
+	}
+
 	symptom := ""
 	if graph.StartSignalID != "" {
 		if node, ok := graph.Nodes[graph.StartSignalID]; ok {
@@ -325,29 +388,46 @@ func (e *BaseExpert) generateContent(ctx context.Context, frontier *belief.Front
 		}
 	}
 
+	prompt := e.buildContentPrompt(symptom, frontier, history, decision)
+	resp, err := chatModel.Generate(callCtx, []*einoschema.Message{
+		einoschema.SystemMessage("你是 AIOps SRE 专家。只输出当前步骤需要的内容，不要输出解释、Markdown 或多余前后缀。"),
+		einoschema.UserMessage(prompt),
+	})
+	if err != nil {
+		return "", err
+	}
+
+	content := strings.TrimSpace(resp.Content)
+	if content == "" {
+		return "", fmt.Errorf("empty llm content")
+	}
+	return redactSecrets(content), nil
+}
+
+func (e *BaseExpert) buildContentPrompt(symptom string, frontier *belief.Frontier, history []RetrievalRecord, decision map[string]string) string {
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("专家：%s\n", e.name))
+	b.WriteString(fmt.Sprintf("动作：%s\n", decision["action"]))
+	b.WriteString(fmt.Sprintf("假设：%s\n", frontier.Label))
+	b.WriteString(fmt.Sprintf("依据：%s\n", frontier.Why))
+	b.WriteString(fmt.Sprintf("症状：%s\n", symptom))
+	if len(history) > 0 {
+		b.WriteString("已获得证据：\n")
+		for _, h := range history {
+			b.WriteString(fmt.Sprintf("- 来源=%s 查询=%s 输出=%s\n", h.Tool, h.Query, h.Output))
+		}
+	}
 	switch decision["action"] {
 	case "tool_call":
-		return fmt.Sprintf("查询 %s %s 相关日志", frontier.Label, symptom), nil
+		b.WriteString("请生成一句适合传给日志或知识库工具的中文查询语句。")
 	case "retrieve":
-		return fmt.Sprintf("%s %s", frontier.Label, symptom), nil
+		b.WriteString("请生成一句适合传给 RAG 的检索查询语句。")
 	case "analyze":
-		var analysis strings.Builder
-		analysis.WriteString(fmt.Sprintf("针对假设「%s」的分析：%s", frontier.Label, frontier.Why))
-		if len(history) > 0 {
-			analysis.WriteString(" 证据：")
-			for _, h := range history {
-				if h.Tool == "query_logs" || h.Tool == "query_internal_docs" {
-					d := extractDataField(h.Output)
-					if d != "" {
-						analysis.WriteString(d)
-						analysis.WriteString(" ")
-					}
-				}
-			}
-		}
-		return analysis.String(), nil
+		b.WriteString("请基于证据输出最终诊断结论和简短建议。")
+	default:
+		b.WriteString("请输出下一步分析内容。")
 	}
-	return "", fmt.Errorf("unknown action: %s", decision["action"])
+	return b.String()
 }
 
 func parseToolOutput(output string) ToolOutput {
@@ -409,18 +489,6 @@ func truncateString(s string, maxLen int) string {
 		return s[:maxLen] + "..."
 	}
 	return s
-}
-
-// extractDataField parses a JSON string and returns the "data" field value.
-func extractDataField(jsonStr string) string {
-	var parsed map[string]interface{}
-	if err := json.Unmarshal([]byte(jsonStr), &parsed); err != nil {
-		return ""
-	}
-	if data, ok := parsed["data"].(string); ok {
-		return data
-	}
-	return ""
 }
 
 type LinuxSREExpert struct {

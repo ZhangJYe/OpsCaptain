@@ -13,7 +13,9 @@ import (
 	"SuperBizAgent/internal/ai/agent/experts"
 	"SuperBizAgent/internal/ai/agent/gos_engine"
 	"SuperBizAgent/internal/ai/agent/gos_engine/eval"
+	"SuperBizAgent/internal/ai/agent/plan_execute_replan"
 	"SuperBizAgent/internal/ai/belief"
+	aitools "SuperBizAgent/internal/ai/tools"
 
 	"github.com/cloudwego/eino/components/tool"
 	einoschema "github.com/cloudwego/eino/schema"
@@ -352,6 +354,7 @@ func buildGoSEngine(evalProfile bool) (*gos_engine.GoSEngine, *gos_engine.Config
 	cfg.FSM.MinSupport = 1
 	cfg.FSM.MaxSteps = 3
 	cfg.FSM.MinConfidence = 0.6
+	cfg.CallTimeoutMs = 2000
 
 	logger := &testLogger{}
 	engine := gos_engine.NewGoSEngine(cfg, logger)
@@ -360,6 +363,8 @@ func buildGoSEngine(evalProfile bool) (*gos_engine.GoSEngine, *gos_engine.Config
 	if evalProfile {
 		toolReg.Register("query_logs", newFakeLogTool())
 		toolReg.Register("query_internal_docs", newFakeInternalDocsTool())
+	} else {
+		registerProductionTools(toolReg)
 	}
 
 	var ragFunc experts.RAGQueryFunc
@@ -376,6 +381,7 @@ func buildGoSEngine(evalProfile bool) (*gos_engine.GoSEngine, *gos_engine.Config
 		MaxRetrievalSteps:   3,
 		RAGQueryFunc:        ragFunc,
 		GenerateContentFunc: contentFunc,
+		CallTimeout:         time.Duration(cfg.CallTimeoutMs) * time.Millisecond,
 	}
 	engine.RegisterExpert("linux_sre", experts.NewLinuxSREExpert(expertCfg, toolReg))
 
@@ -390,6 +396,39 @@ func buildGoSEngine(evalProfile bool) (*gos_engine.GoSEngine, *gos_engine.Config
 	return engine, cfg
 }
 
+func registerProductionTools(toolReg *experts.ToolRegistry) {
+	toolReg.Register("query_internal_docs", aitools.NewQueryInternalDocsTool())
+
+	registeredLog := false
+	logTools, err := aitools.GetLogMcpTool()
+	if err == nil {
+		for _, t := range logTools {
+			invokable, ok := t.(tool.InvokableTool)
+			if !ok {
+				continue
+			}
+			info, infoErr := invokable.Info(context.Background())
+			if infoErr != nil || info == nil || info.Name == "" {
+				continue
+			}
+			toolReg.Register(info.Name, invokable)
+			if info.Name == "query_logs" {
+				registeredLog = true
+			}
+		}
+	}
+	if !registeredLog {
+		toolReg.Register("query_logs", aitools.NewUnavailableLogQueryTool(logToolUnavailableReason(err)))
+	}
+}
+
+func logToolUnavailableReason(err error) string {
+	if err != nil {
+		return err.Error()
+	}
+	return "query_logs invokable tool is unavailable"
+}
+
 // ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
@@ -399,7 +438,7 @@ func main() {
 	baselineFile := flag.String("baseline", "baseline_result.json", "baseline artifact 文件路径")
 	holdoutPath := flag.String("holdout", "internal/ai/agent/gos_engine/eval/testdata/holdout.json", "holdout 数据集路径")
 	outputFile := flag.String("output", "eval_result.json", "输出文件路径")
-	gosProfile := flag.String("gos-profile", "eval", "GoS 配置: real|eval (real=生产行为, eval=fake deps)")
+	gosProfile := flag.String("gos-profile", "real", "GoS 配置: real|eval (real=生产行为, eval=fake deps)")
 	flag.Parse()
 
 	switch *mode {
@@ -444,12 +483,16 @@ func runGoSOnly(holdoutPath, outputFile, gosProfile string) {
 	printMetrics("GoS", metrics)
 	printDetails(results)
 
-	resultJSON, _ := json.MarshalIndent(map[string]interface{}{
+	resultJSON, err := json.MarshalIndent(map[string]interface{}{
 		"mode":    "gos",
 		"commit":  gitCommit(),
 		"metrics": metrics,
 		"results": results,
 	}, "", "  ")
+	if err != nil {
+		fmt.Printf("ERROR: 序列化失败: %v\n", err)
+		os.Exit(1)
+	}
 	if err := os.WriteFile(outputFile, resultJSON, 0644); err != nil {
 		fmt.Printf("ERROR: 写入结果文件失败: %v\n", err)
 		os.Exit(1)
@@ -463,27 +506,86 @@ func runGoSOnly(holdoutPath, outputFile, gosProfile string) {
 
 func runBaseline(holdoutPath, outputFile string) {
 	fmt.Println("=== Baseline 采集 (baseline 模式) ===")
-	fmt.Println("注意: 此模式需要 LLM 环境 (models.OpenAIForGLM)")
-	fmt.Println("如果当前环境没有 LLM，请在有 LLM 的环境中运行，然后用 --mode=compare 对照")
+	fmt.Println("使用真实 Plan-Execute-Replan (BuildPlanAgent)")
 
-	// TODO: 接入真实 BuildPlanAgent
-	// 需要:
-	// 1. 加载 holdout cases
-	// 2. 对每个 case 调用 BuildPlanAgent(ctx, case.Symptom)
-	// 3. 记录 prediction、latency、LLM calls
-	// 4. 产出版本化 artifact
+	cases, err := eval.LoadCases(holdoutPath)
+	if err != nil {
+		fmt.Printf("ERROR: 加载 holdout 失败: %v\n", err)
+		os.Exit(1)
+	}
 
-	fmt.Println()
-	fmt.Println("ERROR: baseline 模式尚未实现")
-	fmt.Println("需要接入 plan_execute_replan.BuildPlanAgent")
-	fmt.Println("当前 Plan-Execute-Replan 依赖 models.OpenAIForGLM (真实 LLM)")
-	fmt.Println("")
-	fmt.Println("实现步骤:")
-	fmt.Println("  1. 在有 LLM 的环境中运行此命令")
-	fmt.Println("  2. 对每个 holdout case 调用 BuildPlanAgent")
-	fmt.Println("  3. 记录结果到 baseline_result.json")
-	fmt.Println("  4. 用 --mode=compare 对照 GoS 结果")
-	os.Exit(1)
+	metrics := eval.NewEvalMetrics()
+	var results []eval.EvalResult
+
+	for i, c := range cases {
+		fmt.Printf("  [%d/%d] %s: %s\n", i+1, len(cases), c.ID, truncateSymptom(c.Symptom, 50))
+
+		start := time.Now()
+		prediction, detail, err := plan_execute_replan.BuildPlanAgent(context.Background(), c.Symptom)
+		latency := time.Since(start)
+
+		status := "succeeded"
+		if err != nil {
+			status = "degraded"
+			prediction = fmt.Sprintf("[ERROR] %v", err)
+		}
+
+		matched := eval.MatchPrediction(prediction, c.GroundTruth, c.ExpectedKeywords)
+
+		r := &eval.EvalResult{
+			CaseID:        c.ID,
+			Symptom:       c.Symptom,
+			GroundTruth:   c.GroundTruth,
+			Prediction:    prediction,
+			Status:        status,
+			Latency:       latency,
+			LLMCalls:      len(detail),
+			EvidenceCount: len(detail),
+			Matched:       matched,
+			TraceComplete: len(detail) > 0,
+		}
+		metrics.AddResult(r)
+		results = append(results, *r)
+
+		matchStr := "✓"
+		if !matched {
+			matchStr = "✗"
+		}
+		fmt.Printf("         %s pred=%q truth=%q (%v)\n", matchStr, truncateSymptom(prediction, 60), c.GroundTruth, latency)
+	}
+
+	metrics.Finalize()
+
+	printMetrics("Baseline (Plan-Execute-Replan)", metrics)
+
+	artifact := BaselineArtifact{
+		Commit:      gitCommit(),
+		Model:       "OpenAIForGLM",
+		ToolConfig:  "plan_execute_replan",
+		HoldoutPath: holdoutPath,
+		Timestamp:   time.Now().Format(time.RFC3339),
+		Metrics:     metrics,
+		Results:     results,
+	}
+
+	resultJSON, err := json.MarshalIndent(artifact, "", "  ")
+	if err != nil {
+		fmt.Printf("ERROR: 序列化失败: %v\n", err)
+		os.Exit(1)
+	}
+	if err := os.WriteFile(outputFile, resultJSON, 0644); err != nil {
+		fmt.Printf("ERROR: 写入结果文件失败: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("\nBaseline artifact 已保存到 %s\n", outputFile)
+	fmt.Printf("用 --mode=compare --baseline=%s 对照 GoS 结果\n", outputFile)
+}
+
+func truncateSymptom(s string, maxLen int) string {
+	if len(s) > maxLen {
+		return s[:maxLen] + "..."
+	}
+	return s
 }
 
 // ---------------------------------------------------------------------------
@@ -491,6 +593,11 @@ func runBaseline(holdoutPath, outputFile string) {
 // ---------------------------------------------------------------------------
 
 func runCompare(holdoutPath, baselineFile, outputFile, gosProfile string) {
+	if gosProfile != "real" {
+		fmt.Println("ERROR: compare 模式只允许 --gos-profile=real；eval profile 只能用于 smoke/gos 开发回归")
+		os.Exit(1)
+	}
+
 	// 读取 baseline artifact
 	data, err := os.ReadFile(baselineFile)
 	if err != nil {
@@ -594,7 +701,7 @@ func runCompare(holdoutPath, baselineFile, outputFile, gosProfile string) {
 		}
 	}
 
-	resultJSON, _ := json.MarshalIndent(map[string]interface{}{
+	resultJSON, err := json.MarshalIndent(map[string]interface{}{
 		"mode":            "compare",
 		"commit":          gitCommit(),
 		"baseline_commit": artifact.Commit,
@@ -604,6 +711,10 @@ func runCompare(holdoutPath, baselineFile, outputFile, gosProfile string) {
 		"baseline":        artifact,
 		"gate":            gateReport,
 	}, "", "  ")
+	if err != nil {
+		fmt.Printf("ERROR: 序列化失败: %v\n", err)
+		os.Exit(1)
+	}
 	if err := os.WriteFile(outputFile, resultJSON, 0644); err != nil {
 		fmt.Printf("ERROR: 写入结果文件失败: %v\n", err)
 		os.Exit(1)
@@ -669,7 +780,7 @@ func runSmoke(holdoutPath, outputFile string) {
 	fmt.Println()
 	fmt.Println("注意: 此 gate 仅用于开发回归，不能作为 Phase 3 准入依据")
 
-	resultJSON, _ := json.MarshalIndent(map[string]interface{}{
+	resultJSON, err := json.MarshalIndent(map[string]interface{}{
 		"mode":          "smoke",
 		"commit":        gitCommit(),
 		"gos_metrics":   gosMetrics,
@@ -678,6 +789,10 @@ func runSmoke(holdoutPath, outputFile string) {
 		"smoke_results": smokeResults,
 		"gate":          gateReport,
 	}, "", "  ")
+	if err != nil {
+		fmt.Printf("ERROR: 序列化失败: %v\n", err)
+		os.Exit(1)
+	}
 	if err := os.WriteFile(outputFile, resultJSON, 0644); err != nil {
 		fmt.Printf("ERROR: 写入结果文件失败: %v\n", err)
 		os.Exit(1)

@@ -9,6 +9,7 @@ type Config struct {
 	MaxTokens         int            `yaml:"max_tokens"`
 	SessionMaxSteps   int            `yaml:"session_max_steps"`
 	MaxRetrievalSteps int            `yaml:"max_retrieval_steps"`
+	CallTimeoutMs     int            `yaml:"call_timeout_ms"`
 	FSM               FSMConfig      `yaml:"fsm"`
 	Experts           []ExpertConfig `yaml:"experts"`
 	HeadAgent         string         `yaml:"head_agent"`
@@ -36,6 +37,7 @@ func DefaultConfig() *Config {
 		MaxTokens:         4096,
 		SessionMaxSteps:   5,
 		MaxRetrievalSteps: 3,
+		CallTimeoutMs:     5000,
 		FSM: FSMConfig{
 			GapDelta:      0.3,
 			MinSupport:    2,
