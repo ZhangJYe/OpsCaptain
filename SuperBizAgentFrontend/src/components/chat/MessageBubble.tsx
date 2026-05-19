@@ -2,15 +2,18 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkFixHeadings from '../../lib/remarkFixHeadings'
 import type { ChatMessage } from '../../types/chat'
+import type { DetailItem } from '../workbench/DetailPanel'
 import { ThinkingCollapse } from '../agent/ThinkingCollapse'
 import { GosReportCard } from './GosReportCard'
 import { isGoSMessage } from '../../lib/utils'
 
 interface Props {
   message: ChatMessage
+  onOpenDetail?: (item: DetailItem) => void
+  hideSteps?: boolean
 }
 
-export function MessageBubble({ message }: Props) {
+export function MessageBubble({ message, hideSteps }: Props) {
   const isUser = message.role === 'user'
   const isGoS = !isUser && isGoSMessage(message)
   const timeLabel = new Intl.DateTimeFormat('zh-CN', {
@@ -70,7 +73,7 @@ export function MessageBubble({ message }: Props) {
             <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.content}</p>
           ) : (
             <>
-              {message.executionSteps && message.executionSteps.length > 0 && (
+              {!hideSteps && message.executionSteps && message.executionSteps.length > 0 && (
                 <ThinkingCollapse steps={message.executionSteps} defaultOpen />
               )}
               <div className="prose-chat">

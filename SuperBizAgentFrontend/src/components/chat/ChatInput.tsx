@@ -12,6 +12,7 @@ interface Props {
   mode: ChatMode
   selectedSkillIds: string[]
   onModeChange: (m: ChatMode) => void
+  embedded?: boolean
 }
 
 const modeOptions: { id: ChatMode; label: string; icon: typeof Zap }[] = [
@@ -25,7 +26,7 @@ function buildQueryWithFiles(query: string, fileNames: string[]): string {
   return `${refs}\n\n${query}`
 }
 
-export function ChatInput({ onSend, onStop, isLoading, mode, selectedSkillIds, onModeChange }: Props) {
+export function ChatInput({ onSend, onStop, isLoading, mode, selectedSkillIds, onModeChange, embedded }: Props) {
   const [input, setInput] = useState('')
   const [isFocused, setIsFocused] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -57,10 +58,10 @@ export function ChatInput({ onSend, onStop, isLoading, mode, selectedSkillIds, o
   const canSend = (input.trim().length > 0 || readyFiles.length > 0) && !isLoading
 
   return (
-    <div className="shrink-0 border-t border-zinc-200/80 bg-white/88 px-4 py-4 backdrop-blur-xl dark:border-zinc-900/80 dark:bg-zinc-950/80">
+    <div className={embedded ? 'shrink-0' : 'shrink-0 border-t border-zinc-200/80 bg-white/88 px-4 py-4 backdrop-blur-xl dark:border-zinc-900/80 dark:bg-zinc-950/80'}>
       <input type="file" id={inputId} onChange={handleChange} accept={accept} multiple={multiple} className="hidden" />
 
-      <div className="mx-auto max-w-4xl">
+      <div className={embedded ? '' : 'mx-auto max-w-4xl'}>
         <div
           className={`rounded-2xl border transition-all duration-300 ${
             isFocused

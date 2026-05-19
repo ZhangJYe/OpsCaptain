@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { useTheme } from './hooks/useTheme'
 import { useChat } from './hooks/useChat'
 import { MainLayout } from './components/layout/MainLayout'
-import { ChatView } from './components/chat/ChatView'
+import { AgentWorkbenchView } from './components/workbench/AgentWorkbenchView'
 import { WelcomeScreen } from './components/welcome/WelcomeScreen'
 import { saveSession } from './lib/storage'
 import type { AIOpsEngine, ChatSession } from './types/chat'
@@ -136,7 +136,7 @@ export default function App() {
           aiOpsEngine={aiOpsEngine}
         />
       ) : (
-        <ChatView
+        <AgentWorkbenchView
           messages={chat.messages}
           streamingContent={chat.streamingContent}
           streamingThoughts={chat.streamingThoughts}
