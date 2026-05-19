@@ -12,6 +12,7 @@ import type { Suggestion } from '../agent/SuggestionChips'
 import { CompanionBar } from './CompanionBar'
 import { DetailPanel } from './DetailPanel'
 import type { DetailItem } from './DetailPanel'
+import { EvidenceBlock } from './EvidenceBlock'
 import type { ChatMessage, ChatMode } from '../../types/chat'
 import { findSkillsByIds, formatSelectedSkillSummary } from '../../lib/utils'
 import { isGoSEngine } from '../../hooks/useChat'
@@ -130,53 +131,77 @@ export function AgentWorkbenchView({
           <div className="mx-auto max-w-4xl px-4 py-8 space-y-6">
 
             <AnimatePresence initial={false}>
-              {messages.map((msg, i) => (
-                <motion.div
-                  key={msg.id}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ type: 'spring', damping: 24, stiffness: 260 }}
-                >
-                  <MessageBubble message={msg} onOpenDetail={handleOpenDetail} />
-                  {msg.role === 'assistant' && i === messages.length - 1 && !isLoading && suggestions.length > 0 && (
-                    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="mt-3 ml-11">
-                      <SuggestionChips suggestions={suggestions} onSelect={handleSuggestion} />
-                    </motion.div>
-                  )}
-                </motion.div>
-              ))}
+              {messages.map((msg, i) => {
+                const isLastAssistant = msg.role === 'assistant' && i === messages.length - 1 && !isLoading
+                const hasBlocks = msg.executionSteps && msg.executionSteps.length > 0
+
+                return (
+                  <motion.div
+                    key={msg.id}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ type: 'spring', damping: 24, stiffness: 260 }}
+                  >
+                    {/* Evidence blocks above the last assistant message */}
+                    {isLastAssistant && hasBlocks && (
+                      <div className="mb-3 space-y-2">
+                        {msg.executionSteps!.map((step) => (
+                          <EvidenceBlock
+                            key={step.id}
+                            step={step}
+                            onOpenDetail={handleOpenDetail}
+                          />
+                        ))}
+                      </div>
+                    )}
+
+                    <MessageBubble message={msg} onOpenDetail={handleOpenDetail} hideSteps={isLastAssistant && hasBlocks} />
+
+                    {isLastAssistant && suggestions.length > 0 && (
+                      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="mt-3 ml-11">
+                        <SuggestionChips suggestions={suggestions} onSelect={handleSuggestion} />
+                      </motion.div>
+                    )}
+                  </motion.div>
+                )
+              })}
             </AnimatePresence>
 
-            {/* Streaming bubble */}
+            {/* Streaming: evidence blocks + output */}
             {isLoading && (
-              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-accent/20 bg-accent/10 text-xs font-semibold text-accent">
-                  OC
-                </div>
-                <div className="min-w-0 flex-1 max-w-[85%]">
-                  <div className="mb-1.5 flex items-center gap-2">
-                    <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-500">OpsCaption</span>
-                    <span className="text-[10px] text-zinc-400 dark:text-zinc-600">
-                      {streamingContent ? '生成中' : '处理中'}
-                    </span>
+              <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
+                {/* Evidence blocks */}
+                {thinkingSteps.filter((s) => s.status !== 'pending').length > 0 && (
+                  <div className="space-y-2">
+                    {thinkingSteps
+                      .filter((s) => s.status !== 'pending')
+                      .map((step) => (
+                        <EvidenceBlock
+                          key={step.id}
+                          step={step}
+                          onOpenDetail={handleOpenDetail}
+                        />
+                      ))}
                   </div>
-                  {isGoS ? (
-                    <GosReportCard steps={thinkingSteps} content={streamingContent} isStreaming />
-                  ) : (
-                    <div className="rounded-2xl border border-zinc-200/80 bg-white/95 px-4 py-3 shadow-sm shadow-zinc-900/[0.03] dark:border-zinc-800/60 dark:bg-zinc-900/80">
-                      <ThinkingCollapse steps={thinkingSteps} isStreaming />
-                      {streamingContent ? (
-                        <StreamingText content={streamingContent} />
-                      ) : (
-                        <div className="flex items-center gap-1.5 py-2">
-                          <span className="w-2 h-2 rounded-full bg-accent/60 animate-pulse-dot" />
-                          <span className="w-2 h-2 rounded-full bg-accent/60 animate-pulse-dot [animation-delay:0.2s]" />
-                          <span className="w-2 h-2 rounded-full bg-accent/60 animate-pulse-dot [animation-delay:0.4s]" />
-                        </div>
-                      )}
+                )}
+
+                {/* Streaming output */}
+                {isGoS ? (
+                  <GosReportCard steps={thinkingSteps} content={streamingContent} isStreaming />
+                ) : streamingContent ? (
+                  <div className="rounded-2xl border border-zinc-200/80 bg-white/95 px-4 py-3 shadow-sm shadow-zinc-900/[0.03] dark:border-zinc-800/60 dark:bg-zinc-900/80">
+                    <StreamingText content={streamingContent} />
+                  </div>
+                ) : thinkingSteps.filter((s) => s.status !== 'pending').length === 0 ? (
+                  <div className="flex items-center gap-3 rounded-xl border border-zinc-200/80 bg-white/80 px-4 py-3 dark:border-zinc-800/60 dark:bg-zinc-900/60">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-accent/60 animate-pulse-dot" />
+                      <span className="w-2 h-2 rounded-full bg-accent/60 animate-pulse-dot [animation-delay:0.2s]" />
+                      <span className="w-2 h-2 rounded-full bg-accent/60 animate-pulse-dot [animation-delay:0.4s]" />
                     </div>
-                  )}
-                </div>
+                    <span className="text-xs text-zinc-400">正在启动诊断...</span>
+                  </div>
+                ) : null}
               </motion.div>
             )}
 
