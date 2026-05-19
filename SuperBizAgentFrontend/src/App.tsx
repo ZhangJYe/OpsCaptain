@@ -9,6 +9,7 @@ import type { AIOpsEngine, ChatSession } from './types/chat'
 
 const SKILL_STORAGE_KEY = 'opscaptain-selected-skills'
 const AIOPS_ENGINE_STORAGE_KEY = 'opscaptain-aiops-engine'
+const PET_ENABLED_KEY = 'opscaptain-pet-enabled'
 
 export default function App() {
   const { theme, toggle: toggleTheme } = useTheme()
@@ -33,6 +34,11 @@ export default function App() {
     const raw = localStorage.getItem(AIOPS_ENGINE_STORAGE_KEY)
     return raw === 'gos_engine' ? 'gos_engine' : 'plan_execute_replan'
   })
+  const [petEnabled, setPetEnabled] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true
+    const raw = localStorage.getItem(PET_ENABLED_KEY)
+    return raw !== 'false'
+  })
 
   useEffect(() => {
     try {
@@ -49,6 +55,14 @@ export default function App() {
       return
     }
   }, [aiOpsEngine])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(PET_ENABLED_KEY, String(petEnabled))
+    } catch {
+      return
+    }
+  }, [petEnabled])
 
   useEffect(() => {
     if (chat.messages.length === 0) {
@@ -132,9 +146,11 @@ export default function App() {
           loadingEngine={chat.loadingEngine}
           mode={chat.mode}
           selectedSkillIds={selectedSkillIds}
+          petEnabled={petEnabled}
           onSend={handleSend}
           onStop={chat.stop}
           onModeChange={chat.setMode}
+          onTogglePet={() => setPetEnabled((v) => !v)}
           onClearSuggestions={chat.clearSuggestions}
         />
       )}
