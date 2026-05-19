@@ -3,6 +3,8 @@ import remarkGfm from 'remark-gfm'
 import remarkFixHeadings from '../../lib/remarkFixHeadings'
 import type { ChatMessage } from '../../types/chat'
 import { ThinkingCollapse } from '../agent/ThinkingCollapse'
+import { GosReportCard } from './GosReportCard'
+import { isGoSMessage } from '../../lib/utils'
 
 interface Props {
   message: ChatMessage
@@ -10,10 +12,28 @@ interface Props {
 
 export function MessageBubble({ message }: Props) {
   const isUser = message.role === 'user'
+  const isGoS = !isUser && isGoSMessage(message)
   const timeLabel = new Intl.DateTimeFormat('zh-CN', {
     hour: '2-digit',
     minute: '2-digit',
   }).format(message.timestamp)
+
+  if (!isUser && isGoS) {
+    return (
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/10 text-xs font-semibold text-accent ring-1 ring-inset ring-accent/20">
+          OC
+        </div>
+        <div className="min-w-0 flex-1 max-w-[85%]">
+          <div className="mb-1.5 flex items-center gap-2">
+            <span className="text-[11px] font-medium text-zinc-500">OpsCaption</span>
+            <span className="text-[10px] text-zinc-400 dark:text-zinc-600">{timeLabel}</span>
+          </div>
+          <GosReportCard message={message} />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className={`flex items-start gap-3 ${isUser ? 'flex-row-reverse' : ''}`}>

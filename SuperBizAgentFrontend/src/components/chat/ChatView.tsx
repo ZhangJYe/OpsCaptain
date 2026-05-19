@@ -4,12 +4,14 @@ import { Activity, Waves } from 'lucide-react'
 import { MessageBubble } from './MessageBubble'
 import { StreamingText } from './StreamingText'
 import { ChatInput } from './ChatInput'
+import { GosReportCard } from './GosReportCard'
 import { ThinkingCollapse } from '../agent/ThinkingCollapse'
 import type { ThinkingStep } from '../agent/ThinkingCollapse'
 import { SuggestionChips } from '../agent/SuggestionChips'
 import type { Suggestion } from '../agent/SuggestionChips'
 import type { ChatMessage, ChatMode } from '../../types/chat'
 import { findSkillsByIds, formatSelectedSkillSummary } from '../../lib/utils'
+import { isGoSEngine } from '../../hooks/useChat'
 
 interface Props {
   messages: ChatMessage[]
@@ -18,6 +20,7 @@ interface Props {
   thinkingSteps: ThinkingStep[]
   suggestions: Suggestion[]
   isLoading: boolean
+  loadingEngine?: string | null
   mode: ChatMode
   selectedSkillIds: string[]
   onSend: (query: string) => void
@@ -33,6 +36,7 @@ export function ChatView({
   thinkingSteps,
   suggestions,
   isLoading,
+  loadingEngine,
   mode,
   selectedSkillIds,
   onSend,
@@ -111,20 +115,26 @@ export function ChatView({
                     {streamingContent ? '生成中' : '处理中'}
                   </span>
                 </div>
-                <div className="rounded-2xl border border-zinc-200/80 bg-white/95 px-4 py-3 shadow-sm shadow-zinc-900/[0.03] dark:border-zinc-800/60 dark:bg-zinc-900/80">
-
-                  <ThinkingCollapse steps={thinkingSteps} isStreaming />
-
-                  {streamingContent ? (
-                    <StreamingText content={streamingContent} />
-                  ) : (
-                    <div className="flex items-center gap-1.5 py-2">
-                      <span className="w-2 h-2 rounded-full bg-accent/60 animate-pulse-dot" />
-                      <span className="w-2 h-2 rounded-full bg-accent/60 animate-pulse-dot [animation-delay:0.2s]" />
-                      <span className="w-2 h-2 rounded-full bg-accent/60 animate-pulse-dot [animation-delay:0.4s]" />
-                    </div>
-                  )}
-                </div>
+                {isGoSEngine(loadingEngine) ? (
+                  <GosReportCard
+                    steps={thinkingSteps}
+                    content={streamingContent}
+                    isStreaming
+                  />
+                ) : (
+                  <div className="rounded-2xl border border-zinc-200/80 bg-white/95 px-4 py-3 shadow-sm shadow-zinc-900/[0.03] dark:border-zinc-800/60 dark:bg-zinc-900/80">
+                    <ThinkingCollapse steps={thinkingSteps} isStreaming />
+                    {streamingContent ? (
+                      <StreamingText content={streamingContent} />
+                    ) : (
+                      <div className="flex items-center gap-1.5 py-2">
+                        <span className="w-2 h-2 rounded-full bg-accent/60 animate-pulse-dot" />
+                        <span className="w-2 h-2 rounded-full bg-accent/60 animate-pulse-dot [animation-delay:0.2s]" />
+                        <span className="w-2 h-2 rounded-full bg-accent/60 animate-pulse-dot [animation-delay:0.4s]" />
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </motion.div>
           )}
