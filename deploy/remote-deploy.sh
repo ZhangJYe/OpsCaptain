@@ -368,20 +368,11 @@ ensure_prometheus_bind_files
 
 $COMPOSE pull
 ensure_runtime_volume_permissions
-if ! $COMPOSE up -d --wait --wait-timeout 180 --remove-orphans; then
+if ! $COMPOSE up -d --remove-orphans jaeger rabbitmq redis backend; then
   $COMPOSE ps || true
-  $COMPOSE logs --tail=120 backend frontend caddy jaeger prometheus rabbitmq redis || true
-  echo "compose deployment failed"
+  $COMPOSE logs --tail=120 backend jaeger rabbitmq redis || true
+  echo "backend deployment failed"
   exit 1
-fi
-
-if [ "$caddy_config_changed" -eq 1 ]; then
-  if ! $COMPOSE up -d --force-recreate --no-deps caddy; then
-    $COMPOSE ps || true
-    $COMPOSE logs --tail=120 caddy || true
-    echo "caddy reload failed"
-    exit 1
-  fi
 fi
 
 attempt=0
@@ -391,6 +382,68 @@ until $COMPOSE exec -T backend wget -qO- http://127.0.0.1:8000/readyz >/dev/null
     $COMPOSE ps || true
     $COMPOSE logs --tail=120 backend frontend caddy jaeger prometheus rabbitmq redis || true
     echo "backend readiness check failed"
+    exit 1
+  fi
+  sleep 2
+done
+
+if ! $COMPOSE up -d frontend; then
+  $COMPOSE ps || true
+  $COMPOSE logs --tail=120 frontend backend || true
+  echo "frontend deployment failed"
+  exit 1
+fi
+
+attempt=0
+until $COMPOSE ps --status=running --services frontend | grep -q '^frontend$'; do
+  attempt=$((attempt + 1))
+  if [ "$attempt" -ge 15 ]; then
+    $COMPOSE ps || true
+    $COMPOSE logs --tail=120 frontend backend || true
+    echo "frontend start check failed"
+    exit 1
+  fi
+  sleep 2
+done
+
+if ! $COMPOSE up -d prometheus; then
+  $COMPOSE ps || true
+  $COMPOSE logs --tail=120 prometheus backend || true
+  echo "prometheus deployment failed"
+  exit 1
+fi
+
+if [ "$caddy_config_changed" -eq 1 ]; then
+  if ! $COMPOSE up -d --force-recreate --no-deps caddy; then
+    $COMPOSE ps || true
+    $COMPOSE logs --tail=120 caddy frontend || true
+    echo "caddy reload failed"
+    exit 1
+  fi
+else
+  if ! $COMPOSE up -d caddy; then
+    $COMPOSE ps || true
+    $COMPOSE logs --tail=120 caddy frontend || true
+    echo "caddy deployment failed"
+    exit 1
+  fi
+fi
+
+if [ -n "$app_base_path" ]; then
+  health_path="${app_base_path}/healthz"
+  ready_path="${app_base_path}/readyz"
+else
+  health_path="/healthz"
+  ready_path="/readyz"
+fi
+
+attempt=0
+until curl -fsS -m 5 "http://127.0.0.1${health_path}" >/dev/null && curl -fsS -m 5 "http://127.0.0.1${ready_path}" >/dev/null; do
+  attempt=$((attempt + 1))
+  if [ "$attempt" -ge 15 ]; then
+    $COMPOSE ps || true
+    $COMPOSE logs --tail=120 caddy frontend backend || true
+    echo "edge readiness check failed"
     exit 1
   fi
   sleep 2
