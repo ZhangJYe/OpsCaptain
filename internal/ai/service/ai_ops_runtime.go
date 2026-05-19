@@ -11,6 +11,7 @@ import (
 	"SuperBizAgent/internal/ai/agent/experts"
 	"SuperBizAgent/internal/ai/agent/gos_engine"
 	"SuperBizAgent/internal/ai/agent/plan_execute_replan"
+	"SuperBizAgent/internal/ai/models"
 	"SuperBizAgent/internal/ai/protocol"
 	"SuperBizAgent/internal/ai/runtime"
 	aitools "SuperBizAgent/internal/ai/tools"
@@ -325,6 +326,7 @@ func registerAIOpsGOSExpert(engine *gos_engine.GoSEngine, cfg *gos_engine.Config
 		Temperature:       cfg.Temperature,
 		MaxTokens:         cfg.MaxTokens,
 		CallTimeout:       time.Duration(cfg.CallTimeoutMs) * time.Millisecond,
+		ChatModelFactory:  models.OpenAIChatModelFactory(cfg.ModelPath),
 	}
 	switch strings.ToLower(strings.TrimSpace(ec.Name)) {
 	case "linux_sre":

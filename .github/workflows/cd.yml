@@ -109,7 +109,12 @@ jobs:
           read_env_value() {
             key="$1"
             awk -F= -v key="$key" '
-              $1 == key {
+              {
+                env_key = $1
+                sub(/^[[:space:]]+/, "", env_key)
+                sub(/[[:space:]]+$/, "", env_key)
+              }
+              env_key == key {
                 sub(/^[^=]*=/, "", $0)
                 print $0
                 exit
@@ -145,7 +150,7 @@ jobs:
             key="$1"
             value="$2"
             tmp_file="dist-deploy/.env.production.tmp"
-            grep -v "^${key}=" dist-deploy/.env.production > "$tmp_file" || true
+            grep -v "^[[:space:]]*${key}[[:space:]]*=" dist-deploy/.env.production > "$tmp_file" || true
             printf '%s=%s\n' "$key" "$value" >> "$tmp_file"
             mv "$tmp_file" dist-deploy/.env.production
           }
@@ -153,7 +158,7 @@ jobs:
           delete_env_value() {
             key="$1"
             tmp_file="dist-deploy/.env.production.tmp"
-            grep -v "^${key}=" dist-deploy/.env.production > "$tmp_file" || true
+            grep -v "^[[:space:]]*${key}[[:space:]]*=" dist-deploy/.env.production > "$tmp_file" || true
             mv "$tmp_file" dist-deploy/.env.production
           }
 

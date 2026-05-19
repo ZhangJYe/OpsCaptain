@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -15,7 +16,9 @@ import (
 	"SuperBizAgent/internal/ai/agent/gos_engine/eval"
 	"SuperBizAgent/internal/ai/agent/plan_execute_replan"
 	"SuperBizAgent/internal/ai/belief"
+	"SuperBizAgent/internal/ai/models"
 	aitools "SuperBizAgent/internal/ai/tools"
+	"SuperBizAgent/utility/common"
 
 	"github.com/cloudwego/eino/components/tool"
 	einoschema "github.com/cloudwego/eino/schema"
@@ -319,7 +322,8 @@ func buildGoSEngine(evalProfile bool) (*gos_engine.GoSEngine, *gos_engine.Config
 	cfg.FSM.MinSupport = 1
 	cfg.FSM.MaxSteps = 3
 	cfg.FSM.MinConfidence = 0.6
-	cfg.CallTimeoutMs = 2000
+	cfg.CallTimeoutMs = 10000
+	cfg.ModelPath = "chat_model_fast"
 
 	logger := &testLogger{}
 	engine := gos_engine.NewGoSEngine(cfg, logger)
@@ -347,6 +351,7 @@ func buildGoSEngine(evalProfile bool) (*gos_engine.GoSEngine, *gos_engine.Config
 		RAGQueryFunc:        ragFunc,
 		GenerateContentFunc: contentFunc,
 		CallTimeout:         time.Duration(cfg.CallTimeoutMs) * time.Millisecond,
+		ChatModelFactory:    models.OpenAIChatModelFactory(cfg.ModelPath),
 	}
 	engine.RegisterExpert("linux_sre", experts.NewLinuxSREExpert(expertCfg, toolReg))
 
@@ -401,6 +406,11 @@ func main() {
 	outputFile := flag.String("output", "eval_result.json", "输出文件路径")
 	gosProfile := flag.String("gos-profile", "real", "GoS 配置: real|eval (real=生产行为, eval=fake deps)")
 	flag.Parse()
+
+	if err := common.LoadPreferredEnvFile(); err != nil {
+		fmt.Printf("加载 env 文件失败: %v\n", err)
+		os.Exit(1)
+	}
 
 	switch *mode {
 	case "gos":
@@ -569,18 +579,22 @@ func runCompare(holdoutPath, baselineFile, outputFile, gosProfile string) {
 		fmt.Println("ERROR: baseline artifact results 为空")
 		os.Exit(1)
 	}
-	if artifact.HoldoutPath != "" && artifact.HoldoutPath != holdoutPath {
-		fmt.Printf("ERROR: baseline artifact holdout 路径不匹配\n")
-		fmt.Printf("  artifact: %s\n", artifact.HoldoutPath)
-		fmt.Printf("  current:  %s\n", holdoutPath)
-		fmt.Println("请使用匹配的 baseline artifact，或重新采集 baseline")
-		os.Exit(1)
-	}
-
 	cases, err := eval.LoadCases(holdoutPath)
 	if err != nil {
 		fmt.Printf("ERROR: 无法加载 holdout: %v\n", err)
 		os.Exit(1)
+	}
+	if artifact.HoldoutPath != "" && artifact.HoldoutPath != holdoutPath {
+		if filepath.Base(artifact.HoldoutPath) != filepath.Base(holdoutPath) {
+			fmt.Printf("ERROR: baseline artifact holdout 路径不匹配\n")
+			fmt.Printf("  artifact: %s\n", artifact.HoldoutPath)
+			fmt.Printf("  current:  %s\n", holdoutPath)
+			fmt.Println("请使用匹配的 baseline artifact，或重新采集 baseline")
+			os.Exit(1)
+		}
+		fmt.Printf("WARN: baseline artifact holdout 路径不同但文件名一致，将继续校验 case_id\n")
+		fmt.Printf("  artifact: %s\n", artifact.HoldoutPath)
+		fmt.Printf("  current:  %s\n", holdoutPath)
 	}
 	if len(artifact.Results) != len(cases) {
 		fmt.Printf("ERROR: baseline artifact 结果数量 (%d) 与 holdout (%d) 不匹配\n",

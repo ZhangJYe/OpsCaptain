@@ -4,11 +4,21 @@ import (
 	"SuperBizAgent/utility/common"
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/components/model"
 	"github.com/gogf/gf/v2/frame/g"
 )
+
+func OpenAIChatModelFactory(configName string) func(context.Context) (model.ToolCallingChatModel, error) {
+	switch strings.ToLower(strings.TrimSpace(configName)) {
+	case "chat_model", "glm_chat_model":
+		return OpenAIForGLM
+	default:
+		return OpenAIForGLMFast
+	}
+}
 
 func OpenAIForGLM(ctx context.Context) (cm model.ToolCallingChatModel, err error) {
 	modelName, err := readModelConfig(ctx, "chat_model.model", "glm_chat_model.model")
@@ -23,10 +33,9 @@ func OpenAIForGLM(ctx context.Context) (cm model.ToolCallingChatModel, err error
 	if err != nil {
 		return nil, err
 	}
-	config := &openai.ChatModelConfig{
-		Model:   common.ResolveEnv(modelName),
-		APIKey:  common.ResolveEnv(apiKey),
-		BaseURL: common.ResolveEnv(baseURL),
+	config, err := buildOpenAIChatConfig(modelName, apiKey, baseURL)
+	if err != nil {
+		return nil, err
 	}
 	cm, err = openai.NewChatModel(ctx, config)
 	if err != nil {
@@ -48,16 +57,35 @@ func OpenAIForGLMFast(ctx context.Context) (cm model.ToolCallingChatModel, err e
 	if err != nil {
 		return nil, err
 	}
-	config := &openai.ChatModelConfig{
-		Model:   common.ResolveEnv(modelName),
-		APIKey:  common.ResolveEnv(apiKey),
-		BaseURL: common.ResolveEnv(baseURL),
+	config, err := buildOpenAIChatConfig(modelName, apiKey, baseURL)
+	if err != nil {
+		return nil, err
 	}
 	cm, err = openai.NewChatModel(ctx, config)
 	if err != nil {
 		return nil, err
 	}
 	return wrapToolCallingChatModel(cm, config.Model), nil
+}
+
+func buildOpenAIChatConfig(modelName, apiKey, baseURL string) (*openai.ChatModelConfig, error) {
+	resolvedModel, ok := common.ResolveOptionalEnv(modelName)
+	if !ok {
+		return nil, fmt.Errorf("chat model name is empty or unresolved")
+	}
+	resolvedAPIKey, ok := common.ResolveOptionalEnv(apiKey)
+	if !ok {
+		return nil, fmt.Errorf("chat model api_key is empty or unresolved")
+	}
+	resolvedBaseURL, ok := common.ResolveOptionalEnv(baseURL)
+	if !ok {
+		return nil, fmt.Errorf("chat model base_url is empty or unresolved")
+	}
+	return &openai.ChatModelConfig{
+		Model:   resolvedModel,
+		APIKey:  resolvedAPIKey,
+		BaseURL: resolvedBaseURL,
+	}, nil
 }
 
 func readModelConfig(ctx context.Context, paths ...string) (string, error) {

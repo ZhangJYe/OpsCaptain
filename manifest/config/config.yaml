@@ -168,10 +168,10 @@ llm:
   concurrent_wait_timeout_ms: 5000
 
 embedding_model:
-  model: "doubao-embedding-text-240515"
+  model: "doubao-embedding-vision-251215"
   api_key: "${ARK_API_KEY}"
   base_url: "https://ark.cn-beijing.volces.com/api/v3"
-  dimension: 1024
+  dimension: 2048
 
 memory:
   max_window_size: 20

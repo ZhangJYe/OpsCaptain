@@ -32,7 +32,7 @@ type ExpertConfig struct {
 func DefaultConfig() *Config {
 	return &Config{
 		Enabled:           false,
-		ModelPath:         "deepseek-v3",
+		ModelPath:         "chat_model_fast",
 		Temperature:       0.8,
 		MaxTokens:         4096,
 		SessionMaxSteps:   5,
