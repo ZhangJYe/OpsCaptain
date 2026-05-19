@@ -13,6 +13,10 @@ safety:
     enabled: true
   output_filter:
     enabled: true
+  injection_classifier:
+    enabled: false
+    timeout_ms: 3000
+    threshold: 0.7
 
 logging:
   level: "DEBUG"

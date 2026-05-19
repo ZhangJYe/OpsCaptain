@@ -34,7 +34,7 @@ func (c *ControllerV1) ChatSubmit(ctx context.Context, req *v1.ChatSubmitReq) (r
 
 	g.Log().Infof(ctx, "[session:%s][req:%s] ChatSubmit request received, question length: %d", id, requestID, len(msg))
 
-	if err := rejectSuspiciousPrompt(ctx, msg); err != nil {
+	if ctx, _, err = checkAndGuardPrompt(ctx, msg); err != nil {
 		return nil, err
 	}
 

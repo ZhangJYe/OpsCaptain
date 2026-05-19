@@ -88,7 +88,7 @@ func (c *ControllerV1) Chat(ctx context.Context, req *v1.ChatReq) (res *v1.ChatR
 
 	g.Log().Infof(ctx, "[session:%s][req:%s] Chat request received, question length: %d, selected_skills=%v", id, requestID, len(msg), selectedSkillIDs)
 
-	if err := rejectSuspiciousPrompt(ctx, msg); err != nil {
+	if ctx, _, err = checkAndGuardPrompt(ctx, msg); err != nil {
 		return nil, err
 	}
 	if decision := getDegradationDecision(ctx, "chat"); decision.Enabled {

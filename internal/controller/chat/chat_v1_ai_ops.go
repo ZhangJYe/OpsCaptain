@@ -17,7 +17,7 @@ func (c *ControllerV1) AIOps(ctx context.Context, req *v1.AIOpsReq) (res *v1.AIO
 	ctx = context.WithValue(ctx, consts.CtxKeyRequestID, requestID)
 	ctx = enrichRequestContext(ctx, "", requestID)
 
-	if err := rejectSuspiciousPrompt(ctx, req.Query); err != nil {
+	if ctx, _, err = checkAndGuardPrompt(ctx, req.Query); err != nil {
 		return nil, err
 	}
 	if decision := getDegradationDecision(ctx, "ai_ops"); decision.Enabled {

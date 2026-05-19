@@ -9,9 +9,11 @@ import (
 )
 
 type PromptGuardDecision struct {
-	Allowed bool
-	Reason  string
-	Pattern string
+	Allowed  bool
+	Reason   string
+	Pattern  string
+	RiskScore float64 // 0.0 = safe, 1.0 = definitely injection
+	RiskLevel string  // "safe" | "suspicious" | "dangerous"
 }
 
 type promptPattern struct {
@@ -30,9 +32,34 @@ var promptPatterns = []promptPattern{
 
 func CheckPrompt(ctx context.Context, input string) PromptGuardDecision {
 	if !promptGuardEnabled(ctx) {
-		return PromptGuardDecision{Allowed: true}
+		return PromptGuardDecision{Allowed: true, RiskLevel: "safe"}
 	}
-	return evaluatePrompt(input)
+
+	decision := evaluatePrompt(input)
+
+	// Regex matched — definite injection
+	if !decision.Allowed {
+		decision.RiskScore = 1.0
+		decision.RiskLevel = "dangerous"
+		return decision
+	}
+
+	// Regex passed — run LLM classifier if enabled
+	if ClassifierEnabled(ctx) {
+		verdict := ClassifyInjection(ctx, input)
+		decision.RiskScore = verdict.Score
+		decision.Reason = verdict.Reason
+		threshold := ClassifierThreshold(ctx)
+		if verdict.Score >= threshold {
+			decision.RiskLevel = "suspicious"
+		} else {
+			decision.RiskLevel = "safe"
+		}
+	} else {
+		decision.RiskLevel = "safe"
+	}
+
+	return decision
 }
 
 func evaluatePrompt(input string) PromptGuardDecision {

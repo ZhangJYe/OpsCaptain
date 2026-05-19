@@ -26,7 +26,6 @@ services:
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ./prometheus/opscaptionai-cost-alerts.yml:/etc/prometheus/rules/opscaptionai-cost-alerts.yml:ro
-      - ./prometheus/freeexchanged-alerts.yml:/etc/prometheus/rules/freeexchanged-alerts.yml:ro
       - prometheus-data:/prometheus
     ports:
       - "127.0.0.1:9090:9090"
