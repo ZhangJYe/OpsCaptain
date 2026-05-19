@@ -30,6 +30,13 @@ jobs:
       ECS_SSH_PRIVATE_KEY_BASE64: ${{ secrets.ECS_SSH_PRIVATE_KEY_BASE64 }}
       REMOTE_APP_DIR: ${{ secrets.ECS_APP_DIR }}
       PROD_ENV_FILE: ${{ secrets.PROD_ENV_FILE }}
+      SECRET_APP_BASE_PATH: ${{ secrets.APP_BASE_PATH }}
+      SECRET_ARK_API_KEY: ${{ secrets.ARK_API_KEY }}
+      SECRET_CORS_ALLOWED_ORIGIN: ${{ secrets.CORS_ALLOWED_ORIGIN }}
+      SECRET_DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      SECRET_DOMAIN_NAME: ${{ secrets.DOMAIN_NAME }}
+      SECRET_MILVUS_ADDRESS: ${{ secrets.MILVUS_ADDRESS }}
+      SECRET_TLS_EMAIL: ${{ secrets.TLS_EMAIL }}
 
     steps:
       - name: Checkout repository
@@ -146,6 +153,20 @@ jobs:
             esac
           }
 
+          set_env_value_if_missing() {
+            key="$1"
+            fallback="$2"
+            current="$(trim_value "$(read_env_value "$key")")"
+            fallback="$(trim_value "$fallback")"
+            case "$current" in
+              ""|'${'*'}')
+                if [ -n "$fallback" ]; then
+                  set_env_value "$key" "$fallback"
+                fi
+                ;;
+            esac
+          }
+
           set_env_value() {
             key="$1"
             value="$2"
@@ -182,6 +203,14 @@ jobs:
           cp deploy/prometheus/opscaptionai-cost-alerts.yml dist-deploy/prometheus/opscaptionai-cost-alerts.yml
           cp deploy/prometheus/freeexchanged-alerts.yml dist-deploy/prometheus/freeexchanged-alerts.yml
           printf '%s' "${PROD_ENV_FILE}" | tr -d '\r' > dist-deploy/.env.production
+
+          set_env_value_if_missing APP_BASE_PATH "$SECRET_APP_BASE_PATH"
+          set_env_value_if_missing ARK_API_KEY "$SECRET_ARK_API_KEY"
+          set_env_value_if_missing CORS_ALLOWED_ORIGIN "$SECRET_CORS_ALLOWED_ORIGIN"
+          set_env_value_if_missing DEEPSEEK_API_KEY "$SECRET_DEEPSEEK_API_KEY"
+          set_env_value_if_missing DOMAIN_NAME "$SECRET_DOMAIN_NAME"
+          set_env_value_if_missing MILVUS_ADDRESS "$SECRET_MILVUS_ADDRESS"
+          set_env_value_if_missing TLS_EMAIL "$SECRET_TLS_EMAIL"
 
           jaeger_endpoint="$(normalize_optional_env_value JAEGER_ENDPOINT http://jaeger:14268/api/traces)"
           prometheus_address="$(normalize_optional_env_value PROMETHEUS_ADDRESS http://prometheus:9090)"
