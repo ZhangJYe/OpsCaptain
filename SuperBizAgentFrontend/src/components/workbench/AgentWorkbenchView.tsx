@@ -13,6 +13,7 @@ import { CompanionBar } from './CompanionBar'
 import { DetailPanel } from './DetailPanel'
 import type { DetailItem } from './DetailPanel'
 import { EvidenceBlock } from './EvidenceBlock'
+import { ResultCard } from './ResultCard'
 import type { ChatMessage, ChatMode } from '../../types/chat'
 import { findSkillsByIds, formatSelectedSkillSummary } from '../../lib/utils'
 import { isGoSEngine } from '../../hooks/useChat'
@@ -152,6 +153,7 @@ export function AgentWorkbenchView({
                             onOpenDetail={handleOpenDetail}
                           />
                         ))}
+                        <ResultCard steps={msg.executionSteps!} />
                       </div>
                     )}
 
