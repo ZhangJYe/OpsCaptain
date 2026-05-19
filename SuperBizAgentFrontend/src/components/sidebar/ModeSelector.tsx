@@ -56,6 +56,7 @@ export function ModeSelector({ value, onChange, aiOpsEngine, onAIOpsEngineChange
             <button
               key={engine.id}
               onClick={() => onAIOpsEngineChange(engine.id)}
+              title={engine.id === 'gos_engine' ? '假设、证据、置信度链路' : '计划、执行、重规划链路'}
               className={`relative flex flex-1 items-center justify-center gap-1.5 rounded-md py-2 text-xs font-medium transition-colors ${
                 aiOpsEngine === engine.id
                   ? 'text-zinc-900 dark:text-white'
@@ -74,6 +75,9 @@ export function ModeSelector({ value, onChange, aiOpsEngine, onAIOpsEngineChange
             </button>
           ))}
         </div>
+        <p className="mt-2 text-[10px] text-zinc-400 dark:text-zinc-600">
+          {aiOpsEngine === 'gos_engine' ? '假设 → 证据 → 置信度' : '计划 → 执行 → 重规划'}
+        </p>
       </div>
     </div>
   )

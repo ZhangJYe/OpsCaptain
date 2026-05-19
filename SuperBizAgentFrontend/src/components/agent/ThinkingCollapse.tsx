@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Activity, ChevronDown, Loader2, Check, AlertCircle } from 'lucide-react'
+import { Activity, ChevronDown, Loader2, Check, AlertCircle, Brain } from 'lucide-react'
 import type { ChatExecutionStep } from '../../types/chat'
 
 export type ThinkingStep = ChatExecutionStep
@@ -17,18 +17,22 @@ export function ThinkingCollapse({ steps, isStreaming, defaultOpen }: Props) {
 
   if (activeSteps.length === 0 && !isStreaming) return null
 
+  const isGOS = activeSteps.some((s) => s.id.startsWith('gos:'))
   const doneCount = activeSteps.filter((s) => s.status === 'done').length
   const hasActive = activeSteps.some((s) => s.status === 'active')
   const hasError = activeSteps.some((s) => s.status === 'error')
-  const hasEvidence = activeSteps.some((s) => ['metrics', 'logs', 'knowledge'].includes(s.id) || s.id.startsWith('tool:'))
-  const evidenceTypes = [
-    activeSteps.some((s) => s.id === 'metrics') ? 'metrics' : '',
-    activeSteps.some((s) => s.id === 'logs') ? 'logs' : '',
-    activeSteps.some((s) => s.id === 'knowledge') ? 'knowledge' : '',
-  ].filter(Boolean)
-  const toolCount = activeSteps.filter((s) => ['metrics', 'logs', 'knowledge'].includes(s.id) || s.id.startsWith('tool:')).length
+  const hasEvidence = activeSteps.some((s) => ['metrics', 'logs', 'knowledge', 'gos:evidence'].includes(s.id) || s.id.startsWith('tool:'))
+  const evidenceTypes = isGOS
+    ? ['hypothesis', 'evidence', 'confidence']
+    : [
+        activeSteps.some((s) => s.id === 'metrics') ? 'metrics' : '',
+        activeSteps.some((s) => s.id === 'logs') ? 'logs' : '',
+        activeSteps.some((s) => s.id === 'knowledge') ? 'knowledge' : '',
+      ].filter(Boolean)
+  const toolCount = activeSteps.filter((s) => ['metrics', 'logs', 'knowledge', 'gos:experts', 'gos:evidence'].includes(s.id) || s.id.startsWith('tool:')).length
   const errorCount = activeSteps.filter((s) => s.status === 'error').length
-  const processName = hasEvidence ? '诊断过程' : '执行过程'
+  const processName = isGOS ? 'GoS 信念推理' : hasEvidence ? '诊断过程' : '执行过程'
+  const ProcessIcon = isGOS ? Brain : Activity
   const summary = hasActive
     ? '执行中'
     : hasError
@@ -41,6 +45,11 @@ export function ThinkingCollapse({ steps, isStreaming, defaultOpen }: Props) {
     logs: '日志',
     knowledge: '知识库',
     reporter: '输出',
+    'gos:hypothesis': '假设',
+    'gos:experts': '专家',
+    'gos:evidence': '证据',
+    'gos:confidence': '置信度',
+    'gos:reporter': '输出',
   }
 
   return (
@@ -49,7 +58,7 @@ export function ThinkingCollapse({ steps, isStreaming, defaultOpen }: Props) {
         onClick={() => setOpen(!open)}
         className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
       >
-        <Activity size={13} className={hasError ? 'text-red-400' : 'text-accent'} />
+        <ProcessIcon size={13} className={hasError ? 'text-red-400' : 'text-accent'} />
         <span className="font-medium text-zinc-600 dark:text-zinc-300">
           {processName}
         </span>
@@ -61,7 +70,7 @@ export function ThinkingCollapse({ steps, isStreaming, defaultOpen }: Props) {
             {evidenceTypes.join(' / ')}
           </span>
         )}
-        {toolCount > 0 && (
+        {!isGOS && toolCount > 0 && (
           <span className="hidden text-[10px] text-zinc-400 dark:text-zinc-600 sm:inline">
             {toolCount} 类证据
           </span>
@@ -103,7 +112,11 @@ export function ThinkingCollapse({ steps, isStreaming, defaultOpen }: Props) {
                     <span className={step.status === 'active' ? 'font-medium text-accent' : step.status === 'error' ? 'text-red-400' : 'text-zinc-700 dark:text-zinc-300'}>
                       {step.label}
                     </span>
-                    <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[10px] text-zinc-400 dark:bg-zinc-800/80 dark:text-zinc-500">
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] ${
+                      step.id.startsWith('gos:')
+                        ? 'bg-accent/10 text-accent'
+                        : 'bg-zinc-100 text-zinc-400 dark:bg-zinc-800/80 dark:text-zinc-500'
+                    }`}>
                       {stepTypeLabels[step.id] || '工具'}
                     </span>
                     {step.detail && (
@@ -113,7 +126,7 @@ export function ThinkingCollapse({ steps, isStreaming, defaultOpen }: Props) {
                   {step.meta && step.meta.length > 0 && (
                     <div className="ml-5 mt-1 space-y-0.5 text-[11px] leading-5 text-zinc-400 dark:text-zinc-600">
                       {step.meta.slice(-3).map((item) => (
-                        <div key={item} className="truncate">
+                        <div key={item} className={isGOS ? 'break-words' : 'truncate'}>
                           {item}
                         </div>
                       ))}
