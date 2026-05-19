@@ -358,8 +358,10 @@ func GetLogMcpTool() ([]tool.BaseTool, error) {
 		return []tool.BaseTool{NewUnavailableLogQueryTool(err.Error())}, nil
 	}
 
-	// 用 eino 适配器发现工具（获取完整 schema）
-	einoTools, err := e_mcp.GetTools(ctx, &e_mcp.Config{Cli: pc.cli})
+	// 用 eino 适配器发现工具（获取完整 schema），带超时保护避免 SSE 卡死阻塞启动
+	listCtx, listCancel := context.WithTimeout(ctx, time.Duration(toolTimeoutMs)*time.Millisecond)
+	defer listCancel()
+	einoTools, err := e_mcp.GetTools(listCtx, &e_mcp.Config{Cli: pc.cli})
 	if err != nil {
 		return []tool.BaseTool{NewUnavailableLogQueryTool(fmt.Sprintf("failed to get MCP tools: %v", err))}, nil
 	}
