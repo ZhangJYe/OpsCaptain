@@ -126,7 +126,7 @@ jobs:
             key="$1"
             value="$(trim_value "$(read_env_value "$key")")"
             if [ -z "$value" ]; then
-              echo "::error::PROD_ENV_FILE is missing required key: $key"
+              echo "::error::PROD_ENV_FILE is missing required key: $key" >&2
               exit 1
             fi
             printf '%s' "$value"
