@@ -92,8 +92,15 @@ export function PetCharacter({ steps, isStreaming, isGoS }: Props) {
   const config = MOOD_CONFIG[mood]
   const isWorking = mood === 'thinking' || mood === 'gos'
 
+  const handlePoke = () => {
+    setQuip(pickQuip(mood))
+    setShowBubble(true)
+    clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(() => setShowBubble(false), 3000)
+  }
+
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2 select-none sm:bottom-8 sm:right-8">
+    <div className="pointer-events-none absolute bottom-4 right-4 z-10 flex flex-col items-end gap-2 select-none">
       <AnimatePresence>
         {showBubble && quip && (
           <motion.div
@@ -101,7 +108,7 @@ export function PetCharacter({ steps, isStreaming, isGoS }: Props) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 4, scale: 0.95 }}
             transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-            className="relative max-w-[200px] rounded-xl border border-zinc-200/80 bg-white px-3 py-2 text-xs text-zinc-600 shadow-lg dark:border-zinc-700/60 dark:bg-zinc-800 dark:text-zinc-300"
+            className="pointer-events-auto relative max-w-[180px] rounded-xl border border-zinc-200/80 bg-white px-3 py-2 text-xs text-zinc-600 shadow-lg dark:border-zinc-700/60 dark:bg-zinc-800 dark:text-zinc-300"
           >
             {quip}
             <div className="absolute -bottom-1.5 right-5 h-3 w-3 rotate-45 border-b border-r border-zinc-200/80 bg-white dark:border-zinc-700/60 dark:bg-zinc-800" />
@@ -109,27 +116,30 @@ export function PetCharacter({ steps, isStreaming, isGoS }: Props) {
         )}
       </AnimatePresence>
 
-      <motion.div
+      <motion.button
+        type="button"
+        aria-label={`运维助手 - ${config.label}，点击刷新`}
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.95 }}
-        className="relative flex h-14 w-14 cursor-pointer items-center justify-center rounded-2xl border border-zinc-200/80 bg-white shadow-lg transition-shadow hover:shadow-xl dark:border-zinc-700/60 dark:bg-zinc-800"
-        onClick={() => {
-          setQuip(pickQuip(mood))
-          setShowBubble(true)
-          clearTimeout(timerRef.current)
-          timerRef.current = setTimeout(() => setShowBubble(false), 3000)
+        className="pointer-events-auto relative flex h-11 w-11 cursor-pointer items-center justify-center rounded-xl border border-zinc-200/80 bg-white shadow-md transition-shadow hover:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:border-zinc-700/60 dark:bg-zinc-800 sm:h-12 sm:w-12"
+        onClick={handlePoke}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            handlePoke()
+          }
         }}
       >
-        <span className={`text-2xl ${config.animation}`}>{config.emoji}</span>
+        <span className={`text-xl sm:text-2xl ${config.animation}`}>{config.emoji}</span>
         {isWorking && (
-          <span className="absolute -top-1 -right-1 flex h-3 w-3">
+          <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent/60 opacity-75" />
-            <span className="relative inline-flex h-3 w-3 rounded-full bg-accent" />
+            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-accent" />
           </span>
         )}
-      </motion.div>
+      </motion.button>
 
-      <span className="text-[10px] text-zinc-400 dark:text-zinc-600">
+      <span className="hidden text-[10px] text-zinc-400 dark:text-zinc-600 sm:inline">
         {config.label}
       </span>
     </div>

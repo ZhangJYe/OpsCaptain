@@ -1,6 +1,6 @@
 import { useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Activity, Waves } from 'lucide-react'
+import { Activity, Waves, Bot, BotOff } from 'lucide-react'
 import { MessageBubble } from './MessageBubble'
 import { StreamingText } from './StreamingText'
 import { ChatInput } from './ChatInput'
@@ -24,9 +24,11 @@ interface Props {
   loadingEngine?: string | null
   mode: ChatMode
   selectedSkillIds: string[]
+  petEnabled: boolean
   onSend: (query: string) => void
   onStop: () => void
   onModeChange: (m: ChatMode) => void
+  onTogglePet: () => void
   onClearSuggestions: () => void
 }
 
@@ -40,9 +42,11 @@ export function ChatView({
   loadingEngine,
   mode,
   selectedSkillIds,
+  petEnabled,
   onSend,
   onStop,
   onModeChange,
+  onTogglePet,
   onClearSuggestions,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -79,10 +83,20 @@ export function ChatView({
               <span>{formatSelectedSkillSummary(selectedSkillIds)}</span>
             </>
           )}
+          <button
+            type="button"
+            onClick={onTogglePet}
+            className="ml-auto flex items-center gap-1 rounded-md px-1.5 py-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 dark:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-400"
+            aria-label={petEnabled ? '关闭运维助手' : '开启运维助手'}
+            title={petEnabled ? '关闭运维助手' : '开启运维助手'}
+          >
+            {petEnabled ? <Bot size={14} /> : <BotOff size={14} />}
+            <span className="hidden sm:inline">{petEnabled ? '助手' : '关闭'}</span>
+          </button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto scrollbar-thin">
+      <div className="relative flex-1 overflow-y-auto scrollbar-thin">
         <div className="mx-auto max-w-4xl px-4 py-8 space-y-6">
 
           <AnimatePresence initial={false}>
@@ -140,6 +154,14 @@ export function ChatView({
             </motion.div>
           )}
 
+          {petEnabled && (messages.length > 0 || isLoading) && (
+            <PetCharacter
+              steps={thinkingSteps}
+              isStreaming={isLoading}
+              isGoS={isGoSEngine(loadingEngine)}
+            />
+          )}
+
           <div ref={bottomRef} />
         </div>
       </div>
@@ -152,14 +174,6 @@ export function ChatView({
         selectedSkillIds={selectedSkillIds}
         onModeChange={onModeChange}
       />
-
-      {(messages.length > 0 || isLoading) && (
-        <PetCharacter
-          steps={thinkingSteps}
-          isStreaming={isLoading}
-          isGoS={isGoSEngine(loadingEngine)}
-        />
-      )}
     </div>
   )
 }
