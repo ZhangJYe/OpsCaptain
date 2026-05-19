@@ -12,4 +12,7 @@ const (
 
 	CtxKeyApprovalBypass    contextKey = "approval_bypass"
 	CtxKeyApprovalRequestID contextKey = "approval_request_id"
+
+	CtxKeyInjectionRiskScore contextKey = "injection_risk_score"
+	CtxKeyInjectionRiskLevel contextKey = "injection_risk_level"
 )

@@ -7,6 +7,7 @@ import (
 	"SuperBizAgent/internal/ai/events"
 	"SuperBizAgent/internal/ai/skills"
 	"SuperBizAgent/internal/ai/tools"
+	"SuperBizAgent/internal/consts"
 	"context"
 	"io"
 
@@ -97,16 +98,23 @@ func newReactAgentLambdaWithQuery(ctx context.Context, query string) (lba *compo
 	}
 	config.ToolCallingModel = chatModelIns11
 
-	var disclosed skills.DisclosureResult
-	selectedSkillIDs := skills.SelectedSkillIDsFromContext(ctx)
-	if query != "" {
-		disclosed = chatDisclosure.Disclose(query, selectedSkillIDs)
-		config.ToolsConfig.Tools = disclosed.Tools
-		g.Log().Infof(ctx, "[Chat] progressive disclosure: query=%q selected=%v domains=%v tools=%d (L0=%d L1=%d)",
-			query, selectedSkillIDs, disclosed.MatchedDomains, len(disclosed.Tools), disclosed.DisclosedTier[skills.TierAlwaysOn],
-			disclosed.DisclosedTier[skills.TierSkillGate])
+	// Restrict tools when injection risk is elevated
+	riskLevel, _ := ctx.Value(consts.CtxKeyInjectionRiskLevel).(string)
+	if riskLevel == "suspicious" {
+		config.ToolsConfig.Tools = chatDisclosure.OnlyAlwaysOnTools()
+		g.Log().Infof(ctx, "[Chat] injection risk=suspicious, restricted to always-on tools only (%d tools)", len(config.ToolsConfig.Tools))
 	} else {
-		config.ToolsConfig.Tools = chatDisclosure.AllTools()
+		var disclosed skills.DisclosureResult
+		selectedSkillIDs := skills.SelectedSkillIDsFromContext(ctx)
+		if query != "" {
+			disclosed = chatDisclosure.Disclose(query, selectedSkillIDs)
+			config.ToolsConfig.Tools = disclosed.Tools
+			g.Log().Infof(ctx, "[Chat] progressive disclosure: query=%q selected=%v domains=%v tools=%d (L0=%d L1=%d)",
+				query, selectedSkillIDs, disclosed.MatchedDomains, len(disclosed.Tools), disclosed.DisclosedTier[skills.TierAlwaysOn],
+				disclosed.DisclosedTier[skills.TierSkillGate])
+		} else {
+			config.ToolsConfig.Tools = chatDisclosure.AllTools()
+		}
 	}
 
 	if emitter, traceID, ok := chatToolEmitterFromContext(ctx); ok {

@@ -45,7 +45,7 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 	phaseStart := time.Now()
 	g.Log().Infof(ctx, "[session:%s][req:%s] ChatStream start, question length: %d, selected_skills=%v", id, requestID, len(msg), selectedSkillIDs)
 
-	if err := rejectSuspiciousPrompt(ctx, msg); err != nil {
+	if ctx, _, err = checkAndGuardPrompt(ctx, msg); err != nil {
 		return nil, err
 	}
 

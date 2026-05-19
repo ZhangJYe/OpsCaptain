@@ -134,6 +134,17 @@ func (pd *ProgressiveDisclosure) AllTools() []tool.BaseTool {
 	return all
 }
 
+// OnlyAlwaysOnTools returns only TierAlwaysOn tools, used when injection risk is elevated.
+func (pd *ProgressiveDisclosure) OnlyAlwaysOnTools() []tool.BaseTool {
+	var out []tool.BaseTool
+	for _, tt := range pd.tools {
+		if tt.Tier == TierAlwaysOn {
+			out = append(out, tt.Tool)
+		}
+	}
+	return out
+}
+
 func (pd *ProgressiveDisclosure) matchDomains(query string) []string {
 	if strings.TrimSpace(query) == "" {
 		return nil
