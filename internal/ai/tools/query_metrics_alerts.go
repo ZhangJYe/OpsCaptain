@@ -42,10 +42,11 @@ type SimplifiedAlert struct {
 }
 
 type PrometheusAlertsOutput struct {
-	Success bool              `json:"success" jsonschema:"description=查询是否成功"`
-	Alerts  []SimplifiedAlert `json:"alerts,omitempty" jsonschema:"description=活动告警列表，每个告警包含名称、描述、状态、激活时间和持续时间。相同 alertname 的告警只保留第一个"`
-	Message string            `json:"message,omitempty" jsonschema:"description=操作结果的状态消息"`
-	Error   string            `json:"error,omitempty" jsonschema:"description=如果查询失败，包含错误信息"`
+	Success  bool              `json:"success" jsonschema:"description=查询是否成功"`
+	Degraded bool              `json:"degraded,omitempty" jsonschema:"description=结果是否降级（查询失败时为 true）"`
+	Alerts   []SimplifiedAlert `json:"alerts,omitempty" jsonschema:"description=活动告警列表，每个告警包含名称、描述、状态、激活时间和持续时间。相同 alertname 的告警只保留第一个"`
+	Message  string            `json:"message,omitempty" jsonschema:"description=操作结果的状态消息"`
+	Error    string            `json:"error,omitempty" jsonschema:"description=如果查询失败，包含错误信息"`
 }
 
 func queryPrometheusAlerts(ctx context.Context) (PrometheusAlertsResult, error) {
@@ -134,9 +135,10 @@ func NewPrometheusAlertsQueryTool() tool.InvokableTool {
 			result, err := queryPrometheusAlerts(ctx)
 			if err != nil {
 				alertsOut := PrometheusAlertsOutput{
-					Success: false,
-					Error:   err.Error(),
-					Message: "Failed to query Prometheus alerts. The service may not be configured or is unreachable.",
+					Success:  false,
+					Degraded: true,
+					Error:    err.Error(),
+					Message:  "Failed to query Prometheus alerts. The service may not be configured or is unreachable.",
 				}
 				jsonBytes, _ := json.MarshalIndent(alertsOut, "", "  ")
 				return string(jsonBytes), nil

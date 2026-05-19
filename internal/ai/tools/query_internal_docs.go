@@ -17,9 +17,10 @@ type QueryInternalDocsInput struct {
 }
 
 type QueryInternalDocsOutput struct {
-	Success bool   `json:"success"`
-	Message string `json:"message,omitempty"`
-	Error   string `json:"error,omitempty"`
+	Success  bool   `json:"success"`
+	Degraded bool   `json:"degraded,omitempty"`
+	Message  string `json:"message,omitempty"`
+	Error    string `json:"error,omitempty"`
 }
 
 const defaultInternalDocsQueryTimeout = 5 * time.Second
@@ -36,9 +37,10 @@ func NewQueryInternalDocsTool() tool.InvokableTool {
 			if err != nil {
 				g.Log().Warningf(ctx, "query_internal_docs degraded: %v", err)
 				out := QueryInternalDocsOutput{
-					Success: false,
-					Message: "内部知识库检索暂时不可用。请继续基于可用的 metrics、logs 和用户提供的上下文诊断，并明确标注缺失知识库证据。",
-					Error:   fmt.Sprintf("failed to query internal docs: %v", err),
+					Success:  false,
+					Degraded: true,
+					Message:  "内部知识库检索暂时不可用。请继续基于可用的 metrics、logs 和用户提供的上下文诊断，并明确标注缺失知识库证据。",
+					Error:    fmt.Sprintf("failed to query internal docs: %v", err),
 				}
 				respBytes, _ := json.Marshal(out)
 				return string(respBytes), nil

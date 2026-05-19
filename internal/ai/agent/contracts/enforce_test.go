@@ -30,10 +30,10 @@ func TestValidateAgainstContract_UnknownAgent(t *testing.T) {
 	}
 }
 
-func TestValidateAgainstContract_ValidTriage(t *testing.T) {
-	r := result("triage", protocol.ResultStatusSucceeded, "intent=deployment domains=[metrics,logs] priority=high")
+func TestValidateAgainstContract_ValidKnowledge(t *testing.T) {
+	r := result("knowledge", protocol.ResultStatusSucceeded, "SOP found for deployment rollback")
 	if err := ValidateAgainstContract(r); err != nil {
-		t.Fatalf("valid triage result should pass, got: %v", err)
+		t.Fatalf("valid knowledge result should pass, got: %v", err)
 	}
 }
 

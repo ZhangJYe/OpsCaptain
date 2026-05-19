@@ -3,6 +3,7 @@ package chat
 import (
 	v1 "SuperBizAgent/api/chat/v1"
 	aiservice "SuperBizAgent/internal/ai/service"
+	"SuperBizAgent/utility/resilience"
 	"SuperBizAgent/utility/safety"
 	traceutil "SuperBizAgent/utility/tracing"
 	"context"
@@ -64,13 +65,13 @@ func userFacingExecutionError(err error) (int, string) {
 	switch {
 	case aiservice.IsDailyTokenLimitError(err):
 		return http.StatusTooManyRequests, "daily token limit exceeded for this session"
-	case strings.Contains(strings.ToLower(err.Error()), "llm concurrency queue timeout"):
+	case resilience.IsConcurrencyLimitError(err):
 		return http.StatusServiceUnavailable, "AI is temporarily busy. Please retry shortly."
-	case errors.Is(err, context.DeadlineExceeded) || strings.Contains(strings.ToLower(err.Error()), "timeout"):
+	case errors.Is(err, context.DeadlineExceeded):
 		return http.StatusGatewayTimeout, "AI response timeout. The request may still be processing — please retry."
 	case errors.Is(err, context.Canceled):
 		return 0, ""
-	case strings.Contains(strings.ToLower(err.Error()), "circuit breaker open"):
+	case errors.Is(err, resilience.ErrCircuitBreakerOpen):
 		return http.StatusServiceUnavailable, "AI service temporarily unavailable. Please retry later."
 	default:
 		return 0, ""

@@ -66,3 +66,38 @@ func TestValidateMysqlQuery_Allowlist(t *testing.T) {
 		t.Fatal("expected users table to be rejected by allowlist")
 	}
 }
+
+func TestValidateMysqlQuery_SubqueryBypass(t *testing.T) {
+	policy := mysqlQueryPolicy{
+		maxRows: 100,
+		allowedTables: map[string]struct{}{
+			"orders": {},
+		},
+	}
+
+	bypassAttempts := []struct {
+		name string
+		sql  string
+	}{
+		{"SELECT subquery", "SELECT (SELECT password FROM users LIMIT 1) FROM orders"},
+		{"WHERE IN subquery", "SELECT * FROM orders WHERE user_id IN (SELECT id FROM users)"},
+		{"WHERE EXISTS subquery", "SELECT * FROM orders WHERE EXISTS (SELECT 1 FROM users WHERE users.id = orders.user_id)"},
+		{"FROM subquery", "SELECT * FROM (SELECT * FROM users) AS u"},
+		{"JOIN subquery", "SELECT * FROM orders JOIN (SELECT id FROM users) AS u ON orders.user_id = u.id"},
+	}
+
+	for _, tc := range bypassAttempts {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := validateMysqlQuery(tc.sql, policy)
+			if err == nil {
+				t.Fatalf("expected subquery to be rejected: %q", tc.sql)
+			}
+		})
+	}
+
+	// Subqueries should be allowed when no allowlist is configured
+	openPolicy := mysqlQueryPolicy{maxRows: 100}
+	if _, err := validateMysqlQuery("SELECT * FROM (SELECT * FROM users) AS u", openPolicy); err != nil {
+		t.Fatalf("subquery should be allowed without allowlist: %v", err)
+	}
+}

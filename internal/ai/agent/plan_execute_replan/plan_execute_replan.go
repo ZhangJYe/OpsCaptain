@@ -34,7 +34,7 @@ func BuildPlanAgent(ctx context.Context, query string) (string, []string, error)
 		MaxIterations: 5,
 	})
 	if err != nil {
-		return "", []string{}, fmt.Errorf("build PlanExecuteAgent Error: %v", err)
+		return "", []string{}, fmt.Errorf("build PlanExecuteAgent Error: %w", err)
 	}
 	r := adk.NewRunner(ctx, adk.RunnerConfig{
 		Agent: planExecuteAgent,

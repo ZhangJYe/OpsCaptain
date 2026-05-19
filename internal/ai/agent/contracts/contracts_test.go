@@ -8,7 +8,7 @@ import (
 )
 
 func TestCoreContractsAreGlobalAndRenderable(t *testing.T) {
-	for _, agent := range []string{"triage", "metrics", "logs", "knowledge", "reporter"} {
+	for _, agent := range []string{"metrics", "logs", "knowledge"} {
 		contract, ok := Get(agent)
 		if !ok {
 			t.Fatalf("expected contract for %s", agent)
@@ -26,16 +26,6 @@ func TestCoreContractsAreGlobalAndRenderable(t *testing.T) {
 		if !strings.Contains(prompt, "## Must Not") {
 			t.Fatalf("expected guardrails in prompt for %s, got %q", agent, prompt)
 		}
-	}
-}
-
-func TestReporterContractForbidsNewFacts(t *testing.T) {
-	prompt, ok := PromptFor("reporter")
-	if !ok {
-		t.Fatal("expected reporter contract")
-	}
-	if !strings.Contains(prompt, "不要新增 specialist 没有提供的新事实") {
-		t.Fatalf("expected reporter contract to forbid new facts, got %q", prompt)
 	}
 }
 

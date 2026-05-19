@@ -69,19 +69,6 @@ func (r *PolicyResolver) Resolve(ctx context.Context, req ContextRequest) Contex
 		base.MaxMemoryItems = loadPositiveInt(ctx, "context.aiops_max_memory_items", defaultAIOpsMaxMemoryItems)
 		base.MaxToolItems = loadPositiveInt(ctx, "context.reporter_max_tool_items", defaultReporterMaxToolItems)
 		base.Budget.ToolTokens = int(float64(budget.MaxTokens) * 0.15)
-	case "reporter":
-		base.Name = "reporter-default"
-		base.AllowHistory = false
-		base.AllowMemory = false
-		base.AllowDocs = false
-		base.AllowToolResults = true
-		base.Staged = false
-		base.MaxHistoryMessages = 0
-		base.MaxMemoryItems = 0
-		base.MaxToolItems = loadPositiveInt(ctx, "context.reporter_max_tool_items", defaultReporterMaxToolItems)
-		base.Budget.HistoryTokens = 0
-		base.Budget.MemoryTokens = 0
-		base.Budget.DocumentTokens = 0
 	case "chat":
 	}
 
