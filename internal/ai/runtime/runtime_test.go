@@ -143,11 +143,11 @@ func TestRuntimeNormalizesDegradedReason(t *testing.T) {
 func TestRuntimeDetailMessagesOmitVerboseSummaryBodies(t *testing.T) {
 	rt := New()
 	longSummary := strings.Repeat("very long summary body ", 20) + "\nwith extra lines"
-	if err := rt.Register(&fakeAgent{name: "reporter", summary: longSummary}); err != nil {
+	if err := rt.Register(&fakeAgent{name: "aggregator", summary: longSummary}); err != nil {
 		t.Fatalf("register agent: %v", err)
 	}
 
-	task := protocol.NewRootTask("session-test", "do something", "reporter")
+	task := protocol.NewRootTask("session-test", "do something", "aggregator")
 	if _, err := rt.Dispatch(context.Background(), task); err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}

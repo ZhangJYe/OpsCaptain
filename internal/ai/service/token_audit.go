@@ -5,6 +5,7 @@ import (
 	"SuperBizAgent/utility/common"
 	"SuperBizAgent/utility/metrics"
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -38,8 +39,8 @@ func (e *DailyTokenLimitError) Error() string {
 }
 
 func IsDailyTokenLimitError(err error) bool {
-	_, ok := err.(*DailyTokenLimitError)
-	return ok
+	var target *DailyTokenLimitError
+	return errors.As(err, &target)
 }
 
 func RecordSessionTokenUsage(ctx context.Context, sessionID, model string, promptTokens, completionTokens int) error {

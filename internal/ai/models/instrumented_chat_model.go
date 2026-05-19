@@ -164,7 +164,7 @@ func (m *instrumentedChatModel) Stream(ctx context.Context, input []*schema.Mess
 		span.RecordError(fmt.Errorf("circuit breaker open"))
 		span.SetStatus(codes.Error, "circuit breaker open")
 		span.End()
-		return nil, fmt.Errorf("circuit breaker open for %s", opt.Name)
+		return nil, fmt.Errorf("circuit breaker open for %s: %w", opt.Name, resilience.ErrCircuitBreakerOpen)
 	}
 
 	reader, err := m.inner.Stream(ctx, input, opts...)
@@ -276,7 +276,7 @@ func llmStatus(err error) string {
 		return "timeout"
 	case errors.Is(err, context.Canceled):
 		return "canceled"
-	case strings.Contains(strings.ToLower(err.Error()), "circuit breaker open"):
+	case errors.Is(err, resilience.ErrCircuitBreakerOpen):
 		return "circuit_open"
 	default:
 		return "error"

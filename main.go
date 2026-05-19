@@ -63,6 +63,8 @@ func main() {
 		if err := auth.ValidateConfig(); err != nil {
 			panic(err)
 		}
+	} else {
+		g.Log().Warningf(ctx, "⚠️  AUTH DISABLED: auth.enabled is false. All API endpoints are accessible without authentication. Do NOT use this in production.")
 	}
 
 	fileDir, err := g.Cfg().Get(ctx, "file_dir")

@@ -34,38 +34,6 @@ func (c Contract) ID() string {
 }
 
 var registry = map[string]Contract{
-	"triage": {
-		Agent:      "triage",
-		Version:    Version,
-		CacheScope: CacheScopeGlobal,
-		Role:       "任务分诊器，负责把原始用户问题映射为 intent、priority 和 specialist domains。",
-		Responsibilities: []string{
-			"仅基于原始用户问题判断路由域。",
-			"输出 intent、domains、priority，供 supervisor 编排。",
-			"保持规则表驱动，便于扩展和 replay。",
-		},
-		Inputs: []string{
-			"raw query",
-			"triage rules",
-		},
-		Outputs: []string{
-			"intent",
-			"domains",
-			"priority",
-		},
-		Must: []string{
-			"优先保持 routing 可解释。",
-			"当无法精确识别时，选择 metrics、logs、knowledge 的安全默认组合。",
-		},
-		MustNot: []string{
-			"不要用 memory_context 改写 routing 判断。",
-			"不要在 triage 阶段读取工具或外部文档。",
-			"不要把 specialist 的执行职责前置到 triage。",
-		},
-		EvidencePolicy: []string{
-			"triage 不生产业务证据，只生产路由元数据。",
-		},
-	},
 	"metrics": {
 		Agent:      "metrics",
 		Version:    Version,
@@ -169,42 +137,6 @@ var registry = map[string]Contract{
 		EvidencePolicy: []string{
 			"知识库 evidence 是指导和背景，不等价于实时观测。",
 			"涉及根因时必须和 metrics/logs 或用户提供事实交叉验证。",
-		},
-	},
-	"reporter": {
-		Agent:      "reporter",
-		Version:    Version,
-		CacheScope: CacheScopeGlobal,
-		Role:       "报告聚合器，负责汇总 specialist 输出，生成用户可读结论。",
-		Responsibilities: []string{
-			"聚合 metrics、logs、knowledge 的 summary、evidence、degradation。",
-			"面向用户解释当前证据支持什么、不支持什么。",
-			"根据 query 语言偏好输出中文或英文。",
-		},
-		Inputs: []string{
-			"raw query",
-			"intent",
-			"specialist results",
-			"tool item context",
-		},
-		Outputs: []string{
-			"final summary",
-			"aggregated evidence",
-			"degradation reason",
-		},
-		Must: []string{
-			"只基于 specialist evidence 和 tool context 汇总结论。",
-			"当存在 degraded specialist 时明确说明部分降级。",
-			"没有 evidence 时给出保守结论和下一步检查建议。",
-		},
-		MustNot: []string{
-			"不要新增 specialist 没有提供的新事实。",
-			"不要把不确定推断写成确定根因。",
-			"不要隐藏工具失败、超时或空结果。",
-		},
-		EvidencePolicy: []string{
-			"reporter 不生产新证据，只聚合和解释已有 evidence。",
-			"结论强度必须跟 evidence 覆盖度一致。",
 		},
 	},
 }

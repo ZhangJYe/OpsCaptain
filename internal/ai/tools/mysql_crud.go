@@ -31,6 +31,15 @@ var (
 	singleQuotePattern  = regexp.MustCompile(`'([^'\\]|\\.|'')*'`)
 	doubleQuotePattern  = regexp.MustCompile(`"([^"\\]|\\.|"")*"`)
 	tablePattern        = regexp.MustCompile(`(?i)\b(?:FROM|JOIN)\s+([a-zA-Z0-9_` + "`" + `.]+)`)
+	subqueryPatterns    = []*regexp.Regexp{
+		regexp.MustCompile(`(?i)\bFROM\s*\(\s*SELECT\b`),
+		regexp.MustCompile(`(?i)\bJOIN\s*\(\s*SELECT\b`),
+		regexp.MustCompile(`(?i)\bIN\s*\(\s*SELECT\b`),
+		regexp.MustCompile(`(?i)\bEXISTS\s*\(\s*SELECT\b`),
+		regexp.MustCompile(`(?i)\bANY\s*\(\s*SELECT\b`),
+		regexp.MustCompile(`(?i)\bALL\s*\(\s*SELECT\b`),
+		regexp.MustCompile(`(?i)\bSELECT\s+.*\bFROM\s+.*\(\s*SELECT\b`),
+	}
 	forbiddenPatterns   = []*regexp.Regexp{
 		regexp.MustCompile(`\bDROP\b`),
 		regexp.MustCompile(`\bDELETE\b`),
@@ -93,12 +102,12 @@ func NewMysqlCrudTool() tool.InvokableTool {
 			policy := loadMySQLQueryPolicy(ctx)
 			query, err := validateMysqlQuery(input.SQL, policy)
 			if err != nil {
-				return fmt.Sprintf(`{"success":false,"error":%q}`, err.Error()), nil
+				return fmt.Sprintf(`{"success":false,"degraded":true,"error":%q}`, err.Error()), nil
 			}
 
 			db, err := initMysqlDB(ctx)
 			if err != nil {
-				return fmt.Sprintf(`{"success":false,"error":"MySQL is not available: %s"}`, err.Error()), nil
+				return fmt.Sprintf(`{"success":false,"degraded":true,"error":"MySQL is not available: %s"}`, err.Error()), nil
 			}
 
 			queryCtx, cancel := context.WithTimeout(ctxOrBackground(ctx), policy.timeout)
@@ -107,7 +116,7 @@ func NewMysqlCrudTool() tool.InvokableTool {
 			var results []map[string]interface{}
 			err = db.WithContext(queryCtx).Raw(query).Scan(&results).Error
 			if err != nil {
-				return fmt.Sprintf(`{"success":false,"error":"query failed: %s"}`, err.Error()), nil
+				return fmt.Sprintf(`{"success":false,"degraded":true,"error":"query failed: %s"}`, err.Error()), nil
 			}
 
 			resBytes, err := json.Marshal(results)
@@ -199,6 +208,11 @@ func validateMysqlQuery(sql string, policy mysqlQueryPolicy) (string, error) {
 	}
 
 	if len(policy.allowedTables) > 0 {
+		for _, pattern := range subqueryPatterns {
+			if pattern.MatchString(inspected) {
+				return "", fmt.Errorf("subqueries are not allowed when table allowlist is enabled")
+			}
+		}
 		for _, tableName := range referencedTableNames(inspected) {
 			if _, ok := policy.allowedTables[tableName]; !ok {
 				return "", fmt.Errorf("table %q is not in the allowlist", tableName)

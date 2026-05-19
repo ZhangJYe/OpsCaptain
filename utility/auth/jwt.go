@@ -15,6 +15,8 @@ import (
 	"github.com/gogf/gf/v2/frame/g"
 )
 
+const revokedTokenKeyPrefix = "opscaptionai:revoked:"
+
 const (
 	defaultTokenExpiry = 24 * time.Hour
 	issuer             = "SuperBizAgent"
@@ -40,10 +42,8 @@ type TokenPair struct {
 }
 
 var (
-	jwtSecret          []byte
-	jwtSecretOnce      sync.Once
-	revokedTokens      sync.Map
-	revokedCleanupOnce sync.Once
+	jwtSecret     []byte
+	jwtSecretOnce sync.Once
 )
 
 var ErrMissingJWTSecret = fmt.Errorf("auth.jwt_secret is not configured; refusing to start")
@@ -111,13 +111,9 @@ func GenerateToken(userID string, role string) (*TokenPair, error) {
 
 func ValidateToken(tokenStr string) (*Claims, error) {
 	secret := loadSecret()
-	startRevokedTokenCleanup()
 
-	if exp, revoked := loadRevokedTokenExpiry(tokenStr); revoked {
-		if exp > time.Now().Unix() {
-			return nil, fmt.Errorf("token has been revoked")
-		}
-		revokedTokens.Delete(tokenStr)
+	if isTokenRevoked(tokenStr) {
+		return nil, fmt.Errorf("token has been revoked")
 	}
 
 	claims, err := decodeJWT(tokenStr, secret)
@@ -141,46 +137,42 @@ func ValidateToken(tokenStr string) (*Claims, error) {
 }
 
 func RevokeToken(tokenStr string) {
-	expiry := time.Now().Add(defaultTokenExpiry).Unix()
+	ttl := defaultTokenExpiry
 	if secret := loadSecret(); len(secret) > 0 {
 		if claims, err := decodeJWT(tokenStr, secret); err == nil && claims.Exp > 0 {
-			expiry = claims.Exp
-		}
-	}
-	revokedTokens.Store(tokenStr, expiry)
-	startRevokedTokenCleanup()
-}
-
-func loadRevokedTokenExpiry(tokenStr string) (int64, bool) {
-	raw, ok := revokedTokens.Load(tokenStr)
-	if !ok {
-		return 0, false
-	}
-	expiry, _ := raw.(int64)
-	return expiry, true
-}
-
-func startRevokedTokenCleanup() {
-	revokedCleanupOnce.Do(func() {
-		go func() {
-			ticker := time.NewTicker(time.Hour)
-			defer ticker.Stop()
-			for range ticker.C {
-				clearExpiredRevokedTokens(time.Now())
+			remaining := time.Until(time.Unix(claims.Exp, 0))
+			if remaining > 0 {
+				ttl = remaining
 			}
-		}()
-	})
+		}
+	}
+	storeRevokedToken(tokenStr, ttl)
 }
 
-func clearExpiredRevokedTokens(now time.Time) {
-	current := now.Unix()
-	revokedTokens.Range(func(key, value any) bool {
-		expiry, _ := value.(int64)
-		if expiry > 0 && expiry <= current {
-			revokedTokens.Delete(key)
-		}
-		return true
-	})
+func revokedTokenKey(tokenStr string) string {
+	hash := sha256.Sum256([]byte(tokenStr))
+	return revokedTokenKeyPrefix + fmt.Sprintf("%x", hash[:8])
+}
+
+func storeRevokedToken(tokenStr string, ttl time.Duration) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	key := revokedTokenKey(tokenStr)
+	if _, err := g.Redis().Do(ctx, "SET", key, "1", "EX", int(ttl.Seconds())); err != nil {
+		g.Log().Warningf(ctx, "[auth] failed to persist revoked token to Redis: %v", err)
+	}
+}
+
+func isTokenRevoked(tokenStr string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	key := revokedTokenKey(tokenStr)
+	val, err := g.Redis().Do(ctx, "EXISTS", key)
+	if err != nil {
+		g.Log().Warningf(ctx, "[auth] Redis check for revoked token failed: %v", err)
+		return false
+	}
+	return val.Int64() > 0
 }
 
 func encodeJWT(claims *Claims, secret []byte) (string, error) {

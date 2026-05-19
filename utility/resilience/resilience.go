@@ -3,12 +3,15 @@ package resilience
 import (
 	"SuperBizAgent/utility/metrics"
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/gogf/gf/v2/frame/g"
 )
+
+var ErrCircuitBreakerOpen = errors.New("circuit breaker open")
 
 type CallOption struct {
 	Timeout    time.Duration
@@ -148,7 +151,7 @@ func Execute[T any](ctx context.Context, opt CallOption, fn func(ctx context.Con
 
 	if !cb.Allow() {
 		var zero T
-		return zero, fmt.Errorf("[%s] circuit breaker open, service temporarily unavailable", opt.Name)
+		return zero, fmt.Errorf("[%s] %w, service temporarily unavailable", opt.Name, ErrCircuitBreakerOpen)
 	}
 
 	var lastErr error
