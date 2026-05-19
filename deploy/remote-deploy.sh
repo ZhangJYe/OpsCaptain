@@ -377,7 +377,7 @@ if ! $COMPOSE up -d --remove-orphans jaeger rabbitmq redis backend; then
 fi
 
 attempt=0
-until $COMPOSE exec -T backend wget -qO- http://127.0.0.1:8000/readyz >/dev/null; do
+until backend_container="$($COMPOSE ps -q backend 2>/dev/null)" && [ -n "$backend_container" ] && [ "$(docker inspect "$backend_container" --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' 2>/dev/null)" = "healthy" ] && $COMPOSE exec -T backend wget -qO- http://127.0.0.1:8000/readyz >/dev/null; do
   attempt=$((attempt + 1))
   if [ "$attempt" -ge "$DEPLOY_WAIT_ATTEMPTS" ]; then
     $COMPOSE ps || true
