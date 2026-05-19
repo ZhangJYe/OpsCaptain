@@ -1,4 +1,4 @@
-import type { SkillGroup, SkillOption } from '../types/chat'
+import type { ChatMessage, SkillGroup, SkillOption } from '../types/chat'
 
 export function getApiBaseUrl(): string {
   const config = (window as any).SUPERBIZAGENT_CONFIG || {}
@@ -159,4 +159,11 @@ export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+export function isGoSMessage(message: ChatMessage): boolean {
+  if (message.engine === 'gos_engine' || message.engine === 'gos' || message.engine === 'aiops_gos_engine') {
+    return true
+  }
+  return message.executionSteps?.some((s) => s.id.startsWith('gos:')) ?? false
 }

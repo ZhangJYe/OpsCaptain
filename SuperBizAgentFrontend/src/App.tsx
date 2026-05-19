@@ -129,6 +129,7 @@ export default function App() {
           thinkingSteps={chat.thinkingSteps}
           suggestions={chat.suggestions}
           isLoading={chat.isLoading}
+          loadingEngine={chat.loadingEngine}
           mode={chat.mode}
           selectedSkillIds={selectedSkillIds}
           onSend={handleSend}

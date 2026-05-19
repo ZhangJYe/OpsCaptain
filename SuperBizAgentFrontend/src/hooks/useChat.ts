@@ -147,7 +147,7 @@ async function requestAIOps({ baseUrl, query, engine }: AIOpsRequest): Promise<A
   };
 }
 
-function isGoSEngine(engine: AIOpsEngine | string | undefined): boolean {
+export function isGoSEngine(engine: AIOpsEngine | string | null | undefined): boolean {
   return engine === "gos_engine" || engine === "gos" || engine === "aiops_gos_engine";
 }
 
@@ -526,6 +526,7 @@ export function useChat() {
   const [mode, setMode] = useState<ChatMode>("stream");
   const [sessionId, setSessionId] = useState(() => generateId());
   const [abortCtrl, setAbortCtrl] = useState<AbortController | null>(null);
+  const [loadingEngine, setLoadingEngine] = useState<string | null>(null);
 
   const send = useCallback(
     async (query: string, options: SendOptions = {}) => {
@@ -913,6 +914,7 @@ export function useChat() {
 
       setMessages((prev) => [...prev, userMsg]);
       setIsLoading(true);
+      setLoadingEngine(engine);
       setStreamingContent("");
       setStreamingThoughts([`AIOps 使用 ${aiOpsEngineLabel(engine)} 引擎`]);
       setSuggestions([]);
@@ -932,6 +934,7 @@ export function useChat() {
           content: payload.result,
           timestamp: Date.now(),
           executionSteps: visibleExecutionSteps(liveSteps),
+          engine: actualEngine,
         };
         setMessages((prev) => [...prev, assistantMsg]);
         setSuggestions(generateSuggestions(payload.result, mode));
@@ -945,10 +948,12 @@ export function useChat() {
             content: `AIOps 请求失败: ${err?.message || "未知错误"}`,
             timestamp: Date.now(),
             executionSteps: visibleExecutionSteps(liveSteps),
+            engine,
           },
         ]);
       } finally {
         setIsLoading(false);
+        setLoadingEngine(null);
         setStreamingContent("");
         setStreamingThoughts([]);
       }
@@ -1005,6 +1010,7 @@ export function useChat() {
     thinkingSteps,
     suggestions,
     isLoading,
+    loadingEngine,
     mode,
     sessionId,
     send,

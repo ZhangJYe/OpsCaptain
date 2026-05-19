@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Activity, ChevronDown, Loader2, Check, AlertCircle, Brain } from 'lucide-react'
+import { Activity, ChevronDown, Loader2, Check, AlertCircle, Brain, Search } from 'lucide-react'
 import type { ChatExecutionStep } from '../../types/chat'
 
 export type ThinkingStep = ChatExecutionStep
@@ -130,6 +130,42 @@ export function ThinkingCollapse({ steps, isStreaming, defaultOpen }: Props) {
                           {item}
                         </div>
                       ))}
+                    </div>
+                  )}
+                  {isGOS && step.id === 'gos:hypothesis' && step.status === 'done' && step.detail && (
+                    <div className="mt-1.5 ml-5 rounded-lg bg-accent/5 border border-accent/10 px-3 py-2">
+                      <span className="text-[10px] font-medium uppercase tracking-wider text-accent">Hypothesis</span>
+                      <p className="mt-1 text-xs text-zinc-700 dark:text-zinc-300">{step.detail}</p>
+                    </div>
+                  )}
+                  {isGOS && step.id === 'gos:experts' && step.status === 'done' && step.detail && (
+                    <div className="mt-1 ml-5 flex items-center gap-1.5 text-[11px] text-zinc-500">
+                      <Search size={10} className="text-accent/60" />
+                      {step.detail}
+                    </div>
+                  )}
+                  {isGOS && step.id === 'gos:evidence' && step.status === 'done' && step.meta && step.meta.length > 0 && (
+                    <div className="mt-1.5 ml-5 space-y-1">
+                      {step.meta.map((item, i) => (
+                        <div key={i} className="flex items-start gap-2 rounded-md bg-zinc-50 dark:bg-zinc-800/50 px-2.5 py-1.5 text-[11px] text-zinc-600 dark:text-zinc-400">
+                          <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent/40" />
+                          <span className="break-words">{item}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {isGOS && step.id === 'gos:confidence' && step.status === 'done' && (
+                    <div className="mt-1 ml-5">
+                      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-medium ${
+                        step.detail?.includes('降级')
+                          ? 'bg-amber-500/10 text-amber-500'
+                          : 'bg-emerald-500/10 text-emerald-500'
+                      }`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${
+                          step.detail?.includes('降级') ? 'bg-amber-400' : 'bg-emerald-400'
+                        }`} />
+                        {step.detail || 'frontier 已收敛'}
+                      </span>
                     </div>
                   )}
                 </div>
