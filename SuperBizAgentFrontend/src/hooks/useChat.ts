@@ -147,10 +147,12 @@ async function requestAIOps({ baseUrl, query, engine }: AIOpsRequest): Promise<A
   };
 }
 
+function isGoSEngine(engine: AIOpsEngine | string | undefined): boolean {
+  return engine === "gos_engine" || engine === "gos" || engine === "aiops_gos_engine";
+}
+
 function aiOpsEngineLabel(engine: AIOpsEngine | string | undefined): string {
-  return engine === "gos_engine" || engine === "aiops_gos_engine"
-    ? "GoS Belief"
-    : "Plan-Execute";
+  return isGoSEngine(engine) ? "GoS Belief" : "Plan-Execute";
 }
 
 function buildExecutionSteps(): ThinkingStep[] {
@@ -170,6 +172,21 @@ function buildExecutionSteps(): ThinkingStep[] {
 }
 
 function buildAIOpsSteps(engine: AIOpsEngine): ThinkingStep[] {
+  if (isGoSEngine(engine)) {
+    return [
+      {
+        id: "gos:hypothesis",
+        label: "建立候选假设",
+        status: "active",
+        detail: "从症状抽取故障方向",
+      },
+      { id: "gos:experts", label: "调度专家检索", status: "pending" },
+      { id: "gos:evidence", label: "挂载支持证据", status: "pending" },
+      { id: "gos:confidence", label: "校准置信度", status: "pending" },
+      { id: "gos:reporter", label: "生成证据链报告", status: "pending" },
+    ];
+  }
+
   return [
     {
       id: "engine",
@@ -181,6 +198,107 @@ function buildAIOpsSteps(engine: AIOpsEngine): ThinkingStep[] {
     { id: "evidence", label: "收集证据", status: "pending" },
     { id: "reporter", label: "生成报告", status: "pending" },
   ];
+}
+
+function activateAIOpsSteps(steps: ThinkingStep[], engine: AIOpsEngine): ThinkingStep[] {
+  if (isGoSEngine(engine)) {
+    return upsertStep(
+      steps.map((step) =>
+        step.id === "gos:hypothesis"
+          ? { ...step, status: "done" as const, detail: "候选假设已建立" }
+          : step,
+      ),
+      "gos:experts",
+      "调度专家检索",
+      { status: "active", detail: "查询日志、知识库与 RAG 证据" },
+    );
+  }
+
+  return upsertStep(
+    steps.map((step) =>
+      step.id === "engine"
+        ? { ...step, status: "done" as const, detail: aiOpsEngineLabel(engine) }
+        : step,
+    ),
+    "dispatch",
+    "调度 Runtime",
+    { status: "active", detail: "提交 AIOps 诊断任务..." },
+  );
+}
+
+function completeAIOpsSteps(
+  steps: ThinkingStep[],
+  actualEngine: AIOpsEngine | string | undefined,
+  payload: AIOpsPayload,
+): ThinkingStep[] {
+  const detailItems = payload.detail || [];
+  const reportDetail =
+    payload.degraded && payload.degradation_reason
+      ? `降级完成：${payload.degradation_reason}`
+      : "诊断报告已生成";
+
+  if (isGoSEngine(actualEngine)) {
+    let next = steps.map((step) => {
+      if (step.id === "gos:hypothesis") {
+        return { ...step, status: "done" as const, detail: "候选故障方向已建立" };
+      }
+      if (step.id === "gos:experts") {
+        return {
+          ...step,
+          status: "done" as const,
+          detail: payload.trace_id ? `trace ${payload.trace_id}` : "专家链路已返回",
+        };
+      }
+      if (step.id === "gos:evidence") {
+        return {
+          ...step,
+          status: "done" as const,
+          detail: detailItems.length > 0 ? `${detailItems.length} 条 trace/detail` : "证据链已写入信念图",
+        };
+      }
+      if (step.id === "gos:confidence") {
+        return {
+          ...step,
+          status: "done" as const,
+          detail: payload.degraded ? "降级路径已记录" : "frontier 已收敛",
+        };
+      }
+      if (step.id === "gos:reporter") {
+        return { ...step, status: payload.degraded ? "error" as const : "done" as const, detail: reportDetail };
+      }
+      return step;
+    });
+
+    for (const item of detailItems.slice(0, 3)) {
+      next = appendStepMeta(next, "gos:evidence", "挂载支持证据", item);
+    }
+    return next;
+  }
+
+  return upsertStep(
+    upsertStep(
+      steps.map((step) =>
+        step.id === "engine"
+          ? { ...step, status: "done" as const, detail: aiOpsEngineLabel(actualEngine) }
+          : step.id === "dispatch"
+          ? {
+              ...step,
+              status: "done" as const,
+              detail: payload.trace_id ? `trace ${payload.trace_id}` : "Runtime 已返回",
+            }
+          : step,
+      ),
+      "evidence",
+      "收集证据",
+      {
+        status: "done",
+        detail: detailItems.length > 0 ? `${detailItems.length} 条执行细节` : aiOpsEngineLabel(actualEngine),
+      },
+    ),
+    "reporter",
+    "生成报告",
+    { status: payload.degraded ? "error" : "done", detail: reportDetail },
+  );
 }
 
 function visibleExecutionSteps(steps: ThinkingStep[]): ThinkingStep[] {
@@ -802,53 +920,11 @@ export function useChat() {
 
       try {
         const baseUrl = getApiBaseUrl();
-        commitThinkingSteps((prev) =>
-          upsertStep(
-            prev.map((step) =>
-              step.id === "engine"
-                ? { ...step, status: "done" as const, detail: aiOpsEngineLabel(engine) }
-                : step,
-            ),
-            "dispatch",
-            "调度 Runtime",
-            { status: "active", detail: "提交 AIOps 诊断任务..." },
-          ),
-        );
+        commitThinkingSteps((prev) => activateAIOpsSteps(prev, engine));
 
         const payload = await requestAIOps({ baseUrl, query: trimmed, engine });
         const actualEngine = payload.engine || engine;
-        const detailItems = payload.detail || [];
-        const reportDetail =
-          payload.degraded && payload.degradation_reason
-            ? `降级完成：${payload.degradation_reason}`
-            : "诊断报告已生成";
-
-        commitThinkingSteps((prev) =>
-          upsertStep(
-            upsertStep(
-              prev.map((step) =>
-                step.id === "engine"
-                  ? { ...step, status: "done" as const, detail: aiOpsEngineLabel(actualEngine) }
-                  : step.id === "dispatch"
-                  ? {
-                      ...step,
-                      status: "done" as const,
-                      detail: payload.trace_id ? `trace ${payload.trace_id}` : "Runtime 已返回",
-                    }
-                  : step,
-              ),
-              "evidence",
-              "收集证据",
-              {
-                status: "done",
-                detail: detailItems.length > 0 ? `${detailItems.length} 条执行细节` : aiOpsEngineLabel(actualEngine),
-              },
-            ),
-            "reporter",
-            "生成报告",
-            { status: payload.degraded ? "error" : "done", detail: reportDetail },
-          ),
-        );
+        commitThinkingSteps((prev) => completeAIOpsSteps(prev, actualEngine, payload));
 
         const assistantMsg: ChatMessage = {
           id: generateId(),
