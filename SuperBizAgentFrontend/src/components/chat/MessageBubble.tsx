@@ -2,12 +2,14 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkFixHeadings from '../../lib/remarkFixHeadings'
 import type { ChatMessage } from '../../types/chat'
+import type { DetailItem } from '../workbench/DetailPanel'
 import { ThinkingCollapse } from '../agent/ThinkingCollapse'
 import { GosReportCard } from './GosReportCard'
 import { isGoSMessage } from '../../lib/utils'
 
 interface Props {
   message: ChatMessage
+  onOpenDetail?: (item: DetailItem) => void
 }
 
 export function MessageBubble({ message }: Props) {
