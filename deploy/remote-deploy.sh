@@ -3,6 +3,7 @@ set -eu
 
 APP_DIR="${APP_DIR:-$(pwd)}"
 COMPOSE="docker compose --env-file .env.production -f docker-compose.prod.yml"
+DEPLOY_WAIT_ATTEMPTS="${DEPLOY_WAIT_ATTEMPTS:-90}"
 
 normalize_optional_value() {
   value="$(printf '%s' "${1:-}" | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
@@ -378,7 +379,7 @@ fi
 attempt=0
 until $COMPOSE exec -T backend wget -qO- http://127.0.0.1:8000/readyz >/dev/null; do
   attempt=$((attempt + 1))
-  if [ "$attempt" -ge 15 ]; then
+  if [ "$attempt" -ge "$DEPLOY_WAIT_ATTEMPTS" ]; then
     $COMPOSE ps || true
     $COMPOSE logs --tail=120 backend frontend caddy jaeger prometheus rabbitmq redis || true
     echo "backend readiness check failed"
@@ -397,7 +398,7 @@ fi
 attempt=0
 until $COMPOSE ps --status=running --services frontend | grep -q '^frontend$'; do
   attempt=$((attempt + 1))
-  if [ "$attempt" -ge 15 ]; then
+  if [ "$attempt" -ge "$DEPLOY_WAIT_ATTEMPTS" ]; then
     $COMPOSE ps || true
     $COMPOSE logs --tail=120 frontend backend || true
     echo "frontend start check failed"
@@ -440,7 +441,7 @@ fi
 attempt=0
 until curl -fsS -m 5 "http://127.0.0.1${health_path}" >/dev/null && curl -fsS -m 5 "http://127.0.0.1${ready_path}" >/dev/null; do
   attempt=$((attempt + 1))
-  if [ "$attempt" -ge 15 ]; then
+  if [ "$attempt" -ge "$DEPLOY_WAIT_ATTEMPTS" ]; then
     $COMPOSE ps || true
     $COMPOSE logs --tail=120 caddy frontend backend || true
     echo "edge readiness check failed"
