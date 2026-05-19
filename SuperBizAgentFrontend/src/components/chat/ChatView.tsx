@@ -5,6 +5,7 @@ import { MessageBubble } from './MessageBubble'
 import { StreamingText } from './StreamingText'
 import { ChatInput } from './ChatInput'
 import { GosReportCard } from './GosReportCard'
+import { PetCharacter } from '../pet/PetCharacter'
 import { ThinkingCollapse } from '../agent/ThinkingCollapse'
 import type { ThinkingStep } from '../agent/ThinkingCollapse'
 import { SuggestionChips } from '../agent/SuggestionChips'
@@ -151,6 +152,14 @@ export function ChatView({
         selectedSkillIds={selectedSkillIds}
         onModeChange={onModeChange}
       />
+
+      {(messages.length > 0 || isLoading) && (
+        <PetCharacter
+          steps={thinkingSteps}
+          isStreaming={isLoading}
+          isGoS={isGoSEngine(loadingEngine)}
+        />
+      )}
     </div>
   )
 }
