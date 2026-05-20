@@ -59,10 +59,15 @@ export function ChatView({
   onClearSuggestions,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
   const selectedSkills = findSkillsByIds(selectedSkillIds)
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const scroller = scrollRef.current
+    if (!scroller) return
+    requestAnimationFrame(() => {
+      scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' })
+    })
   }, [messages, streamingContent])
 
   const handleSuggestion = (query: string) => {
@@ -105,7 +110,7 @@ export function ChatView({
         </div>
       </div>
 
-      <div className="relative flex-1 overflow-y-auto scrollbar-thin">
+      <div ref={scrollRef} className="relative flex-1 overflow-y-auto scrollbar-thin">
         <div className="mx-auto max-w-4xl px-4 py-8 space-y-6">
 
           <AnimatePresence initial={false}>

@@ -63,29 +63,32 @@ export function ObservabilityPanel({}: Props) {
   }
 
   return (
-    <div className="glass rounded-xl p-3">
-      <div className="mb-2 flex items-center justify-between">
-        <p className="text-xs text-zinc-600 dark:text-zinc-500">服务状态</p>
+    <div className="rounded-xl border border-white/60 bg-white/55 p-3 backdrop-blur-md dark:border-white/10 dark:bg-slate-800/40">
+      <div className="mb-2.5 flex items-center justify-between">
+        <p className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">服务状态</p>
         <button
           onClick={probe}
-          className="text-[10px] text-accent hover:underline"
+          className="rounded-md px-1.5 py-0.5 text-[10px] font-medium text-sky-600 transition-colors hover:bg-sky-500/10 dark:text-sky-400"
         >
           刷新
         </button>
       </div>
-      <div className="space-y-1.5">
+      <div className="space-y-1">
         {endpoints.map((ep) => {
           const Icon = icons[ep.name] || Server
           return (
-            <div
+            <a
               key={ep.name}
-              className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800/30"
+              href={ep.link}
+              target="_blank"
+              rel="noreferrer"
+              className="grid grid-cols-[18px_minmax(0,1fr)_8px_44px] items-center gap-2 rounded-lg px-2 py-2 transition-colors hover:bg-white/70 dark:hover:bg-slate-700/40"
             >
               <Icon size={14} className="text-zinc-500 dark:text-zinc-500" />
-              <span className="text-xs flex-1">{ep.name}</span>
+              <span className="truncate text-xs font-medium text-zinc-700 dark:text-zinc-300">{ep.name}</span>
               <span className={`inline-block w-1.5 h-1.5 rounded-full ${statusColors[ep.status]}`} />
-              <span className="w-10 text-right text-[10px] text-zinc-500 dark:text-zinc-600">{ep.text}</span>
-            </div>
+              <span className="text-right text-[10px] font-medium text-zinc-500 dark:text-zinc-500">{ep.text}</span>
+            </a>
           )
         })}
       </div>
