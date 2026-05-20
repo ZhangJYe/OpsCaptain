@@ -20,45 +20,46 @@ export function GosReportCard({ message, steps, content, isStreaming }: Props) {
   const isDone = !isStreaming && executionSteps.length > 0 && executionSteps.every((s) => s.status === 'done' || s.status === 'error')
 
   return (
-    <div className="rounded-xl border border-zinc-200/80 border-l-2 border-l-accent bg-gradient-to-br from-white via-white to-accent/[0.03] px-4 py-3 shadow-sm shadow-zinc-900/[0.03] dark:border-zinc-800/60 dark:border-l-accent dark:from-zinc-900 dark:via-zinc-900 dark:to-accent/[0.06]">
-      {/* Header */}
-      <div className="mb-2 flex items-center gap-2 text-[11px] font-medium text-accent">
-        <Brain size={13} />
-        <span>GoS Belief Report</span>
-        {isStreaming ? (
-          <span className="ml-auto flex items-center gap-1 text-[10px] text-zinc-400">
-            <Loader2 size={10} className="animate-spin" />
-            推理中...
-          </span>
-        ) : isDone ? (
-          <span className="ml-auto rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-500">
-            完成
-          </span>
-        ) : null}
-      </div>
+    <div className="relative">
+      {isStreaming && <div aria-hidden="true" className="glow-frame rounded-[22px] rounded-bl-[6px]" />}
 
-      {/* Thinking chain */}
-      {hasSteps && (
-        <ThinkingCollapse steps={executionSteps} isStreaming={isStreaming} defaultOpen={isStreaming} />
-      )}
-
-      {/* Divider */}
-      {hasSteps && body && (
-        <div className="my-2 border-t border-zinc-100 dark:border-zinc-800/60" />
-      )}
-
-      {/* Report body */}
-      {body && (
-        <div className="prose-chat">
-          {isStreaming && !message ? (
-            <span>{body}</span>
-          ) : (
-            <ReactMarkdown remarkPlugins={[remarkGfm, remarkFixHeadings]}>
-              {body}
-            </ReactMarkdown>
-          )}
+      <div className="relative rounded-[22px] rounded-bl-[6px] border border-white/60 border-l-2 border-l-amber-400 bg-white/70 px-4 py-3 backdrop-blur-2xl dark:border-white/10 dark:border-l-amber-400 dark:bg-slate-800/50">
+        <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+          <Brain size={13} />
+          <span>GoS Belief Report</span>
+          {isStreaming ? (
+            <span className="ml-auto flex items-center gap-1 text-[10px] text-sky-500">
+              <Loader2 size={10} className="animate-spin" />
+              推理中...
+            </span>
+          ) : isDone ? (
+            <span className="ml-auto flex items-center gap-1 text-[10px]">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]" />
+              <span className="text-emerald-600 dark:text-emerald-400">完成</span>
+            </span>
+          ) : null}
         </div>
-      )}
+
+        {hasSteps && (
+          <ThinkingCollapse steps={executionSteps} isStreaming={isStreaming} defaultOpen={isStreaming} />
+        )}
+
+        {hasSteps && body && (
+          <div className="my-2 border-t border-white/40 dark:border-white/5" />
+        )}
+
+        {body && (
+          <div className="prose-chat">
+            {isStreaming && !message ? (
+              <span>{body}</span>
+            ) : (
+              <ReactMarkdown remarkPlugins={[remarkGfm, remarkFixHeadings]}>
+                {body}
+              </ReactMarkdown>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

@@ -37,7 +37,7 @@ export function SuggestionChips({ suggestions, onSelect }: Props) {
           <button
             key={i}
             onClick={() => onSelect(s.query)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200/80 bg-white/70 px-2.5 py-1.5 text-xs text-zinc-600 transition-all hover:border-accent/30 hover:bg-accent/5 hover:text-accent dark:border-zinc-800/60 dark:bg-zinc-900/50 dark:text-zinc-400 dark:hover:border-accent/30 dark:hover:text-accent"
+            className="inline-flex min-h-[32px] items-center gap-1.5 rounded-full border border-white/40 bg-white/50 px-3.5 py-1.5 text-[12px] font-semibold text-zinc-700 shadow-sm backdrop-blur-sm transition-all hover:-translate-y-0.5 hover:bg-white hover:text-sky-600 hover:shadow-md active:translate-y-0 active:scale-95 dark:border-white/10 dark:bg-slate-700/50 dark:text-zinc-300 dark:hover:bg-slate-600 dark:hover:text-sky-400"
           >
             <Icon size={12} />
             {s.label}

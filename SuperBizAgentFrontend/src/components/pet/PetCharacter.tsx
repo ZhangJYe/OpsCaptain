@@ -1,147 +1,75 @@
-import { useState, useEffect, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import type { ThinkingStep } from '../agent/ThinkingCollapse'
+import { useEffect, useState } from 'react'
+import { motion } from 'framer-motion'
 
-type PetMood = 'idle' | 'thinking' | 'done' | 'error' | 'gos'
-
-interface MoodConfig {
-  emoji: string
-  label: string
-  animation: string
-  quips: string[]
-}
-
-const MOOD_CONFIG: Record<PetMood, MoodConfig> = {
-  idle: {
-    emoji: '🤖',
-    label: '待命中',
-    animation: '',
-    quips: ['有什么需要排查的？', '运维小助手随时待命', '丢个问题过来吧'],
-  },
-  thinking: {
-    emoji: '🔍',
-    label: '排查中',
-    animation: 'animate-bounce',
-    quips: ['正在翻日志...', '指标拉取中...', '让我看看发生了什么...'],
-  },
-  done: {
-    emoji: '✅',
-    label: '已完成',
-    animation: '',
-    quips: ['搞定！', '排查完毕，请过目', '这次运气不错'],
-  },
-  error: {
-    emoji: '⚠️',
-    label: '遇到问题',
-    animation: 'animate-pulse',
-    quips: ['这条路走不通，换个方向', '有异常，但别慌', '出了点状况'],
-  },
-  gos: {
-    emoji: '🧠',
-    label: '信念推理',
-    animation: 'animate-pulse',
-    quips: ['建立假设中...', '正在收敛推理链...', 'GoS 引擎全速运转'],
-  },
-}
-
-function resolveMood(steps: ThinkingStep[], isStreaming: boolean, isGoS: boolean): PetMood {
-  if (isGoS && isStreaming) return 'gos'
-  if (steps.some((s) => s.status === 'error')) return 'error'
-  if (isStreaming || steps.some((s) => s.status === 'active')) return 'thinking'
-  if (steps.length > 0 && steps.every((s) => s.status === 'done')) return 'done'
-  return 'idle'
-}
-
-function pickQuip(mood: PetMood): string {
-  const quips = MOOD_CONFIG[mood].quips
-  return quips[Math.floor(Math.random() * quips.length)]
-}
+export type PetMood = 'idle' | 'thinking' | 'done' | 'error' | 'gos'
 
 interface Props {
-  steps: ThinkingStep[]
-  isStreaming: boolean
-  isGoS: boolean
+  mood: PetMood
+  size?: number
+  className?: string
 }
 
-export function PetCharacter({ steps, isStreaming, isGoS }: Props) {
-  const [mood, setMood] = useState<PetMood>('idle')
-  const [quip, setQuip] = useState('')
-  const [showBubble, setShowBubble] = useState(false)
-  const prevMoodRef = useRef<PetMood>('idle')
-  const timerRef = useRef<ReturnType<typeof setTimeout>>()
+const PET_ASSETS: Record<PetMood, string> = {
+  idle: '/pet/opscaptain/idle.gif',
+  thinking: '/pet/opscaptain/thinking.gif',
+  done: '/pet/opscaptain/done.gif',
+  error: '/pet/opscaptain/error.gif',
+  gos: '/pet/opscaptain/gos.gif',
+}
+
+const PET_LABELS: Record<PetMood, string> = {
+  idle: '待命',
+  thinking: '排查中',
+  done: '完成',
+  error: '异常',
+  gos: '推理中',
+}
+
+function FallbackCharacter({ mood, size, className }: Required<Props>) {
+  const active = mood === 'thinking' || mood === 'gos'
+  const danger = mood === 'error'
+  const done = mood === 'done'
+
+  return (
+    <motion.div
+      aria-hidden="true"
+      className={`relative flex items-center justify-center rounded-2xl border border-white/60 bg-white/75 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-slate-800/70 ${className}`}
+      style={{ width: size, height: size }}
+      animate={active ? { y: [0, -3, 0] } : danger ? { rotate: [-2, 2, -2, 0] } : undefined}
+      transition={active ? { duration: 1.4, repeat: Infinity, ease: 'easeInOut' } : danger ? { duration: 0.3, repeat: 2 } : undefined}
+    >
+      <span className={`h-3 w-3 rounded-full ${danger ? 'bg-rose-400' : done ? 'bg-emerald-400' : active ? 'bg-sky-400' : 'bg-zinc-300'} shadow-[0_0_12px_currentColor]`} />
+      <span className="absolute bottom-1.5 text-[9px] font-semibold text-zinc-400 dark:text-zinc-500">OC</span>
+    </motion.div>
+  )
+}
+
+export function PetCharacter({ mood, size = 64, className = '' }: Props) {
+  const src = PET_ASSETS[mood]
+  const [failedSrc, setFailedSrc] = useState<string | null>(null)
 
   useEffect(() => {
-    const newMood = resolveMood(steps, isStreaming, isGoS)
-    if (newMood !== prevMoodRef.current) {
-      prevMoodRef.current = newMood
-      setMood(newMood)
-      setQuip(pickQuip(newMood))
-      setShowBubble(true)
+    setFailedSrc(null)
+  }, [src])
 
-      clearTimeout(timerRef.current)
-      if (newMood === 'done' || newMood === 'error') {
-        timerRef.current = setTimeout(() => setShowBubble(false), 4000)
-      }
-    }
-  }, [steps, isStreaming, isGoS])
-
-  useEffect(() => {
-    return () => clearTimeout(timerRef.current)
-  }, [])
-
-  const config = MOOD_CONFIG[mood]
-  const isWorking = mood === 'thinking' || mood === 'gos'
-
-  const handlePoke = () => {
-    setQuip(pickQuip(mood))
-    setShowBubble(true)
-    clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(() => setShowBubble(false), 3000)
+  if (failedSrc === src) {
+    return <FallbackCharacter mood={mood} size={size} className={className} />
   }
 
   return (
-    <div className="pointer-events-none absolute bottom-4 right-4 z-10 flex flex-col items-end gap-2 select-none">
-      <AnimatePresence>
-        {showBubble && quip && (
-          <motion.div
-            initial={{ opacity: 0, y: 8, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 4, scale: 0.95 }}
-            transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-            className="pointer-events-auto relative max-w-[180px] rounded-xl border border-zinc-200/80 bg-white px-3 py-2 text-xs text-zinc-600 shadow-lg dark:border-zinc-700/60 dark:bg-zinc-800 dark:text-zinc-300"
-          >
-            {quip}
-            <div className="absolute -bottom-1.5 right-5 h-3 w-3 rotate-45 border-b border-r border-zinc-200/80 bg-white dark:border-zinc-700/60 dark:bg-zinc-800" />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <motion.button
-        type="button"
-        aria-label={`运维助手 - ${config.label}，点击刷新`}
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.95 }}
-        className="pointer-events-auto relative flex h-11 w-11 cursor-pointer items-center justify-center rounded-xl border border-zinc-200/80 bg-white shadow-md transition-shadow hover:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:border-zinc-700/60 dark:bg-zinc-800 sm:h-12 sm:w-12"
-        onClick={handlePoke}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            handlePoke()
-          }
-        }}
-      >
-        <span className={`text-xl sm:text-2xl ${config.animation}`}>{config.emoji}</span>
-        {isWorking && (
-          <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent/60 opacity-75" />
-            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-accent" />
-          </span>
-        )}
-      </motion.button>
-
-      <span className="hidden text-[10px] text-zinc-400 dark:text-zinc-600 sm:inline">
-        {config.label}
-      </span>
-    </div>
+    <motion.img
+      key={src}
+      src={src}
+      width={size}
+      height={size}
+      alt={`运维助手-${PET_LABELS[mood]}`}
+      className={`select-none object-contain drop-shadow-md ${className}`}
+      draggable={false}
+      onError={() => setFailedSrc(src)}
+      initial={{ opacity: 0, scale: 0.94 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.18 }}
+      style={{ width: size, height: size }}
+    />
   )
 }

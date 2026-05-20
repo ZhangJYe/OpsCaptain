@@ -3,7 +3,6 @@ import { useTheme } from './hooks/useTheme'
 import { useChat } from './hooks/useChat'
 import { MainLayout } from './components/layout/MainLayout'
 import { AgentWorkbenchView } from './components/workbench/AgentWorkbenchView'
-import { WelcomeScreen } from './components/welcome/WelcomeScreen'
 import { saveSession } from './lib/storage'
 import type { AIOpsEngine, ChatSession } from './types/chat'
 
@@ -18,7 +17,6 @@ export default function App() {
     if (typeof window === 'undefined') return false
     return window.innerWidth >= 1024
   })
-  const [showWelcome, setShowWelcome] = useState(true)
   const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>(() => {
     if (typeof window === 'undefined') return []
     try {
@@ -76,7 +74,6 @@ export default function App() {
 
   const handleSend = useCallback(
     (query: string) => {
-      setShowWelcome(false)
       chat.send(query, { selectedSkillIds })
     },
     [chat, selectedSkillIds]
@@ -84,7 +81,6 @@ export default function App() {
 
   const handleStartAIOps = useCallback(
     (query: string) => {
-      setShowWelcome(false)
       chat.sendAIOps(query, { aiOpsEngine })
     },
     [chat, aiOpsEngine]
@@ -97,17 +93,12 @@ export default function App() {
         return
       }
       setSelectedSkillIds(Array.isArray(session.selectedSkillIds) ? session.selectedSkillIds : [])
-      setShowWelcome(false)
     },
     [chat]
   )
 
   const handleNewChat = useCallback(() => {
-    const created = chat.newSession()
-    if (!created) {
-      return
-    }
-    setShowWelcome(true)
+    chat.newSession()
   }, [chat])
 
   return (
@@ -129,31 +120,25 @@ export default function App() {
       onSelectedSkillIdsChange={setSelectedSkillIds}
       isLoading={chat.isLoading}
     >
-      {showWelcome && chat.messages.length === 0 ? (
-        <WelcomeScreen
-          onSend={handleSend}
-          onStartAIOps={handleStartAIOps}
-          aiOpsEngine={aiOpsEngine}
-        />
-      ) : (
-        <AgentWorkbenchView
-          messages={chat.messages}
-          streamingContent={chat.streamingContent}
-          streamingThoughts={chat.streamingThoughts}
-          thinkingSteps={chat.thinkingSteps}
-          suggestions={chat.suggestions}
-          isLoading={chat.isLoading}
-          loadingEngine={chat.loadingEngine}
-          mode={chat.mode}
-          selectedSkillIds={selectedSkillIds}
-          petEnabled={petEnabled}
-          onSend={handleSend}
-          onStop={chat.stop}
-          onModeChange={chat.setMode}
-          onTogglePet={() => setPetEnabled((v) => !v)}
-          onClearSuggestions={chat.clearSuggestions}
-        />
-      )}
+      <AgentWorkbenchView
+        messages={chat.messages}
+        streamingContent={chat.streamingContent}
+        streamingThoughts={chat.streamingThoughts}
+        thinkingSteps={chat.thinkingSteps}
+        suggestions={chat.suggestions}
+        isLoading={chat.isLoading}
+        loadingEngine={chat.loadingEngine}
+        mode={chat.mode}
+        selectedSkillIds={selectedSkillIds}
+        petEnabled={petEnabled}
+        aiOpsEngine={aiOpsEngine}
+        onSend={handleSend}
+        onStartAIOps={handleStartAIOps}
+        onStop={chat.stop}
+        onModeChange={chat.setMode}
+        onTogglePet={() => setPetEnabled((v) => !v)}
+        onClearSuggestions={chat.clearSuggestions}
+      />
     </MainLayout>
   )
 }

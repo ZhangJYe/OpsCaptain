@@ -6,6 +6,7 @@ import { StreamingText } from './StreamingText'
 import { ChatInput } from './ChatInput'
 import { GosReportCard } from './GosReportCard'
 import { PetCharacter } from '../pet/PetCharacter'
+import type { PetMood } from '../pet/PetCharacter'
 import { ThinkingCollapse } from '../agent/ThinkingCollapse'
 import type { ThinkingStep } from '../agent/ThinkingCollapse'
 import { SuggestionChips } from '../agent/SuggestionChips'
@@ -13,6 +14,14 @@ import type { Suggestion } from '../agent/SuggestionChips'
 import type { ChatMessage, ChatMode } from '../../types/chat'
 import { findSkillsByIds, formatSelectedSkillSummary } from '../../lib/utils'
 import { isGoSEngine } from '../../hooks/useChat'
+
+function resolvePetMood(steps: ThinkingStep[], isStreaming: boolean, isGoS: boolean): PetMood {
+  if (isGoS && isStreaming) return 'gos'
+  if (steps.some((s) => s.status === 'error')) return 'error'
+  if (isStreaming || steps.some((s) => s.status === 'active')) return 'thinking'
+  if (steps.length > 0 && steps.every((s) => s.status === 'done')) return 'done'
+  return 'idle'
+}
 
 interface Props {
   messages: ChatMessage[]
@@ -155,11 +164,14 @@ export function ChatView({
           )}
 
           {petEnabled && (messages.length > 0 || isLoading) && (
-            <PetCharacter
-              steps={thinkingSteps}
-              isStreaming={isLoading}
-              isGoS={isGoSEngine(loadingEngine)}
-            />
+            <div className="pointer-events-none absolute bottom-4 right-4 z-10 select-none">
+              <div className="pointer-events-auto">
+                <PetCharacter
+                  mood={resolvePetMood(thinkingSteps, isLoading, isGoSEngine(loadingEngine))}
+                  size={48}
+                />
+              </div>
+            </div>
           )}
 
           <div ref={bottomRef} />

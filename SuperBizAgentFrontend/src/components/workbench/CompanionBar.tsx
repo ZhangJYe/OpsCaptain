@@ -1,45 +1,33 @@
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { PetCharacter } from '../pet/PetCharacter'
+import type { PetMood } from '../pet/PetCharacter'
 import type { ThinkingStep } from '../agent/ThinkingCollapse'
 
-type PetMood = 'idle' | 'thinking' | 'done' | 'error' | 'gos'
-
 interface MoodConfig {
-  emoji: string
   label: string
-  animation: string
   quips: string[]
 }
 
 const MOOD_CONFIG: Record<PetMood, MoodConfig> = {
   idle: {
-    emoji: '🤖',
     label: '待命',
-    animation: '',
     quips: ['有什么需要排查的？', '运维小助手随时待命', '丢个问题过来吧'],
   },
   thinking: {
-    emoji: '🔍',
     label: '排查中',
-    animation: 'animate-bounce',
     quips: ['正在翻日志...', '指标拉取中...', '让我看看发生了什么...'],
   },
   done: {
-    emoji: '✅',
     label: '完成',
-    animation: '',
     quips: ['搞定！', '排查完毕，请过目', '这次运气不错'],
   },
   error: {
-    emoji: '⚠️',
     label: '异常',
-    animation: 'animate-pulse',
     quips: ['这条路走不通，换个方向', '有异常，但别慌', '出了点状况'],
   },
   gos: {
-    emoji: '🧠',
     label: '推理中',
-    animation: 'animate-pulse',
     quips: ['建立假设中...', '正在收敛推理链...', 'GoS 引擎全速运转'],
   },
 }
@@ -90,7 +78,6 @@ export function CompanionBar({ steps, isStreaming, isGoS }: Props) {
   }, [])
 
   const config = MOOD_CONFIG[mood]
-  const isWorking = mood === 'thinking' || mood === 'gos'
 
   const handlePoke = () => {
     setQuip(pickQuip(mood))
@@ -100,9 +87,8 @@ export function CompanionBar({ steps, isStreaming, isGoS }: Props) {
   }
 
   return (
-    <div className="flex items-center gap-3">
-      {/* Pet character - inline with input */}
-      <div className="relative flex flex-col items-center gap-1">
+    <div className="flex items-end gap-2">
+      <div className="relative flex flex-col items-center">
         <AnimatePresence>
           {showBubble && quip && (
             <motion.div
@@ -110,18 +96,18 @@ export function CompanionBar({ steps, isStreaming, isGoS }: Props) {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 4, scale: 0.95 }}
               transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-              className="absolute bottom-full mb-2 w-max max-w-[160px] rounded-lg border border-zinc-200/80 bg-white px-2.5 py-1.5 text-[11px] text-zinc-600 shadow-md dark:border-zinc-700/60 dark:bg-zinc-800 dark:text-zinc-300"
+              className="pointer-events-none absolute bottom-full mb-1 w-max max-w-[160px] whitespace-normal break-words rounded-2xl rounded-br-sm border border-white/60 bg-white/95 px-3 py-1.5 text-center text-[11px] font-medium leading-snug text-zinc-800 shadow-lg backdrop-blur-sm dark:border-white/15 dark:bg-slate-800/95 dark:text-zinc-100"
             >
               {quip}
-              <div className="absolute -bottom-1 left-4 h-2 w-2 rotate-45 border-b border-r border-zinc-200/80 bg-white dark:border-zinc-700/60 dark:bg-zinc-800" />
+              <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 border-[6px] border-transparent border-t-white/95 dark:border-t-slate-800/95" />
             </motion.div>
           )}
         </AnimatePresence>
 
         <button
           type="button"
-          aria-label={`运维助手 - ${config.label}，点击刷新`}
-          className="relative flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-zinc-200/80 bg-white transition-all hover:scale-105 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-accent dark:border-zinc-700/60 dark:bg-zinc-800"
+          aria-label={`运维助手 - ${config.label}，点击互动`}
+          className="group relative cursor-pointer rounded-xl transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50"
           onClick={handlePoke}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
@@ -130,16 +116,8 @@ export function CompanionBar({ steps, isStreaming, isGoS }: Props) {
             }
           }}
         >
-          <span className={`text-lg ${config.animation}`}>{config.emoji}</span>
-          {isWorking && (
-            <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent/60 opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
-            </span>
-          )}
+          <PetCharacter mood={mood} size={52} />
         </button>
-
-        <span className="text-[9px] text-zinc-400 dark:text-zinc-600">{config.label}</span>
       </div>
     </div>
   )

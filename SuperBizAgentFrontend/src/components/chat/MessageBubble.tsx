@@ -10,10 +10,9 @@ import { isGoSMessage } from '../../lib/utils'
 interface Props {
   message: ChatMessage
   onOpenDetail?: (item: DetailItem) => void
-  hideSteps?: boolean
 }
 
-export function MessageBubble({ message, hideSteps }: Props) {
+export function MessageBubble({ message, onOpenDetail }: Props) {
   const isUser = message.role === 'user'
   const isGoS = !isUser && isGoSMessage(message)
   const timeLabel = new Intl.DateTimeFormat('zh-CN', {
@@ -24,7 +23,7 @@ export function MessageBubble({ message, hideSteps }: Props) {
   if (!isUser && isGoS) {
     return (
       <div className="flex items-start gap-3">
-        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/10 text-xs font-semibold text-accent ring-1 ring-inset ring-accent/20">
+        <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-sky-400/15 text-[10px] font-bold text-sky-600 ring-1 ring-inset ring-sky-400/20 dark:text-sky-400">
           OC
         </div>
         <div className="min-w-0 flex-1 max-w-[85%]">
@@ -40,20 +39,17 @@ export function MessageBubble({ message, hideSteps }: Props) {
 
   return (
     <div className={`flex items-start gap-3 ${isUser ? 'flex-row-reverse' : ''}`}>
-      {/* Avatar */}
       <div
-        className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ring-1 ring-inset ${
+        className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ring-1 ring-inset ${
           isUser
-            ? 'bg-zinc-100 text-zinc-600 ring-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:ring-zinc-700'
-            : 'bg-accent/10 text-accent ring-accent/20'
+            ? 'bg-sky-500 text-white ring-sky-400/30'
+            : 'bg-sky-400/15 text-sky-600 ring-sky-400/20 dark:text-sky-400'
         }`}
       >
         {isUser ? '你' : 'OC'}
       </div>
 
-      {/* Content */}
       <div className={`min-w-0 ${isUser ? 'max-w-[75%]' : 'flex-1 max-w-[85%]'}`}>
-        {/* Meta line */}
         <div className={`mb-1.5 flex items-center gap-2 ${isUser ? 'justify-end' : ''}`}>
           <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-500">
             {isUser ? '你' : 'OpsCaption'}
@@ -61,20 +57,19 @@ export function MessageBubble({ message, hideSteps }: Props) {
           <span className="text-[10px] text-zinc-400 dark:text-zinc-600">{timeLabel}</span>
         </div>
 
-        {/* Bubble */}
         <div
-          className={`rounded-2xl px-4 py-3 ${
+          className={`px-4 py-3 ${
             isUser
-              ? 'bg-accent text-white shadow-sm shadow-accent/10'
-              : 'border border-zinc-200/80 bg-white/95 text-zinc-800 shadow-sm shadow-zinc-900/[0.03] dark:border-zinc-800/60 dark:bg-zinc-900/80 dark:text-zinc-200'
+              ? 'rounded-2xl rounded-tr-sm bg-sky-500 text-white shadow-md shadow-sky-500/20'
+              : 'rounded-[22px] rounded-bl-[6px] border border-white/60 bg-white/70 text-zinc-800 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-slate-800/50 dark:text-zinc-200'
           }`}
         >
           {isUser ? (
             <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.content}</p>
           ) : (
             <>
-              {!hideSteps && message.executionSteps && message.executionSteps.length > 0 && (
-                <ThinkingCollapse steps={message.executionSteps} defaultOpen />
+              {message.executionSteps && message.executionSteps.length > 0 && (
+                <ThinkingCollapse steps={message.executionSteps} defaultOpen onStepClick={onOpenDetail} />
               )}
               <div className="prose-chat">
                 <ReactMarkdown remarkPlugins={[remarkGfm, remarkFixHeadings]}>
