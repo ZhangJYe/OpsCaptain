@@ -9,12 +9,18 @@ interface Props {
   className?: string
 }
 
+function petAsset(filename: string): string {
+  const rawBase = (import.meta as unknown as { env?: { BASE_URL?: string } }).env?.BASE_URL || './'
+  const base = rawBase.endsWith('/') ? rawBase : `${rawBase}/`
+  return `${base}pet/opscaptain/${filename}`
+}
+
 const PET_ASSETS: Record<PetMood, string> = {
-  idle: '/pet/opscaptain/idle.gif',
-  thinking: '/pet/opscaptain/thinking.gif',
-  done: '/pet/opscaptain/done.gif',
-  error: '/pet/opscaptain/error.gif',
-  gos: '/pet/opscaptain/gos.gif',
+  idle: petAsset('idle.gif'),
+  thinking: petAsset('thinking.gif'),
+  done: petAsset('done.gif'),
+  error: petAsset('error.gif'),
+  gos: petAsset('gos.gif'),
 }
 
 const PET_LABELS: Record<PetMood, string> = {
@@ -47,6 +53,7 @@ function FallbackCharacter({ mood, size, className }: Required<Props>) {
 export function PetCharacter({ mood, size = 64, className = '' }: Props) {
   const src = PET_ASSETS[mood]
   const [failedSrc, setFailedSrc] = useState<string | null>(null)
+  const active = mood === 'thinking' || mood === 'gos' || mood === 'idle'
 
   useEffect(() => {
     setFailedSrc(null)
@@ -63,12 +70,12 @@ export function PetCharacter({ mood, size = 64, className = '' }: Props) {
       width={size}
       height={size}
       alt={`运维助手-${PET_LABELS[mood]}`}
-      className={`select-none object-contain drop-shadow-md ${className}`}
+      className={`select-none object-contain drop-shadow-[0_18px_22px_rgba(15,23,42,0.18)] ${className}`}
       draggable={false}
       onError={() => setFailedSrc(src)}
       initial={{ opacity: 0, scale: 0.94 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.18 }}
+      animate={active ? { opacity: 1, scale: 1, y: [0, -3, 0] } : { opacity: 1, scale: 1, y: 0 }}
+      transition={active ? { y: { duration: 2.8, repeat: Infinity, ease: 'easeInOut' }, opacity: { duration: 0.18 }, scale: { duration: 0.18 } } : { duration: 0.18 }}
       style={{ width: size, height: size }}
     />
   )

@@ -38,6 +38,12 @@ interface Props {
   onClearSuggestions: () => void
 }
 
+const RESULT_STEP_IDS = new Set(['metrics', 'logs', 'knowledge', 'evidence', 'gos:hypothesis', 'gos:experts', 'gos:evidence', 'gos:confidence'])
+
+function hasResultSteps(steps?: ThinkingStep[]): boolean {
+  return steps?.some((step) => step.status === 'error' || RESULT_STEP_IDS.has(step.id) || step.id.startsWith('tool:')) ?? false
+}
+
 export function AgentWorkbenchView({
   messages,
   streamingContent,
@@ -144,7 +150,7 @@ export function AgentWorkbenchView({
             <AnimatePresence initial={false}>
               {messages.map((msg, i) => {
                 const isLastAssistant = msg.role === 'assistant' && i === messages.length - 1 && !isLoading
-                const hasBlocks = msg.executionSteps && msg.executionSteps.length > 0
+                const hasBlocks = hasResultSteps(msg.executionSteps)
 
                 return (
                   <motion.div
@@ -213,8 +219,8 @@ export function AgentWorkbenchView({
           </div>
         </div>
 
-        <div className="shrink-0 border-t border-white/40 bg-white/30 backdrop-blur-sm dark:border-white/5 dark:bg-slate-900/20">
-          <div className="mx-auto flex max-w-4xl items-end gap-3 px-4 py-3">
+        <div className="shrink-0 border-t border-white/40 bg-white/35 backdrop-blur-md dark:border-white/5 dark:bg-slate-900/25">
+          <div className="mx-auto flex max-w-5xl items-end gap-2 px-4 py-3 sm:gap-4 sm:px-5 sm:py-4">
             {petEnabled && (
               <CompanionBar
                 steps={thinkingSteps}

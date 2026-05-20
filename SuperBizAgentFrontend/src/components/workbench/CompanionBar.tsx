@@ -87,38 +87,43 @@ export function CompanionBar({ steps, isStreaming, isGoS }: Props) {
   }
 
   return (
-    <div className="flex items-end gap-2">
-      <div className="relative flex flex-col items-center">
-        <AnimatePresence>
-          {showBubble && quip && (
-            <motion.div
-              initial={{ opacity: 0, y: 6, scale: 0.9 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 4, scale: 0.95 }}
-              transition={{ type: 'spring', damping: 20, stiffness: 300 }}
-              className="pointer-events-none absolute bottom-full mb-1 w-max max-w-[160px] whitespace-normal break-words rounded-2xl rounded-br-sm border border-white/60 bg-white/95 px-3 py-1.5 text-center text-[11px] font-medium leading-snug text-zinc-800 shadow-lg backdrop-blur-sm dark:border-white/15 dark:bg-slate-800/95 dark:text-zinc-100"
-            >
-              {quip}
-              <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 border-[6px] border-transparent border-t-white/95 dark:border-t-slate-800/95" />
-            </motion.div>
-          )}
-        </AnimatePresence>
+    <div className="relative flex h-[86px] w-[78px] shrink-0 items-end justify-center sm:h-[112px] sm:w-[112px]">
+      <motion.div
+        aria-hidden="true"
+        className="absolute bottom-1 h-7 w-16 rounded-full bg-sky-300/25 blur-xl dark:bg-sky-400/15 sm:h-9 sm:w-24"
+        animate={{ opacity: [0.45, 0.75, 0.45], scale: [0.92, 1.05, 0.92] }}
+        transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
+      />
 
-        <button
-          type="button"
-          aria-label={`运维助手 - ${config.label}，点击互动`}
-          className="group relative cursor-pointer rounded-xl transition-transform hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50"
-          onClick={handlePoke}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault()
-              handlePoke()
-            }
-          }}
-        >
-          <PetCharacter mood={mood} size={52} />
-        </button>
-      </div>
+      <AnimatePresence>
+        {showBubble && quip && (
+          <motion.div
+            initial={{ opacity: 0, y: 8, scale: 0.92 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 5, scale: 0.96 }}
+            transition={{ type: 'spring', damping: 22, stiffness: 320 }}
+            className="pointer-events-none absolute bottom-[76px] left-1/2 z-20 w-max max-w-[210px] -translate-x-1/2 whitespace-normal break-words rounded-2xl rounded-br-md border border-white/70 bg-white/95 px-3.5 py-2 text-center text-[12px] font-medium leading-snug text-zinc-800 shadow-xl shadow-zinc-900/10 backdrop-blur-md dark:border-white/15 dark:bg-slate-800/95 dark:text-zinc-100 sm:bottom-[98px] sm:max-w-[240px]"
+          >
+            {quip}
+            <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 border-[6px] border-transparent border-t-white/95 dark:border-t-slate-800/95" />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <button
+        type="button"
+        aria-label={`运维助手 - ${config.label}，点击互动`}
+        className="group relative z-10 -mb-1 cursor-pointer rounded-3xl p-0.5 transition-transform hover:scale-[1.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 active:scale-95"
+        onClick={handlePoke}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            handlePoke()
+          }
+        }}
+      >
+        <PetCharacter mood={mood} size={88} />
+      </button>
     </div>
   )
 }
