@@ -47,7 +47,7 @@ export function MainLayout({
   const siteRecord = getSiteRecord()
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-[#f1f5f9] dark:bg-[#0B1120]">
+    <div className="relative h-full min-h-[100dvh] w-full overflow-hidden bg-[#f1f5f9] dark:bg-[#0B1120]">
       <div className="pointer-events-none absolute -top-1/4 -left-1/4 h-[60%] w-[60%] rounded-full bg-sky-200/30 blur-3xl dark:bg-sky-400/15" />
       <div className="pointer-events-none absolute -bottom-1/4 -right-1/4 h-[50%] w-[50%] rounded-full bg-amber-200/25 blur-3xl dark:bg-amber-400/10" />
       <div className="pointer-events-none absolute top-1/3 -right-1/6 h-[55%] w-[55%] rounded-full bg-sky-300/15 blur-3xl dark:bg-sky-500/8" />

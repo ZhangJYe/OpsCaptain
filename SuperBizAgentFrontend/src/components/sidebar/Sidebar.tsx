@@ -37,7 +37,6 @@ export function Sidebar({
 }: Props) {
   return (
     <div className="flex h-full flex-col border-r border-zinc-200/80 bg-white/92 backdrop-blur-xl dark:border-zinc-800/60 dark:bg-zinc-950/92">
-      {/* Header */}
       <div className="flex items-center justify-between px-4 py-4">
         <div className="flex items-center gap-2.5">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-xs font-bold text-white shadow-sm shadow-accent/20">
@@ -45,7 +44,7 @@ export function Sidebar({
           </span>
           <div>
             <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">OpsCaption</h2>
-            <p className="text-[11px] text-zinc-500 dark:text-zinc-500">运维诊断工作台</p>
+            <p className="text-[11px] text-zinc-400 dark:text-zinc-500">运维诊断工作台</p>
           </div>
         </div>
         <button
@@ -56,7 +55,6 @@ export function Sidebar({
         </button>
       </div>
 
-      {/* Content */}
       <div className="flex-1 overflow-y-auto scrollbar-thin px-3 space-y-3">
         <OperatorCard />
         <ModeSelector
@@ -74,7 +72,6 @@ export function Sidebar({
         />
       </div>
 
-      {/* New chat button */}
       <div className="border-t border-zinc-200/80 p-3 dark:border-zinc-800/60">
         <button
           onClick={onNewChat}

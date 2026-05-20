@@ -30,12 +30,12 @@ export function HistoryPanel({ onSelect, currentSessionId, messageCount }: Props
   return (
     <div>
       <div className="mb-2 flex items-center justify-between">
-        <p className="text-xs text-zinc-600 dark:text-zinc-500">历史会话</p>
-        <span className="text-[10px] text-zinc-500 dark:text-zinc-600">{filtered.length}</span>
+        <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">历史会话</p>
+        <span className="text-[10px] text-zinc-500 dark:text-zinc-400">{filtered.length}</span>
       </div>
 
       <div className="relative mb-2">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 dark:text-zinc-600" />
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 dark:text-zinc-500" />
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -46,7 +46,7 @@ export function HistoryPanel({ onSelect, currentSessionId, messageCount }: Props
 
       <div className="space-y-1 max-h-48 overflow-y-auto scrollbar-thin">
         {filtered.length === 0 ? (
-          <p className="py-4 text-center text-xs text-zinc-400 dark:text-zinc-700">暂无历史会话</p>
+          <p className="py-4 text-center text-xs text-zinc-400 dark:text-zinc-500">暂无历史会话</p>
         ) : (
           filtered.map((s) => (
             <div
@@ -58,10 +58,10 @@ export function HistoryPanel({ onSelect, currentSessionId, messageCount }: Props
               }`}
             >
               <button onClick={() => onSelect(s)} className="flex min-w-0 flex-1 items-start gap-2 text-left">
-                <MessageSquare size={14} className="mt-0.5 shrink-0 text-zinc-500 dark:text-zinc-600" />
+                <MessageSquare size={14} className="mt-0.5 shrink-0 text-zinc-400 dark:text-zinc-500" />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs">{s.title}</p>
-                  <p className="text-[10px] text-zinc-500 dark:text-zinc-600">
+                  <p className="truncate text-xs font-medium text-zinc-800 dark:text-zinc-200">{s.title}</p>
+                  <p className="text-[10px] text-zinc-400 dark:text-zinc-500">
                     {new Date(s.updatedAt).toLocaleDateString('zh-CN')}
                   </p>
                 </div>
