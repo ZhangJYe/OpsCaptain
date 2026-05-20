@@ -41,7 +41,7 @@ interface Props {
 const RESULT_STEP_IDS = new Set(['metrics', 'logs', 'knowledge', 'evidence', 'gos:hypothesis', 'gos:experts', 'gos:evidence', 'gos:confidence'])
 
 function hasResultSteps(steps?: ThinkingStep[]): boolean {
-  return steps?.some((step) => step.status === 'error' || RESULT_STEP_IDS.has(step.id) || step.id.startsWith('tool:')) ?? false
+  return steps?.some((step) => RESULT_STEP_IDS.has(step.id) || step.id.startsWith('tool:')) ?? false
 }
 
 export function AgentWorkbenchView({
@@ -64,13 +64,19 @@ export function AgentWorkbenchView({
   onClearSuggestions,
 }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
   const selectedSkills = findSkillsByIds(selectedSkillIds)
   const [detailItem, setDetailItem] = useState<DetailItem | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
+  const hasActiveConversation = messages.length > 0 || isLoading || streamingContent.length > 0
 
   useEffect(() => {
     if (messages.length === 0 && !streamingContent) return
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const scroller = scrollRef.current
+    if (!scroller) return
+    requestAnimationFrame(() => {
+      scroller.scrollTo({ top: scroller.scrollHeight, behavior: 'smooth' })
+    })
   }, [messages, streamingContent])
 
   const handleSuggestion = (query: string) => {
@@ -136,9 +142,8 @@ export function AgentWorkbenchView({
           </div>
         </div>
 
-        <div className="relative flex-1 overflow-y-auto scrollbar-thin">
-          <div className="mx-auto max-w-4xl px-4 py-6 space-y-5">
-
+        <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto scrollbar-thin">
+          <div className={`mx-auto flex min-h-full max-w-4xl flex-col gap-5 px-4 py-5 sm:py-6 ${hasActiveConversation ? 'justify-end' : ''}`}>
             {messages.length === 0 && !isLoading && (
               <WorkbenchEmptyState
                 onSend={onSend}
@@ -187,7 +192,7 @@ export function AgentWorkbenchView({
             {isLoading && (
               <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
                 {thinkingSteps.filter((s) => s.status !== 'pending').length > 0 && (
-                  <div className="space-y-2">
+                  <div className="ml-10 space-y-2">
                     {thinkingSteps
                       .filter((s) => s.status !== 'pending')
                       .map((step) => (
@@ -219,8 +224,8 @@ export function AgentWorkbenchView({
           </div>
         </div>
 
-        <div className="shrink-0 border-t border-white/40 bg-white/35 backdrop-blur-md dark:border-white/5 dark:bg-slate-900/25">
-          <div className="mx-auto flex max-w-5xl items-end gap-2 px-4 py-3 sm:gap-4 sm:px-5 sm:py-4">
+        <div className="shrink-0 border-t border-white/40 bg-white/40 backdrop-blur-xl dark:border-white/5 dark:bg-slate-900/30">
+          <div className="mx-auto flex max-w-5xl items-end gap-2 px-4 py-3 sm:gap-4 sm:px-5">
             {petEnabled && (
               <CompanionBar
                 steps={thinkingSteps}

@@ -130,21 +130,21 @@ export function ChatInput({ onSend, onStop, isLoading, mode, selectedSkillIds, o
               )}
             </AnimatePresence>
 
-            <div className="flex items-center justify-between gap-3 border-t border-white/30 px-3 py-2.5 dark:border-white/5">
-              <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between gap-2 border-t border-white/30 px-3 py-2.5 dark:border-white/5 sm:gap-3">
+              <div className="flex min-w-0 items-center gap-2 sm:gap-3">
                 <div className="inline-flex rounded-lg bg-white/50 p-0.5 dark:bg-slate-700/50">
                   {modeOptions.map((option) => (
                     <button
                       key={option.id}
                       onClick={() => onModeChange(option.id)}
-                      className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-all duration-200 ${
+                      className={`flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all duration-200 sm:px-2.5 ${
                         option.id === mode
                           ? 'bg-white text-sky-600 shadow-sm dark:bg-slate-600 dark:text-sky-400'
                           : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'
                       }`}
                     >
                       <option.icon size={13} />
-                      <span>{option.label}</span>
+                      <span className="hidden sm:inline">{option.label}</span>
                     </button>
                   ))}
                 </div>
@@ -154,12 +154,12 @@ export function ChatInput({ onSend, onStop, isLoading, mode, selectedSkillIds, o
                 </span>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
                 <label htmlFor={inputId}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/40 bg-white/50 px-2.5 py-1.5 text-xs font-medium text-zinc-600 cursor-pointer transition-all hover:-translate-y-0.5 hover:bg-white hover:text-sky-600 hover:shadow-md dark:border-white/10 dark:bg-slate-700/50 dark:text-zinc-400 dark:hover:bg-slate-600 dark:hover:text-sky-400"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/40 bg-white/50 px-2 py-1.5 text-xs font-medium text-zinc-600 cursor-pointer transition-all hover:-translate-y-0.5 hover:bg-white hover:text-sky-600 hover:shadow-md dark:border-white/10 dark:bg-slate-700/50 dark:text-zinc-400 dark:hover:bg-slate-600 dark:hover:text-sky-400 sm:px-2.5"
                   title="上传文档到知识库">
                   {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Paperclip size={14} />}
-                  上传文档
+                  <span className="hidden sm:inline">上传文档</span>
                 </label>
 
                 <span className="hidden text-[10px] text-zinc-400 dark:text-zinc-600 lg:inline">
@@ -167,7 +167,7 @@ export function ChatInput({ onSend, onStop, isLoading, mode, selectedSkillIds, o
                 </span>
                 <button
                   onClick={isLoading ? onStop : handleSubmit}
-                  className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-200 ${
+                  className={`inline-flex items-center justify-center gap-2 rounded-xl px-2.5 py-2 text-sm font-semibold transition-all duration-200 sm:px-4 ${
                     isLoading
                       ? 'bg-rose-500/15 text-rose-400 hover:bg-rose-500/25'
                       : canSend
@@ -178,12 +178,12 @@ export function ChatInput({ onSend, onStop, isLoading, mode, selectedSkillIds, o
                   {isLoading ? (
                     <>
                       <Square size={14} />
-                      停止
+                      <span className="hidden sm:inline">停止</span>
                     </>
                   ) : (
                     <>
                       <Send size={14} />
-                      发送
+                      <span className="hidden sm:inline">发送</span>
                     </>
                   )}
                 </button>

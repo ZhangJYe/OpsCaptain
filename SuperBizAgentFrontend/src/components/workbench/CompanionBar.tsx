@@ -87,10 +87,10 @@ export function CompanionBar({ steps, isStreaming, isGoS }: Props) {
   }
 
   return (
-    <div className="relative flex h-[86px] w-[78px] shrink-0 items-end justify-center sm:h-[112px] sm:w-[112px]">
+    <div className="relative flex h-[92px] w-[82px] shrink-0 items-end justify-center sm:h-[120px] sm:w-[120px]">
       <motion.div
         aria-hidden="true"
-        className="absolute bottom-1 h-7 w-16 rounded-full bg-sky-300/25 blur-xl dark:bg-sky-400/15 sm:h-9 sm:w-24"
+        className="absolute bottom-0 h-8 w-20 rounded-full bg-sky-300/25 blur-xl dark:bg-sky-400/15 sm:h-9 sm:w-24"
         animate={{ opacity: [0.45, 0.75, 0.45], scale: [0.92, 1.05, 0.92] }}
         transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
       />
@@ -102,7 +102,7 @@ export function CompanionBar({ steps, isStreaming, isGoS }: Props) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 5, scale: 0.96 }}
             transition={{ type: 'spring', damping: 22, stiffness: 320 }}
-            className="pointer-events-none absolute bottom-[76px] left-1/2 z-20 w-max max-w-[210px] -translate-x-1/2 whitespace-normal break-words rounded-2xl rounded-br-md border border-white/70 bg-white/95 px-3.5 py-2 text-center text-[12px] font-medium leading-snug text-zinc-800 shadow-xl shadow-zinc-900/10 backdrop-blur-md dark:border-white/15 dark:bg-slate-800/95 dark:text-zinc-100 sm:bottom-[98px] sm:max-w-[240px]"
+            className="pointer-events-none absolute bottom-[82px] left-1/2 z-20 w-max max-w-[210px] -translate-x-1/2 whitespace-normal break-words rounded-2xl rounded-br-md border border-white/70 bg-white/95 px-3.5 py-2 text-center text-[12px] font-medium leading-snug text-zinc-800 shadow-xl shadow-zinc-900/10 backdrop-blur-md dark:border-white/15 dark:bg-slate-800/95 dark:text-zinc-100 sm:bottom-[106px] sm:max-w-[240px]"
           >
             {quip}
             <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 border-[6px] border-transparent border-t-white/95 dark:border-t-slate-800/95" />
@@ -122,7 +122,7 @@ export function CompanionBar({ steps, isStreaming, isGoS }: Props) {
           }
         }}
       >
-        <PetCharacter mood={mood} size={88} />
+        <PetCharacter mood={mood} size={96} />
       </button>
     </div>
   )

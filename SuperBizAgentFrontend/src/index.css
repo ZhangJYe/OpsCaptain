@@ -56,6 +56,8 @@
   }
   #root {
     @apply h-full;
+    height: 100dvh;
+    min-height: 100dvh;
   }
   ::selection {
     @apply bg-sky-100 text-zinc-950 dark:bg-sky-500/25 dark:text-white;

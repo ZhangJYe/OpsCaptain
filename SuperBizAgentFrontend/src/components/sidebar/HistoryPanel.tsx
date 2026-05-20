@@ -53,14 +53,14 @@ export function HistoryPanel({ onSelect, currentSessionId, messageCount }: Props
               key={s.id}
               className={`group flex items-start gap-2 rounded-lg p-2 transition-colors ${
                 s.id === currentSessionId
-                  ? 'border border-accent/20 bg-accent/10'
-                  : 'hover:bg-zinc-100 dark:hover:bg-zinc-800/50'
+                  ? 'border border-sky-300/55 bg-sky-50/80 shadow-sm shadow-sky-500/5 dark:border-sky-500/25 dark:bg-sky-500/10'
+                  : 'border border-transparent hover:bg-zinc-100 dark:hover:bg-zinc-800/50'
               }`}
             >
               <button onClick={() => onSelect(s)} className="flex min-w-0 flex-1 items-start gap-2 text-left">
-                <MessageSquare size={14} className="mt-0.5 shrink-0 text-zinc-400 dark:text-zinc-500" />
+                <MessageSquare size={14} className={`mt-0.5 shrink-0 ${s.id === currentSessionId ? 'text-sky-500' : 'text-zinc-400 dark:text-zinc-500'}`} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-medium text-zinc-800 dark:text-zinc-200">{s.title}</p>
+                  <p className="truncate text-xs font-semibold text-zinc-800 dark:text-zinc-200">{s.title}</p>
                   <p className="text-[10px] text-zinc-400 dark:text-zinc-500">
                     {new Date(s.updatedAt).toLocaleDateString('zh-CN')}
                   </p>
