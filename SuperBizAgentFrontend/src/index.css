@@ -2,6 +2,40 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Glow border animation ─────────────────────────────────── */
+@property --glow-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes glow-spin {
+  to { --glow-angle: 360deg; }
+}
+
+.glow-frame {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  padding: 3px;
+  background: conic-gradient(
+    from var(--glow-angle),
+    rgba(251, 146, 60, 0.15) 0deg,
+    rgba(251, 146, 60, 0.25) 90deg,
+    rgba(251, 146, 60, 0.5) 200deg,
+    rgba(251, 146, 60, 0.8) 290deg,
+    #fb923c 335deg,
+    rgba(251, 146, 60, 0.5) 355deg,
+    rgba(251, 146, 60, 0.15) 360deg
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: glow-spin 4s linear infinite;
+  filter: drop-shadow(0 0 5px rgba(251, 146, 60, 0.35));
+}
+
 @layer base {
   * {
     @apply border-zinc-200 dark:border-zinc-800;
@@ -12,10 +46,11 @@
   body {
     @apply h-full overflow-hidden antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
-    background: #fafafa;
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    background: #f1f5f9;
   }
   .dark body {
-    background: #09090b;
+    background: #0B1120;
   }
   #root {
     @apply h-full;
@@ -27,7 +62,10 @@
 
 @layer components {
   .glass {
-    @apply border border-zinc-200/80 bg-white/80 backdrop-blur-xl dark:border-zinc-800/60 dark:bg-zinc-900/60;
+    @apply border border-white/60 bg-white/70 backdrop-blur-2xl dark:border-white/10 dark:bg-slate-800/60;
+  }
+  .glass-card {
+    @apply rounded-xl border border-white/60 bg-white/70 backdrop-blur-md dark:border-white/10 dark:bg-slate-800/50;
   }
 }
 
@@ -35,8 +73,8 @@
 
 .prose-chat {
   @apply max-w-none;
-  font-size: 0.92rem;
-  line-height: 1.78;
+  font-size: 0.875rem;
+  line-height: 1.75;
   color: theme('colors.zinc.700');
   overflow-wrap: anywhere;
 }
@@ -62,14 +100,14 @@
 .dark .prose-chat h4 {
   color: theme('colors.white');
 }
-.prose-chat h1 { font-size: 1.18em; }
+.prose-chat h1 { font-size: 1.15em; }
 .prose-chat h2 {
-  font-size: 1.08em;
+  font-size: 1.05em;
   padding-left: 0.65em;
-  border-left: 3px solid theme('colors.accent.DEFAULT / 0.55');
+  border-left: 3px solid theme('colors.sky.400 / 0.5');
 }
-.prose-chat h3 { font-size: 1.02em; }
-.prose-chat h4 { font-size: 1em; color: theme('colors.zinc.700'); }
+.prose-chat h3 { font-size: 1em; }
+.prose-chat h4 { font-size: 0.95em; color: theme('colors.zinc.700'); }
 .dark .prose-chat h4 { color: theme('colors.zinc.300'); }
 
 .prose-chat > :first-child {
@@ -82,18 +120,18 @@
 
 /* Paragraphs */
 .prose-chat p {
-  margin: 0.72em 0;
+  margin: 0.65em 0;
   white-space: pre-wrap;
 }
 
 .prose-chat p:has(strong:first-child) {
-  margin-top: 0.95em;
+  margin-top: 0.9em;
 }
 
 /* Lists */
 .prose-chat ul,
 .prose-chat ol {
-  margin: 0.65em 0;
+  margin: 0.6em 0;
   padding-left: 1.35em;
 }
 .prose-chat ul {
@@ -103,7 +141,7 @@
   list-style-type: decimal;
 }
 .prose-chat li {
-  margin: 0.32em 0;
+  margin: 0.28em 0;
   padding-left: 0.15em;
 }
 .prose-chat li::marker {
@@ -146,7 +184,7 @@
   border: 1px solid theme('colors.zinc.200');
   background: theme('colors.zinc.50');
   overflow-x: auto;
-  font-size: 0.85em;
+  font-size: 0.82em;
   line-height: 1.6;
 }
 .dark .prose-chat pre {
@@ -163,7 +201,7 @@
 
 /* Links */
 .prose-chat a {
-  color: theme('colors.accent.DEFAULT');
+  color: theme('colors.sky.500');
   text-decoration: none;
 }
 .prose-chat a:hover {
@@ -174,7 +212,7 @@
 .prose-chat blockquote {
   margin: 0.75em 0;
   padding-left: 1em;
-  border-left: 2px solid theme('colors.accent.DEFAULT / 0.4');
+  border-left: 2px solid theme('colors.sky.400 / 0.4');
   font-style: italic;
   color: theme('colors.zinc.600');
 }

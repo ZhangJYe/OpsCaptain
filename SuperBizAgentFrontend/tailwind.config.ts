@@ -6,12 +6,12 @@ export default {
     extend: {
       colors: {
         accent: {
-          DEFAULT: '#3b82f6',
+          DEFAULT: '#0ea5e9',
           foreground: '#ffffff',
         },
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        sans: ['"Segoe UI"', '"PingFang SC"', '"Microsoft YaHei"', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
       },
       animation: {

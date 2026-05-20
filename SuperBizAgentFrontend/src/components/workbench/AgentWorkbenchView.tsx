@@ -1,20 +1,20 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Activity, Waves, Bot, BotOff, PanelRightOpen, PanelRightClose } from 'lucide-react'
+import { Bot, BotOff, PanelRightOpen, PanelRightClose } from 'lucide-react'
 import { MessageBubble } from '../chat/MessageBubble'
 import { StreamingText } from '../chat/StreamingText'
 import { ChatInput } from '../chat/ChatInput'
 import { GosReportCard } from '../chat/GosReportCard'
-import { ThinkingCollapse } from '../agent/ThinkingCollapse'
-import type { ThinkingStep } from '../agent/ThinkingCollapse'
 import { SuggestionChips } from '../agent/SuggestionChips'
 import type { Suggestion } from '../agent/SuggestionChips'
+import type { ThinkingStep } from '../agent/ThinkingCollapse'
 import { CompanionBar } from './CompanionBar'
 import { DetailPanel } from './DetailPanel'
-import type { DetailItem } from './DetailPanel'
 import { EvidenceBlock } from './EvidenceBlock'
+import type { DetailItem } from './DetailPanel'
 import { ResultCard } from './ResultCard'
-import type { ChatMessage, ChatMode } from '../../types/chat'
+import { WorkbenchEmptyState } from './WorkbenchEmptyState'
+import type { ChatMessage, ChatMode, AIOpsEngine } from '../../types/chat'
 import { findSkillsByIds, formatSelectedSkillSummary } from '../../lib/utils'
 import { isGoSEngine } from '../../hooks/useChat'
 
@@ -29,7 +29,9 @@ interface Props {
   mode: ChatMode
   selectedSkillIds: string[]
   petEnabled: boolean
+  aiOpsEngine: AIOpsEngine
   onSend: (query: string) => void
+  onStartAIOps: (query: string) => void
   onStop: () => void
   onModeChange: (m: ChatMode) => void
   onTogglePet: () => void
@@ -47,7 +49,9 @@ export function AgentWorkbenchView({
   mode,
   selectedSkillIds,
   petEnabled,
+  aiOpsEngine,
   onSend,
+  onStartAIOps,
   onStop,
   onModeChange,
   onTogglePet,
@@ -59,6 +63,7 @@ export function AgentWorkbenchView({
   const [detailOpen, setDetailOpen] = useState(false)
 
   useEffect(() => {
+    if (messages.length === 0 && !streamingContent) return
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, streamingContent])
 
@@ -80,13 +85,11 @@ export function AgentWorkbenchView({
 
   return (
     <div className="flex h-full">
-      {/* Center: stream + input */}
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Header bar */}
-        <div className="shrink-0 border-b border-zinc-200/80 bg-white/70 px-4 py-2 backdrop-blur-xl dark:border-zinc-900/80 dark:bg-zinc-950/40">
-          <div className="mx-auto flex max-w-4xl items-center gap-3 text-xs text-zinc-500 dark:text-zinc-500">
+        <div className="shrink-0 border-b border-white/40 bg-white/30 px-4 py-2 backdrop-blur-sm dark:border-white/5 dark:bg-slate-900/20">
+          <div className="mx-auto flex max-w-4xl items-center gap-3 text-[11px] font-medium text-zinc-500 dark:text-zinc-500">
             <span className="inline-flex items-center gap-1.5">
-              {mode === 'quick' ? <Activity size={12} className="text-accent" /> : <Waves size={12} className="text-accent" />}
+              <span className={`h-1.5 w-1.5 rounded-full ${isLoading ? 'bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.5)] animate-pulse' : 'bg-zinc-300 dark:bg-zinc-700'}`} />
               {mode === 'quick' ? '快速回答' : '流式输出'}
             </span>
             {selectedSkills.length > 0 ? (
@@ -108,7 +111,7 @@ export function AgentWorkbenchView({
               <button
                 type="button"
                 onClick={onTogglePet}
-                className="flex items-center gap-1 rounded-md px-1.5 py-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 dark:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-400"
+                className="flex items-center gap-1 rounded-lg px-1.5 py-1 text-zinc-400 transition-colors hover:bg-white/50 hover:text-zinc-600 dark:text-zinc-600 dark:hover:bg-slate-700/50 dark:hover:text-zinc-400"
                 aria-label={petEnabled ? '关闭运维助手' : '开启运维助手'}
                 title={petEnabled ? '关闭运维助手' : '开启运维助手'}
               >
@@ -117,7 +120,7 @@ export function AgentWorkbenchView({
               <button
                 type="button"
                 onClick={() => setDetailOpen((v) => !v)}
-                className="flex items-center gap-1 rounded-md px-1.5 py-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 dark:text-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-zinc-400"
+                className="flex items-center gap-1 rounded-lg px-1.5 py-1 text-zinc-400 transition-colors hover:bg-white/50 hover:text-zinc-600 dark:text-zinc-600 dark:hover:bg-slate-700/50 dark:hover:text-zinc-400"
                 aria-label={detailOpen ? '关闭详情面板' : '打开详情面板'}
                 title={detailOpen ? '关闭详情面板' : '打开详情面板'}
               >
@@ -127,9 +130,16 @@ export function AgentWorkbenchView({
           </div>
         </div>
 
-        {/* Evidence stream */}
         <div className="relative flex-1 overflow-y-auto scrollbar-thin">
-          <div className="mx-auto max-w-4xl px-4 py-8 space-y-6">
+          <div className="mx-auto max-w-4xl px-4 py-6 space-y-5">
+
+            {messages.length === 0 && !isLoading && (
+              <WorkbenchEmptyState
+                onSend={onSend}
+                onStartAIOps={onStartAIOps}
+                aiOpsEngine={aiOpsEngine}
+              />
+            )}
 
             <AnimatePresence initial={false}>
               {messages.map((msg, i) => {
@@ -139,28 +149,27 @@ export function AgentWorkbenchView({
                 return (
                   <motion.div
                     key={msg.id}
-                    initial={{ opacity: 0, y: 12 }}
+                    initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ type: 'spring', damping: 24, stiffness: 260 }}
+                    transition={{ type: 'spring', damping: 22, stiffness: 280 }}
                   >
-                    {/* Evidence blocks above the last assistant message */}
+                    <MessageBubble message={msg} onOpenDetail={handleOpenDetail} />
+
                     {isLastAssistant && hasBlocks && (
-                      <div className="mb-3 space-y-2">
-                        {msg.executionSteps!.map((step) => (
-                          <EvidenceBlock
-                            key={step.id}
-                            step={step}
-                            onOpenDetail={handleOpenDetail}
-                          />
-                        ))}
-                        <ResultCard steps={msg.executionSteps!} />
+                      <div className="mt-3 ml-10">
+                        <ResultCard
+                          steps={msg.executionSteps!}
+                          onRefine={() => onSend('请继续深入分析当前问题，补充更多证据和根因定位')}
+                          onExport={() => {
+                            const text = `# OpsCaptain 诊断报告\n\n${msg.content}\n\n---\n证据数: ${msg.executionSteps?.filter(s => s.status === 'done').length || 0}`
+                            return navigator.clipboard.writeText(text)
+                          }}
+                        />
                       </div>
                     )}
 
-                    <MessageBubble message={msg} onOpenDetail={handleOpenDetail} hideSteps={isLastAssistant && hasBlocks} />
-
                     {isLastAssistant && suggestions.length > 0 && (
-                      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="mt-3 ml-11">
+                      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="mt-3 ml-10">
                         <SuggestionChips suggestions={suggestions} onSelect={handleSuggestion} />
                       </motion.div>
                     )}
@@ -169,10 +178,8 @@ export function AgentWorkbenchView({
               })}
             </AnimatePresence>
 
-            {/* Streaming: evidence blocks + output */}
             {isLoading && (
               <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
-                {/* Evidence blocks */}
                 {thinkingSteps.filter((s) => s.status !== 'pending').length > 0 && (
                   <div className="space-y-2">
                     {thinkingSteps
@@ -187,21 +194,16 @@ export function AgentWorkbenchView({
                   </div>
                 )}
 
-                {/* Streaming output */}
                 {isGoS ? (
                   <GosReportCard steps={thinkingSteps} content={streamingContent} isStreaming />
                 ) : streamingContent ? (
-                  <div className="rounded-2xl border border-zinc-200/80 bg-white/95 px-4 py-3 shadow-sm shadow-zinc-900/[0.03] dark:border-zinc-800/60 dark:bg-zinc-900/80">
+                  <div className="rounded-[22px] rounded-bl-[6px] border border-white/60 bg-white/70 px-4 py-3 backdrop-blur-xl dark:border-white/10 dark:bg-slate-800/50">
                     <StreamingText content={streamingContent} />
                   </div>
                 ) : thinkingSteps.filter((s) => s.status !== 'pending').length === 0 ? (
-                  <div className="flex items-center gap-3 rounded-xl border border-zinc-200/80 bg-white/80 px-4 py-3 dark:border-zinc-800/60 dark:bg-zinc-900/60">
-                    <div className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-accent/60 animate-pulse-dot" />
-                      <span className="w-2 h-2 rounded-full bg-accent/60 animate-pulse-dot [animation-delay:0.2s]" />
-                      <span className="w-2 h-2 rounded-full bg-accent/60 animate-pulse-dot [animation-delay:0.4s]" />
-                    </div>
-                    <span className="text-xs text-zinc-400">正在启动诊断...</span>
+                  <div className="flex items-center gap-3 rounded-xl border border-white/40 bg-white/40 px-4 py-3 backdrop-blur-sm dark:border-white/5 dark:bg-slate-800/30">
+                    <span className="h-2 w-2 rounded-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.5)] animate-pulse" />
+                    <span className="text-xs text-sky-600/70 dark:text-sky-400/70">正在启动诊断...</span>
                   </div>
                 ) : null}
               </motion.div>
@@ -211,10 +213,9 @@ export function AgentWorkbenchView({
           </div>
         </div>
 
-        {/* Companion + Input area */}
-        <div className="shrink-0 border-t border-zinc-200/80 bg-white/88 backdrop-blur-xl dark:border-zinc-900/80 dark:bg-zinc-950/80">
+        <div className="shrink-0 border-t border-white/40 bg-white/30 backdrop-blur-sm dark:border-white/5 dark:bg-slate-900/20">
           <div className="mx-auto flex max-w-4xl items-end gap-3 px-4 py-3">
-            {petEnabled && (messages.length > 0 || isLoading) && (
+            {petEnabled && (
               <CompanionBar
                 steps={thinkingSteps}
                 isStreaming={isLoading}
@@ -236,7 +237,6 @@ export function AgentWorkbenchView({
         </div>
       </div>
 
-      {/* Right detail panel */}
       <AnimatePresence>
         {detailOpen && (
           <DetailPanel item={detailItem} onClose={handleCloseDetail} />

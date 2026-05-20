@@ -58,138 +58,136 @@ export function ChatInput({ onSend, onStop, isLoading, mode, selectedSkillIds, o
   const canSend = (input.trim().length > 0 || readyFiles.length > 0) && !isLoading
 
   return (
-    <div className={embedded ? 'shrink-0' : 'shrink-0 border-t border-zinc-200/80 bg-white/88 px-4 py-4 backdrop-blur-xl dark:border-zinc-900/80 dark:bg-zinc-950/80'}>
+    <div className={embedded ? 'shrink-0' : 'shrink-0 border-t border-white/40 bg-white/30 px-4 py-4 backdrop-blur-sm dark:border-white/5 dark:bg-slate-900/30'}>
       <input type="file" id={inputId} onChange={handleChange} accept={accept} multiple={multiple} className="hidden" />
 
       <div className={embedded ? '' : 'mx-auto max-w-4xl'}>
-        <div
-          className={`rounded-2xl border transition-all duration-300 ${
+        <div className={`relative rounded-[22px] rounded-bl-[6px] transition-shadow duration-300 ${isFocused ? 'shadow-lg shadow-sky-500/10 dark:shadow-none' : 'shadow-md shadow-zinc-900/5 dark:shadow-none'}`}>
+          {isFocused && <div aria-hidden="true" className="glow-frame rounded-[22px] rounded-bl-[6px]" />}
+
+          <div className={`relative rounded-[22px] rounded-bl-[6px] border transition-all duration-300 ${
             isFocused
-              ? 'border-accent/30 shadow-[0_0_0_3px_rgba(59,130,246,0.08)] dark:shadow-[0_0_0_3px_rgba(59,130,246,0.06)]'
-              : 'border-zinc-200/80 shadow-sm dark:border-zinc-800/60'
-          } bg-white/90 dark:bg-zinc-900/70`}
-        >
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
-            placeholder="描述告警、日志或系统现象..."
-            rows={1}
-            className="min-h-[44px] w-full resize-none bg-transparent px-4 py-3 text-sm leading-7 text-zinc-900 outline-none placeholder:text-zinc-400 dark:text-zinc-100 dark:placeholder:text-zinc-500"
-          />
+              ? 'border-sky-400/50 bg-white/80 dark:border-sky-400/30 dark:bg-slate-800/70'
+              : 'border-white/60 bg-white/60 dark:border-white/10 dark:bg-slate-800/50'
+          } backdrop-blur-xl`}>
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onFocus={() => setIsFocused(true)}
+              onBlur={() => setIsFocused(false)}
+              placeholder="描述告警、日志或系统现象..."
+              rows={1}
+              className="min-h-[44px] w-full resize-none rounded-t-[22px] bg-transparent px-4 py-3 text-sm leading-7 text-zinc-900 outline-none placeholder:text-zinc-400 dark:text-zinc-100 dark:placeholder:text-zinc-500"
+            />
 
-          {/* Uploaded file chips */}
-          <AnimatePresence>
-            {files.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="flex flex-wrap gap-2 px-4 pb-2"
-              >
-                {files.map((file) => (
-                  <span
-                    key={file.id}
-                    className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs ${
-                      file.status === 'ready' ? 'border-accent/30 bg-accent/5 text-accent' :
-                      file.status === 'indexing' ? 'border-yellow-300/50 bg-yellow-50/50 text-yellow-600 dark:border-yellow-600/30 dark:bg-yellow-900/20 dark:text-yellow-400' :
-                      file.status === 'failed' ? 'border-red-300/50 bg-red-50/50 text-red-500 dark:border-red-600/30 dark:bg-red-900/20' :
-                      'border-zinc-200 bg-zinc-50 text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800'
-                    }`}
-                  >
-                    <FileIcon size={12} />
-                    <span className="max-w-[120px] truncate">{file.name}</span>
-                    <span className="text-zinc-400">({formatFileSize(file.size)})</span>
-                    {file.status === 'indexing' && <Loader2 size={12} className="animate-spin" />}
-                    {file.status === 'failed' && <span className="text-[10px]">索引失败</span>}
-                    <button
-                      onClick={() => removeFile(file.id)}
-                      className="ml-0.5 rounded p-0.5 text-zinc-400 transition-colors hover:bg-red-500/10 hover:text-red-400"
+            <AnimatePresence>
+              {files.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="flex flex-wrap gap-2 px-4 pb-2"
+                >
+                  {files.map((file) => (
+                    <span
+                      key={file.id}
+                      className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs ${
+                        file.status === 'ready' ? 'border-sky-300/50 bg-sky-50/50 text-sky-600 dark:border-sky-600/30 dark:bg-sky-900/20 dark:text-sky-400' :
+                        file.status === 'indexing' ? 'border-amber-300/50 bg-amber-50/50 text-amber-600 dark:border-amber-600/30 dark:bg-amber-900/20 dark:text-amber-400' :
+                        file.status === 'failed' ? 'border-rose-300/50 bg-rose-50/50 text-rose-500 dark:border-rose-600/30 dark:bg-rose-900/20' :
+                        'border-white/40 bg-white/50 text-zinc-500 dark:border-white/10 dark:bg-slate-700/50'
+                      }`}
                     >
-                      <X size={12} />
+                      <FileIcon size={12} />
+                      <span className="max-w-[120px] truncate">{file.name}</span>
+                      <span className="text-zinc-400">({formatFileSize(file.size)})</span>
+                      {file.status === 'indexing' && <Loader2 size={12} className="animate-spin" />}
+                      {file.status === 'failed' && <span className="text-[10px]">索引失败</span>}
+                      <button
+                        onClick={() => removeFile(file.id)}
+                        className="ml-0.5 rounded p-0.5 text-zinc-400 transition-colors hover:bg-rose-500/10 hover:text-rose-400"
+                      >
+                        <X size={12} />
+                      </button>
+                    </span>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+              {uploadError && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="px-4 pb-2"
+                >
+                  <p className="text-xs text-rose-400">{uploadError}</p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <div className="flex items-center justify-between gap-3 border-t border-white/30 px-3 py-2.5 dark:border-white/5">
+              <div className="flex items-center gap-3">
+                <div className="inline-flex rounded-lg bg-white/50 p-0.5 dark:bg-slate-700/50">
+                  {modeOptions.map((option) => (
+                    <button
+                      key={option.id}
+                      onClick={() => onModeChange(option.id)}
+                      className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-all duration-200 ${
+                        option.id === mode
+                          ? 'bg-white text-sky-600 shadow-sm dark:bg-slate-600 dark:text-sky-400'
+                          : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'
+                      }`}
+                    >
+                      <option.icon size={13} />
+                      <span>{option.label}</span>
                     </button>
-                  </span>
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
+                  ))}
+                </div>
 
-          {/* Upload error */}
-          <AnimatePresence>
-            {uploadError && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="px-4 pb-2"
-              >
-                <p className="text-xs text-red-400">{uploadError}</p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          <div className="flex items-center justify-between gap-3 border-t border-zinc-100 px-3 py-2.5 dark:border-zinc-800">
-            <div className="flex items-center gap-3">
-              {/* Mode toggle */}
-              <div className="inline-flex rounded-lg bg-zinc-100 p-0.5 dark:bg-zinc-800">
-                {modeOptions.map((option) => (
-                  <button
-                    key={option.id}
-                    onClick={() => onModeChange(option.id)}
-                    className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-all duration-200 ${
-                      option.id === mode
-                        ? 'bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-white'
-                        : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'
-                    }`}
-                  >
-                    <option.icon size={13} />
-                    <span>{option.label}</span>
-                  </button>
-                ))}
+                <span className="hidden text-[11px] text-zinc-400 dark:text-zinc-600 sm:inline truncate max-w-[200px]">
+                  {formatSelectedSkillSummary(selectedSkillIds)}
+                </span>
               </div>
 
-              {/* Skill summary */}
-              <span className="hidden text-[11px] text-zinc-400 dark:text-zinc-600 sm:inline truncate max-w-[200px]">
-                {formatSelectedSkillSummary(selectedSkillIds)}
-              </span>
-            </div>
+              <div className="flex items-center gap-2">
+                <label htmlFor={inputId}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/40 bg-white/50 px-2.5 py-1.5 text-xs font-medium text-zinc-600 cursor-pointer transition-all hover:-translate-y-0.5 hover:bg-white hover:text-sky-600 hover:shadow-md dark:border-white/10 dark:bg-slate-700/50 dark:text-zinc-400 dark:hover:bg-slate-600 dark:hover:text-sky-400"
+                  title="上传文档到知识库">
+                  {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Paperclip size={14} />}
+                  上传文档
+                </label>
 
-            <div className="flex items-center gap-2">
-              <label htmlFor={inputId}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200/80 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-600 cursor-pointer transition-all hover:border-accent/30 hover:text-accent dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:border-accent/30 dark:hover:text-accent"
-                title="上传文档到知识库">
-                {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Paperclip size={14} />}
-                上传文档
-              </label>
-
-              <span className="hidden text-[10px] text-zinc-400 dark:text-zinc-600 lg:inline">
-                Enter 发送 · Shift+Enter 换行
-              </span>
-              <button
-                onClick={isLoading ? onStop : handleSubmit}
-                className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all duration-200 ${
-                  isLoading
-                    ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20'
-                    : canSend
-                      ? 'bg-accent text-white shadow-sm hover:brightness-110 active:scale-[0.97]'
-                      : 'cursor-not-allowed bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600'
-                }`}
-              >
-                {isLoading ? (
-                  <>
-                    <Square size={14} />
-                    停止
-                  </>
-                ) : (
-                  <>
-                    <Send size={14} />
-                    发送
-                  </>
-                )}
-              </button>
+                <span className="hidden text-[10px] text-zinc-400 dark:text-zinc-600 lg:inline">
+                  Enter 发送 · Shift+Enter 换行
+                </span>
+                <button
+                  onClick={isLoading ? onStop : handleSubmit}
+                  className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-200 ${
+                    isLoading
+                      ? 'bg-rose-500/15 text-rose-400 hover:bg-rose-500/25'
+                      : canSend
+                        ? 'bg-sky-500 text-white shadow-md shadow-sky-400/25 hover:bg-sky-600 hover:shadow-sky-400/40 active:bg-sky-700'
+                        : 'cursor-not-allowed bg-white/50 text-zinc-400 dark:bg-slate-700/50 dark:text-zinc-600'
+                  }`}
+                >
+                  {isLoading ? (
+                    <>
+                      <Square size={14} />
+                      停止
+                    </>
+                  ) : (
+                    <>
+                      <Send size={14} />
+                      发送
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
