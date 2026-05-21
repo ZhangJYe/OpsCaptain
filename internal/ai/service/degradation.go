@@ -26,6 +26,12 @@ type ExecutionResponse struct {
 	ApprovalRequestID string
 	ApprovalStatus    string
 	ExecutionPlan     []string
+	Confidence        float64
+	Evidence          []protocol.EvidenceItem
+	Metadata          map[string]any
+	NextActions       []string
+	StartedAt         int64
+	FinishedAt        int64
 }
 
 func (r ExecutionResponse) Degraded() bool {
@@ -124,6 +130,12 @@ func ExecutionResponseFromResult(result *protocol.TaskResult, detail []string, t
 		response.Status = result.Status
 	}
 	response.DegradationReason = strings.TrimSpace(result.DegradationReason)
+	response.Confidence = result.Confidence
+	response.Evidence = result.Evidence
+	response.Metadata = result.Metadata
+	response.NextActions = result.NextActions
+	response.StartedAt = result.StartedAt
+	response.FinishedAt = result.FinishedAt
 	return response
 }
 

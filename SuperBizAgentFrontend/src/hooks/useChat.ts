@@ -35,6 +35,11 @@ interface AIOpsPayload {
   engine?: string;
   degraded?: boolean;
   degradation_reason?: string;
+  confidence?: number;
+  evidence?: Array<{ source_type: string; source_id: string; title: string; snippet: string; score: number; uri?: string }>;
+  next_actions?: string[];
+  started_at?: number;
+  finished_at?: number;
 }
 
 function parseJsonSafe(raw: string): any {
@@ -144,7 +149,157 @@ async function requestAIOps({ baseUrl, query, engine }: AIOpsRequest): Promise<A
     engine: payload?.engine,
     degraded: Boolean(payload?.degraded),
     degradation_reason: payload?.degradation_reason,
+    confidence: typeof payload?.confidence === 'number' ? payload.confidence : undefined,
+    evidence: Array.isArray(payload?.evidence) ? payload.evidence : undefined,
+    next_actions: Array.isArray(payload?.next_actions) ? payload.next_actions : undefined,
+    started_at: payload?.started_at,
+    finished_at: payload?.finished_at,
   };
+}
+
+interface AIOpsRunInfo {
+  trace_id: string;
+  task_id: string;
+  engine: string;
+  status: string;
+  degraded?: boolean;
+  degradation_reason?: string;
+  approval_required?: boolean;
+  approval_request_id?: string;
+}
+
+interface AIOpsTraceEvent {
+  event_id: string;
+  task_id: string;
+  trace_id: string;
+  type: string;
+  agent: string;
+  message?: string;
+  payload?: Record<string, any>;
+  created_at: number;
+}
+
+interface AIOpsResultResponse {
+  found: boolean;
+  status?: string;
+  trace_id: string;
+  result?: string;
+  detail?: string[];
+  engine?: string;
+  confidence?: number;
+  evidence?: AIOpsPayload["evidence"];
+  next_actions?: string[];
+  degraded?: boolean;
+  degradation_reason?: string;
+  started_at?: number;
+  finished_at?: number;
+}
+
+async function requestAIOpsRuns(baseUrl: string, query: string, engine: string, signal?: AbortSignal): Promise<AIOpsRunInfo> {
+  const res = await fetch(`${baseUrl}/ai_ops_runs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query, engine }),
+    signal,
+  });
+  const data = await res.json();
+  const payload = normalizeResponsePayload(data);
+  if (!res.ok) {
+    throw new Error(String(data?.message || `HTTP ${res.status}`));
+  }
+  return {
+    trace_id: payload.trace_id || "",
+    task_id: payload.task_id || "",
+    engine: payload.engine || engine,
+    status: payload.status || "running",
+    degraded: Boolean(payload?.degraded),
+    degradation_reason: payload?.degradation_reason,
+    approval_required: Boolean(payload?.approval_required),
+    approval_request_id: payload?.approval_request_id,
+  };
+}
+
+async function requestAIOpsTrace(baseUrl: string, traceId: string, signal?: AbortSignal): Promise<AIOpsTraceEvent[]> {
+  const res = await fetch(`${baseUrl}/ai_ops_trace?trace_id=${encodeURIComponent(traceId)}`, { signal });
+  const data = await res.json();
+  const payload = normalizeResponsePayload(data);
+  if (!res.ok) return [];
+  return Array.isArray(payload?.events) ? payload.events : [];
+}
+
+async function requestAIOpsResult(baseUrl: string, traceId: string, signal?: AbortSignal): Promise<AIOpsResultResponse> {
+  const res = await fetch(`${baseUrl}/ai_ops_result?trace_id=${encodeURIComponent(traceId)}`, { signal });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(String(data?.message || `HTTP ${res.status}`));
+  }
+  return normalizeResponsePayload(data);
+}
+
+function applyTraceEventToSteps(
+  steps: ThinkingStep[],
+  event: AIOpsTraceEvent,
+  engine: string,
+): ThinkingStep[] | null {
+  const stage = event.payload?.stage as string | undefined;
+  const isGoS = isGoSEngine(engine);
+
+  if (isGoS) {
+    const stageMap: Record<string, { stepId: string; detail: string }> = {
+      ingest: { stepId: "gos:hypothesis", detail: "解析症状并建立候选假设..." },
+      ingest_done: { stepId: "gos:hypothesis", detail: event.message || "候选假设已建立" },
+      frontier_selected: { stepId: "gos:experts", detail: event.message || "选中 frontier" },
+      expert_planned: { stepId: "gos:experts", detail: event.message || "调度专家" },
+      evidence_attached: { stepId: "gos:evidence", detail: event.message || "挂载证据" },
+      confidence_updated: { stepId: "gos:confidence", detail: event.message || "置信度更新" },
+      fsm_decision: { stepId: "gos:confidence", detail: event.message || "FSM 决策" },
+      report: { stepId: "gos:reporter", detail: "生成证据链报告..." },
+    };
+
+    const mapping = stageMap[stage || ""];
+    if (!mapping) return null;
+
+    return steps.map((step) => {
+      if (step.id === mapping.stepId) {
+        const metaItem = event.message && event.message !== step.detail ? event.message : undefined;
+        return {
+          ...step,
+          status: "active" as const,
+          detail: mapping.detail,
+          meta: metaItem ? [...(step.meta || []).slice(-2), metaItem] : step.meta,
+        };
+      }
+      if (isStepBefore(step.id, mapping.stepId, isGoS) && step.status === "active") {
+        return { ...step, status: "done" as const };
+      }
+      return step;
+    });
+  }
+
+  if (event.type === "task_info" && event.message) {
+    const infoCount = steps.filter((s) => s.id.startsWith("info:")).length;
+    const infoId = `info:${infoCount}`;
+    let next = upsertStep(steps, infoId, event.message.slice(0, 60), {
+      status: "done",
+      detail: event.message,
+    });
+    next = upsertStep(next, "evidence", "收集证据", {
+      status: "active",
+      detail: `已收集 ${infoCount + 1} 条执行细节`,
+    });
+    return next;
+  }
+
+  return null;
+}
+
+function isStepBefore(currentId: string, targetId: string, isGoS: boolean): boolean {
+  if (isGoS) {
+    const order = ["gos:hypothesis", "gos:experts", "gos:evidence", "gos:confidence", "gos:reporter"];
+    return order.indexOf(currentId) < order.indexOf(targetId);
+  }
+  const order = ["engine", "dispatch", "evidence", "reporter"];
+  return order.indexOf(currentId) < order.indexOf(targetId);
 }
 
 export function isGoSEngine(engine: AIOpsEngine | string | null | undefined): boolean {
@@ -238,6 +393,9 @@ function completeAIOpsSteps(
       : "诊断报告已生成";
 
   if (isGoSEngine(actualEngine)) {
+    const evidenceCount = payload.evidence?.length ?? 0;
+    const confidencePct = payload.confidence != null ? `${Math.round(payload.confidence * 100)}%` : undefined;
+
     let next = steps.map((step) => {
       if (step.id === "gos:hypothesis") {
         return { ...step, status: "done" as const, detail: "候选故障方向已建立" };
@@ -250,18 +408,16 @@ function completeAIOpsSteps(
         };
       }
       if (step.id === "gos:evidence") {
-        return {
-          ...step,
-          status: "done" as const,
-          detail: detailItems.length > 0 ? `${detailItems.length} 条 trace/detail` : "证据链已写入信念图",
-        };
+        const count = evidenceCount > 0 ? `${evidenceCount} 条证据` : detailItems.length > 0 ? `${detailItems.length} 条 trace/detail` : "证据链已写入信念图";
+        return { ...step, status: "done" as const, detail: count };
       }
       if (step.id === "gos:confidence") {
-        return {
-          ...step,
-          status: "done" as const,
-          detail: payload.degraded ? "降级路径已记录" : "frontier 已收敛",
-        };
+        const detail = payload.degraded
+          ? "降级路径已记录"
+          : confidencePct
+          ? `置信度 ${confidencePct}，frontier 已收敛`
+          : "frontier 已收敛";
+        return { ...step, status: "done" as const, detail };
       }
       if (step.id === "gos:reporter") {
         return { ...step, status: payload.degraded ? "error" as const : "done" as const, detail: reportDetail };
@@ -269,8 +425,14 @@ function completeAIOpsSteps(
       return step;
     });
 
-    for (const item of detailItems.slice(0, 3)) {
-      next = appendStepMeta(next, "gos:evidence", "挂载支持证据", item);
+    if (payload.evidence) {
+      for (const ev of payload.evidence.slice(0, 3)) {
+        next = appendStepMeta(next, "gos:evidence", "挂载支持证据", `[${ev.source_type}] ${ev.title || ev.snippet || ev.source_id}`);
+      }
+    } else {
+      for (const item of detailItems.slice(0, 3)) {
+        next = appendStepMeta(next, "gos:evidence", "挂载支持证据", item);
+      }
     }
     return next;
   }
@@ -920,12 +1082,141 @@ export function useChat() {
       setSuggestions([]);
       commitThinkingSteps(liveSteps);
 
+      let pollTimer: ReturnType<typeof setInterval> | null = null;
+      let pollTimeout: ReturnType<typeof setTimeout> | null = null;
+      let rejectPolling: ((err: Error) => void) | null = null;
+      let aborted = false;
+      const pollAbort = new AbortController();
+      setAbortCtrl(pollAbort);
+
+      const cleanup = () => {
+        if (pollTimer) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+        }
+        if (pollTimeout) {
+          clearTimeout(pollTimeout);
+          pollTimeout = null;
+        }
+      };
+
+      pollAbort.signal.addEventListener("abort", () => {
+        aborted = true;
+        cleanup();
+        if (rejectPolling) {
+          const reject = rejectPolling;
+          rejectPolling = null;
+          reject(new Error("已停止"));
+        }
+      });
+
       try {
         const baseUrl = getApiBaseUrl();
         commitThinkingSteps((prev) => activateAIOpsSteps(prev, engine));
 
-        const payload = await requestAIOps({ baseUrl, query: trimmed, engine });
-        const actualEngine = payload.engine || engine;
+        const runInfo = await requestAIOpsRuns(baseUrl, trimmed, engine, pollAbort.signal);
+        const actualEngine = runInfo.engine || engine;
+
+        if (runInfo.status !== "running" || !runInfo.trace_id) {
+          const terminalContent = runInfo.degraded
+            ? `AIOps 已降级: ${runInfo.degradation_reason || "服务暂时不可用"}`
+            : runInfo.approval_required
+            ? `请求已进入审批队列 (ID: ${runInfo.approval_request_id || "unknown"})`
+            : "AIOps 无法启动";
+          commitThinkingSteps((prev) => markActiveAsError(prev, terminalContent));
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: generateId(),
+              role: "assistant",
+              content: terminalContent,
+              timestamp: Date.now(),
+              executionSteps: visibleExecutionSteps(liveSteps),
+              engine: actualEngine,
+            },
+          ]);
+          return;
+        }
+
+        let seenEventIds = new Set<string>();
+
+        const POLL_TIMEOUT_MS = 120_000;
+        await new Promise<void>((resolve, reject) => {
+          rejectPolling = reject;
+          pollTimeout = setTimeout(() => {
+            cleanup();
+            rejectPolling = null;
+            reject(new Error("AIOps 轮询超时（120s）"));
+          }, POLL_TIMEOUT_MS);
+
+          const poll = async () => {
+            if (aborted) {
+              cleanup();
+              rejectPolling = null;
+              reject(new Error("已停止"));
+              return;
+            }
+            try {
+              const events = await requestAIOpsTrace(baseUrl, runInfo.trace_id, pollAbort.signal);
+              for (const event of events) {
+                if (seenEventIds.has(event.event_id)) continue;
+                seenEventIds.add(event.event_id);
+
+                const updated = applyTraceEventToSteps(liveSteps, event, actualEngine);
+                if (updated) {
+                  commitThinkingSteps(updated);
+                }
+
+                if (event.type === "task_completed") {
+                  cleanup();
+                  rejectPolling = null;
+                  resolve();
+                  return;
+                }
+                if (event.type === "task_failed" || event.type === "task_timeout") {
+                  cleanup();
+                  rejectPolling = null;
+                  reject(new Error(event.message || "AIOps 执行失败"));
+                  return;
+                }
+              }
+            } catch (pollErr) {
+              if (aborted) {
+                cleanup();
+                rejectPolling = null;
+                reject(new Error("已停止"));
+                return;
+              }
+            }
+          };
+
+          poll();
+          pollTimer = setInterval(poll, 1500);
+        });
+
+        const resultRes = await requestAIOpsResult(baseUrl, runInfo.trace_id, pollAbort.signal);
+        if (!resultRes.found) {
+          throw new Error("AIOps 执行完成但未找到结果");
+        }
+
+        if (resultRes.status === "failed") {
+          throw new Error(resultRes.result || "AIOps 执行失败");
+        }
+
+        const payload: AIOpsPayload = {
+          result: resultRes.result || "无响应",
+          trace_id: runInfo.trace_id,
+          detail: resultRes.detail,
+          engine: resultRes.engine,
+          degraded: resultRes.degraded,
+          degradation_reason: resultRes.degradation_reason,
+          confidence: resultRes.confidence,
+          evidence: resultRes.evidence,
+          next_actions: resultRes.next_actions,
+          started_at: resultRes.started_at,
+          finished_at: resultRes.finished_at,
+        };
+
         commitThinkingSteps((prev) => completeAIOpsSteps(prev, actualEngine, payload));
 
         const assistantMsg: ChatMessage = {
@@ -935,25 +1226,35 @@ export function useChat() {
           timestamp: Date.now(),
           executionSteps: visibleExecutionSteps(liveSteps),
           engine: actualEngine,
+          confidence: payload.confidence,
+          evidenceCount: payload.evidence?.length,
+          nextActions: payload.next_actions,
+          startedAt: payload.started_at,
+          finishedAt: payload.finished_at,
         };
         setMessages((prev) => [...prev, assistantMsg]);
         setSuggestions(generateSuggestions(payload.result, mode));
       } catch (err: any) {
-        commitThinkingSteps((prev) => markActiveAsError(prev, err?.message));
+        aborted = true;
+        cleanup();
+        const errorMessage = pollAbort.signal.aborted ? "已停止" : err?.message;
+        commitThinkingSteps((prev) => markActiveAsError(prev, errorMessage));
         setMessages((prev) => [
           ...prev,
           {
             id: generateId(),
             role: "assistant",
-            content: `AIOps 请求失败: ${err?.message || "未知错误"}`,
+            content: `AIOps 请求失败: ${errorMessage || "未知错误"}`,
             timestamp: Date.now(),
             executionSteps: visibleExecutionSteps(liveSteps),
             engine,
           },
         ]);
       } finally {
+        cleanup();
         setIsLoading(false);
         setLoadingEngine(null);
+        setAbortCtrl(null);
         setStreamingContent("");
         setStreamingThoughts([]);
       }

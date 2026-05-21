@@ -174,6 +174,143 @@ func ApproveQueuedAIOpsRequest(ctx context.Context, requestID string) (Execution
 	return response, nil
 }
 
+type AIOpsRunInfo struct {
+	TraceID           string
+	TaskID            string
+	Engine            string
+	Status            string
+	Degraded          bool
+	DegradationReason string
+	ApprovalRequired  bool
+	ApprovalRequestID string
+	ApprovalStatus    string
+}
+
+func RunAIOpsAsync(ctx context.Context, query string) (*AIOpsRunInfo, error) {
+	if !aiOpsMultiAgentEnabled(ctx) {
+		return &AIOpsRunInfo{
+			Status:            "degraded",
+			Degraded:          true,
+			DegradationReason: "multi_agent_disabled",
+		}, nil
+	}
+
+	approval := NewApprovalGate()
+	if decision := approval.Check(ctx, query); !decision.Approved {
+		if decision.Queued && decision.ApprovalRequest != nil {
+			return &AIOpsRunInfo{
+				Status:            "approval_required",
+				ApprovalRequired:  true,
+				ApprovalRequestID: decision.ApprovalRequest.ID,
+				ApprovalStatus:    string(decision.ApprovalRequest.Status),
+			}, nil
+		}
+		return &AIOpsRunInfo{
+			Status:            "degraded",
+			Degraded:          true,
+			DegradationReason: decision.Reason,
+		}, nil
+	}
+
+	if decision := GetDegradationDecision(ctx, "ai_ops"); decision.Enabled {
+		return &AIOpsRunInfo{
+			Status:            "degraded",
+			Degraded:          true,
+			DegradationReason: decision.Reason,
+		}, nil
+	}
+
+	rt, err := getOrCreateAIOpsRuntime(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("aiops runtime unavailable: %w", err)
+	}
+
+	memorySvc := newMemoryService()
+	sessionID := memorySvc.ResolveSessionID(ctx)
+	ctx = context.WithValue(ctx, consts.CtxKeySessionID, sessionID)
+	memoryContext, _, _ := memorySvc.BuildContextPlan(ctx, "aiops", sessionID, query)
+
+	enrichedQuery := query
+	if strings.TrimSpace(memoryContext) != "" {
+		enrichedQuery = query + "\n\n可参考的历史上下文：\n" + memoryContext
+	}
+
+	if hints := skillFocusCollector.Collect(query); len(hints) > 0 {
+		enrichedQuery = enrichedQuery + "\n\n场景分析方向（基于 Skill 匹配）：\n" + skills.FormatFocusHints(hints)
+	}
+
+	agentName := selectAIOpsAgentName(ctx)
+	rootTask := protocol.NewRootTask(sessionID, query, agentName)
+	rootTask.Input = map[string]any{
+		"raw_query":        query,
+		"executable_query": enrichedQuery,
+		"response_mode":    "ai_ops",
+		"entrypoint":       "ai_ops",
+		"engine":           agentName,
+	}
+
+	runInfo := &AIOpsRunInfo{
+		TraceID: rootTask.TraceID,
+		TaskID:  rootTask.TaskID,
+		Engine:  agentName,
+		Status:  "running",
+	}
+
+	go func() {
+		bgCtx := context.Background()
+		bgCtx = context.WithValue(bgCtx, consts.CtxKeySessionID, sessionID)
+		bgCtx = context.WithValue(bgCtx, consts.CtxKeyRequestID, ctx.Value(consts.CtxKeyRequestID))
+		bgCtx = WithAIOpsEngine(bgCtx, agentName)
+
+		g.Log().Infof(bgCtx, "[AIOps] async dispatch started, trace_id=%s", rootTask.TraceID)
+		result, dispatchErr := rt.Dispatch(bgCtx, rootTask)
+		if dispatchErr != nil {
+			g.Log().Warningf(bgCtx, "[AIOps] async dispatch failed, trace_id=%s: %v", rootTask.TraceID, dispatchErr)
+		}
+		if result != nil {
+			memorySvc.PersistOutcome(bgCtx, sessionID, query, result.Summary)
+		}
+		g.Log().Infof(bgCtx, "[AIOps] async dispatch completed, trace_id=%s", rootTask.TraceID)
+	}()
+
+	return runInfo, nil
+}
+
+func GetAIOpsResult(ctx context.Context, traceID string) (*ExecutionResponse, error) {
+	if strings.TrimSpace(traceID) == "" {
+		return nil, nil
+	}
+	rt, err := getOrCreateAIOpsRuntime(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("aiops runtime unavailable: %w", err)
+	}
+	result, err := rt.ResultByTraceID(ctx, traceID)
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return nil, nil
+	}
+	events, _ := rt.TraceEvents(ctx, traceID)
+	detail := make([]string, 0, len(events))
+	for _, ev := range events {
+		if ev.Message != "" && includeTraceEvent(ev.Type) {
+			detail = append(detail, ev.Message)
+		}
+	}
+	resp := ExecutionResponseFromResult(result, detail, traceID)
+	return &resp, nil
+}
+
+func includeTraceEvent(eventType string) bool {
+	switch eventType {
+	case "task_started", "task_info", "task_completed":
+		return true
+	default:
+		return false
+	}
+}
+
 func GetAIOpsTrace(_ context.Context, traceID string) ([]*protocol.TaskEvent, []string, error) {
 	if traceID == "" {
 		return nil, nil, fmt.Errorf("traceID is empty")

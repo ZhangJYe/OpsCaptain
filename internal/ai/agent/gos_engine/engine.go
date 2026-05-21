@@ -48,6 +48,21 @@ func (e *GoSEngine) RegisterExpert(name string, agent experts.ExpertAgent) {
 	e.experts[name] = agent
 }
 
+func (e *GoSEngine) SetEmitter(emit EventEmitter) {
+	e.cfg.Emit = emit
+}
+
+func (e *GoSEngine) emit(ctx context.Context, message string, detail string, payload map[string]any) {
+	if e.cfg.Emit == nil {
+		return
+	}
+	if payload == nil {
+		payload = make(map[string]any)
+	}
+	payload["stage"] = message
+	e.cfg.Emit(ctx, detail, payload)
+}
+
 func (e *GoSEngine) Run(ctx context.Context, symptom string) *protocol.TaskResult {
 	startedAt := time.Now()
 	stats := &RunStats{}
@@ -55,9 +70,13 @@ func (e *GoSEngine) Run(ctx context.Context, symptom string) *protocol.TaskResul
 	graph := belief.NewBeliefGraph()
 	fsm := belief.NewBeliefFSM(e.cfg.ToFSMThresholds())
 
+	e.emit(ctx, "ingest", "解析症状并建立候选假设", nil)
 	if err := e.ingest(ctx, graph, symptom); err != nil {
 		return e.degradedResult(graph, fsm, startedAt, stats, "ingest_failed", err, nil, false)
 	}
+	e.emit(ctx, "ingest_done", fmt.Sprintf("已抽取 %d 个候选节点", len(graph.Nodes)), map[string]any{
+		"node_count": len(graph.Nodes),
+	})
 
 	for {
 		if fsm.IsFinalState() {
@@ -70,10 +89,25 @@ func (e *GoSEngine) Run(ctx context.Context, symptom string) *protocol.TaskResul
 			break
 		}
 
+		e.emit(ctx, "frontier_selected", fmt.Sprintf("选中 frontier: %s (score=%.2f)", frontier.Label, frontier.Score), map[string]any{
+			"frontier_label": frontier.Label,
+			"frontier_score": frontier.Score,
+			"fsm_level":      fsm.GetCurrentLevel(),
+		})
+
 		plan, err := e.plan(ctx, frontier)
 		if err != nil {
 			return e.degradedResult(graph, fsm, startedAt, stats, "plan_failed", err, nil, false)
 		}
+
+		expertNames := make([]string, 0, len(plan))
+		for _, p := range plan {
+			expertNames = append(expertNames, p.ExpertName)
+		}
+		e.emit(ctx, "expert_planned", fmt.Sprintf("调度 %d 位专家: %v", len(plan), expertNames), map[string]any{
+			"expert_count": len(plan),
+			"expert_names": expertNames,
+		})
 
 		actRes, err := e.act(ctx, plan, frontier, graph, stats)
 
@@ -82,6 +116,11 @@ func (e *GoSEngine) Run(ctx context.Context, symptom string) *protocol.TaskResul
 			if res := e.updateGraph(ctx, graph, actRes.Analyses, frontier); res.Committed {
 				alreadyUpdated = true
 			}
+			e.emit(ctx, "evidence_attached", fmt.Sprintf("挂载 %d 条证据, %d 失败", len(actRes.Analyses), actRes.FailedCount), map[string]any{
+				"evidence_count": len(actRes.Analyses),
+				"failed_count":   actRes.FailedCount,
+				"degraded_count": actRes.DegradedCount,
+			})
 		}
 
 		if err != nil {
@@ -93,8 +132,22 @@ func (e *GoSEngine) Run(ctx context.Context, symptom string) *protocol.TaskResul
 		stats.Steps++
 
 		updatedFrontier := graph.ExtractFrontier(fsm.GetCurrentLevel())
+		if updatedFrontier != nil {
+			e.emit(ctx, "confidence_updated", fmt.Sprintf("置信度 %.2f, supports=%d", updatedFrontier.Score, updatedFrontier.Supports), map[string]any{
+				"confidence": updatedFrontier.Score,
+				"supports":   updatedFrontier.Supports,
+				"steps":      stats.Steps,
+			})
+		}
 
 		decision := fsm.Decide(graph)
+		e.emit(ctx, "fsm_decision", fmt.Sprintf("FSM 决策: %s", decision.Action), map[string]any{
+			"action":     decision.Action,
+			"reason":     decision.Reason,
+			"fsm_level":  fsm.GetCurrentLevel(),
+			"total_steps": fsm.TotalSteps,
+		})
+
 		switch decision.Action {
 		case "report":
 			if updatedFrontier != nil && e.shouldReport(updatedFrontier) {
@@ -113,6 +166,12 @@ func (e *GoSEngine) Run(ctx context.Context, symptom string) *protocol.TaskResul
 	}
 
 DONE:
+	e.emit(ctx, "report", "生成信念报告", map[string]any{
+		"total_steps": stats.Steps,
+		"llm_calls":   stats.LLMCalls,
+		"tool_calls":  stats.ToolCalls,
+		"rag_calls":   stats.RAGCalls,
+	})
 	return e.generateReport(ctx, graph, fsm, startedAt, stats)
 }
 

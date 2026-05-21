@@ -15,6 +15,11 @@ export interface ChatMessage {
   timestamp: number
   executionSteps?: ChatExecutionStep[]
   engine?: string
+  confidence?: number
+  evidenceCount?: number
+  nextActions?: string[]
+  startedAt?: number
+  finishedAt?: number
 }
 
 export interface ChatSession {

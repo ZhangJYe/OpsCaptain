@@ -15,6 +15,8 @@ type Ledger interface {
 	AppendEvent(ctx context.Context, event *protocol.TaskEvent) error
 	EventsByTrace(ctx context.Context, traceID string) ([]*protocol.TaskEvent, error)
 	ListChildren(ctx context.Context, parentTaskID string) ([]*protocol.TaskEnvelope, error)
+	ResultByTaskID(ctx context.Context, taskID string) (*protocol.TaskResult, error)
+	TaskByTraceID(ctx context.Context, traceID string) (*protocol.TaskEnvelope, error)
 }
 
 type InMemoryLedger struct {
@@ -128,6 +130,29 @@ func (l *InMemoryLedger) ListChildren(_ context.Context, parentTaskID string) ([
 		return out[i].CreatedAt < out[j].CreatedAt
 	})
 	return out, nil
+}
+
+func (l *InMemoryLedger) ResultByTaskID(_ context.Context, taskID string) (*protocol.TaskResult, error) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	r, ok := l.results[taskID]
+	if !ok {
+		return nil, nil
+	}
+	cp := *r
+	return &cp, nil
+}
+
+func (l *InMemoryLedger) TaskByTraceID(_ context.Context, traceID string) (*protocol.TaskEnvelope, error) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	for _, task := range l.tasks {
+		if task.TraceID == traceID {
+			cp := *task
+			return &cp, nil
+		}
+	}
+	return nil, nil
 }
 
 func (l *InMemoryLedger) pruneTasksLocked() {

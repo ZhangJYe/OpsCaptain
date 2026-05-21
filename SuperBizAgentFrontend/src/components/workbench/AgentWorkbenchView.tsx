@@ -4,7 +4,7 @@ import { Bot, BotOff, PanelRightOpen, PanelRightClose, CheckCircle2, CircleAlert
 import { MessageBubble } from '../chat/MessageBubble'
 import { StreamingText } from '../chat/StreamingText'
 import { ChatInput } from '../chat/ChatInput'
-import { GosReportCard } from '../chat/GosReportCard'
+import { GoSBeliefProgress } from './GoSBeliefProgress'
 import { SuggestionChips } from '../agent/SuggestionChips'
 import type { Suggestion } from '../agent/SuggestionChips'
 import type { ThinkingStep } from '../agent/ThinkingCollapse'
@@ -270,6 +270,9 @@ export function AgentWorkbenchView({
                       <div className="mt-3 ml-10">
                         <ResultCard
                           steps={msg.executionSteps!}
+                          confidence={msg.confidence}
+                          evidenceCount={msg.evidenceCount}
+                          nextActions={msg.nextActions}
                           onRefine={() => onSend('请继续深入分析当前问题，补充更多证据和根因定位')}
                           onExport={() => {
                             const text = `# OpsCaptain 诊断报告\n\n${msg.content}\n\n---\n证据数: ${msg.executionSteps?.filter(s => s.status === 'done').length || 0}`
@@ -308,7 +311,7 @@ export function AgentWorkbenchView({
                 ) : null}
 
                 {isGoS ? (
-                  <GosReportCard steps={thinkingSteps} content={streamingContent} isStreaming />
+                  <GoSBeliefProgress steps={thinkingSteps} content={streamingContent} />
                 ) : streamingContent ? (
                   <div className="rounded-[22px] rounded-bl-[6px] border border-white/60 bg-white/70 px-4 py-3 backdrop-blur-xl dark:border-white/10 dark:bg-slate-800/50">
                     <StreamingText content={streamingContent} />

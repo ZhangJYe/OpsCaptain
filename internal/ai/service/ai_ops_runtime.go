@@ -139,6 +139,11 @@ func (a *aiOpsGOSAgent) Handle(ctx context.Context, task *protocol.TaskEnvelope)
 	}
 
 	engine := buildAIOpsGoSEngine(ctx)
+	if rt, ok := runtime.FromContext(ctx); ok && task != nil {
+		engine.SetEmitter(func(emitCtx context.Context, message string, payload map[string]any) {
+			rt.EmitInfo(emitCtx, task, a.Name(), message, payload)
+		})
+	}
 	result := engine.Run(ctx, query)
 	if result != nil && task != nil {
 		result.TaskID = task.TaskID

@@ -110,6 +110,62 @@ func (l *FileLedger) EventsByTrace(ctx context.Context, traceID string) ([]*prot
 	return events, nil
 }
 
+func (l *FileLedger) ResultByTaskID(ctx context.Context, taskID string) (*protocol.TaskResult, error) {
+	if r, err := l.inner.ResultByTaskID(ctx, taskID); err != nil || r != nil {
+		return r, err
+	}
+	path := filepath.Join(l.dir, "results", taskID+".json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var result protocol.TaskResult
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
+func (l *FileLedger) TaskByTraceID(ctx context.Context, traceID string) (*protocol.TaskEnvelope, error) {
+	if t, err := l.inner.TaskByTraceID(ctx, traceID); err != nil || t != nil {
+		return t, err
+	}
+	traceFile := filepath.Join(l.dir, "traces", traceID+".jsonl")
+	f, err := os.Open(traceFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer f.Close()
+
+	reader := bufio.NewReader(f)
+	for {
+		line, readErr := reader.ReadBytes('\n')
+		if len(strings.TrimSpace(string(line))) > 0 {
+			var event protocol.TaskEvent
+			if json.Unmarshal(line, &event) == nil && event.TaskID != "" {
+				taskPath := filepath.Join(l.dir, "tasks", event.TaskID+".json")
+				taskData, taskErr := os.ReadFile(taskPath)
+				if taskErr == nil {
+					var task protocol.TaskEnvelope
+					if json.Unmarshal(taskData, &task) == nil {
+						return &task, nil
+					}
+				}
+			}
+		}
+		if readErr == io.EOF {
+			break
+		}
+	}
+	return nil, nil
+}
+
 func (l *FileLedger) ListChildren(ctx context.Context, parentTaskID string) ([]*protocol.TaskEnvelope, error) {
 	return l.inner.ListChildren(ctx, parentTaskID)
 }

@@ -10,7 +10,11 @@ import (
 	"github.com/gogf/gf/v2/util/guid"
 )
 
-var runAIOpsMultiAgent = service.RunAIOpsMultiAgent
+var (
+	runAIOpsMultiAgent = service.RunAIOpsMultiAgent
+	runAIOpsAsync      = service.RunAIOpsAsync
+	getAIOpsResult     = service.GetAIOpsResult
+)
 
 func (c *ControllerV1) AIOps(ctx context.Context, req *v1.AIOpsReq) (res *v1.AIOpsRes, err error) {
 	requestID := guid.S()
@@ -64,6 +68,18 @@ func (c *ControllerV1) AIOps(ctx context.Context, req *v1.AIOpsReq) (res *v1.AIO
 		executionPlan = append(executionPlan, filtered)
 	}
 
+	evidence := make([]v1.EvidenceItem, 0, len(response.Evidence))
+	for _, e := range response.Evidence {
+		evidence = append(evidence, v1.EvidenceItem{
+			SourceType: e.SourceType,
+			SourceID:   e.SourceID,
+			Title:      e.Title,
+			Snippet:    e.Snippet,
+			Score:      e.Score,
+			URI:        e.URI,
+		})
+	}
+
 	return &v1.AIOpsRes{
 		TraceID:           response.TraceID,
 		Result:            result,
@@ -75,6 +91,11 @@ func (c *ControllerV1) AIOps(ctx context.Context, req *v1.AIOpsReq) (res *v1.AIO
 		ExecutionPlan:     executionPlan,
 		Degraded:          response.Degraded(),
 		DegradationReason: response.DegradationReason,
+		Confidence:        response.Confidence,
+		Evidence:          evidence,
+		NextActions:       response.NextActions,
+		StartedAt:         response.StartedAt,
+		FinishedAt:        response.FinishedAt,
 	}, nil
 }
 
@@ -105,5 +126,82 @@ func (c *ControllerV1) AIOpsTrace(ctx context.Context, req *v1.AIOpsTraceReq) (r
 		TraceID: req.TraceID,
 		Detail:  detail,
 		Events:  out,
+	}, nil
+}
+
+func (c *ControllerV1) AIOpsRuns(ctx context.Context, req *v1.AIOpsRunsReq) (res *v1.AIOpsRunsRes, err error) {
+	requestID := guid.S()
+	ctx = context.WithValue(ctx, consts.CtxKeyRequestID, requestID)
+	ctx = enrichRequestContext(ctx, "", requestID)
+
+	if ctx, _, err = checkAndGuardPrompt(ctx, req.Query); err != nil {
+		return nil, err
+	}
+
+	query := req.Query
+	ctx = service.WithAIOpsEngine(ctx, req.Engine)
+	if query == "" {
+		query = `你是一个 AIOps 事故分析助手，请严格按以下顺序执行：
+1. 查询当前活跃的 Prometheus 告警。
+2. 对每条告警查询匹配的内部文档或 runbook。
+3. 只能基于工具结果和内部文档进行分析。
+4. 如果某个工具失败，跳过该步骤，并在报告中明确说明一次。
+5. 默认使用中文输出报告，除非用户明确要求其他语言。
+6. 报告使用 Markdown，包含这些章节：活跃告警、根因分析、缓解建议、结论。`
+	}
+
+	runs, err := runAIOpsAsync(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+
+	return &v1.AIOpsRunsRes{
+		TraceID:           runs.TraceID,
+		TaskID:            runs.TaskID,
+		Engine:            runs.Engine,
+		Status:            runs.Status,
+		Degraded:          runs.Degraded,
+		DegradationReason: runs.DegradationReason,
+		ApprovalRequired:  runs.ApprovalRequired,
+		ApprovalRequestID: runs.ApprovalRequestID,
+		ApprovalStatus:    runs.ApprovalStatus,
+	}, nil
+}
+
+func (c *ControllerV1) AIOpsResult(ctx context.Context, req *v1.AIOpsResultReq) (res *v1.AIOpsResultRes, err error) {
+	result, err := getAIOpsResult(ctx, req.TraceID)
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return &v1.AIOpsResultRes{Found: false, TraceID: req.TraceID}, nil
+	}
+
+	evidence := make([]v1.EvidenceItem, 0, len(result.Evidence))
+	for _, e := range result.Evidence {
+		evidence = append(evidence, v1.EvidenceItem{
+			SourceType: e.SourceType,
+			SourceID:   e.SourceID,
+			Title:      e.Title,
+			Snippet:    e.Snippet,
+			Score:      e.Score,
+			URI:        e.URI,
+		})
+	}
+
+	return &v1.AIOpsResultRes{
+		Found:             true,
+		Status:            string(result.Status),
+		TraceID:           req.TraceID,
+		Result:            result.Content,
+		Detail:            result.Detail,
+		Engine:            result.Engine,
+		Confidence:        result.Confidence,
+		Evidence:          evidence,
+		NextActions:       result.NextActions,
+		Degraded:          result.Degraded(),
+		DegradationReason: result.DegradationReason,
+		StartedAt:         result.StartedAt,
+		FinishedAt:        result.FinishedAt,
 	}, nil
 }

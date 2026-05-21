@@ -1,6 +1,12 @@
 package gos_engine
 
-import "SuperBizAgent/internal/ai/belief"
+import (
+	"context"
+
+	"SuperBizAgent/internal/ai/belief"
+)
+
+type EventEmitter func(ctx context.Context, message string, payload map[string]any)
 
 type Config struct {
 	Enabled           bool           `yaml:"enabled"`
@@ -13,6 +19,7 @@ type Config struct {
 	FSM               FSMConfig      `yaml:"fsm"`
 	Experts           []ExpertConfig `yaml:"experts"`
 	HeadAgent         string         `yaml:"head_agent"`
+	Emit              EventEmitter   `yaml:"-"`
 }
 
 type FSMConfig struct {

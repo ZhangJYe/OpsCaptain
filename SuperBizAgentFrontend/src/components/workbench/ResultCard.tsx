@@ -8,6 +8,9 @@ interface Props {
   steps: ThinkingStep[]
   degraded?: boolean
   degradationReason?: string
+  confidence?: number
+  evidenceCount?: number
+  nextActions?: string[]
   onRefine?: () => void
   onExport?: () => Promise<void>
 }
@@ -48,7 +51,7 @@ function getGoSSummary(steps: ThinkingStep[]) {
   }
 }
 
-export function ResultCard({ steps, degraded, degradationReason, onRefine, onExport }: Props) {
+export function ResultCard({ steps, degraded, degradationReason, confidence, evidenceCount, nextActions, onRefine, onExport }: Props) {
   const risk = assessRisk(steps)
   const evidence = countEvidence(steps)
   const isGoS = steps.some((s) => s.id.startsWith('gos:'))
@@ -106,12 +109,20 @@ export function ResultCard({ steps, degraded, degradationReason, onRefine, onExp
           <div className="grid gap-2 px-4 py-3 sm:grid-cols-3">
             {[
               { label: '主假设', value: gosSummary.hypothesis },
-              { label: '支持证据', value: gosSummary.evidence },
-              { label: '置信度', value: gosSummary.confidence },
+              { label: '支持证据', value: evidenceCount != null ? `${evidenceCount} 条结构化证据` : gosSummary.evidence },
+              { label: '置信度', value: confidence != null ? `${Math.round(confidence * 100)}%` : gosSummary.confidence, isConfidence: true },
             ].map((item) => (
               <div key={item.label} className="rounded-xl border border-amber-200/50 bg-amber-50/35 px-3 py-2 dark:border-amber-500/15 dark:bg-amber-500/10">
                 <p className="text-[10px] font-semibold text-amber-600 dark:text-amber-300">{item.label}</p>
                 <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-zinc-600 dark:text-zinc-300">{item.value}</p>
+                {item.isConfidence && confidence != null && (
+                  <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-amber-200/40 dark:bg-amber-500/15">
+                    <div
+                      className="h-full rounded-full bg-amber-400 transition-all duration-500 dark:bg-amber-500"
+                      style={{ width: `${Math.round(confidence * 100)}%` }}
+                    />
+                  </div>
+                )}
               </div>
             ))}
           </div>

@@ -248,6 +248,14 @@ func (r *Runtime) TraceEvents(ctx context.Context, traceID string) ([]*protocol.
 	return r.ledger.EventsByTrace(ctx, traceID)
 }
 
+func (r *Runtime) ResultByTraceID(ctx context.Context, traceID string) (*protocol.TaskResult, error) {
+	task, err := r.ledger.TaskByTraceID(ctx, traceID)
+	if err != nil || task == nil {
+		return nil, err
+	}
+	return r.ledger.ResultByTaskID(ctx, task.TaskID)
+}
+
 func nowMillis() int64 {
 	return time.Now().UnixMilli()
 }

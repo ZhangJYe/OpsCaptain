@@ -50,3 +50,17 @@ __pycache__/
 # Local agent / hook artifacts
 .claude-audit.log
 rag_eval_cmd
+.playwright-cli/
+
+# Local evaluation artifacts
+gos_eval
+baseline_result*.json
+eval_compare*.json
+
+# Local editor metadata
+Learn/.obsidian/
+Learn/*.base
+
+# Accidental root npm manifests
+/package.json
+/package-lock.json

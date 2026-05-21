@@ -95,17 +95,70 @@ type AIOpsReq struct {
 	Engine string `json:"engine,omitempty" v:"in:plan_execute_replan,gos_engine,gos#AIOps引擎不合法"`
 }
 
+type EvidenceItem struct {
+	SourceType string  `json:"source_type"`
+	SourceID   string  `json:"source_id"`
+	Title      string  `json:"title"`
+	Snippet    string  `json:"snippet"`
+	Score      float64 `json:"score"`
+	URI        string  `json:"uri,omitempty"`
+}
+
 type AIOpsRes struct {
-	TraceID           string   `json:"trace_id"`
-	Result            string   `json:"result"`
-	Detail            []string `json:"detail"`
-	Engine            string   `json:"engine,omitempty"`
-	ApprovalRequired  bool     `json:"approval_required,omitempty"`
-	ApprovalRequestID string   `json:"approval_request_id,omitempty"`
-	ApprovalStatus    string   `json:"approval_status,omitempty"`
-	ExecutionPlan     []string `json:"execution_plan,omitempty"`
-	Degraded          bool     `json:"degraded,omitempty"`
-	DegradationReason string   `json:"degradation_reason,omitempty"`
+	TraceID           string         `json:"trace_id"`
+	Result            string         `json:"result"`
+	Detail            []string       `json:"detail"`
+	Engine            string         `json:"engine,omitempty"`
+	ApprovalRequired  bool           `json:"approval_required,omitempty"`
+	ApprovalRequestID string         `json:"approval_request_id,omitempty"`
+	ApprovalStatus    string         `json:"approval_status,omitempty"`
+	ExecutionPlan     []string       `json:"execution_plan,omitempty"`
+	Degraded          bool           `json:"degraded,omitempty"`
+	DegradationReason string         `json:"degradation_reason,omitempty"`
+	Confidence        float64        `json:"confidence,omitempty"`
+	Evidence          []EvidenceItem `json:"evidence,omitempty"`
+	NextActions       []string       `json:"next_actions,omitempty"`
+	StartedAt         int64          `json:"started_at,omitempty"`
+	FinishedAt        int64          `json:"finished_at,omitempty"`
+}
+
+type AIOpsRunsReq struct {
+	g.Meta `path:"/ai_ops_runs" method:"post" summary:"异步启动AI运维"`
+	Query  string `json:"query,omitempty" v:"max-length:8000#自定义分析指令长度不能超过8000"`
+	Engine string `json:"engine,omitempty" v:"in:plan_execute_replan,gos_engine,gos#AIOps引擎不合法"`
+}
+
+type AIOpsRunsRes struct {
+	TraceID           string `json:"trace_id"`
+	TaskID            string `json:"task_id"`
+	Engine            string `json:"engine"`
+	Status            string `json:"status"`
+	Degraded          bool   `json:"degraded,omitempty"`
+	DegradationReason string `json:"degradation_reason,omitempty"`
+	ApprovalRequired  bool   `json:"approval_required,omitempty"`
+	ApprovalRequestID string `json:"approval_request_id,omitempty"`
+	ApprovalStatus    string `json:"approval_status,omitempty"`
+}
+
+type AIOpsResultReq struct {
+	g.Meta  `path:"/ai_ops_result" method:"get" summary:"获取AI运维结果"`
+	TraceID string `json:"trace_id" v:"required|max-length:128#TraceID不能为空|TraceID长度不能超过128"`
+}
+
+type AIOpsResultRes struct {
+	Found             bool           `json:"found"`
+	Status            string         `json:"status,omitempty"`
+	TraceID           string         `json:"trace_id,omitempty"`
+	Result            string         `json:"result,omitempty"`
+	Detail            []string       `json:"detail,omitempty"`
+	Engine            string         `json:"engine,omitempty"`
+	Confidence        float64        `json:"confidence,omitempty"`
+	Evidence          []EvidenceItem `json:"evidence,omitempty"`
+	NextActions       []string       `json:"next_actions,omitempty"`
+	Degraded          bool           `json:"degraded,omitempty"`
+	DegradationReason string         `json:"degradation_reason,omitempty"`
+	StartedAt         int64          `json:"started_at,omitempty"`
+	FinishedAt        int64          `json:"finished_at,omitempty"`
 }
 
 type AIOpsTraceReq struct {
