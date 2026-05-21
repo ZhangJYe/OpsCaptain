@@ -1,16 +1,24 @@
 import { Menu, Moon, Sun, Plus } from 'lucide-react'
-import type { ChatMode } from '../../types/chat'
+import type { AIOpsEngine, ChatMode, WorkbenchMode } from '../../types/chat'
+import { getEngineViewModel } from '../../lib/engineViewModel'
 
 interface Props {
   theme: string
   onToggleSidebar: () => void
   onToggleTheme: () => void
   chatMode: ChatMode
+  workbenchMode: WorkbenchMode
+  aiOpsEngine: AIOpsEngine
   onNewChat: () => void
   isLoading: boolean
 }
 
-export function TopBar({ theme, onToggleSidebar, onToggleTheme, chatMode, onNewChat, isLoading }: Props) {
+export function TopBar({ theme, onToggleSidebar, onToggleTheme, chatMode, workbenchMode, aiOpsEngine, onNewChat, isLoading }: Props) {
+  const engineView = getEngineViewModel(aiOpsEngine)
+  const statusText = workbenchMode === 'aiops'
+    ? `AIOps · ${engineView.label}`
+    : `ReAct · ${chatMode === 'quick' ? 'quick' : 'stream'}`
+
   return (
     <header className="flex h-12 shrink-0 items-center justify-between gap-4 border-b border-white/40 bg-white/20 px-4 backdrop-blur-sm dark:border-white/5 dark:bg-slate-900/20 lg:px-6">
       <div className="flex items-center gap-3">
@@ -37,7 +45,7 @@ export function TopBar({ theme, onToggleSidebar, onToggleTheme, chatMode, onNewC
       <div className="flex items-center gap-2">
         <div className="hidden items-center gap-1.5 rounded-full border border-white/40 bg-white/30 px-2.5 py-1 text-[10px] font-medium text-zinc-500 backdrop-blur-sm dark:border-white/5 dark:bg-slate-700/30 dark:text-zinc-400 md:flex">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.5)]" />
-          {chatMode === 'quick' ? 'direct answer' : 'streaming'}
+          {statusText}
         </div>
         <button
           onClick={onNewChat}
@@ -50,7 +58,7 @@ export function TopBar({ theme, onToggleSidebar, onToggleTheme, chatMode, onNewC
           <span className="hidden sm:inline">新会话</span>
         </button>
         <span className="rounded-full bg-sky-400/15 px-2 py-0.5 text-[10px] font-semibold text-sky-600 dark:text-sky-400 md:hidden">
-          {chatMode === 'quick' ? '快速' : '流式'}
+          {workbenchMode === 'aiops' ? engineView.label : chatMode === 'quick' ? '快速' : '流式'}
         </span>
         <button
           onClick={onToggleTheme}

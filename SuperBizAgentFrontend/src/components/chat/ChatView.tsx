@@ -188,6 +188,8 @@ export function ChatView({
         onStop={onStop}
         isLoading={isLoading}
         mode={mode}
+        workbenchMode="chat"
+        aiOpsEngine="plan_execute_replan"
         selectedSkillIds={selectedSkillIds}
         onModeChange={onModeChange}
       />

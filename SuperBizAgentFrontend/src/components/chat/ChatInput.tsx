@@ -1,15 +1,18 @@
 import { useState, useRef, useEffect } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { GitBranch, Send, Square, Zap, Paperclip, X, Loader2, FileIcon } from 'lucide-react'
-import type { ChatMode } from '../../types/chat'
+import type { AIOpsEngine, ChatMode, WorkbenchMode } from '../../types/chat'
 import { formatSelectedSkillSummary, formatFileSize } from '../../lib/utils'
 import { useFileUpload } from '../../hooks/useFileUpload'
+import { getEngineViewModel } from '../../lib/engineViewModel'
 
 interface Props {
   onSend: (query: string) => void
   onStop: () => void
   isLoading: boolean
   mode: ChatMode
+  workbenchMode: WorkbenchMode
+  aiOpsEngine: AIOpsEngine
   selectedSkillIds: string[]
   onModeChange: (m: ChatMode) => void
   embedded?: boolean
@@ -26,11 +29,18 @@ function buildQueryWithFiles(query: string, fileNames: string[]): string {
   return `${refs}\n\n${query}`
 }
 
-export function ChatInput({ onSend, onStop, isLoading, mode, selectedSkillIds, onModeChange, embedded }: Props) {
+export function ChatInput({ onSend, onStop, isLoading, mode, workbenchMode, aiOpsEngine, selectedSkillIds, onModeChange, embedded }: Props) {
   const [input, setInput] = useState('')
   const [isFocused, setIsFocused] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const { files, readyFiles, isUploading, uploadError, removeFile, clearFiles, inputId, handleChange, accept, multiple } = useFileUpload()
+  const isAIOps = workbenchMode === 'aiops'
+  const engineView = getEngineViewModel(aiOpsEngine)
+  const submitLabel = isAIOps ? `启动 ${engineView.label}` : '发送'
+  const placeholder = isAIOps
+    ? `描述告警、日志或系统现象，使用 ${engineView.label} 排障...`
+    : '输入问题，使用 ReAct 问答...'
+  const contextLabel = isAIOps ? `AIOps · ${engineView.badge}` : formatSelectedSkillSummary(selectedSkillIds)
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -77,7 +87,7 @@ export function ChatInput({ onSend, onStop, isLoading, mode, selectedSkillIds, o
               onKeyDown={handleKeyDown}
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
-              placeholder="描述告警、日志或系统现象..."
+              placeholder={placeholder}
               rows={1}
               className="min-h-[44px] w-full resize-none rounded-t-[22px] bg-transparent px-4 py-3 text-sm leading-7 text-zinc-900 outline-none placeholder:text-zinc-400 dark:text-zinc-100 dark:placeholder:text-zinc-500"
             />
@@ -132,25 +142,39 @@ export function ChatInput({ onSend, onStop, isLoading, mode, selectedSkillIds, o
 
             <div className="flex items-center justify-between gap-2 border-t border-white/30 px-3 py-2.5 dark:border-white/5 sm:gap-3">
               <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-                <div className="inline-flex rounded-lg bg-white/50 p-0.5 dark:bg-slate-700/50">
-                  {modeOptions.map((option) => (
-                    <button
-                      key={option.id}
-                      onClick={() => onModeChange(option.id)}
-                      className={`flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all duration-200 sm:px-2.5 ${
-                        option.id === mode
-                          ? 'bg-white text-sky-600 shadow-sm dark:bg-slate-600 dark:text-sky-400'
-                          : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'
-                      }`}
-                    >
-                      <option.icon size={13} />
-                      <span className="hidden sm:inline">{option.label}</span>
-                    </button>
-                  ))}
-                </div>
+                {isAIOps ? (
+                  <div className={`hidden rounded-lg p-0.5 sm:inline-flex ${engineView.sidebar.flowActive}`}>
+                    {engineView.flow.map((item) => (
+                      <span key={item} className="rounded-md px-2 py-1.5 text-[10px] font-semibold">
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="inline-flex rounded-lg bg-white/50 p-0.5 dark:bg-slate-700/50">
+                    {modeOptions.map((option) => (
+                      <button
+                        key={option.id}
+                        onClick={() => onModeChange(option.id)}
+                        className={`flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-all duration-200 sm:px-2.5 ${
+                          option.id === mode
+                            ? 'bg-white text-sky-600 shadow-sm dark:bg-slate-600 dark:text-sky-400'
+                            : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'
+                        }`}
+                      >
+                        <option.icon size={13} />
+                        <span className="hidden sm:inline">{option.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
 
-                <span className="hidden text-[11px] text-zinc-400 dark:text-zinc-600 sm:inline truncate max-w-[200px]">
-                  {formatSelectedSkillSummary(selectedSkillIds)}
+                <span className={`hidden max-w-[220px] truncate rounded-md px-2 py-1 text-[11px] font-medium sm:inline ${
+                  isAIOps
+                    ? `${engineView.sidebar.flowActive}`
+                    : 'text-zinc-400 dark:text-zinc-600'
+                }`}>
+                  {contextLabel}
                 </span>
               </div>
 
@@ -183,7 +207,7 @@ export function ChatInput({ onSend, onStop, isLoading, mode, selectedSkillIds, o
                   ) : (
                     <>
                       <Send size={14} />
-                      <span className="hidden sm:inline">发送</span>
+                      <span className="hidden sm:inline">{submitLabel}</span>
                     </>
                   )}
                 </button>

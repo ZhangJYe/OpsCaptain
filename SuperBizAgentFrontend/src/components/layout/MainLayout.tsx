@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { TopBar } from './TopBar'
 import { Sidebar } from '../sidebar/Sidebar'
 import type { ReactNode } from 'react'
-import type { AIOpsEngine, ChatMessage, ChatMode, ChatSession } from '../../types/chat'
+import type { AIOpsEngine, ChatMessage, ChatMode, ChatSession, WorkbenchMode } from '../../types/chat'
 import { getSiteRecord } from '../../lib/utils'
 
 interface Props {
@@ -15,6 +15,8 @@ interface Props {
   onLoadSession: (s: ChatSession) => void
   chatMode: ChatMode
   onModeChange: (m: ChatMode) => void
+  workbenchMode: WorkbenchMode
+  onWorkbenchModeChange: (mode: WorkbenchMode) => void
   aiOpsEngine: AIOpsEngine
   onAIOpsEngineChange: (engine: AIOpsEngine) => void
   sessionId: string
@@ -35,6 +37,8 @@ export function MainLayout({
   onLoadSession,
   chatMode,
   onModeChange,
+  workbenchMode,
+  onWorkbenchModeChange,
   aiOpsEngine,
   onAIOpsEngineChange,
   sessionId,
@@ -89,6 +93,8 @@ export function MainLayout({
                 messages={messages}
                 chatMode={chatMode}
                 onModeChange={onModeChange}
+                workbenchMode={workbenchMode}
+                onWorkbenchModeChange={onWorkbenchModeChange}
                 aiOpsEngine={aiOpsEngine}
                 onAIOpsEngineChange={onAIOpsEngineChange}
                 selectedSkillIds={selectedSkillIds}
@@ -104,6 +110,8 @@ export function MainLayout({
               onToggleSidebar={onToggleSidebar}
               onToggleTheme={onToggleTheme}
               chatMode={chatMode}
+              workbenchMode={workbenchMode}
+              aiOpsEngine={aiOpsEngine}
               onNewChat={onNewChat}
               isLoading={isLoading}
             />

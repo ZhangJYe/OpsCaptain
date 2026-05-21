@@ -85,7 +85,7 @@ export function WorkbenchEmptyState({ onSend, onStartAIOps, aiOpsEngine }: Props
             onClick={() => onStartAIOps(aiopsDraftQuery)}
             className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition-all hover:-translate-y-0.5 hover:shadow-md ${view.action}`}
           >
-            {view.cta}
+            运行示例
             <ArrowRight size={12} />
           </button>
         </div>

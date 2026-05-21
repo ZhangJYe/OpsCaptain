@@ -4,7 +4,7 @@ import { ModeSelector } from './ModeSelector'
 import { HistoryPanel } from './HistoryPanel'
 import { ObservabilityPanel } from './ObservabilityPanel'
 import { SkillPanel } from './SkillPanel'
-import type { AIOpsEngine, ChatMessage, ChatMode, ChatSession } from '../../types/chat'
+import type { AIOpsEngine, ChatMessage, ChatMode, ChatSession, WorkbenchMode } from '../../types/chat'
 
 interface Props {
   onClose: () => void
@@ -14,6 +14,8 @@ interface Props {
   messages: ChatMessage[]
   chatMode: ChatMode
   onModeChange: (m: ChatMode) => void
+  workbenchMode: WorkbenchMode
+  onWorkbenchModeChange: (mode: WorkbenchMode) => void
   aiOpsEngine: AIOpsEngine
   onAIOpsEngineChange: (engine: AIOpsEngine) => void
   selectedSkillIds: string[]
@@ -29,6 +31,8 @@ export function Sidebar({
   messages,
   chatMode,
   onModeChange,
+  workbenchMode,
+  onWorkbenchModeChange,
   aiOpsEngine,
   onAIOpsEngineChange,
   selectedSkillIds,
@@ -60,6 +64,8 @@ export function Sidebar({
         <ModeSelector
           value={chatMode}
           onChange={onModeChange}
+          workbenchMode={workbenchMode}
+          onWorkbenchModeChange={onWorkbenchModeChange}
           aiOpsEngine={aiOpsEngine}
           onAIOpsEngineChange={onAIOpsEngineChange}
         />

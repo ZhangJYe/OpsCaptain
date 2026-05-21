@@ -4,10 +4,11 @@ import { useChat } from './hooks/useChat'
 import { MainLayout } from './components/layout/MainLayout'
 import { AgentWorkbenchView } from './components/workbench/AgentWorkbenchView'
 import { saveSession } from './lib/storage'
-import type { AIOpsEngine, ChatSession } from './types/chat'
+import type { AIOpsEngine, ChatSession, WorkbenchMode } from './types/chat'
 
 const SKILL_STORAGE_KEY = 'opscaptain-selected-skills'
 const AIOPS_ENGINE_STORAGE_KEY = 'opscaptain-aiops-engine'
+const WORKBENCH_MODE_STORAGE_KEY = 'opscaptain-workbench-mode'
 const PET_ENABLED_KEY = 'opscaptain-pet-enabled'
 
 export default function App() {
@@ -31,6 +32,11 @@ export default function App() {
     if (typeof window === 'undefined') return 'plan_execute_replan'
     const raw = localStorage.getItem(AIOPS_ENGINE_STORAGE_KEY)
     return raw === 'gos_engine' ? 'gos_engine' : 'plan_execute_replan'
+  })
+  const [workbenchMode, setWorkbenchMode] = useState<WorkbenchMode>(() => {
+    if (typeof window === 'undefined') return 'aiops'
+    const raw = localStorage.getItem(WORKBENCH_MODE_STORAGE_KEY)
+    return raw === 'chat' ? 'chat' : 'aiops'
   })
   const [petEnabled, setPetEnabled] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true
@@ -56,6 +62,14 @@ export default function App() {
 
   useEffect(() => {
     try {
+      localStorage.setItem(WORKBENCH_MODE_STORAGE_KEY, workbenchMode)
+    } catch {
+      return
+    }
+  }, [workbenchMode])
+
+  useEffect(() => {
+    try {
       localStorage.setItem(PET_ENABLED_KEY, String(petEnabled))
     } catch {
       return
@@ -74,17 +88,27 @@ export default function App() {
 
   const handleSend = useCallback(
     (query: string) => {
+      if (workbenchMode === 'aiops') {
+        chat.sendAIOps(query, { aiOpsEngine })
+        return
+      }
       chat.send(query, { selectedSkillIds })
     },
-    [chat, selectedSkillIds]
+    [chat, selectedSkillIds, workbenchMode, aiOpsEngine]
   )
 
   const handleStartAIOps = useCallback(
     (query: string) => {
+      setWorkbenchMode('aiops')
       chat.sendAIOps(query, { aiOpsEngine })
     },
     [chat, aiOpsEngine]
   )
+
+  const handleAIOpsEngineChange = useCallback((engine: AIOpsEngine) => {
+    setAIOpsEngine(engine)
+    setWorkbenchMode('aiops')
+  }, [])
 
   const handleLoadSession = useCallback(
     (session: ChatSession) => {
@@ -112,8 +136,10 @@ export default function App() {
       onLoadSession={handleLoadSession}
       chatMode={chat.mode}
       onModeChange={chat.setMode}
+      workbenchMode={workbenchMode}
+      onWorkbenchModeChange={setWorkbenchMode}
       aiOpsEngine={aiOpsEngine}
-      onAIOpsEngineChange={setAIOpsEngine}
+      onAIOpsEngineChange={handleAIOpsEngineChange}
       sessionId={chat.sessionId}
       messages={chat.messages}
       selectedSkillIds={selectedSkillIds}
@@ -129,6 +155,7 @@ export default function App() {
         isLoading={chat.isLoading}
         loadingEngine={chat.loadingEngine}
         mode={chat.mode}
+        workbenchMode={workbenchMode}
         selectedSkillIds={selectedSkillIds}
         petEnabled={petEnabled}
         aiOpsEngine={aiOpsEngine}
