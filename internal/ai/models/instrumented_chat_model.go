@@ -55,6 +55,7 @@ func wrapToolCallingChatModel(inner einomodel.ToolCallingChatModel, modelName st
 func (m *instrumentedChatModel) Generate(ctx context.Context, input []*schema.Message, opts ...einomodel.Option) (*schema.Message, error) {
 	agent := llmAgentLabel(ctx)
 	started := time.Now()
+	opts = m.compatibleOptions(opts)
 	ctx, span := traceutil.StartSpan(
 		ctx,
 		"llm",
@@ -118,6 +119,7 @@ func (m *instrumentedChatModel) Generate(ctx context.Context, input []*schema.Me
 func (m *instrumentedChatModel) Stream(ctx context.Context, input []*schema.Message, opts ...einomodel.Option) (*schema.StreamReader[*schema.Message], error) {
 	agent := llmAgentLabel(ctx)
 	started := time.Now()
+	opts = m.compatibleOptions(opts)
 	ctx, span := traceutil.StartSpan(
 		ctx,
 		"llm",
@@ -243,6 +245,40 @@ func (m *instrumentedChatModel) WithTools(tools []*schema.ToolInfo) (einomodel.T
 		return nil, err
 	}
 	return wrapToolCallingChatModel(wrapped, m.modelName), nil
+}
+
+func (m *instrumentedChatModel) compatibleOptions(opts []einomodel.Option) []einomodel.Option {
+	if !shouldDowngradeForcedToolChoice(m.modelName) {
+		return opts
+	}
+	common := einomodel.GetCommonOptions(nil, opts...)
+	if common.ToolChoice == nil || *common.ToolChoice != schema.ToolChoiceForced {
+		return opts
+	}
+	next := make([]einomodel.Option, 0, len(opts))
+	if common.Temperature != nil {
+		next = append(next, einomodel.WithTemperature(*common.Temperature))
+	}
+	if common.MaxTokens != nil {
+		next = append(next, einomodel.WithMaxTokens(*common.MaxTokens))
+	}
+	if common.Model != nil {
+		next = append(next, einomodel.WithModel(*common.Model))
+	}
+	if common.TopP != nil {
+		next = append(next, einomodel.WithTopP(*common.TopP))
+	}
+	if len(common.Stop) > 0 {
+		next = append(next, einomodel.WithStop(common.Stop))
+	}
+	if common.Tools != nil {
+		next = append(next, einomodel.WithTools(common.Tools))
+	}
+	return next
+}
+
+func shouldDowngradeForcedToolChoice(modelName string) bool {
+	return strings.Contains(strings.ToLower(strings.TrimSpace(modelName)), "deepseek")
 }
 
 func llmCallOption(agent, modelName string) resilience.CallOption {
