@@ -201,22 +201,40 @@ var gCfgGet = func(ctx context.Context, key string) (string, error) {
 }
 
 func selectAIOpsAgentName(ctx context.Context) string {
+	agentName, _, _ := resolveAIOpsAgentName(ctx)
+	return agentName
+}
+
+func resolveAIOpsAgentName(ctx context.Context) (string, bool, string) {
 	engine, configured := requestedAIOpsEngine(ctx)
+	explicitRequest := configured
 	if !configured {
 		engine, configured = aiOpsConfigString(ctx, "aiops.engine")
 	}
 	if !configured {
-		return aiOpsPlanAgentName
+		return aiOpsPlanAgentName, true, ""
 	}
-	engine = strings.ToLower(strings.TrimSpace(engine))
-	if engine != "gos" && engine != "gos_engine" {
-		return aiOpsPlanAgentName
+	agentName := normalizeAIOpsAgentName(engine)
+	if agentName != aiOpsGOSAgentName {
+		return aiOpsPlanAgentName, true, ""
 	}
 	enabled, ok := aiOpsConfigBool(ctx, "aiops.gos.enabled")
 	if !ok || !enabled {
+		if explicitRequest {
+			return aiOpsGOSAgentName, false, "GoS 引擎已在配置中关闭，当前请求没有实际进入 GoS 信念推理链路。"
+		}
+		return aiOpsPlanAgentName, true, ""
+	}
+	return aiOpsGOSAgentName, true, ""
+}
+
+func normalizeAIOpsAgentName(engine string) string {
+	switch strings.ToLower(strings.TrimSpace(engine)) {
+	case "gos", "gos_engine", aiOpsGOSAgentName:
+		return aiOpsGOSAgentName
+	default:
 		return aiOpsPlanAgentName
 	}
-	return aiOpsGOSAgentName
 }
 
 func WithAIOpsEngine(ctx context.Context, engine string) context.Context {

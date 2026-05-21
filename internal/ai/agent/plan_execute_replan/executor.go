@@ -1,7 +1,6 @@
 package plan_execute_replan
 
 import (
-	"SuperBizAgent/internal/ai/models"
 	"SuperBizAgent/internal/ai/tools"
 	"context"
 
@@ -23,7 +22,7 @@ func NewExecutor(ctx context.Context) (adk.Agent, error) {
 	toolList = append(toolList, tools.NewQueryInternalDocsTool())
 	// time
 	toolList = append(toolList, tools.NewGetCurrentTimeTool())
-	execModel, err := models.OpenAIForGLMFast(ctx)
+	execModel, err := newPlanChatModel(ctx)
 	if err != nil {
 		return nil, err
 	}

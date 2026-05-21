@@ -1,6 +1,7 @@
 package plan_execute_replan
 
 import (
+	"strings"
 	"testing"
 
 	einoschema "github.com/cloudwego/eino/schema"
@@ -91,5 +92,32 @@ func TestIsAnalysisMessage(t *testing.T) {
 				t.Errorf("isAnalysisMessage() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestFallbackAnalysisFromDetails(t *testing.T) {
+	got := fallbackAnalysisFromDetails([]string{
+		"llm_stream_failed",
+		"llm_stream_failed",
+		"query metrics returned empty result",
+	})
+	if !strings.Contains(got, "降级报告") {
+		t.Fatalf("expected degraded report, got %q", got)
+	}
+	if strings.Count(got, "llm_stream_failed") != 1 {
+		t.Fatalf("expected compacted unique event, got %q", got)
+	}
+	if !strings.Contains(got, "LLM 流式响应失败") {
+		t.Fatalf("expected stream failure judgment, got %q", got)
+	}
+}
+
+func TestQueryWithFinalReportRequirement(t *testing.T) {
+	got := queryWithFinalReportRequirement("分析 paymentservice")
+	if !strings.Contains(got, "最后必须输出") {
+		t.Fatalf("expected final report requirement, got %q", got)
+	}
+	if !strings.Contains(got, "分析 paymentservice") {
+		t.Fatalf("expected original query to be preserved, got %q", got)
 	}
 }

@@ -56,8 +56,14 @@ type aiOpsMemory interface {
 }
 
 func RunAIOpsMultiAgent(ctx context.Context, query string) (ExecutionResponse, error) {
+	agentName, agentAvailable, unavailableReason := resolveAIOpsAgentName(ctx)
 	if !aiOpsMultiAgentEnabled(ctx) {
-		return multiAgentDisabledResponse(), nil
+		response := multiAgentDisabledResponse()
+		response.Engine = agentName
+		return response, nil
+	}
+	if !agentAvailable {
+		return aiOpsEngineUnavailableResponse(agentName, unavailableReason), nil
 	}
 	approval := NewApprovalGate()
 	if decision := approval.Check(ctx, query); !decision.Approved {
@@ -66,6 +72,7 @@ func RunAIOpsMultiAgent(ctx context.Context, query string) (ExecutionResponse, e
 				Content:           decision.Reason,
 				Detail:            []string{decision.Reason},
 				Status:            protocol.ResultStatusSucceeded,
+				Engine:            agentName,
 				ApprovalRequired:  true,
 				ApprovalRequestID: decision.ApprovalRequest.ID,
 				ApprovalStatus:    string(decision.ApprovalRequest.Status),
@@ -76,11 +83,14 @@ func RunAIOpsMultiAgent(ctx context.Context, query string) (ExecutionResponse, e
 			Content: decision.Reason,
 			Detail:  []string{decision.Reason},
 			Status:  protocol.ResultStatusSucceeded,
+			Engine:  agentName,
 		}, nil
 	}
 
 	if decision := GetDegradationDecision(ctx, "ai_ops"); decision.Enabled {
-		return NewDegradedExecutionResponse(decision), nil
+		response := NewDegradedExecutionResponse(decision)
+		response.Engine = agentName
+		return response, nil
 	}
 
 	memorySvc := newMemoryService()
@@ -107,7 +117,6 @@ func RunAIOpsMultiAgent(ctx context.Context, query string) (ExecutionResponse, e
 		}, err
 	}
 
-	agentName := selectAIOpsAgentName(ctx)
 	rootTask := protocol.NewRootTask(sessionID, query, agentName)
 	rootTask.Input = map[string]any{
 		"raw_query":        query,
@@ -187,18 +196,24 @@ type AIOpsRunInfo struct {
 }
 
 func RunAIOpsAsync(ctx context.Context, query string) (*AIOpsRunInfo, error) {
+	agentName, agentAvailable, unavailableReason := resolveAIOpsAgentName(ctx)
 	if !aiOpsMultiAgentEnabled(ctx) {
 		return &AIOpsRunInfo{
+			Engine:            agentName,
 			Status:            "degraded",
 			Degraded:          true,
 			DegradationReason: "multi_agent_disabled",
 		}, nil
+	}
+	if !agentAvailable {
+		return aiOpsEngineUnavailableRunInfo(agentName, unavailableReason), nil
 	}
 
 	approval := NewApprovalGate()
 	if decision := approval.Check(ctx, query); !decision.Approved {
 		if decision.Queued && decision.ApprovalRequest != nil {
 			return &AIOpsRunInfo{
+				Engine:            agentName,
 				Status:            "approval_required",
 				ApprovalRequired:  true,
 				ApprovalRequestID: decision.ApprovalRequest.ID,
@@ -206,6 +221,7 @@ func RunAIOpsAsync(ctx context.Context, query string) (*AIOpsRunInfo, error) {
 			}, nil
 		}
 		return &AIOpsRunInfo{
+			Engine:            agentName,
 			Status:            "degraded",
 			Degraded:          true,
 			DegradationReason: decision.Reason,
@@ -214,6 +230,7 @@ func RunAIOpsAsync(ctx context.Context, query string) (*AIOpsRunInfo, error) {
 
 	if decision := GetDegradationDecision(ctx, "ai_ops"); decision.Enabled {
 		return &AIOpsRunInfo{
+			Engine:            agentName,
 			Status:            "degraded",
 			Degraded:          true,
 			DegradationReason: decision.Reason,
@@ -239,7 +256,6 @@ func RunAIOpsAsync(ctx context.Context, query string) (*AIOpsRunInfo, error) {
 		enrichedQuery = enrichedQuery + "\n\n场景分析方向（基于 Skill 匹配）：\n" + skills.FormatFocusHints(hints)
 	}
 
-	agentName := selectAIOpsAgentName(ctx)
 	rootTask := protocol.NewRootTask(sessionID, query, agentName)
 	rootTask.Input = map[string]any{
 		"raw_query":        query,
@@ -374,5 +390,24 @@ func multiAgentDisabledResponse() ExecutionResponse {
 		Detail:            []string{"multi_agent.enabled=false"},
 		Status:            protocol.ResultStatusDegraded,
 		DegradationReason: "multi_agent_disabled",
+	}
+}
+
+func aiOpsEngineUnavailableResponse(agentName, reason string) ExecutionResponse {
+	return ExecutionResponse{
+		Content:           reason,
+		Detail:            []string{reason},
+		Engine:            agentName,
+		Status:            protocol.ResultStatusDegraded,
+		DegradationReason: reason,
+	}
+}
+
+func aiOpsEngineUnavailableRunInfo(agentName, reason string) *AIOpsRunInfo {
+	return &AIOpsRunInfo{
+		Engine:            agentName,
+		Status:            "degraded",
+		Degraded:          true,
+		DegradationReason: reason,
 	}
 }

@@ -112,8 +112,10 @@ retriever:
 
 aiops:
   engine: "plan_execute_replan"
+  plan:
+    model_path: "chat_model_fast"
   gos:
-    enabled: false
+    enabled: true
     model_path: "chat_model_fast"
     temperature: 0.8
     max_tokens: 4096

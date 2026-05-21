@@ -1,7 +1,6 @@
 package plan_execute_replan
 
 import (
-	"SuperBizAgent/internal/ai/models"
 	"context"
 
 	"github.com/cloudwego/eino/adk"
@@ -9,7 +8,7 @@ import (
 )
 
 func NewRePlanAgent(ctx context.Context) (adk.Agent, error) {
-	model, err := models.OpenAIForGLM(ctx)
+	model, err := newPlanChatModel(ctx)
 	if err != nil {
 		return nil, err
 	}

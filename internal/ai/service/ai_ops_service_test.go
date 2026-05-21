@@ -165,6 +165,74 @@ func TestSelectAIOpsAgentNameUsesRequestOverride(t *testing.T) {
 	}
 }
 
+func TestResolveAIOpsAgentNameRejectsExplicitDisabledGOS(t *testing.T) {
+	oldString := aiOpsConfigString
+	oldBool := aiOpsConfigBool
+	aiOpsConfigString = func(_ context.Context, key string) (string, bool) {
+		if key == "aiops.engine" {
+			return "plan_execute_replan", true
+		}
+		return "", false
+	}
+	aiOpsConfigBool = func(_ context.Context, key string) (bool, bool) {
+		if key == "aiops.gos.enabled" {
+			return false, true
+		}
+		return false, false
+	}
+	t.Cleanup(func() {
+		aiOpsConfigString = oldString
+		aiOpsConfigBool = oldBool
+	})
+
+	agentName, available, reason := resolveAIOpsAgentName(WithAIOpsEngine(context.Background(), "gos_engine"))
+	if agentName != aiOpsGOSAgentName {
+		t.Fatalf("expected gos agent %q, got %q", aiOpsGOSAgentName, agentName)
+	}
+	if available {
+		t.Fatal("expected explicit disabled gos request to be unavailable")
+	}
+	if !strings.Contains(reason, "GoS") {
+		t.Fatalf("expected user-facing reason, got %q", reason)
+	}
+}
+
+func TestRunAIOpsAsyncGOSDisabledReturnsEngine(t *testing.T) {
+	enableMultiAgentForTest(t)
+	oldString := aiOpsConfigString
+	oldBool := aiOpsConfigBool
+	aiOpsConfigString = func(_ context.Context, key string) (string, bool) {
+		if key == "aiops.engine" {
+			return "plan_execute_replan", true
+		}
+		return "", false
+	}
+	aiOpsConfigBool = func(_ context.Context, key string) (bool, bool) {
+		if key == "aiops.gos.enabled" {
+			return false, true
+		}
+		return false, false
+	}
+	t.Cleanup(func() {
+		aiOpsConfigString = oldString
+		aiOpsConfigBool = oldBool
+	})
+
+	info, err := RunAIOpsAsync(WithAIOpsEngine(context.Background(), "gos_engine"), "check alerts")
+	if err != nil {
+		t.Fatalf("run async: %v", err)
+	}
+	if info.Status != "degraded" || !info.Degraded {
+		t.Fatalf("expected degraded run info, got %+v", info)
+	}
+	if info.Engine != aiOpsGOSAgentName {
+		t.Fatalf("expected engine %q, got %q", aiOpsGOSAgentName, info.Engine)
+	}
+	if !strings.Contains(info.DegradationReason, "GoS") {
+		t.Fatalf("expected GoS reason, got %q", info.DegradationReason)
+	}
+}
+
 func TestRunAIOpsCallsBuildPlanAgent(t *testing.T) {
 	enableMultiAgentForTest(t)
 	oldBuild := buildPlanAgent
