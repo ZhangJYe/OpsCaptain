@@ -27,7 +27,18 @@ func NewApprovalGate() *StaticApprovalGate {
 
 var highRiskApprovalKeywords = []string{
 	"delete", "drop", "update", "insert", "truncate", "alter", "rollback", "restart",
-	"执行", "删除", "修改", "回滚", "重启", "写入", "变更",
+	"删除", "修改", "回滚", "重启", "写入", "变更",
+}
+
+var explicitExecutionKeywords = []string{
+	"delete", "drop", "update", "insert", "truncate", "alter", "restart",
+	"execute", "apply", "perform", "run rollback", "rollback ",
+	"执行", "立即", "删除", "修改", "写入", "变更", "重启", "执行回滚", "立即回滚", "实际回滚", "帮我回滚",
+}
+
+var analysisOnlyKeywords = []string{
+	"分析", "排查", "诊断", "建议", "步骤", "方案", "如何", "查询", "查看", "说明", "生成", "评估", "给出", "列出", "总结", "报告",
+	"analyze", "diagnose", "summarize", "suggest", "recommend", "how to", "steps", "plan",
 }
 
 func (g *StaticApprovalGate) Check(ctx context.Context, action string) ApprovalDecision {
@@ -58,7 +69,24 @@ func (g *StaticApprovalGate) Check(ctx context.Context, action string) ApprovalD
 }
 
 func requiresApproval(action string) bool {
+	hasRisk := false
 	for _, keyword := range highRiskApprovalKeywords {
+		if strings.Contains(action, keyword) {
+			hasRisk = true
+			break
+		}
+	}
+	if !hasRisk {
+		return false
+	}
+	if hasAnyKeyword(action, analysisOnlyKeywords) && !hasAnyKeyword(action, explicitExecutionKeywords) {
+		return false
+	}
+	return hasAnyKeyword(action, explicitExecutionKeywords)
+}
+
+func hasAnyKeyword(action string, keywords []string) bool {
+	for _, keyword := range keywords {
 		if strings.Contains(action, keyword) {
 			return true
 		}

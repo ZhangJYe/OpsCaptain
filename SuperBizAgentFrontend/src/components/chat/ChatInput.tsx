@@ -41,6 +41,13 @@ export function ChatInput({ onSend, onStop, isLoading, mode, workbenchMode, aiOp
     ? `描述告警、日志或系统现象，使用 ${engineView.label} 排障...`
     : '输入问题，使用 ReAct 问答...'
   const contextLabel = isAIOps ? `AIOps · ${engineView.badge}` : formatSelectedSkillSummary(selectedSkillIds)
+  const trimmedInput = input.trim()
+  const hasDraft = trimmedInput.length > 0 || readyFiles.length > 0
+  const aiOpsReady = !isAIOps || readyFiles.length > 0 || Array.from(trimmedInput).length >= 6
+  const canSend = hasDraft && aiOpsReady && !isLoading
+  const sendHint = isAIOps && hasDraft && !aiOpsReady
+    ? '补充服务、告警或日志线索'
+    : 'Enter 发送 · Shift+Enter 换行'
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -50,9 +57,9 @@ export function ChatInput({ onSend, onStop, isLoading, mode, workbenchMode, aiOp
   }, [input])
 
   const handleSubmit = () => {
-    if ((!input.trim() && readyFiles.length === 0) || isLoading) return
+    if (!canSend) return
     const names = readyFiles.map((f) => f.name)
-    const query = buildQueryWithFiles(input.trim(), names)
+    const query = buildQueryWithFiles(trimmedInput, names)
     onSend(query || '请分析上传的文件')
     setInput('')
     clearFiles()
@@ -64,8 +71,6 @@ export function ChatInput({ onSend, onStop, isLoading, mode, workbenchMode, aiOp
       handleSubmit()
     }
   }
-
-  const canSend = (input.trim().length > 0 || readyFiles.length > 0) && !isLoading
 
   return (
     <div className={embedded ? 'shrink-0' : 'shrink-0 border-t border-white/40 bg-white/30 px-4 py-4 backdrop-blur-sm dark:border-white/5 dark:bg-slate-900/30'}>
@@ -186,8 +191,8 @@ export function ChatInput({ onSend, onStop, isLoading, mode, workbenchMode, aiOp
                   <span className="hidden sm:inline">上传文档</span>
                 </label>
 
-                <span className="hidden text-[10px] text-zinc-400 dark:text-zinc-600 lg:inline">
-                  Enter 发送 · Shift+Enter 换行
+                <span className={`hidden text-[10px] lg:inline ${isAIOps && hasDraft && !aiOpsReady ? 'text-amber-500 dark:text-amber-400' : 'text-zinc-400 dark:text-zinc-600'}`}>
+                  {sendHint}
                 </span>
                 <button
                   onClick={isLoading ? onStop : handleSubmit}

@@ -76,7 +76,7 @@ export function PetCharacter({ mood, size = 64, className = '' }: Props) {
       width={size}
       height={size}
       alt={`运维助手-${PET_LABELS[mood]}`}
-      className={`select-none object-contain drop-shadow-[0_18px_22px_rgba(15,23,42,0.18)] ${className}`}
+      className={`select-none rounded-[28px] bg-white/95 object-cover p-1 ring-1 ring-white/75 drop-shadow-[0_18px_22px_rgba(15,23,42,0.16)] dark:bg-white/90 dark:ring-white/20 ${className}`}
       draggable={false}
       onError={() => setCandidateIndex((index) => index + 1)}
       initial={{ opacity: 0, scale: 0.94 }}

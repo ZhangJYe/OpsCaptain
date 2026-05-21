@@ -96,12 +96,17 @@ func (a *aiOpsPlanAgent) Handle(ctx context.Context, task *protocol.TaskEnvelope
 		}
 	}
 	if err != nil {
+		summary := strings.TrimSpace(content)
+		if summary == "" {
+			summary = fmt.Sprintf("Plan 执行没有生成可靠结论：%v。请补充服务名、告警时间窗、关键日志或指标后重试。", err)
+		}
 		return &protocol.TaskResult{
-			TaskID:     task.TaskID,
-			Agent:      a.Name(),
-			Status:     protocol.ResultStatusFailed,
-			Summary:    fmt.Sprintf("plan-execute-replan failed: %v", err),
-			Confidence: 0,
+			TaskID:            task.TaskID,
+			Agent:             a.Name(),
+			Status:            protocol.ResultStatusDegraded,
+			Summary:           summary,
+			Confidence:        0.15,
+			DegradationReason: err.Error(),
 			Error: &protocol.TaskError{
 				Code:    "plan_execute_replan_failed",
 				Message: err.Error(),

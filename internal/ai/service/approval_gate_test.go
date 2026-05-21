@@ -13,6 +13,12 @@ func TestRequiresApproval(t *testing.T) {
 	if requiresApproval("summarize current alert status") {
 		t.Fatal("expected read-only request to skip approval")
 	}
+	if requiresApproval("请给出回滚、限流和验证步骤") {
+		t.Fatal("expected advisory rollback plan to skip approval")
+	}
+	if !requiresApproval("请立即回滚 paymentservice") {
+		t.Fatal("expected explicit rollback operation to require approval")
+	}
 }
 
 func TestApprovalGateBypassContext(t *testing.T) {
