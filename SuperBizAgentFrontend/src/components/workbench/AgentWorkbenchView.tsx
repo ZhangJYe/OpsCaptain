@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Bot, BotOff, PanelRightOpen, PanelRightClose } from 'lucide-react'
+import { Bot, BotOff, PanelRightOpen, PanelRightClose, CheckCircle2, CircleAlert, Loader2, Route } from 'lucide-react'
 import { MessageBubble } from '../chat/MessageBubble'
 import { StreamingText } from '../chat/StreamingText'
 import { ChatInput } from '../chat/ChatInput'
@@ -17,6 +17,7 @@ import { WorkbenchEmptyState } from './WorkbenchEmptyState'
 import type { ChatMessage, ChatMode, AIOpsEngine } from '../../types/chat'
 import { findSkillsByIds, formatSelectedSkillSummary } from '../../lib/utils'
 import { isGoSEngine } from '../../hooks/useChat'
+import { ENGINE_VIEW_MODEL } from '../../lib/engineViewModel'
 
 interface Props {
   messages: ChatMessage[]
@@ -42,6 +43,104 @@ const RESULT_STEP_IDS = new Set(['metrics', 'logs', 'knowledge', 'evidence', 'go
 
 function hasResultSteps(steps?: ThinkingStep[]): boolean {
   return steps?.some((step) => RESULT_STEP_IDS.has(step.id) || step.id.startsWith('tool:')) ?? false
+}
+
+const PLAN_STEP_PHASES: Record<string, string> = {
+  engine: 'Plan',
+  dispatch: 'Execute',
+  evidence: 'Replan',
+  reporter: 'Report',
+}
+
+function planStepToDetail(step: ThinkingStep): DetailItem | null {
+  if (!step.detail && (!step.meta || step.meta.length === 0) && step.status !== 'error') return null
+  return {
+    id: step.id,
+    type: step.status === 'error' ? 'error' : 'info',
+    title: step.label,
+    content: [step.detail, ...(step.meta || [])].filter(Boolean).join('\n\n') || `${step.label} 执行失败`,
+    meta: step.status === 'error' ? '执行失败' : step.status === 'done' ? '已完成' : '执行中',
+  }
+}
+
+function PlanExecutionTimeline({ steps, onOpenDetail }: { steps: ThinkingStep[]; onOpenDetail: (item: DetailItem) => void }) {
+  const activeSteps = steps.filter((s) => s.status !== 'pending')
+  if (activeSteps.length === 0) return null
+  const view = ENGINE_VIEW_MODEL.plan_execute_replan
+
+  return (
+    <div className="ml-10 overflow-hidden rounded-[22px] rounded-bl-[6px] border border-sky-200/60 bg-white/65 backdrop-blur-xl dark:border-sky-500/15 dark:bg-slate-800/45">
+      <div className="flex items-center justify-between border-b border-white/40 px-4 py-3 dark:border-white/5">
+        <div className="flex items-center gap-2">
+          <span className={`flex h-7 w-7 items-center justify-center rounded-lg ring-1 ${view.sidebar.icon}`}>
+            <Route size={14} />
+          </span>
+          <div>
+            <p className="text-xs font-semibold text-sky-700 dark:text-sky-300">Plan Timeline</p>
+            <p className="text-[10px] text-zinc-400 dark:text-zinc-600">{view.trace}</p>
+          </div>
+        </div>
+        <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ring-1 ${view.sidebar.flowActive}`}>
+          {activeSteps.length} step
+        </span>
+      </div>
+
+      <div className="px-4 py-3">
+        {activeSteps.map((step, index) => {
+          const detail = planStepToDetail(step)
+          const clickable = Boolean(detail)
+          const isLast = index === activeSteps.length - 1
+          const phase = PLAN_STEP_PHASES[step.id] || 'Step'
+
+          return (
+            <div
+              key={step.id}
+              role={clickable ? 'button' : undefined}
+              tabIndex={clickable ? 0 : undefined}
+              onClick={clickable ? () => onOpenDetail(detail!) : undefined}
+              onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpenDetail(detail!) } } : undefined}
+              className={`group grid grid-cols-[22px_minmax(0,1fr)] gap-3 ${clickable ? 'cursor-pointer rounded-xl transition-colors hover:bg-white/55 dark:hover:bg-slate-700/30' : ''}`}
+            >
+              <div className="relative flex justify-center">
+                {!isLast && <span className="absolute top-6 h-[calc(100%-10px)] w-px bg-sky-200/70 dark:bg-sky-500/20" />}
+                <span className="relative mt-1 flex h-5 w-5 items-center justify-center rounded-full bg-white ring-1 ring-sky-200 dark:bg-slate-800 dark:ring-sky-500/20">
+                  {step.status === 'active' ? (
+                    <Loader2 size={12} className="animate-spin text-sky-500" />
+                  ) : step.status === 'done' ? (
+                    <CheckCircle2 size={13} className="text-emerald-500" />
+                  ) : step.status === 'error' ? (
+                    <CircleAlert size={13} className="text-rose-500" />
+                  ) : (
+                    <span className="h-1.5 w-1.5 rounded-full bg-zinc-300 dark:bg-zinc-600" />
+                  )}
+                </span>
+              </div>
+
+              <div className="min-w-0 pb-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">{step.label}</span>
+                  <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${view.sidebar.flowActive}`}>
+                    {phase}
+                  </span>
+                  {step.status === 'active' && <span className="text-[10px] font-medium text-sky-500">执行中...</span>}
+                </div>
+                {step.detail && <p className="mt-1 truncate text-[11px] text-zinc-500 dark:text-zinc-500">{step.detail}</p>}
+                {step.meta && step.meta.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {step.meta.slice(-2).map((item) => (
+                      <span key={item} className="max-w-[220px] truncate rounded-md bg-white/55 px-2 py-0.5 text-[10px] text-zinc-500 dark:bg-slate-700/40 dark:text-zinc-400">
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 export function AgentWorkbenchView({
@@ -94,6 +193,7 @@ export function AgentWorkbenchView({
   }, [])
 
   const isGoS = isGoSEngine(loadingEngine)
+  const isPlanAIOps = loadingEngine === 'plan_execute_replan'
 
   return (
     <div className="flex h-full">
@@ -191,7 +291,9 @@ export function AgentWorkbenchView({
 
             {isLoading && (
               <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
-                {thinkingSteps.filter((s) => s.status !== 'pending').length > 0 && (
+                {isPlanAIOps ? (
+                  <PlanExecutionTimeline steps={thinkingSteps} onOpenDetail={handleOpenDetail} />
+                ) : !isGoS && thinkingSteps.filter((s) => s.status !== 'pending').length > 0 ? (
                   <div className="ml-10 space-y-2">
                     {thinkingSteps
                       .filter((s) => s.status !== 'pending')
@@ -203,7 +305,7 @@ export function AgentWorkbenchView({
                         />
                       ))}
                   </div>
-                )}
+                ) : null}
 
                 {isGoS ? (
                   <GosReportCard steps={thinkingSteps} content={streamingContent} isStreaming />
