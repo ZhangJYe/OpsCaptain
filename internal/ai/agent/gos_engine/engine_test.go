@@ -3,6 +3,7 @@ package gos_engine
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -296,7 +297,7 @@ func TestGoSEngine_Run_AllExpertsDegraded(t *testing.T) {
 			ExpertName:        "linux_sre",
 			Status:            "degraded",
 			DegradationReason: "partial_data",
-			Analysis:          "部分数据",
+			Analysis:          "部分数据提示 CPU 高负载，需要继续确认",
 			Confidence:        0.3,
 		},
 	})
@@ -304,4 +305,42 @@ func TestGoSEngine_Run_AllExpertsDegraded(t *testing.T) {
 	result := engine.Run(context.Background(), "服务响应超时")
 	require.NotNil(t, result)
 	assert.Equal(t, protocol.ResultStatusDegraded, result.Status)
+	assert.Equal(t, "部分数据提示 CPU 高负载，需要继续确认", result.Summary)
+}
+
+func TestGoSEngine_DegradedSummaryRejectsWeakText(t *testing.T) {
+	cfg := DefaultConfig()
+	logger := &testLogger{}
+	engine := NewGoSEngine(cfg, logger)
+
+	summary, _ := engine.degradedSummary("act_failed", assert.AnError, &ActResult{
+		Analyses: []*experts.ExpertAnalysis{
+			{
+				ExpertName: "linux_sre",
+				Status:     "degraded",
+				Analysis:   "诊断降级",
+				ToolErrors: []experts.ToolError{
+					{ToolName: "query_internal_docs", Action: "execute", Error: "no documents found"},
+				},
+			},
+		},
+	})
+	assert.Contains(t, summary, "缺少或不可用的证据")
+	assert.Contains(t, summary, "query_internal_docs execute: no documents found")
+	assert.NotEqual(t, "诊断降级", summary)
+}
+
+func TestGoSEngine_DegradedResultSkipsInputEvidence(t *testing.T) {
+	cfg := DefaultConfig()
+	logger := &testLogger{}
+	engine := NewGoSEngine(cfg, logger)
+	graph := belief.NewBeliefGraph()
+	require.NoError(t, NewIngestor(graph, logger).Ingest(context.Background(), "服务响应超时"))
+	fsm := belief.NewBeliefFSM(cfg.ToFSMThresholds())
+
+	result := engine.degradedResult(graph, fsm, time.Now(), &RunStats{}, "act_failed", assert.AnError, nil, false)
+	require.NotNil(t, result)
+	assert.Equal(t, protocol.ResultStatusDegraded, result.Status)
+	assert.Empty(t, result.Evidence)
+	assert.Contains(t, result.Summary, "GoS 未获得足够可用证据")
 }

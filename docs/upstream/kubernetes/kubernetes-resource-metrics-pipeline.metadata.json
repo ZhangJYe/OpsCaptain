@@ -1,0 +1,16 @@
+{
+  "_source": "upstream://kubernetes/kubernetes-resource-metrics-pipeline",
+  "source_url": "https://github.com/kubernetes/website/blob/main/content/en/docs/tasks/debug/debug-cluster/resource-metrics-pipeline.md",
+  "fetch_url": "https://raw.githubusercontent.com/kubernetes/website/main/content/en/docs/tasks/debug/debug-cluster/resource-metrics-pipeline.md",
+  "license": "CC-BY-4.0",
+  "provider": "kubernetes",
+  "title": "Kubernetes Resource Metrics Pipeline",
+  "tags": [
+    "kubernetes",
+    "metrics",
+    "debug",
+    "resource"
+  ],
+  "fetched_at": "2026-05-22T06:34:49+00:00",
+  "instance_type": "upstream_ops_doc"
+}

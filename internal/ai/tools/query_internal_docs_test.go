@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	retrieverapi "github.com/cloudwego/eino/components/retriever"
@@ -15,6 +16,14 @@ type fakeInternalDocsRetriever struct{}
 
 func (f *fakeInternalDocsRetriever) Retrieve(context.Context, string, ...retrieverapi.Option) ([]*schema.Document, error) {
 	return []*schema.Document{}, nil
+}
+
+type fakeInternalDocsErrorRetriever struct {
+	err error
+}
+
+func (f *fakeInternalDocsErrorRetriever) Retrieve(context.Context, string, ...retrieverapi.Option) ([]*schema.Document, error) {
+	return nil, f.err
 }
 
 func TestQueryInternalDocsToolReusesRetriever(t *testing.T) {
@@ -81,5 +90,34 @@ func TestQueryInternalDocsToolCachesRecentInitFailures(t *testing.T) {
 	}
 	if created != 1 {
 		t.Fatalf("expected failed retriever init to be cached, got %d creations", created)
+	}
+}
+
+func TestQueryInternalDocsToolReturnsSchemaMismatchDegradedPayload(t *testing.T) {
+	oldFactory := rag.NewRetrieverFunc
+	defer func() {
+		rag.NewRetrieverFunc = oldFactory
+		rag.ResetSharedPool()
+	}()
+
+	rag.ResetSharedPool()
+	rag.NewRetrieverFunc = func(context.Context) (retrieverapi.Retriever, error) {
+		return &fakeInternalDocsErrorRetriever{err: errors.New("milvus collection schema mismatch: missing field content")}, nil
+	}
+
+	tool := NewQueryInternalDocsTool()
+	output, err := tool.InvokableRun(context.Background(), `{"query":"部署回滚"}`)
+	if err != nil {
+		t.Fatalf("expected degraded output, got error: %v", err)
+	}
+	var payload QueryInternalDocsOutput
+	if err := json.Unmarshal([]byte(output), &payload); err != nil {
+		t.Fatalf("failed to parse payload %q: %v", output, err)
+	}
+	if payload.Success || !payload.Degraded {
+		t.Fatalf("expected degraded payload, got %#v", payload)
+	}
+	if !strings.Contains(payload.Error, "schema mismatch") {
+		t.Fatalf("expected schema mismatch error, got %q", payload.Error)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -40,7 +41,7 @@ var (
 		regexp.MustCompile(`(?i)\bALL\s*\(\s*SELECT\b`),
 		regexp.MustCompile(`(?i)\bSELECT\s+.*\bFROM\s+.*\(\s*SELECT\b`),
 	}
-	forbiddenPatterns   = []*regexp.Regexp{
+	forbiddenPatterns = []*regexp.Regexp{
 		regexp.MustCompile(`\bDROP\b`),
 		regexp.MustCompile(`\bDELETE\b`),
 		regexp.MustCompile(`\bUPDATE\b`),
@@ -75,16 +76,12 @@ type mysqlQueryPolicy struct {
 
 func initMysqlDB(ctx context.Context) (*gorm.DB, error) {
 	mysqlOnce.Do(func() {
-		dsn, err := g.Cfg().Get(ctx, "mysql.dsn")
-		if err != nil {
-			mysqlErr = fmt.Errorf("failed to read mysql.dsn from config: %w", err)
-			return
-		}
-		if dsn.String() == "" {
+		dsn := resolveMySQLDSN(ctx)
+		if dsn == "" {
 			mysqlErr = fmt.Errorf("mysql.dsn is not configured")
 			return
 		}
-		db, err := gorm.Open(mysql.Open(dsn.String()), &gorm.Config{})
+		db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 		if err != nil {
 			mysqlErr = fmt.Errorf("failed to connect to mysql: %w", err)
 			return
@@ -163,11 +160,18 @@ func loadMySQLQueryPolicy(ctx context.Context) mysqlQueryPolicy {
 }
 
 func loadAllowedTables(ctx context.Context) map[string]struct{} {
+	rawItems := make([]string, 0)
 	v, err := g.Cfg().Get(ctxOrBackground(ctx), "mysql.allowed_tables")
-	if err != nil || v.IsNil() {
-		return nil
+	if err == nil && !v.IsNil() {
+		rawItems = append(rawItems, v.Strings()...)
+		if raw := v.String(); raw != "" {
+			rawItems = append(rawItems, raw)
+		}
 	}
-	items := v.Strings()
+	if env := os.Getenv("MYSQL_ALLOWED_TABLES"); env != "" {
+		rawItems = append(rawItems, env)
+	}
+	items := expandAllowedTableItems(rawItems)
 	if len(items) == 0 {
 		return nil
 	}
@@ -183,6 +187,33 @@ func loadAllowedTables(ctx context.Context) map[string]struct{} {
 		return nil
 	}
 	return allowed
+}
+
+func resolveMySQLDSN(ctx context.Context) string {
+	if v, err := g.Cfg().Get(ctxOrBackground(ctx), "mysql.dsn"); err == nil {
+		if value := normalizeOptionalURL(v.String()); value != "" {
+			return value
+		}
+	}
+	return normalizeOptionalURL(os.Getenv("MYSQL_DSN"))
+}
+
+func expandAllowedTableItems(rawItems []string) []string {
+	items := make([]string, 0, len(rawItems))
+	for _, raw := range rawItems {
+		value := normalizeOptionalURL(raw)
+		if value == "" || value == "[]" {
+			continue
+		}
+		for _, part := range strings.FieldsFunc(value, func(r rune) bool {
+			return r == ',' || r == ';' || r == '\n' || r == '\t' || r == ' '
+		}) {
+			if table := normalizeTableName(part); table != "" {
+				items = append(items, table)
+			}
+		}
+	}
+	return items
 }
 
 func validateMysqlQuery(sql string, policy mysqlQueryPolicy) (string, error) {

@@ -3,6 +3,9 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -12,6 +15,80 @@ import (
 
 type fakeInvokableTool struct {
 	info *schema.ToolInfo
+}
+
+func TestIsConnectionErrorRecognizesUnknownSession(t *testing.T) {
+	if !isConnectionError(errors.New("request failed with status 404: unknown session")) {
+		t.Fatal("expected unknown session 404 to be connection error")
+	}
+}
+
+func TestResolveLogHTTPURLDerivesFromSSE(t *testing.T) {
+	t.Setenv("MCP_LOG_HTTP_URL", "")
+	got := resolveLogHTTPURL(context.Background(), "http://127.0.0.1:18088/sse")
+	if got != "http://127.0.0.1:18088/tools/query_logs" {
+		t.Fatalf("unexpected derived url: %q", got)
+	}
+}
+
+func TestResolveLogHTTPURLUsesEnvOverride(t *testing.T) {
+	t.Setenv("MCP_LOG_HTTP_URL", "http://127.0.0.1:18089/tools/query_logs")
+	got := resolveLogHTTPURL(context.Background(), "http://127.0.0.1:18088/sse")
+	if got != "http://127.0.0.1:18089/tools/query_logs" {
+		t.Fatalf("unexpected override url: %q", got)
+	}
+}
+
+func TestCallLogHTTPFallbackReturnsStructuredLogs(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/tools/query_logs" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if r.Method != http.MethodPost {
+			t.Fatalf("unexpected method: %s", r.Method)
+		}
+		var input LogQueryInput
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			t.Fatalf("decode request failed: %v", err)
+		}
+		if input.Query != "checkout timeout" {
+			t.Fatalf("unexpected query: %q", input.Query)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"success":true,"logs":[{"service":"checkout","message":"timeout"}]}`))
+	}))
+	defer server.Close()
+
+	result, err := callLogHTTPFallback(context.Background(), server.URL+"/tools/query_logs", `{"query":"checkout timeout"}`, 1000000000)
+	if err != nil {
+		t.Fatalf("callLogHTTPFallback returned error: %v", err)
+	}
+	if !strings.Contains(result, `"success":true`) {
+		t.Fatalf("expected success payload, got %s", result)
+	}
+}
+
+func TestHTTPLogQueryToolDegradesWhenEndpointFails(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "offline", http.StatusBadGateway)
+	}))
+	defer server.Close()
+
+	logTool := NewHTTPLogQueryTool(server.URL, "sse unavailable")
+	result, err := logTool.InvokableRun(context.Background(), `{"query":"checkout timeout"}`)
+	if err != nil {
+		t.Fatalf("InvokableRun returned error: %v", err)
+	}
+	var payload LogQueryUnavailableOutput
+	if err := json.Unmarshal([]byte(result), &payload); err != nil {
+		t.Fatalf("failed to unmarshal payload: %v", err)
+	}
+	if !payload.Degraded || payload.Success {
+		t.Fatalf("expected degraded=false success payload, got %#v", payload)
+	}
+	if !strings.Contains(payload.Error, "http fallback failed") {
+		t.Fatalf("expected fallback error, got %q", payload.Error)
+	}
 }
 
 func (f *fakeInvokableTool) Info(context.Context) (*schema.ToolInfo, error) {

@@ -58,6 +58,7 @@ cors:
 
 milvus:
   address: "${MILVUS_ADDRESS}"
+  collection: "${MILVUS_COLLECTION}"
   index_type: "HNSW"
   metric_type: "IP"
   hnsw:
@@ -146,10 +147,13 @@ log_topic:
 
 mcp:
   log_url: "${MCP_LOG_URL}"
+  log_http_url: "${MCP_LOG_HTTP_URL}"
+  connect_timeout_ms: 10000
+  tool_timeout_ms: 120000
 
 mysql:
   dsn: "${MYSQL_DSN}"
-  allowed_tables: []
+  allowed_tables: "${MYSQL_ALLOWED_TABLES}"
   query_timeout_ms: 10000
   max_rows: 100
 

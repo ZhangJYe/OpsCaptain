@@ -1,6 +1,9 @@
 package tools
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestMysqlCrudTool_RejectNonSelect(t *testing.T) {
 	tool := NewMysqlCrudTool()
@@ -99,5 +102,29 @@ func TestValidateMysqlQuery_SubqueryBypass(t *testing.T) {
 	openPolicy := mysqlQueryPolicy{maxRows: 100}
 	if _, err := validateMysqlQuery("SELECT * FROM (SELECT * FROM users) AS u", openPolicy); err != nil {
 		t.Fatalf("subquery should be allowed without allowlist: %v", err)
+	}
+}
+
+func TestExpandAllowedTableItemsFiltersPlaceholders(t *testing.T) {
+	got := expandAllowedTableItems([]string{"orders, users", "${MYSQL_ALLOWED_TABLES}", "[]", "audit.events"})
+	want := map[string]bool{"orders": true, "users": true, "events": true}
+	if len(got) != len(want) {
+		t.Fatalf("unexpected table list: %#v", got)
+	}
+	for _, table := range got {
+		if !want[table] {
+			t.Fatalf("unexpected table %q in %#v", table, got)
+		}
+	}
+}
+
+func TestLoadAllowedTablesFromEnv(t *testing.T) {
+	t.Setenv("MYSQL_ALLOWED_TABLES", "orders, audit.events")
+	tables := loadAllowedTables(context.Background())
+	if _, ok := tables["orders"]; !ok {
+		t.Fatalf("expected orders allowlist: %#v", tables)
+	}
+	if _, ok := tables["events"]; !ok {
+		t.Fatalf("expected normalized events allowlist: %#v", tables)
 	}
 }

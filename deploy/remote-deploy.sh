@@ -127,6 +127,41 @@ ensure_runtime_volume_permissions() {
     'mkdir -p /app/var/runtime/ledger /app/var/runtime/artifacts && chown -R 1000:1000 /app/var/runtime'
 }
 
+install_log_mcp_service() {
+  if [ ! -f "./local-k8s-log-mcp.py" ] || [ ! -f "./opscaptain-log-mcp.service" ]; then
+    return 0
+  fi
+
+  chmod +x ./local-k8s-log-mcp.py || true
+  if ! command -v systemctl >/dev/null 2>&1; then
+    echo "systemctl not found, skip log MCP service update"
+    return 0
+  fi
+  if [ "$(id -u)" != "0" ]; then
+    echo "not running as root, skip log MCP service update"
+    return 0
+  fi
+
+  service_tmp_path="$(mktemp "${TMPDIR:-/tmp}/opscaptain-log-mcp.XXXXXX")"
+  sed "s#/opt/opscaptain#$APP_DIR#g" ./opscaptain-log-mcp.service > "$service_tmp_path"
+  cp "$service_tmp_path" /etc/systemd/system/opscaptain-log-mcp.service
+  rm -f "$service_tmp_path"
+  systemctl daemon-reload || true
+  systemctl enable opscaptain-log-mcp.service >/dev/null 2>&1 || true
+  systemctl restart opscaptain-log-mcp.service || true
+  sleep 1
+  if curl -fsS -m 3 http://172.17.0.1:18088/healthz >/dev/null 2>&1 || curl -fsS -m 3 http://127.0.0.1:18088/healthz >/dev/null 2>&1; then
+    echo "log MCP healthz ok"
+  else
+    echo "log MCP healthz failed; backend will use structured degraded fallback if logs are unavailable"
+  fi
+  if curl -fsS -m 5 -H 'Content-Type: application/json' -d '{"query":"error","limit":1}' http://172.17.0.1:18088/tools/query_logs >/dev/null 2>&1 || curl -fsS -m 5 -H 'Content-Type: application/json' -d '{"query":"error","limit":1}' http://127.0.0.1:18088/tools/query_logs >/dev/null 2>&1; then
+    echo "log MCP query_logs ok"
+  else
+    echo "log MCP query_logs failed; backend will continue without fatal startup failure"
+  fi
+}
+
 write_site_block() {
   site_label="$1"
 
@@ -366,6 +401,7 @@ if [ -n "${ACR_PASSWORD_FILE:-}" ] && [ -f "./${ACR_PASSWORD_FILE}" ]; then
 fi
 
 ensure_prometheus_bind_files
+install_log_mcp_service
 
 $COMPOSE pull
 ensure_runtime_volume_permissions

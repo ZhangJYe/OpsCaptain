@@ -156,6 +156,7 @@ harness:
 
 milvus:
   address: "localhost:19530"
+  collection: ""
 
 chat_model:
   model: "deepseek-v4-pro"
@@ -251,6 +252,7 @@ log_topic:
 
 mcp:
   log_url: ""
+  log_http_url: ""
   connect_timeout_ms: 10000
   tool_timeout_ms: 120000
 

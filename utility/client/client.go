@@ -194,3 +194,116 @@ func BuildMilvusFields(ctx context.Context) []*entity.Field {
 		},
 	}
 }
+
+type MilvusCollectionReport struct {
+	Collection string
+	SchemaOK   bool
+	DocCount   int64
+}
+
+func InspectMilvusCollection(ctx context.Context) (MilvusCollectionReport, error) {
+	collectionName := common.GetMilvusCollectionName(ctx)
+	report := MilvusCollectionReport{Collection: collectionName}
+
+	defaultClient, err := cli.NewClient(ctx, cli.Config{
+		Address: common.GetMilvusAddr(ctx),
+		DBName:  "default",
+	})
+	if err != nil {
+		return report, err
+	}
+	defer defaultClient.Close()
+
+	databases, err := defaultClient.ListDatabases(ctx)
+	if err != nil {
+		return report, fmt.Errorf("failed to list databases: %w", err)
+	}
+	agentDBExists := false
+	for _, db := range databases {
+		if db.Name == common.MilvusDBName {
+			agentDBExists = true
+			break
+		}
+	}
+	if !agentDBExists {
+		return report, fmt.Errorf("milvus database %s not found", common.MilvusDBName)
+	}
+
+	agentClient, err := cli.NewClient(ctx, cli.Config{
+		Address: common.GetMilvusAddr(ctx),
+		DBName:  common.MilvusDBName,
+	})
+	if err != nil {
+		return report, err
+	}
+	defer agentClient.Close()
+
+	collections, err := agentClient.ListCollections(ctx)
+	if err != nil {
+		return report, fmt.Errorf("failed to list collections: %w", err)
+	}
+	exists := false
+	for _, collection := range collections {
+		if collection.Name == collectionName {
+			exists = true
+			break
+		}
+	}
+	if !exists {
+		return report, fmt.Errorf("milvus collection %s not found", collectionName)
+	}
+
+	collection, err := agentClient.DescribeCollection(ctx, collectionName)
+	if err != nil {
+		return report, err
+	}
+	if err := ValidateMilvusCollectionSchema(ctx, collection); err != nil {
+		return report, err
+	}
+	report.SchemaOK = true
+
+	stats, err := agentClient.GetCollectionStatistics(ctx, collectionName)
+	if err != nil {
+		return report, err
+	}
+	if raw := strings.TrimSpace(stats["row_count"]); raw != "" {
+		if count, parseErr := strconv.ParseInt(raw, 10, 64); parseErr == nil {
+			report.DocCount = count
+		}
+	}
+
+	return report, nil
+}
+
+func ValidateMilvusCollectionSchema(ctx context.Context, collection *entity.Collection) error {
+	if collection == nil || collection.Schema == nil {
+		return fmt.Errorf("collection schema is empty")
+	}
+
+	fields := make(map[string]*entity.Field)
+	for _, field := range collection.Schema.Fields {
+		if field != nil {
+			fields[field.Name] = field
+		}
+	}
+
+	expected := BuildMilvusFields(ctx)
+	for _, want := range expected {
+		got := fields[want.Name]
+		if got == nil {
+			return fmt.Errorf("milvus collection schema mismatch: missing field %s", want.Name)
+		}
+		if got.DataType != want.DataType {
+			return fmt.Errorf("milvus collection schema mismatch: field %s type=%v want=%v", want.Name, got.DataType, want.DataType)
+		}
+		if want.PrimaryKey && !got.PrimaryKey {
+			return fmt.Errorf("milvus collection schema mismatch: field %s is not primary key", want.Name)
+		}
+		for key, wantValue := range want.TypeParams {
+			if got.TypeParams[key] != wantValue {
+				return fmt.Errorf("milvus collection schema mismatch: field %s %s=%s want=%s", want.Name, key, got.TypeParams[key], wantValue)
+			}
+		}
+	}
+	return nil
+}

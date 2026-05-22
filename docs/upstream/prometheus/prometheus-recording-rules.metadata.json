@@ -1,0 +1,16 @@
+{
+  "_source": "upstream://prometheus/prometheus-recording-rules",
+  "source_url": "https://github.com/prometheus/docs/blob/main/docs/practices/rules.md",
+  "fetch_url": "https://raw.githubusercontent.com/prometheus/docs/main/docs/practices/rules.md",
+  "license": "Apache-2.0",
+  "provider": "prometheus",
+  "title": "Prometheus Recording Rules",
+  "tags": [
+    "prometheus",
+    "rules",
+    "recording",
+    "alerting"
+  ],
+  "fetched_at": "2026-05-22T06:34:49+00:00",
+  "instance_type": "upstream_ops_doc"
+}

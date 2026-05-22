@@ -1,9 +1,13 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -197,7 +201,7 @@ func isConnectionError(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := err.Error()
+	msg := strings.ToLower(err.Error())
 	// 排除 context.DeadlineExceeded（工具执行超时，重连无意义）
 	if msg == context.DeadlineExceeded.Error() {
 		return false
@@ -206,8 +210,12 @@ func isConnectionError(err error) bool {
 		strings.Contains(msg, "connection reset") ||
 		strings.Contains(msg, "connection closed") ||
 		strings.Contains(msg, "broken pipe") ||
-		strings.Contains(msg, "EOF") ||
-		strings.Contains(msg, "reset by peer")
+		strings.Contains(msg, "eof") ||
+		strings.Contains(msg, "reset by peer") ||
+		strings.Contains(msg, "unknown session") ||
+		strings.Contains(msg, "transport error") ||
+		strings.Contains(msg, "request failed with status 404") ||
+		strings.Contains(msg, "status 404")
 }
 
 // pooledToolWrapper 包装 eino MCP 工具，调用走连接池（带超时 + 重连）
@@ -216,6 +224,7 @@ type pooledToolWrapper struct {
 	pool     *pooledClient
 	toolName string // 缓存工具名，避免每次调用都查 Info
 	alias    string
+	httpURL  string
 }
 
 func (w *pooledToolWrapper) Info(ctx context.Context) (*schema.ToolInfo, error) {
@@ -235,7 +244,18 @@ func (w *pooledToolWrapper) Info(ctx context.Context) (*schema.ToolInfo, error) 
 }
 
 func (w *pooledToolWrapper) InvokableRun(ctx context.Context, args string, opts ...tool.Option) (string, error) {
-	return w.pool.CallTool(ctx, w.toolName, args)
+	result, err := w.pool.CallTool(ctx, w.toolName, args)
+	if err == nil {
+		return result, nil
+	}
+	if w.httpURL == "" || !isConnectionError(err) {
+		return "", err
+	}
+	fallbackResult, fallbackErr := callLogHTTPFallback(ctx, w.httpURL, args, time.Duration(w.pool.toolTimeoutMs)*time.Millisecond)
+	if fallbackErr != nil {
+		return "", fmt.Errorf("%w; http fallback failed: %v", err, fallbackErr)
+	}
+	return fallbackResult, nil
 }
 
 type LogQueryInput struct {
@@ -282,6 +302,93 @@ func NewUnavailableLogQueryTool(reason string) tool.InvokableTool {
 		panic(fmt.Sprintf("failed to create query_logs fallback tool: %v", err))
 	}
 	return t
+}
+
+func NewHTTPLogQueryTool(httpURL string, reason string) tool.InvokableTool {
+	t, err := utils.InferOptionableTool(
+		"query_logs",
+		"Query application logs through the HTTP fallback endpoint when the SSE MCP transport is unavailable.",
+		func(ctx context.Context, input *LogQueryInput, opts ...tool.Option) (string, error) {
+			if input == nil {
+				input = &LogQueryInput{}
+			}
+			payload, err := json.Marshal(input)
+			if err != nil {
+				return "", err
+			}
+			result, err := callLogHTTPFallback(ctx, httpURL, string(payload), time.Duration(defaultToolTimeoutMs)*time.Millisecond)
+			if err != nil {
+				return NewUnavailableLogQueryTool(fmt.Sprintf("%s; http fallback failed: %v", reason, err)).InvokableRun(ctx, string(payload))
+			}
+			return result, nil
+		},
+	)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create query_logs http fallback tool: %v", err))
+	}
+	return t
+}
+
+func callLogHTTPFallback(ctx context.Context, httpURL string, args string, timeout time.Duration) (string, error) {
+	if strings.TrimSpace(httpURL) == "" {
+		return "", fmt.Errorf("log http fallback url is empty")
+	}
+	if timeout <= 0 {
+		timeout = defaultToolTimeoutMs * time.Millisecond
+	}
+	callCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	body := strings.TrimSpace(args)
+	if body == "" {
+		body = "{}"
+	}
+	req, err := http.NewRequestWithContext(callCtx, http.MethodPost, httpURL, bytes.NewBufferString(body))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return "", err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("log http fallback status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(data)))
+	}
+	if len(data) == 0 {
+		return "{}", nil
+	}
+	return string(data), nil
+}
+
+func resolveLogHTTPURL(ctx context.Context, mcpURL string) string {
+	if v, err := g.Cfg().Get(ctx, "mcp.log_http_url"); err == nil {
+		if value := normalizeOptionalURL(v.String()); value != "" {
+			return value
+		}
+	}
+	if value := normalizeOptionalURL(os.Getenv("MCP_LOG_HTTP_URL")); value != "" {
+		return value
+	}
+	mcpURL = normalizeOptionalURL(mcpURL)
+	if mcpURL == "" {
+		return ""
+	}
+	parsed, err := url.Parse(mcpURL)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return ""
+	}
+	parsed.Path = "/tools/query_logs"
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String()
 }
 
 // --- 工具发现结果缓存 ---
@@ -340,9 +447,15 @@ func GetLogMcpTool() ([]tool.BaseTool, error) {
 		mcpURL = normalizeOptionalURL(os.Getenv("MCP_LOG_URL"))
 	}
 	if mcpURL == "" {
+		httpURL := resolveLogHTTPURL(ctx, "")
+		if httpURL != "" {
+			g.Log().Warning(ctx, "mcp.log_url is not configured, log query tool will use HTTP fallback")
+			return []tool.BaseTool{NewHTTPLogQueryTool(httpURL, "mcp.log_url is not configured")}, nil
+		}
 		g.Log().Warning(ctx, "mcp.log_url is not configured, log query tool will use degraded fallback")
 		return []tool.BaseTool{NewUnavailableLogQueryTool("mcp.log_url is not configured")}, nil
 	}
+	httpURL := resolveLogHTTPURL(ctx, mcpURL)
 
 	// 检查缓存
 	if ct, ok := getCachedTools(mcpURL); ok {
@@ -355,6 +468,9 @@ func GetLogMcpTool() ([]tool.BaseTool, error) {
 	// 获取复用的连接池客户端
 	pc, err := globalPool.getOrCreate(mcpURL, connectTimeoutMs, toolTimeoutMs)
 	if err != nil {
+		if httpURL != "" {
+			return []tool.BaseTool{NewHTTPLogQueryTool(httpURL, err.Error())}, nil
+		}
 		return []tool.BaseTool{NewUnavailableLogQueryTool(err.Error())}, nil
 	}
 
@@ -363,6 +479,9 @@ func GetLogMcpTool() ([]tool.BaseTool, error) {
 	defer listCancel()
 	einoTools, err := e_mcp.GetTools(listCtx, &e_mcp.Config{Cli: pc.cli})
 	if err != nil {
+		if httpURL != "" {
+			return []tool.BaseTool{NewHTTPLogQueryTool(httpURL, fmt.Sprintf("failed to get MCP tools: %v", err))}, nil
+		}
 		return []tool.BaseTool{NewUnavailableLogQueryTool(fmt.Sprintf("failed to get MCP tools: %v", err))}, nil
 	}
 
@@ -379,7 +498,7 @@ func GetLogMcpTool() ([]tool.BaseTool, error) {
 			if name == "query_logs" {
 				hasQueryLogsAlias = true
 			}
-			tools = append(tools, &pooledToolWrapper{inner: it, pool: pc, toolName: name})
+			tools = append(tools, &pooledToolWrapper{inner: it, pool: pc, toolName: name, httpURL: httpURL})
 		} else {
 			tools = append(tools, t)
 		}

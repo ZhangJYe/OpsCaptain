@@ -196,12 +196,25 @@ jobs:
 
           mkdir -p dist-deploy
           mkdir -p dist-deploy/prometheus
+          mkdir -p dist-deploy/knowledge_seed
           cp deploy/docker-compose.prod.yml dist-deploy/docker-compose.prod.yml
           cp deploy/config.prod.yaml dist-deploy/config.prod.yaml
           cp deploy/remote-deploy.sh dist-deploy/remote-deploy.sh
+          cp deploy/local-k8s-log-mcp.py dist-deploy/local-k8s-log-mcp.py
+          cp deploy/opscaptain-log-mcp.service dist-deploy/opscaptain-log-mcp.service
           cp deploy/prometheus/prometheus.yml dist-deploy/prometheus/prometheus.yml
           cp deploy/prometheus/opscaptionai-cost-alerts.yml dist-deploy/prometheus/opscaptionai-cost-alerts.yml
           printf '%s' "${PROD_ENV_FILE}" | tr -d '\r' > dist-deploy/.env.production
+
+          for seed_dir in docs res todo Learn/system Learn/operations internal/ai/cmd/knowledge_cmd/docs; do
+            if [ -d "$seed_dir" ]; then
+              find "$seed_dir" -type f -name '*.md' -print | while IFS= read -r seed_file; do
+                target="dist-deploy/knowledge_seed/$seed_file"
+                mkdir -p "$(dirname "$target")"
+                cp "$seed_file" "$target"
+              done
+            fi
+          done
 
           set_env_value_if_missing APP_BASE_PATH "$SECRET_APP_BASE_PATH"
           set_env_value_if_missing ARK_API_KEY "$SECRET_ARK_API_KEY"
@@ -209,6 +222,9 @@ jobs:
           set_env_value_if_missing DEEPSEEK_API_KEY "$SECRET_DEEPSEEK_API_KEY"
           set_env_value_if_missing DOMAIN_NAME "$SECRET_DOMAIN_NAME"
           set_env_value_if_missing MILVUS_ADDRESS "$SECRET_MILVUS_ADDRESS"
+          set_env_value_if_missing MILVUS_COLLECTION biz
+          set_env_value_if_missing MCP_LOG_URL http://host.docker.internal:18088/sse
+          set_env_value_if_missing MCP_LOG_HTTP_URL http://host.docker.internal:18088/tools/query_logs
           set_env_value_if_missing TLS_EMAIL "$SECRET_TLS_EMAIL"
 
           jaeger_endpoint="$(normalize_optional_env_value JAEGER_ENDPOINT http://jaeger:14268/api/traces)"
@@ -294,6 +310,8 @@ jobs:
         run: |
           ssh -p "${ECS_SSH_PORT}" "${ECS_USER}@${ECS_HOST}" "\
             mkdir -p '${REMOTE_APP_DIR}' '${REMOTE_APP_DIR}/prometheus' && \
+            rm -rf '${REMOTE_APP_DIR}/knowledge_seed' && \
+            mkdir -p '${REMOTE_APP_DIR}/knowledge_seed' && \
             rm -rf '${REMOTE_APP_DIR}/prometheus/prometheus.yml' && \
             rm -rf '${REMOTE_APP_DIR}/prometheus/opscaptionai-cost-alerts.yml'"
 
@@ -305,6 +323,9 @@ jobs:
           scp -P "${ECS_SSH_PORT}" dist-deploy/.env.production "${ECS_USER}@${ECS_HOST}:${REMOTE_APP_DIR}/.env.production"
           scp -P "${ECS_SSH_PORT}" dist-deploy/.acr-password "${ECS_USER}@${ECS_HOST}:${REMOTE_APP_DIR}/.acr-password"
           scp -P "${ECS_SSH_PORT}" dist-deploy/release.env "${ECS_USER}@${ECS_HOST}:${REMOTE_APP_DIR}/release.env"
+          scp -P "${ECS_SSH_PORT}" dist-deploy/local-k8s-log-mcp.py "${ECS_USER}@${ECS_HOST}:${REMOTE_APP_DIR}/local-k8s-log-mcp.py"
+          scp -P "${ECS_SSH_PORT}" dist-deploy/opscaptain-log-mcp.service "${ECS_USER}@${ECS_HOST}:${REMOTE_APP_DIR}/opscaptain-log-mcp.service"
+          scp -P "${ECS_SSH_PORT}" -r dist-deploy/knowledge_seed/. "${ECS_USER}@${ECS_HOST}:${REMOTE_APP_DIR}/knowledge_seed/"
           scp -P "${ECS_SSH_PORT}" dist-deploy/prometheus/prometheus.yml "${ECS_USER}@${ECS_HOST}:${REMOTE_APP_DIR}/prometheus/"
           scp -P "${ECS_SSH_PORT}" dist-deploy/prometheus/opscaptionai-cost-alerts.yml "${ECS_USER}@${ECS_HOST}:${REMOTE_APP_DIR}/prometheus/"
 

@@ -200,6 +200,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         parsed = urlparse(self.path)
+        if parsed.path == "/healthz":
+            self.write_json({"ok": True, "service": "freeexchanged-local-k8s-log-mcp"})
+            return
         if parsed.path != "/sse":
             self.send_error(404)
             return
@@ -234,6 +237,17 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
+        if parsed.path == "/tools/query_logs":
+            length = int(self.headers.get("Content-Length") or "0")
+            raw = self.rfile.read(length)
+            try:
+                payload = json.loads(raw or b"{}")
+                result = query_logs(payload if isinstance(payload, dict) else {})
+                self.write_json(result)
+            except Exception as exc:
+                self.write_json({"success": False, "degraded": True, "error": str(exc)})
+            return
+
         if parsed.path != "/message":
             self.send_error(404)
             return
@@ -257,6 +271,14 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(202)
         self.send_header("Content-Length", "0")
         self.end_headers()
+
+    def write_json(self, payload):
+        data = json.dumps(payload, ensure_ascii=False).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
 
     def write_event(self, event, data):
         self.wfile.write(f"event: {event}\n".encode())

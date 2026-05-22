@@ -1,0 +1,15 @@
+{
+  "_source": "upstream://opentelemetry/opentelemetry-logs",
+  "source_url": "https://github.com/open-telemetry/opentelemetry.io/blob/main/content/en/docs/concepts/signals/logs.md",
+  "fetch_url": "https://raw.githubusercontent.com/open-telemetry/opentelemetry.io/main/content/en/docs/concepts/signals/logs.md",
+  "license": "CC-BY-4.0",
+  "provider": "opentelemetry",
+  "title": "OpenTelemetry Logs",
+  "tags": [
+    "opentelemetry",
+    "logs",
+    "observability"
+  ],
+  "fetched_at": "2026-05-22T06:34:49+00:00",
+  "instance_type": "upstream_ops_doc"
+}

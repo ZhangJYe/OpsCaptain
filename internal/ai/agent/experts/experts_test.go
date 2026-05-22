@@ -234,6 +234,26 @@ func TestParseToolOutput_HasSuccess(t *testing.T) {
 	}
 }
 
+func TestIsEmptyRetrievalOutput(t *testing.T) {
+	tests := []struct {
+		name   string
+		output string
+		empty  bool
+	}{
+		{name: "empty array", output: "[]", empty: true},
+		{name: "empty content array", output: `{"content":[],"isError":false}`, empty: true},
+		{name: "empty data array", output: `{"success":true,"data":[]}`, empty: true},
+		{name: "non empty array", output: `[{"content":"SOP"}]`, empty: false},
+		{name: "plain text", output: "SOP-PAY-001", empty: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.empty, isEmptyRetrievalOutput(tt.output))
+		})
+	}
+}
+
 func TestRedactSecrets(t *testing.T) {
 	tests := []struct {
 		name     string

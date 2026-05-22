@@ -97,6 +97,21 @@ services:
       start_period: 20s
       retries: 5
 
+  knowledge-indexer:
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE is required}
+    profiles:
+      - knowledge-indexer
+    restart: "no"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - .env.production
+    volumes:
+      - ./config.prod.yaml:/app/manifest/config/config.yaml:ro
+      - ./knowledge_seed:/app/knowledge_seed:ro
+    entrypoint: ["./knowledge-indexer"]
+    command: ["-dir", "/app/knowledge_seed", "-collection", "opscaption_knowledge_v2", "-verify-query", "部署回滚"]
+
   frontend:
     image: ${FRONTEND_IMAGE:?FRONTEND_IMAGE is required}
     restart: unless-stopped

@@ -22,9 +22,12 @@ const dependencyCheckTimeout = 3 * time.Second
 var errCheckSkipped = errors.New("check skipped")
 
 type CheckStatus struct {
-	Ready   bool   `json:"ready"`
-	Error   string `json:"error,omitempty"`
-	Skipped bool   `json:"skipped,omitempty"`
+	Ready      bool   `json:"ready"`
+	Error      string `json:"error,omitempty"`
+	Skipped    bool   `json:"skipped,omitempty"`
+	Collection string `json:"collection,omitempty"`
+	SchemaOK   *bool  `json:"schema_ok,omitempty"`
+	DocCount   *int64 `json:"doc_count,omitempty"`
 }
 
 type ReadinessReport struct {
@@ -33,9 +36,10 @@ type ReadinessReport struct {
 }
 
 var (
-	redisReadyCheck    = defaultRedisReadyCheck
-	milvusReadyCheck   = defaultMilvusReadyCheck
-	rabbitMQReadyCheck = defaultRabbitMQReadyCheck
+	redisReadyCheck     = defaultRedisReadyCheck
+	milvusReadyCheck    = defaultMilvusReadyCheck
+	rabbitMQReadyCheck  = defaultRabbitMQReadyCheck
+	knowledgeReadyCheck = defaultKnowledgeReadyCheck
 )
 
 func BuildReadinessReport(ctx context.Context, shuttingDown bool) (ReadinessReport, int) {
@@ -72,6 +76,7 @@ func BuildReadinessReport(ctx context.Context, shuttingDown bool) (ReadinessRepo
 			}
 		}
 	}
+	checks["knowledge"] = knowledgeReadyCheck(ctx)
 
 	status := http.StatusOK
 	if !ready {
@@ -81,6 +86,31 @@ func BuildReadinessReport(ctx context.Context, shuttingDown bool) (ReadinessRepo
 		Ready:  ready,
 		Checks: checks,
 	}, status
+}
+
+func defaultKnowledgeReadyCheck(parent context.Context) CheckStatus {
+	addr, ok := milvusAddress(parent)
+	if !ok {
+		return CheckStatus{Ready: true, Skipped: true}
+	}
+	_ = addr
+
+	ctx, cancel := context.WithTimeout(parent, dependencyCheckTimeout)
+	defer cancel()
+
+	report, err := client.InspectMilvusCollection(ctx)
+	schemaOK := report.SchemaOK
+	docCount := report.DocCount
+	status := CheckStatus{
+		Ready:      true,
+		Collection: report.Collection,
+		SchemaOK:   &schemaOK,
+		DocCount:   &docCount,
+	}
+	if err != nil {
+		status.Error = err.Error()
+	}
+	return status
 }
 
 func CloseResources(ctx context.Context) error {

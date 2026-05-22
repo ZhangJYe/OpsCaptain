@@ -22,8 +22,8 @@ type safeRetriever struct {
 func (s *safeRetriever) Retrieve(ctx context.Context, query string, opts ...retriever.Option) ([]*schema.Document, error) {
 	docs, err := s.inner.Retrieve(ctx, query, opts...)
 	if err != nil && strings.Contains(err.Error(), "extra output fields") && strings.Contains(err.Error(), "does not dynamic field") {
-		g.Log().Debugf(ctx, "milvus retriever returned empty-collection error, treating as empty result: %v", err)
-		return nil, nil
+		g.Log().Warningf(ctx, "milvus retriever schema mismatch: %v", err)
+		return nil, fmt.Errorf("milvus collection schema mismatch: %w", err)
 	}
 	return docs, err
 }

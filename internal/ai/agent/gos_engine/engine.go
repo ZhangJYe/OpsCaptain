@@ -3,9 +3,12 @@ package gos_engine
 import (
 	"context"
 	"fmt"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/sync/errgroup"
 
 	"SuperBizAgent/internal/ai/agent/experts"
 	"SuperBizAgent/internal/ai/belief"
@@ -142,9 +145,9 @@ func (e *GoSEngine) Run(ctx context.Context, symptom string) *protocol.TaskResul
 
 		decision := fsm.Decide(graph)
 		e.emit(ctx, "fsm_decision", fmt.Sprintf("FSM 决策: %s", decision.Action), map[string]any{
-			"action":     decision.Action,
-			"reason":     decision.Reason,
-			"fsm_level":  fsm.GetCurrentLevel(),
+			"action":      decision.Action,
+			"reason":      decision.Reason,
+			"fsm_level":   fsm.GetCurrentLevel(),
 			"total_steps": fsm.TotalSteps,
 		})
 
@@ -186,37 +189,52 @@ func (e *GoSEngine) plan(ctx context.Context, frontier *belief.Frontier) ([]Plan
 }
 
 func (e *GoSEngine) act(ctx context.Context, plan []PlanItem, frontier *belief.Frontier, graph *belief.BeliefGraph, stats *RunStats) (*ActResult, error) {
-	result := &ActResult{
-		Analyses: make([]*experts.ExpertAnalysis, 0, len(plan)),
+	analyses := make([]*experts.ExpertAnalysis, len(plan))
+	var mu sync.Mutex
+
+	g, gCtx := errgroup.WithContext(ctx)
+	g.SetLimit(3)
+
+	for i, item := range plan {
+		i, item := i, item
+		g.Go(func() error {
+			agent, exists := e.experts[item.ExpertName]
+			if !exists {
+				analyses[i] = &experts.ExpertAnalysis{
+					ExpertName:        item.ExpertName,
+					Status:            "failed",
+					DegradationReason: "expert_not_found",
+				}
+				return nil
+			}
+
+			analysis := agent.Run(gCtx, frontier, graph)
+			if analysis == nil {
+				analysis = &experts.ExpertAnalysis{
+					ExpertName:        item.ExpertName,
+					Status:            "failed",
+					DegradationReason: "expert_nil_result",
+				}
+			}
+			analyses[i] = analysis
+
+			mu.Lock()
+			stats.LLMCalls += analysis.LLMCalls
+			stats.ToolCalls += analysis.ToolCalls
+			stats.RAGCalls += analysis.RAGCalls
+			mu.Unlock()
+
+			return nil
+		})
 	}
 
-	for _, item := range plan {
-		agent, exists := e.experts[item.ExpertName]
-		if !exists {
-			result.Analyses = append(result.Analyses, &experts.ExpertAnalysis{
-				ExpertName:        item.ExpertName,
-				Status:            "failed",
-				DegradationReason: "expert_not_found",
-			})
-			result.FailedCount++
-			continue
-		}
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
 
-		analysis := agent.Run(ctx, frontier, graph)
-		if analysis == nil {
-			analysis = &experts.ExpertAnalysis{
-				ExpertName:        item.ExpertName,
-				Status:            "failed",
-				DegradationReason: "expert_nil_result",
-			}
-		}
-
-		result.Analyses = append(result.Analyses, analysis)
-		stats.LLMCalls += analysis.LLMCalls
-		stats.ToolCalls += analysis.ToolCalls
-		stats.RAGCalls += analysis.RAGCalls
-
-		switch analysis.Status {
+	result := &ActResult{Analyses: analyses}
+	for _, a := range analyses {
+		switch a.Status {
 		case "degraded":
 			result.DegradedCount++
 		case "failed":
@@ -288,12 +306,14 @@ func (e *GoSEngine) degradedResult(graph *belief.BeliefGraph, fsm *belief.Belief
 			e.updateGraph(context.Background(), graph, actRes.Analyses, f)
 		}
 	}
+	summary, confidence := e.degradedSummary(reason, err, actRes)
 
 	return &protocol.TaskResult{
 		TaskID:            uuid.NewString(),
 		Agent:             "gos_engine",
 		Status:            protocol.ResultStatusDegraded,
-		Summary:           "诊断降级",
+		Summary:           summary,
+		Confidence:        confidence,
 		DegradationReason: fmt.Sprintf("%s: %v", reason, err),
 		Evidence:          e.collectEvidence(graph),
 		Metadata: map[string]any{
@@ -308,6 +328,72 @@ func (e *GoSEngine) degradedResult(graph *belief.BeliefGraph, fsm *belief.Belief
 		StartedAt:  startedAt.UnixMilli(),
 		FinishedAt: time.Now().UnixMilli(),
 	}
+}
+
+func (e *GoSEngine) degradedSummary(reason string, err error, actRes *ActResult) (string, float64) {
+	var gaps []string
+	if actRes != nil {
+		for _, analysis := range actRes.Analyses {
+			if analysis == nil {
+				continue
+			}
+			text := strings.TrimSpace(analysis.Analysis)
+			if text != "" && !isWeakDegradedText(text) {
+				return text, analysis.Confidence
+			}
+			for _, toolErr := range analysis.ToolErrors {
+				item := strings.TrimSpace(fmt.Sprintf("%s %s: %s", toolErr.ToolName, toolErr.Action, toolErr.Error))
+				if item != "" {
+					gaps = append(gaps, item)
+				}
+			}
+		}
+	}
+	if len(gaps) == 0 {
+		gaps = append(gaps, fmt.Sprintf("%s: %v", reason, err))
+	}
+	var b strings.Builder
+	b.WriteString("GoS 未获得足够可用证据，无法形成可信根因。\n\n")
+	b.WriteString("缺少或不可用的证据：\n")
+	for _, gap := range compactStrings(gaps, 4) {
+		b.WriteString("- ")
+		b.WriteString(gap)
+		b.WriteString("\n")
+	}
+	b.WriteString("\n下一步建议：\n")
+	b.WriteString("- 补充服务名、告警时间窗、关键日志片段和指标快照。\n")
+	b.WriteString("- 确认知识库 collection 已导入 runbook/历史案例，并检查 Milvus schema 与文档数。\n")
+	b.WriteString("- 确认日志 MCP `/healthz` 和 `/tools/query_logs` 可用后重试。")
+	return b.String(), 0
+}
+
+func isWeakDegradedText(text string) bool {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return true
+	}
+	switch trimmed {
+	case "信息不足，无法完成分析", "诊断降级":
+		return true
+	}
+	return len([]rune(trimmed)) < 8
+}
+
+func compactStrings(items []string, limit int) []string {
+	out := make([]string, 0, limit)
+	seen := make(map[string]bool)
+	for _, item := range items {
+		cleaned := strings.Join(strings.Fields(strings.TrimSpace(item)), " ")
+		if cleaned == "" || seen[cleaned] {
+			continue
+		}
+		out = append(out, cleaned)
+		seen[cleaned] = true
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out
 }
 
 func (e *GoSEngine) generateReport(ctx context.Context, graph *belief.BeliefGraph, fsm *belief.BeliefFSM, startedAt time.Time, stats *RunStats) *protocol.TaskResult {
@@ -368,6 +454,9 @@ func (e *GoSEngine) collectEvidence(graph *belief.BeliefGraph) []protocol.Eviden
 	var evidence []protocol.EvidenceItem
 	for _, n := range graph.GetActiveNodeCopies() {
 		if n.Type == belief.NodeEvidence {
+			if n.Source == nil {
+				continue
+			}
 			item := protocol.EvidenceItem{
 				SourceType: "graph",
 				Title:      n.Label,

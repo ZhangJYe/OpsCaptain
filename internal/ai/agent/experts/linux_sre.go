@@ -181,6 +181,16 @@ func (e *BaseExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *
 				result.DegradationReason = fmt.Sprintf("tool %s success=false", toolName)
 				continue
 			}
+			if isEmptyRetrievalOutput(output) {
+				result.ToolErrors = append(result.ToolErrors, ToolError{
+					ToolName: toolName,
+					Action:   "execute",
+					Error:    "no documents found",
+				})
+				result.Status = "degraded"
+				result.DegradationReason = fmt.Sprintf("tool %s returned no documents", toolName)
+				continue
+			}
 
 			sanitizedOutput := redactSecrets(output)
 			history = append(history, RetrievalRecord{Query: content, Output: sanitizedOutput, Tool: toolName})
@@ -464,6 +474,42 @@ func parseToolOutput(output string) ToolOutput {
 	}
 
 	return toolOutput
+}
+
+func isEmptyRetrievalOutput(output string) bool {
+	s := strings.TrimSpace(output)
+	if s == "" || s == "[]" || s == "null" {
+		return true
+	}
+
+	var arr []interface{}
+	if err := json.Unmarshal([]byte(s), &arr); err == nil {
+		return len(arr) == 0
+	}
+
+	var obj map[string]interface{}
+	if err := json.Unmarshal([]byte(s), &obj); err != nil {
+		return false
+	}
+
+	for _, key := range []string{"data", "content"} {
+		value, ok := obj[key]
+		if !ok {
+			continue
+		}
+		switch v := value.(type) {
+		case []interface{}:
+			if len(v) == 0 {
+				return true
+			}
+		case string:
+			if strings.TrimSpace(v) == "" || strings.TrimSpace(v) == "[]" {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 var secretPatterns = []*regexp.Regexp{

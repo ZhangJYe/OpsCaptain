@@ -1,0 +1,137 @@
+[
+  {
+    "slug": "kubernetes-debug-running-pod",
+    "provider": "kubernetes",
+    "title": "Kubernetes Debug Running Pods",
+    "url": "https://raw.githubusercontent.com/kubernetes/website/main/content/en/docs/tasks/debug/debug-application/debug-running-pod.md",
+    "source_url": "https://github.com/kubernetes/website/blob/main/content/en/docs/tasks/debug/debug-application/debug-running-pod.md",
+    "license": "CC-BY-4.0",
+    "tags": ["kubernetes", "pod", "debug", "troubleshooting"]
+  },
+  {
+    "slug": "kubernetes-resource-metrics-pipeline",
+    "provider": "kubernetes",
+    "title": "Kubernetes Resource Metrics Pipeline",
+    "url": "https://raw.githubusercontent.com/kubernetes/website/main/content/en/docs/tasks/debug/debug-cluster/resource-metrics-pipeline.md",
+    "source_url": "https://github.com/kubernetes/website/blob/main/content/en/docs/tasks/debug/debug-cluster/resource-metrics-pipeline.md",
+    "license": "CC-BY-4.0",
+    "tags": ["kubernetes", "metrics", "debug", "resource"]
+  },
+  {
+    "slug": "kubernetes-deployment",
+    "provider": "kubernetes",
+    "title": "Kubernetes Deployments",
+    "url": "https://raw.githubusercontent.com/kubernetes/website/main/content/en/docs/concepts/workloads/controllers/deployment.md",
+    "source_url": "https://github.com/kubernetes/website/blob/main/content/en/docs/concepts/workloads/controllers/deployment.md",
+    "license": "CC-BY-4.0",
+    "tags": ["kubernetes", "deployment", "rollout", "rollback"]
+  },
+  {
+    "slug": "prometheus-alerting-practices",
+    "provider": "prometheus",
+    "title": "Prometheus Alerting Practices",
+    "url": "https://raw.githubusercontent.com/prometheus/docs/main/docs/practices/alerting.md",
+    "source_url": "https://github.com/prometheus/docs/blob/main/docs/practices/alerting.md",
+    "license": "Apache-2.0",
+    "tags": ["prometheus", "alerting", "sre", "monitoring"]
+  },
+  {
+    "slug": "prometheus-recording-rules",
+    "provider": "prometheus",
+    "title": "Prometheus Recording Rules",
+    "url": "https://raw.githubusercontent.com/prometheus/docs/main/docs/practices/rules.md",
+    "source_url": "https://github.com/prometheus/docs/blob/main/docs/practices/rules.md",
+    "license": "Apache-2.0",
+    "tags": ["prometheus", "rules", "recording", "alerting"]
+  },
+  {
+    "slug": "prometheus-query-log",
+    "provider": "prometheus",
+    "title": "Prometheus Query Log",
+    "url": "https://raw.githubusercontent.com/prometheus/docs/main/docs/guides/query-log.md",
+    "source_url": "https://github.com/prometheus/docs/blob/main/docs/guides/query-log.md",
+    "license": "Apache-2.0",
+    "tags": ["prometheus", "query-log", "debug", "performance"]
+  },
+  {
+    "slug": "opentelemetry-logs",
+    "provider": "opentelemetry",
+    "title": "OpenTelemetry Logs",
+    "url": "https://raw.githubusercontent.com/open-telemetry/opentelemetry.io/main/content/en/docs/concepts/signals/logs.md",
+    "source_url": "https://github.com/open-telemetry/opentelemetry.io/blob/main/content/en/docs/concepts/signals/logs.md",
+    "license": "CC-BY-4.0",
+    "tags": ["opentelemetry", "logs", "observability"]
+  },
+  {
+    "slug": "opentelemetry-metrics",
+    "provider": "opentelemetry",
+    "title": "OpenTelemetry Metrics",
+    "url": "https://raw.githubusercontent.com/open-telemetry/opentelemetry.io/main/content/en/docs/concepts/signals/metrics.md",
+    "source_url": "https://github.com/open-telemetry/opentelemetry.io/blob/main/content/en/docs/concepts/signals/metrics.md",
+    "license": "CC-BY-4.0",
+    "tags": ["opentelemetry", "metrics", "observability"]
+  },
+  {
+    "slug": "opentelemetry-traces",
+    "provider": "opentelemetry",
+    "title": "OpenTelemetry Traces",
+    "url": "https://raw.githubusercontent.com/open-telemetry/opentelemetry.io/main/content/en/docs/concepts/signals/traces.md",
+    "source_url": "https://github.com/open-telemetry/opentelemetry.io/blob/main/content/en/docs/concepts/signals/traces.md",
+    "license": "CC-BY-4.0",
+    "tags": ["opentelemetry", "traces", "observability"]
+  },
+  {
+    "slug": "helm-rollback",
+    "provider": "helm",
+    "title": "Helm Rollback",
+    "url": "https://raw.githubusercontent.com/helm/helm-www/main/docs/helm/helm_rollback.md",
+    "source_url": "https://github.com/helm/helm-www/blob/main/docs/helm/helm_rollback.md",
+    "license": "Apache-2.0",
+    "tags": ["helm", "rollback", "release"]
+  },
+  {
+    "slug": "helm-history",
+    "provider": "helm",
+    "title": "Helm History",
+    "url": "https://raw.githubusercontent.com/helm/helm-www/main/docs/helm/helm_history.md",
+    "source_url": "https://github.com/helm/helm-www/blob/main/docs/helm/helm_history.md",
+    "license": "Apache-2.0",
+    "tags": ["helm", "history", "release"]
+  },
+  {
+    "slug": "argocd-sync-options",
+    "provider": "argocd",
+    "title": "Argo CD Sync Options",
+    "url": "https://raw.githubusercontent.com/argoproj/argo-cd/master/docs/user-guide/sync-options.md",
+    "source_url": "https://github.com/argoproj/argo-cd/blob/master/docs/user-guide/sync-options.md",
+    "license": "Apache-2.0",
+    "tags": ["argocd", "sync", "gitops"]
+  },
+  {
+    "slug": "argocd-auto-sync",
+    "provider": "argocd",
+    "title": "Argo CD Automated Sync",
+    "url": "https://raw.githubusercontent.com/argoproj/argo-cd/master/docs/user-guide/auto_sync.md",
+    "source_url": "https://github.com/argoproj/argo-cd/blob/master/docs/user-guide/auto_sync.md",
+    "license": "Apache-2.0",
+    "tags": ["argocd", "auto-sync", "gitops"]
+  },
+  {
+    "slug": "etcd-recovery",
+    "provider": "etcd",
+    "title": "etcd Disaster Recovery",
+    "url": "https://raw.githubusercontent.com/etcd-io/website/main/content/en/docs/v3.5/op-guide/recovery.md",
+    "source_url": "https://github.com/etcd-io/website/blob/main/content/en/docs/v3.5/op-guide/recovery.md",
+    "license": "Apache-2.0",
+    "tags": ["etcd", "recovery", "backup", "restore"]
+  },
+  {
+    "slug": "etcd-monitoring",
+    "provider": "etcd",
+    "title": "etcd Monitoring",
+    "url": "https://raw.githubusercontent.com/etcd-io/website/main/content/en/docs/v3.5/op-guide/monitoring.md",
+    "source_url": "https://github.com/etcd-io/website/blob/main/content/en/docs/v3.5/op-guide/monitoring.md",
+    "license": "Apache-2.0",
+    "tags": ["etcd", "monitoring", "metrics"]
+  }
+]

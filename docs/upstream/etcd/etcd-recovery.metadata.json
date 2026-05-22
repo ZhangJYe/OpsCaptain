@@ -1,0 +1,16 @@
+{
+  "_source": "upstream://etcd/etcd-recovery",
+  "source_url": "https://github.com/etcd-io/website/blob/main/content/en/docs/v3.5/op-guide/recovery.md",
+  "fetch_url": "https://raw.githubusercontent.com/etcd-io/website/main/content/en/docs/v3.5/op-guide/recovery.md",
+  "license": "Apache-2.0",
+  "provider": "etcd",
+  "title": "etcd Disaster Recovery",
+  "tags": [
+    "etcd",
+    "recovery",
+    "backup",
+    "restore"
+  ],
+  "fetched_at": "2026-05-22T06:34:49+00:00",
+  "instance_type": "upstream_ops_doc"
+}
