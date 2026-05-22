@@ -85,6 +85,12 @@ func (a *aiOpsPlanAgent) Handle(ctx context.Context, task *protocol.TaskEnvelope
 		}
 	}
 
+	if rt, ok := runtime.FromContext(ctx); ok && task != nil {
+		ctx = plan_execute_replan.WithStageEmitter(ctx, func(emitCtx context.Context, message string, payload map[string]any) {
+			rt.EmitInfo(emitCtx, task, a.Name(), message, payload)
+		})
+	}
+
 	content, planDetail, err := buildPlanAgent(ctx, query)
 	if rt, ok := runtime.FromContext(ctx); ok && task != nil {
 		for _, step := range planDetail {
@@ -92,7 +98,7 @@ func (a *aiOpsPlanAgent) Handle(ctx context.Context, task *protocol.TaskEnvelope
 			if step == "" {
 				continue
 			}
-			rt.EmitInfo(ctx, task, a.Name(), step, nil)
+			rt.EmitInfo(ctx, task, a.Name(), step, map[string]any{"plan_detail": true})
 		}
 	}
 	if err != nil {

@@ -12,9 +12,21 @@ import (
 	"github.com/gogf/gf/v2/frame/g"
 )
 
+type StageEmitter func(context.Context, string, map[string]any)
+
+type stageEmitterContextKey struct{}
+
+func WithStageEmitter(ctx context.Context, emit StageEmitter) context.Context {
+	if ctx == nil || emit == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, stageEmitterContextKey{}, emit)
+}
+
 func BuildPlanAgent(ctx context.Context, query string) (string, []string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
+	emitPlanStage(ctx, "planning", "正在制定排障计划", nil)
 
 	planAgent, err := NewPlanner(ctx)
 	if err != nil {
@@ -59,6 +71,7 @@ func BuildPlanAgent(ctx context.Context, query string) (string, []string, error)
 		g.Log().Debugf(ctx, "[AIOps] step: %s", msg.String())
 		if item := planDetailMessage(msg); item != "" {
 			detail = append(detail, item)
+			emitPlanMessageStage(ctx, msg)
 		}
 
 		if analysis := analysisMessageContent(msg); analysis != "" {
@@ -68,11 +81,54 @@ func BuildPlanAgent(ctx context.Context, query string) (string, []string, error)
 
 	if lastAnalysis == "" {
 		if fallback := fallbackAnalysisFromDetails(detail); fallback != "" {
+			emitPlanStage(ctx, "report_degraded", "Plan 已生成降级诊断报告", nil)
 			return fallback, detail, fmt.Errorf("no analysis conclusion found in event stream")
 		}
+		emitPlanStage(ctx, "report_failed", "Plan 未生成诊断结论", nil)
 		return "", detail, fmt.Errorf("no analysis conclusion found in event stream")
 	}
 	return lastAnalysis, detail, nil
+}
+
+func emitPlanMessageStage(ctx context.Context, msg adk.Message) {
+	stage, message, payload := planStageEvent(msg)
+	if stage == "" || message == "" {
+		return
+	}
+	emitPlanStage(ctx, stage, message, payload)
+}
+
+func emitPlanStage(ctx context.Context, stage, message string, payload map[string]any) {
+	emit, ok := ctx.Value(stageEmitterContextKey{}).(StageEmitter)
+	if !ok || emit == nil || strings.TrimSpace(stage) == "" || strings.TrimSpace(message) == "" {
+		return
+	}
+	nextPayload := make(map[string]any, len(payload)+1)
+	for key, value := range payload {
+		nextPayload[key] = value
+	}
+	nextPayload["stage"] = strings.TrimSpace(stage)
+	emit(ctx, strings.TrimSpace(message), nextPayload)
+}
+
+func planStageEvent(msg adk.Message) (string, string, map[string]any) {
+	if isPlanJSON(msg.Content) {
+		count := planStepCount(msg.Content)
+		if count > 0 {
+			return "plan_ready", fmt.Sprintf("已生成 %d 个排障步骤", count), map[string]any{"step_count": count}
+		}
+		return "plan_ready", "已生成排障步骤", nil
+	}
+	if analysisMessageContent(msg) != "" {
+		return "report_ready", "诊断报告已生成", nil
+	}
+	if len(msg.ToolCalls) > 0 {
+		return "evidence_running", "按计划执行证据检查", map[string]any{"tool_count": len(msg.ToolCalls)}
+	}
+	if msg.Role == "tool" {
+		return "evidence_ready", "证据检查已返回", nil
+	}
+	return "", "", nil
 }
 
 func queryWithFinalReportRequirement(query string) string {

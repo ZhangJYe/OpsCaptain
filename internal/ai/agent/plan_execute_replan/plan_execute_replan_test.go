@@ -1,6 +1,7 @@
 package plan_execute_replan
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -125,6 +126,50 @@ func TestPlanDetailMessageSummarizesProtocolPayloads(t *testing.T) {
 		Content: `{"response":"## report\nanalysis complete"}`,
 	}); strings.Contains(got, "analysis complete") {
 		t.Fatalf("expected summarized report event, got %q", got)
+	}
+}
+
+func TestPlanStageEventUsesStructuredStages(t *testing.T) {
+	stage, message, payload := planStageEvent(&einoschema.Message{
+		Role:    einoschema.Assistant,
+		Content: `{"steps":["inspect logs","inspect metrics"]}`,
+	})
+	if stage != "plan_ready" || !strings.Contains(message, "2") || payload["step_count"] != 2 {
+		t.Fatalf("expected ready plan stage, got stage=%q message=%q payload=%v", stage, message, payload)
+	}
+
+	stage, message, _ = planStageEvent(&einoschema.Message{
+		Role:    einoschema.Assistant,
+		Content: `{"response":"## report\nanalysis complete"}`,
+	})
+	if stage != "report_ready" || message == "" {
+		t.Fatalf("expected report stage, got stage=%q message=%q", stage, message)
+	}
+
+	stage, message, _ = planStageEvent(&einoschema.Message{
+		Role:    einoschema.Tool,
+		Content: `{"logs":"timeout"}`,
+	})
+	if stage != "evidence_ready" || message == "" {
+		t.Fatalf("expected evidence stage, got stage=%q message=%q", stage, message)
+	}
+}
+
+func TestEmitPlanStageAddsStagePayload(t *testing.T) {
+	var gotMessage string
+	var gotPayload map[string]any
+	ctx := WithStageEmitter(context.Background(), func(_ context.Context, message string, payload map[string]any) {
+		gotMessage = message
+		gotPayload = payload
+	})
+
+	emitPlanStage(ctx, "planning", " 正在制定排障计划 ", map[string]any{"step_count": 1})
+
+	if gotMessage != "正在制定排障计划" {
+		t.Fatalf("expected trimmed message, got %q", gotMessage)
+	}
+	if gotPayload["stage"] != "planning" || gotPayload["step_count"] != 1 {
+		t.Fatalf("expected stage payload, got %v", gotPayload)
 	}
 }
 
