@@ -3,6 +3,7 @@ package knowledge_index_pipeline
 import (
 	"SuperBizAgent/internal/ai/embedder"
 	"context"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/cloudwego/eino-ext/components/document/transformer/splitter/markdown"
@@ -67,6 +68,7 @@ func (t *twoStageTransformer) Transform(ctx context.Context, docs []*schema.Docu
 	if err != nil {
 		return nil, err
 	}
+	after1 = compactDocuments(after1)
 
 	var small, large []*schema.Document
 	for _, d := range after1 {
@@ -85,9 +87,26 @@ func (t *twoStageTransformer) Transform(ctx context.Context, docs []*schema.Docu
 	if err != nil {
 		return after1, nil
 	}
+	after2 = compactDocuments(after2)
 
 	result := make([]*schema.Document, 0, len(small)+len(after2))
 	result = append(result, small...)
 	result = append(result, after2...)
-	return result, nil
+	return compactDocuments(result), nil
+}
+
+func compactDocuments(docs []*schema.Document) []*schema.Document {
+	result := make([]*schema.Document, 0, len(docs))
+	for _, doc := range docs {
+		if doc == nil {
+			continue
+		}
+		content := strings.TrimSpace(doc.Content)
+		if content == "" {
+			continue
+		}
+		doc.Content = content
+		result = append(result, doc)
+	}
+	return result
 }

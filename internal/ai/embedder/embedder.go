@@ -82,10 +82,14 @@ func (e *doubaoMultimodalEmbedder) EmbedStrings(ctx context.Context, texts []str
 }
 
 func (e *doubaoMultimodalEmbedder) embedText(ctx context.Context, text string) ([]float64, error) {
+	normalized := strings.TrimSpace(text)
+	if normalized == "" {
+		normalized = "."
+	}
 	payload := doubaoMultimodalEmbeddingRequest{
 		Model: e.model,
 		Input: []doubaoMultimodalEmbeddingInput{
-			{Type: "text", Text: text},
+			{Type: "text", Text: normalized},
 		},
 	}
 	body, err := json.Marshal(payload)
