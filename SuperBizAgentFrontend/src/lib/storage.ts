@@ -1,4 +1,4 @@
-import type { ChatMessage, ChatMode } from '../types/chat'
+import type { ChatMessage, ChatMode, WorkMode } from '../types/chat'
 
 const STORAGE_KEY = 'opscaption-chat-history'
 const LEGACY_STORAGE_KEY = 'chatHistories'
@@ -11,6 +11,7 @@ interface StoredSession {
   createdAt: number
   updatedAt: number
   mode?: ChatMode
+  workMode?: WorkMode
   selectedSkillIds?: string[]
 }
 
@@ -36,6 +37,7 @@ export function loadSessions(): StoredSession[] {
       createdAt: parseTimestamp(session.createdAt),
       updatedAt: parseTimestamp(session.updatedAt),
       mode: session.mode === 'stream' ? 'stream' : 'quick',
+      workMode: session.workMode === 'aiops' ? 'aiops' : 'react',
       selectedSkillIds: Array.isArray(session.selectedSkillIds) ? session.selectedSkillIds : [],
     }))
   } catch {
@@ -45,6 +47,7 @@ export function loadSessions(): StoredSession[] {
 
 interface SaveSessionOptions {
   mode?: ChatMode
+  workMode?: WorkMode
   selectedSkillIds?: string[]
 }
 
@@ -59,6 +62,7 @@ export function saveSession(id: string, messages: ChatMessage[], options: SaveSe
     createdAt: idx >= 0 ? sessions[idx].createdAt : Date.now(),
     updatedAt: Date.now(),
     mode: options.mode,
+    workMode: options.workMode,
     selectedSkillIds: Array.isArray(options.selectedSkillIds) ? options.selectedSkillIds : [],
   }
   if (idx >= 0) {

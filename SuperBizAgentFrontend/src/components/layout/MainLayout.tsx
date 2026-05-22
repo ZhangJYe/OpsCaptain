@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { TopBar } from './TopBar'
 import { Sidebar } from '../sidebar/Sidebar'
 import type { ReactNode } from 'react'
-import type { AIOpsEngine, ChatMessage, ChatMode, ChatSession } from '../../types/chat'
+import type { AIOpsEngine, ChatMessage, ChatMode, ChatSession, IncidentSession, WorkMode } from '../../types/chat'
 import { getSiteRecord } from '../../lib/utils'
 
 interface Props {
@@ -13,11 +13,16 @@ interface Props {
   onToggleTheme: () => void
   onNewChat: () => void
   onLoadSession: (s: ChatSession) => void
+  onLoadIncident: (incidentId: string) => void
   chatMode: ChatMode
   onModeChange: (m: ChatMode) => void
+  workMode: WorkMode
+  onWorkModeChange: (mode: WorkMode) => void
   aiOpsEngine: AIOpsEngine
   onAIOpsEngineChange: (engine: AIOpsEngine) => void
   sessionId: string
+  currentIncidentId: string
+  incidents: IncidentSession[]
   messages: ChatMessage[]
   selectedSkillIds: string[]
   onSelectedSkillIdsChange: (ids: string[]) => void
@@ -33,11 +38,16 @@ export function MainLayout({
   onToggleTheme,
   onNewChat,
   onLoadSession,
+  onLoadIncident,
   chatMode,
   onModeChange,
+  workMode,
+  onWorkModeChange,
   aiOpsEngine,
   onAIOpsEngineChange,
   sessionId,
+  currentIncidentId,
+  incidents,
   messages,
   selectedSkillIds,
   onSelectedSkillIdsChange,
@@ -76,10 +86,15 @@ export function MainLayout({
             onClose={onCloseSidebar}
             onNewChat={onNewChat}
             onLoadSession={onLoadSession}
+            onLoadIncident={onLoadIncident}
             currentSessionId={sessionId}
+            currentIncidentId={currentIncidentId}
+            incidents={incidents}
             messages={messages}
             chatMode={chatMode}
             onModeChange={onModeChange}
+            workMode={workMode}
+            onWorkModeChange={onWorkModeChange}
             aiOpsEngine={aiOpsEngine}
             onAIOpsEngineChange={onAIOpsEngineChange}
             selectedSkillIds={selectedSkillIds}
@@ -95,6 +110,7 @@ export function MainLayout({
           onToggleSidebar={onToggleSidebar}
           onToggleTheme={onToggleTheme}
           chatMode={chatMode}
+          workMode={workMode}
           onNewChat={onNewChat}
           isLoading={isLoading}
         />

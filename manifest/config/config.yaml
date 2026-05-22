@@ -213,6 +213,12 @@ retriever:
 
 aiops:
   engine: "plan_execute_replan"
+  incident:
+    enabled: true
+    store_dir: "./var/runtime/incidents"
+    turn_timeout_ms: 120000
+    max_context_turns: 6
+    event_replay_limit: 200
   gos:
     enabled: false
     model_path: "chat_model_fast"

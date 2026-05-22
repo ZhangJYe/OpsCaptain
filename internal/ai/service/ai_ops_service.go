@@ -55,6 +55,24 @@ type aiOpsMemory interface {
 	PersistOutcome(ctx context.Context, sessionID, query, summary string)
 }
 
+type aiOpsIncidentContextKey struct{}
+
+func WithAIOpsIncidentContext(ctx context.Context, contextText string) context.Context {
+	contextText = strings.TrimSpace(contextText)
+	if ctx == nil || contextText == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, aiOpsIncidentContextKey{}, contextText)
+}
+
+func aiOpsIncidentContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	value, _ := ctx.Value(aiOpsIncidentContextKey{}).(string)
+	return strings.TrimSpace(value)
+}
+
 func RunAIOpsMultiAgent(ctx context.Context, query string) (ExecutionResponse, error) {
 	if !aiOpsMultiAgentEnabled(ctx) {
 		return multiAgentDisabledResponse(), nil
@@ -91,6 +109,9 @@ func RunAIOpsMultiAgent(ctx context.Context, query string) (ExecutionResponse, e
 	enrichedQuery := query
 	if strings.TrimSpace(memoryContext) != "" {
 		enrichedQuery = query + "\n\n可参考的历史上下文：\n" + memoryContext
+	}
+	if incidentContext := aiOpsIncidentContext(ctx); incidentContext != "" {
+		enrichedQuery = enrichedQuery + "\n\n当前事故排障会话：\n" + incidentContext
 	}
 
 	if hints := skillFocusCollector.Collect(query); len(hints) > 0 {
@@ -142,7 +163,12 @@ func ListApprovalRequests(ctx context.Context, status string) ([]ApprovalRequest
 }
 
 func RejectQueuedAIOpsRequest(ctx context.Context, requestID, reviewReason string) (*ApprovalRequest, error) {
-	return rejectApprovalRequest(ctx, requestID, reviewerIdentity(ctx), reviewReason)
+	request, err := rejectApprovalRequest(ctx, requestID, reviewerIdentity(ctx), reviewReason)
+	if err != nil {
+		return nil, err
+	}
+	_ = RecordIncidentApprovalRejection(ctx, requestID, reviewReason)
+	return request, nil
 }
 
 func ApproveQueuedAIOpsRequest(ctx context.Context, requestID string) (ExecutionResponse, error) {
@@ -159,6 +185,7 @@ func ApproveQueuedAIOpsRequest(ctx context.Context, requestID string) (Execution
 	if request.UserID != "" {
 		runCtx = context.WithValue(runCtx, consts.CtxKeyUserID, request.UserID)
 	}
+	runCtx = withIncidentApprovalRun(runCtx, requestID)
 
 	response, err := RunAIOpsMultiAgent(runCtx, request.Query)
 	if err != nil {
@@ -171,6 +198,7 @@ func ApproveQueuedAIOpsRequest(ctx context.Context, requestID string) (Execution
 			response.ApprovalStatus = string(ApprovalStatusExecuted)
 		}
 	}
+	_ = RecordIncidentApprovalExecution(runCtx, requestID, response)
 	return response, nil
 }
 

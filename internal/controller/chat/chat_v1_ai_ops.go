@@ -4,8 +4,11 @@ import (
 	"SuperBizAgent/api/chat/v1"
 	"SuperBizAgent/internal/ai/service"
 	"SuperBizAgent/internal/consts"
+	"SuperBizAgent/utility/mem"
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/gogf/gf/v2/util/guid"
 )
@@ -14,8 +17,15 @@ var runAIOpsMultiAgent = service.RunAIOpsMultiAgent
 
 func (c *ControllerV1) AIOps(ctx context.Context, req *v1.AIOpsReq) (res *v1.AIOpsRes, err error) {
 	requestID := guid.S()
+	sessionID := strings.TrimSpace(req.SessionID)
+	if sessionID != "" {
+		if err := mem.ValidateSessionID(sessionID); err != nil {
+			return nil, fmt.Errorf("invalid session ID: %w", err)
+		}
+		ctx = context.WithValue(ctx, consts.CtxKeySessionID, sessionID)
+	}
 	ctx = context.WithValue(ctx, consts.CtxKeyRequestID, requestID)
-	ctx = enrichRequestContext(ctx, "", requestID)
+	ctx = enrichRequestContext(ctx, sessionID, requestID)
 
 	if err := rejectSuspiciousPrompt(ctx, req.Query); err != nil {
 		return nil, err

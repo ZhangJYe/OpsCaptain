@@ -90,9 +90,10 @@ type UploadStatusRes struct {
 }
 
 type AIOpsReq struct {
-	g.Meta `path:"/ai_ops" method:"post" summary:"AI运维"`
-	Query  string `json:"query,omitempty" v:"max-length:8000#自定义分析指令长度不能超过8000"`
-	Engine string `json:"engine,omitempty" v:"in:plan_execute_replan,gos_engine,gos#AIOps引擎不合法"`
+	g.Meta    `path:"/ai_ops" method:"post" summary:"AI运维"`
+	SessionID string `json:"session_id,omitempty" v:"max-length:128#会话ID长度不能超过128"`
+	Query     string `json:"query,omitempty" v:"max-length:8000#自定义分析指令长度不能超过8000"`
+	Engine    string `json:"engine,omitempty" v:"in:plan_execute_replan,gos_engine,gos#AIOps引擎不合法"`
 }
 
 type AIOpsRes struct {
@@ -128,6 +129,85 @@ type AIOpsTraceRes struct {
 	TraceID string            `json:"trace_id"`
 	Detail  []string          `json:"detail"`
 	Events  []AIOpsTraceEvent `json:"events"`
+}
+
+type AIOpsIncidentTurn struct {
+	TurnID            string   `json:"turn_id"`
+	IncidentID        string   `json:"incident_id"`
+	UserQuery         string   `json:"user_query"`
+	TraceID           string   `json:"trace_id,omitempty"`
+	Status            string   `json:"status"`
+	Result            string   `json:"result,omitempty"`
+	Detail            []string `json:"detail,omitempty"`
+	Engine            string   `json:"engine,omitempty"`
+	ApprovalRequestID string   `json:"approval_request_id,omitempty"`
+	ApprovalStatus    string   `json:"approval_status,omitempty"`
+	DegradationReason string   `json:"degradation_reason,omitempty"`
+	CreatedAt         int64    `json:"created_at"`
+	FinishedAt        int64    `json:"finished_at,omitempty"`
+}
+
+type AIOpsIncidentEvent struct {
+	EventID    string         `json:"event_id"`
+	IncidentID string         `json:"incident_id"`
+	TurnID     string         `json:"turn_id,omitempty"`
+	TraceID    string         `json:"trace_id,omitempty"`
+	Type       string         `json:"type"`
+	Agent      string         `json:"agent,omitempty"`
+	Message    string         `json:"message,omitempty"`
+	Payload    map[string]any `json:"payload,omitempty"`
+	CreatedAt  int64          `json:"created_at"`
+}
+
+type AIOpsIncident struct {
+	IncidentID     string               `json:"incident_id"`
+	SessionID      string               `json:"session_id"`
+	Title          string               `json:"title"`
+	Status         string               `json:"status"`
+	EngineStrategy string               `json:"engine_strategy"`
+	LatestSummary  string               `json:"latest_summary,omitempty"`
+	Turns          []AIOpsIncidentTurn  `json:"turns,omitempty"`
+	Events         []AIOpsIncidentEvent `json:"events,omitempty"`
+	CreatedAt      int64                `json:"created_at"`
+	UpdatedAt      int64                `json:"updated_at"`
+}
+
+type AIOpsIncidentCreateReq struct {
+	g.Meta `path:"/ai_ops/incidents" method:"post" summary:"创建事故排障会话"`
+	Query  string `json:"query" v:"required|max-length:8000#事故现象不能为空|事故现象长度不能超过8000"`
+	Engine string `json:"engine,omitempty" v:"in:plan_execute_replan,gos_engine,gos#AIOps引擎不合法"`
+}
+
+type AIOpsIncidentTurnReq struct {
+	g.Meta     `path:"/ai_ops/incidents/{incident_id}/turns" method:"post" summary:"追加事故排障轮次"`
+	IncidentID string `json:"incident_id" v:"required|max-length:128#事故ID不能为空|事故ID长度不能超过128"`
+	Query      string `json:"query" v:"required|max-length:8000#追加现象不能为空|追加现象长度不能超过8000"`
+}
+
+type AIOpsIncidentListReq struct {
+	g.Meta `path:"/ai_ops/incidents" method:"get" summary:"查询事故排障会话"`
+}
+
+type AIOpsIncidentGetReq struct {
+	g.Meta     `path:"/ai_ops/incidents/{incident_id}" method:"get" summary:"恢复事故排障会话"`
+	IncidentID string `json:"incident_id" v:"required|max-length:128#事故ID不能为空|事故ID长度不能超过128"`
+}
+
+type AIOpsIncidentEventsReq struct {
+	g.Meta     `path:"/ai_ops/incidents/{incident_id}/events" method:"get" summary:"订阅事故排障事件"`
+	IncidentID string `json:"incident_id" v:"required|max-length:128#事故ID不能为空|事故ID长度不能超过128"`
+	TurnID     string `json:"turn_id,omitempty" v:"max-length:128#排障轮次ID长度不能超过128"`
+}
+
+type AIOpsIncidentRes struct {
+	Incident AIOpsIncident `json:"incident"`
+}
+
+type AIOpsIncidentListRes struct {
+	Items []AIOpsIncident `json:"items"`
+}
+
+type AIOpsIncidentEventsRes struct {
 }
 
 type TokenAuditReq struct {

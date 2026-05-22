@@ -28,6 +28,10 @@ type Runtime struct {
 	artifacts ArtifactStore
 }
 
+type TaskEventSink func(*protocol.TaskEvent)
+
+type taskEventSinkContextKey struct{}
+
 const defaultAgentDispatchTimeout = 30 * time.Second
 
 func New() *Runtime {
@@ -200,7 +204,20 @@ func (r *Runtime) Dispatch(ctx context.Context, task *protocol.TaskEnvelope) (*p
 }
 
 func (r *Runtime) Publish(ctx context.Context, event *protocol.TaskEvent) error {
-	return r.bus.Publish(ctx, event)
+	if err := r.bus.Publish(ctx, event); err != nil {
+		return err
+	}
+	if sink, ok := ctx.Value(taskEventSinkContextKey{}).(TaskEventSink); ok && sink != nil {
+		sink(event)
+	}
+	return nil
+}
+
+func WithTaskEventSink(ctx context.Context, sink TaskEventSink) context.Context {
+	if ctx == nil || sink == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, taskEventSinkContextKey{}, sink)
 }
 
 func (r *Runtime) EmitInfo(ctx context.Context, task *protocol.TaskEnvelope, agentName, message string, payload map[string]any) {

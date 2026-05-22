@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { GitBranch, Send, Square, Zap, Paperclip, X, Loader2, FileIcon } from 'lucide-react'
-import type { ChatMode } from '../../types/chat'
+import type { AIOpsEngine, ChatMode, WorkMode } from '../../types/chat'
 import { formatSelectedSkillSummary, formatFileSize } from '../../lib/utils'
 import { useFileUpload } from '../../hooks/useFileUpload'
 
@@ -10,6 +10,8 @@ interface Props {
   onStop: () => void
   isLoading: boolean
   mode: ChatMode
+  workMode: WorkMode
+  aiOpsEngine: AIOpsEngine
   selectedSkillIds: string[]
   onModeChange: (m: ChatMode) => void
 }
@@ -25,7 +27,7 @@ function buildQueryWithFiles(query: string, fileNames: string[]): string {
   return `${refs}\n\n${query}`
 }
 
-export function ChatInput({ onSend, onStop, isLoading, mode, selectedSkillIds, onModeChange }: Props) {
+export function ChatInput({ onSend, onStop, isLoading, mode, workMode, aiOpsEngine, selectedSkillIds, onModeChange }: Props) {
   const [input, setInput] = useState('')
   const [isFocused, setIsFocused] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -133,27 +135,34 @@ export function ChatInput({ onSend, onStop, isLoading, mode, selectedSkillIds, o
           <div className="flex items-center justify-between gap-3 border-t border-zinc-100 px-3 py-2.5 dark:border-zinc-800">
             <div className="flex items-center gap-3">
               {/* Mode toggle */}
-              <div className="inline-flex rounded-lg bg-zinc-100 p-0.5 dark:bg-zinc-800">
-                {modeOptions.map((option) => (
-                  <button
-                    key={option.id}
-                    onClick={() => onModeChange(option.id)}
-                    className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-all duration-200 ${
-                      option.id === mode
-                        ? 'bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-white'
-                        : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'
-                    }`}
-                  >
-                    <option.icon size={13} />
-                    <span>{option.label}</span>
-                  </button>
-                ))}
-              </div>
+              {workMode === 'react' ? (
+                <div className="inline-flex rounded-lg bg-zinc-100 p-0.5 dark:bg-zinc-800">
+                  {modeOptions.map((option) => (
+                    <button
+                      key={option.id}
+                      onClick={() => onModeChange(option.id)}
+                      className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-all duration-200 ${
+                        option.id === mode
+                          ? 'bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-white'
+                          : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200'
+                      }`}
+                    >
+                      <option.icon size={13} />
+                      <span>{option.label}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <span className="inline-flex rounded-lg bg-zinc-100 px-2.5 py-1.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+                  AIOps · {aiOpsEngine === 'gos_engine' ? 'GoS' : 'Plan'}
+                </span>
+              )}
 
-              {/* Skill summary */}
-              <span className="hidden text-[11px] text-zinc-400 dark:text-zinc-600 sm:inline truncate max-w-[200px]">
-                {formatSelectedSkillSummary(selectedSkillIds)}
-              </span>
+              {workMode === 'react' && (
+                <span className="hidden text-[11px] text-zinc-400 dark:text-zinc-600 sm:inline truncate max-w-[200px]">
+                  {formatSelectedSkillSummary(selectedSkillIds)}
+                </span>
+              )}
             </div>
 
             <div className="flex items-center gap-2">

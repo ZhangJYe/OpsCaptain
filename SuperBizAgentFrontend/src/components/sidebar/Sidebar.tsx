@@ -4,16 +4,21 @@ import { ModeSelector } from './ModeSelector'
 import { HistoryPanel } from './HistoryPanel'
 import { ObservabilityPanel } from './ObservabilityPanel'
 import { SkillPanel } from './SkillPanel'
-import type { AIOpsEngine, ChatMessage, ChatMode, ChatSession } from '../../types/chat'
+import type { AIOpsEngine, ChatMessage, ChatMode, ChatSession, IncidentSession, WorkMode } from '../../types/chat'
 
 interface Props {
   onClose: () => void
   onNewChat: () => void
   onLoadSession: (s: ChatSession) => void
+  onLoadIncident: (incidentId: string) => void
   currentSessionId: string
+  currentIncidentId: string
+  incidents: IncidentSession[]
   messages: ChatMessage[]
   chatMode: ChatMode
   onModeChange: (m: ChatMode) => void
+  workMode: WorkMode
+  onWorkModeChange: (mode: WorkMode) => void
   aiOpsEngine: AIOpsEngine
   onAIOpsEngineChange: (engine: AIOpsEngine) => void
   selectedSkillIds: string[]
@@ -25,10 +30,15 @@ export function Sidebar({
   onClose,
   onNewChat,
   onLoadSession,
+  onLoadIncident,
   currentSessionId,
+  currentIncidentId,
+  incidents,
   messages,
   chatMode,
   onModeChange,
+  workMode,
+  onWorkModeChange,
   aiOpsEngine,
   onAIOpsEngineChange,
   selectedSkillIds,
@@ -62,14 +72,19 @@ export function Sidebar({
         <ModeSelector
           value={chatMode}
           onChange={onModeChange}
+          workMode={workMode}
+          onWorkModeChange={onWorkModeChange}
           aiOpsEngine={aiOpsEngine}
           onAIOpsEngineChange={onAIOpsEngineChange}
         />
-        <SkillPanel selectedSkillIds={selectedSkillIds} onChange={onSelectedSkillIdsChange} />
+        {workMode === 'react' && <SkillPanel selectedSkillIds={selectedSkillIds} onChange={onSelectedSkillIdsChange} />}
         <ObservabilityPanel />
         <HistoryPanel
           onSelect={onLoadSession}
+          onSelectIncident={onLoadIncident}
           currentSessionId={currentSessionId}
+          currentIncidentId={currentIncidentId}
+          incidents={incidents}
           messageCount={messages.length}
         />
       </div>
@@ -80,10 +95,10 @@ export function Sidebar({
           onClick={onNewChat}
           disabled={isLoading}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent py-2.5 text-sm font-medium text-white shadow-sm shadow-accent/20 transition-all duration-200 hover:brightness-110 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
-          title={isLoading ? '请等待当前请求完成' : '新建会话'}
+          title={isLoading ? '请等待当前请求完成' : workMode === 'aiops' ? '新建事故' : '新建会话'}
         >
           <Plus size={16} />
-          {isLoading ? '请求中...' : '新建会话'}
+          {isLoading ? '请求中...' : workMode === 'aiops' ? '新建事故' : '新建会话'}
         </button>
       </div>
     </div>
