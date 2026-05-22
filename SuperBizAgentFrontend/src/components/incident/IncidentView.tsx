@@ -60,7 +60,7 @@ function dateTime(value?: number): string {
 
 function eventSummary(event: IncidentEvent): string {
   if (event.message) {
-    return event.message
+    return summarizeProtocolMessage(event.message)
   }
   return event.type.replace(/_/g, ' ')
 }
@@ -78,10 +78,45 @@ function eventMeta(event: IncidentEvent): string[] {
 function latestConclusion(incident: IncidentSession): string {
   for (let idx = incident.turns.length - 1; idx >= 0; idx -= 1) {
     if (incident.turns[idx].result?.trim()) {
-      return incident.turns[idx].result || ''
+      return unwrapProtocolContent(incident.turns[idx].result || '')
     }
   }
-  return incident.latest_summary || ''
+  return unwrapProtocolContent(incident.latest_summary || '')
+}
+
+function summarizeProtocolMessage(message: string): string {
+  const payload = parseProtocolPayload(message)
+  if (Array.isArray(payload?.steps) || Array.isArray(payload?.plan)) {
+    const count = Array.isArray(payload.steps) ? payload.steps.length : payload.plan.length
+    return count > 0 ? `Plan 已生成 ${count} 个排障步骤` : 'Plan 已生成排障步骤'
+  }
+  if (typeof payload?.response === 'string' && payload.response.trim()) {
+    return 'Plan 已生成诊断报告'
+  }
+  return message
+}
+
+function unwrapProtocolContent(content: string): string {
+  const payload = parseProtocolPayload(content)
+  for (const key of ['response', 'answer', 'report']) {
+    if (typeof payload?.[key] === 'string' && payload[key].trim()) {
+      return payload[key].trim()
+    }
+  }
+  return content
+}
+
+function parseProtocolPayload(content: string): Record<string, any> | null {
+  const start = content.indexOf('{')
+  if (start < 0) {
+    return null
+  }
+  try {
+    const parsed = JSON.parse(content.slice(start))
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null
+  } catch {
+    return null
+  }
 }
 
 function terminalTone(turn: IncidentTurn): string {

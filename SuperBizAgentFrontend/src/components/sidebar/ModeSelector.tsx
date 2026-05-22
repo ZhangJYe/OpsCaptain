@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Activity, GitBranch, MessageSquare, Network, Route, Zap } from 'lucide-react'
+import { Activity, GitBranch, Lock, MessageSquare, Network, Route, Zap } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { AIOpsEngine, ChatMode, WorkbenchMode } from '../../types/chat'
 import { ENGINE_VIEW_MODEL } from '../../lib/engineViewModel'
@@ -10,6 +10,7 @@ interface Props {
   workbenchMode: WorkbenchMode
   onWorkbenchModeChange: (mode: WorkbenchMode) => void
   aiOpsEngine: AIOpsEngine
+  lockedAIOpsEngine?: string
   onAIOpsEngineChange: (engine: AIOpsEngine) => void
 }
 
@@ -36,8 +37,11 @@ export function ModeSelector({
   workbenchMode,
   onWorkbenchModeChange,
   aiOpsEngine,
+  lockedAIOpsEngine,
   onAIOpsEngineChange,
 }: Props) {
+  const engineLocked = workbenchMode === 'aiops' && Boolean(lockedAIOpsEngine)
+
   return (
     <div className="space-y-3 rounded-xl border border-zinc-200/80 bg-white/80 p-3 backdrop-blur dark:border-zinc-800/60 dark:bg-zinc-900/60">
       <div>
@@ -98,7 +102,15 @@ export function ModeSelector({
 
       {workbenchMode === 'aiops' && (
         <div>
-          <p className="mb-2 text-[11px] font-medium text-zinc-500 dark:text-zinc-500">排障高级设置</p>
+          <div className="mb-2 flex items-center justify-between gap-2 text-[11px] font-medium text-zinc-500 dark:text-zinc-500">
+            <span>排障高级设置</span>
+            {engineLocked && (
+              <span className="inline-flex items-center gap-1 text-zinc-400 dark:text-zinc-600">
+                <Lock size={11} />
+                当前事故已锁定
+              </span>
+            )}
+          </div>
           <div className="grid gap-2">
             {AIOPS_ENGINES.map((engine) => {
               const view = ENGINE_VIEW_MODEL[engine]
@@ -109,8 +121,9 @@ export function ModeSelector({
                 <button
                   key={engine}
                   onClick={() => onAIOpsEngineChange(engine)}
+                  disabled={engineLocked}
                   title={view.trace}
-                  className={`relative overflow-hidden rounded-xl border p-2.5 text-left transition-all duration-200 ${selected ? view.sidebar.selected : view.sidebar.idle}`}
+                  className={`relative overflow-hidden rounded-xl border p-2.5 text-left transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-80 ${selected ? view.sidebar.selected : view.sidebar.idle}`}
                 >
                   {selected && (
                     <motion.div
@@ -151,7 +164,9 @@ export function ModeSelector({
               )
             })}
           </div>
-          <p className="mt-2 text-[10px] text-zinc-400 dark:text-zinc-600">{ENGINE_VIEW_MODEL[aiOpsEngine].trace}</p>
+          <p className="mt-2 text-[10px] text-zinc-400 dark:text-zinc-600">
+            {engineLocked ? `新建事故后可改策略。${ENGINE_VIEW_MODEL[aiOpsEngine].trace}` : ENGINE_VIEW_MODEL[aiOpsEngine].trace}
+          </p>
         </div>
       )}
     </div>

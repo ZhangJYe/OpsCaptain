@@ -83,6 +83,14 @@ func TestIsAnalysisMessage(t *testing.T) {
 			},
 			want: false,
 		},
+		{
+			name: "assistant with JSON response",
+			msg: &einoschema.Message{
+				Role:    einoschema.Assistant,
+				Content: `{"response":"## report\nanalysis complete"}`,
+			},
+			want: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -92,6 +100,31 @@ func TestIsAnalysisMessage(t *testing.T) {
 				t.Errorf("isAnalysisMessage() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestAnalysisMessageContentUnwrapsPlanResponse(t *testing.T) {
+	got := analysisMessageContent(&einoschema.Message{
+		Role:    einoschema.Assistant,
+		Content: `{"response":"## report\nanalysis complete"}`,
+	})
+	if got != "## report\nanalysis complete" {
+		t.Fatalf("expected response body, got %q", got)
+	}
+}
+
+func TestPlanDetailMessageSummarizesProtocolPayloads(t *testing.T) {
+	if got := planDetailMessage(&einoschema.Message{
+		Role:    einoschema.Assistant,
+		Content: `{"steps":["inspect logs","inspect metrics"]}`,
+	}); !strings.Contains(got, "2") || strings.Contains(got, "inspect logs") {
+		t.Fatalf("expected summarized plan steps, got %q", got)
+	}
+	if got := planDetailMessage(&einoschema.Message{
+		Role:    einoschema.Assistant,
+		Content: `{"response":"## report\nanalysis complete"}`,
+	}); strings.Contains(got, "analysis complete") {
+		t.Fatalf("expected summarized report event, got %q", got)
 	}
 }
 

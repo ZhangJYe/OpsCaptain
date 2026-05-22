@@ -22,6 +22,7 @@ interface Props {
   onAIOpsEngineChange: (engine: AIOpsEngine) => void
   sessionId: string
   currentIncidentId: string
+  currentIncidentEngine: string
   incidents: IncidentSession[]
   messages: ChatMessage[]
   selectedSkillIds: string[]
@@ -47,6 +48,7 @@ export function MainLayout({
   onAIOpsEngineChange,
   sessionId,
   currentIncidentId,
+  currentIncidentEngine,
   incidents,
   messages,
   selectedSkillIds,
@@ -94,6 +96,7 @@ export function MainLayout({
                 onLoadIncident={onLoadIncident}
                 currentSessionId={sessionId}
                 currentIncidentId={currentIncidentId}
+                currentIncidentEngine={currentIncidentEngine}
                 incidents={incidents}
                 messages={messages}
                 chatMode={chatMode}

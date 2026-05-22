@@ -46,6 +46,8 @@ export default function App() {
     const raw = localStorage.getItem(PET_ENABLED_KEY)
     return raw !== 'false'
   })
+  const incidentEngine = incidents.incident?.engine_strategy === 'gos_engine' ? 'gos_engine' : 'plan_execute_replan'
+  const displayedAIOpsEngine = incidents.incident && workbenchMode === 'aiops' ? incidentEngine : aiOpsEngine
 
   useEffect(() => {
     try {
@@ -106,10 +108,16 @@ export default function App() {
     [aiOpsEngine, incidents],
   )
 
-  const handleAIOpsEngineChange = useCallback((engine: AIOpsEngine) => {
-    setAIOpsEngine(engine)
-    setWorkbenchMode('aiops')
-  }, [])
+  const handleAIOpsEngineChange = useCallback(
+    (engine: AIOpsEngine) => {
+      if (incidents.incident && workbenchMode === 'aiops') {
+        return
+      }
+      setAIOpsEngine(engine)
+      setWorkbenchMode('aiops')
+    },
+    [incidents.incident, workbenchMode],
+  )
 
   const handleLoadSession = useCallback(
     (session: ChatSession) => {
@@ -153,10 +161,11 @@ export default function App() {
       onModeChange={chat.setMode}
       workbenchMode={workbenchMode}
       onWorkbenchModeChange={setWorkbenchMode}
-      aiOpsEngine={aiOpsEngine}
+      aiOpsEngine={displayedAIOpsEngine}
       onAIOpsEngineChange={handleAIOpsEngineChange}
       sessionId={chat.sessionId}
       currentIncidentId={incidents.incident?.incident_id || ''}
+      currentIncidentEngine={incidents.incident?.engine_strategy || ''}
       incidents={incidents.incidents}
       messages={chat.messages}
       selectedSkillIds={selectedSkillIds}
@@ -168,7 +177,7 @@ export default function App() {
           incident={incidents.incident}
           isLoading={incidents.isLoading}
           error={incidents.error}
-          engine={aiOpsEngine}
+          engine={displayedAIOpsEngine}
           onCreate={handleStartAIOps}
           onAppend={(query) => {
             void incidents.appendTurn(query).catch(() => undefined)

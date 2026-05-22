@@ -13,6 +13,7 @@ interface Props {
   onLoadIncident: (incidentId: string) => void
   currentSessionId: string
   currentIncidentId: string
+  currentIncidentEngine: string
   incidents: IncidentSession[]
   messages: ChatMessage[]
   chatMode: ChatMode
@@ -33,6 +34,7 @@ export function Sidebar({
   onLoadIncident,
   currentSessionId,
   currentIncidentId,
+  currentIncidentEngine,
   incidents,
   messages,
   chatMode,
@@ -75,6 +77,7 @@ export function Sidebar({
           workbenchMode={workbenchMode}
           onWorkbenchModeChange={onWorkbenchModeChange}
           aiOpsEngine={aiOpsEngine}
+          lockedAIOpsEngine={currentIncidentEngine}
           onAIOpsEngineChange={onAIOpsEngineChange}
         />
         {workbenchMode === 'chat' && <SkillPanel selectedSkillIds={selectedSkillIds} onChange={onSelectedSkillIdsChange} />}

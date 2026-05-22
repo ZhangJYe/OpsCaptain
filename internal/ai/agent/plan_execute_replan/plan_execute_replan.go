@@ -2,6 +2,7 @@ package plan_execute_replan
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -56,10 +57,12 @@ func BuildPlanAgent(ctx context.Context, query string) (string, []string, error)
 			continue
 		}
 		g.Log().Debugf(ctx, "[AIOps] step: %s", msg.String())
-		detail = append(detail, msg.String())
+		if item := planDetailMessage(msg); item != "" {
+			detail = append(detail, item)
+		}
 
-		if isAnalysisMessage(msg) {
-			lastAnalysis = msg.Content
+		if analysis := analysisMessageContent(msg); analysis != "" {
+			lastAnalysis = analysis
 		}
 	}
 
@@ -138,19 +141,26 @@ func detailsContain(detail []string, needle string) bool {
 }
 
 func isAnalysisMessage(msg adk.Message) bool {
+	return analysisMessageContent(msg) != ""
+}
+
+func analysisMessageContent(msg adk.Message) string {
 	if msg.Role != "assistant" {
-		return false
+		return ""
 	}
 	if len(msg.Content) < 20 {
-		return false
+		return ""
 	}
 	if len(msg.ToolCalls) > 0 {
-		return false
+		return ""
 	}
 	if isPlanJSON(msg.Content) {
-		return false
+		return ""
 	}
-	return true
+	if response := planResponseContent(msg.Content); response != "" {
+		return response
+	}
+	return strings.TrimSpace(msg.Content)
 }
 
 func isPlanJSON(content string) bool {
@@ -162,4 +172,48 @@ func isPlanJSON(content string) bool {
 		return false
 	}
 	return len(s) > 10 && (strings.Contains(s, `"steps"`) || strings.Contains(s, `"plan"`))
+}
+
+func planDetailMessage(msg adk.Message) string {
+	if msg.Role != "assistant" {
+		return strings.TrimSpace(msg.String())
+	}
+	if isPlanJSON(msg.Content) {
+		if count := planStepCount(msg.Content); count > 0 {
+			return fmt.Sprintf("Plan generated %d troubleshooting steps", count)
+		}
+		return "Plan generated troubleshooting steps"
+	}
+	if analysisMessageContent(msg) != "" {
+		return "Plan generated final diagnostic report"
+	}
+	return strings.TrimSpace(msg.String())
+}
+
+func planResponseContent(content string) string {
+	var payload map[string]json.RawMessage
+	if json.Unmarshal([]byte(strings.TrimSpace(content)), &payload) != nil {
+		return ""
+	}
+	for _, key := range []string{"response", "answer", "report"} {
+		var value string
+		if raw, ok := payload[key]; ok && json.Unmarshal(raw, &value) == nil && strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func planStepCount(content string) int {
+	var payload map[string]json.RawMessage
+	if json.Unmarshal([]byte(strings.TrimSpace(content)), &payload) != nil {
+		return 0
+	}
+	for _, key := range []string{"steps", "plan"} {
+		var values []string
+		if raw, ok := payload[key]; ok && json.Unmarshal(raw, &values) == nil {
+			return len(values)
+		}
+	}
+	return 0
 }
