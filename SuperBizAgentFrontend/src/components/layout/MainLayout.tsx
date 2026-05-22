@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { TopBar } from './TopBar'
 import { Sidebar } from '../sidebar/Sidebar'
 import type { ReactNode } from 'react'
-import type { AIOpsEngine, ChatMessage, ChatMode, ChatSession, WorkbenchMode } from '../../types/chat'
+import type { AIOpsEngine, ChatMessage, ChatMode, ChatSession, IncidentSession, WorkbenchMode } from '../../types/chat'
 import { getSiteRecord } from '../../lib/utils'
 
 interface Props {
@@ -12,14 +12,17 @@ interface Props {
   onCloseSidebar: () => void
   onToggleTheme: () => void
   onNewChat: () => void
-  onLoadSession: (s: ChatSession) => void
+  onLoadSession: (session: ChatSession) => void
+  onLoadIncident: (incidentId: string) => void
   chatMode: ChatMode
-  onModeChange: (m: ChatMode) => void
+  onModeChange: (mode: ChatMode) => void
   workbenchMode: WorkbenchMode
   onWorkbenchModeChange: (mode: WorkbenchMode) => void
   aiOpsEngine: AIOpsEngine
   onAIOpsEngineChange: (engine: AIOpsEngine) => void
   sessionId: string
+  currentIncidentId: string
+  incidents: IncidentSession[]
   messages: ChatMessage[]
   selectedSkillIds: string[]
   onSelectedSkillIdsChange: (ids: string[]) => void
@@ -35,6 +38,7 @@ export function MainLayout({
   onToggleTheme,
   onNewChat,
   onLoadSession,
+  onLoadIncident,
   chatMode,
   onModeChange,
   workbenchMode,
@@ -42,6 +46,8 @@ export function MainLayout({
   aiOpsEngine,
   onAIOpsEngineChange,
   sessionId,
+  currentIncidentId,
+  incidents,
   messages,
   selectedSkillIds,
   onSelectedSkillIdsChange,
@@ -74,11 +80,7 @@ export function MainLayout({
             )}
           </AnimatePresence>
 
-          <div
-            className={`flex-shrink-0 overflow-hidden transition-[width] duration-200 ease-in-out ${
-              sidebarOpen ? 'w-72' : 'w-0'
-            }`}
-          >
+          <div className={`flex-shrink-0 overflow-hidden transition-[width] duration-200 ease-in-out ${sidebarOpen ? 'w-72' : 'w-0'}`}>
             <motion.aside
               className={`fixed bottom-0 left-0 top-0 z-50 w-72 lg:static lg:z-0 lg:h-full ${sidebarOpen ? '' : 'pointer-events-none'}`}
               initial={false}
@@ -89,7 +91,10 @@ export function MainLayout({
                 onClose={onCloseSidebar}
                 onNewChat={onNewChat}
                 onLoadSession={onLoadSession}
+                onLoadIncident={onLoadIncident}
                 currentSessionId={sessionId}
+                currentIncidentId={currentIncidentId}
+                incidents={incidents}
                 messages={messages}
                 chatMode={chatMode}
                 onModeChange={onModeChange}
@@ -118,7 +123,7 @@ export function MainLayout({
             <main className="relative flex-1 overflow-hidden">{children}</main>
             {siteRecord && (
               <footer className="border-t border-white/40 bg-white/30 px-4 py-2.5 text-center text-xs text-zinc-400 backdrop-blur-sm dark:border-white/5 dark:bg-slate-900/30 dark:text-zinc-600">
-                <span className="mr-1">ICP备案号：</span>
+                <span className="mr-1">ICP备案号:</span>
                 <a
                   className="font-medium text-zinc-500 transition-colors hover:text-sky-500 dark:text-zinc-500 dark:hover:text-sky-400"
                   href={siteRecord.icpLink}

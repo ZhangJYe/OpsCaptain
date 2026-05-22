@@ -24,6 +24,7 @@ interface QuickAnswerRequest {
 
 interface AIOpsRequest {
   baseUrl: string;
+  sessionId: string;
   query: string;
   engine: AIOpsEngine;
 }
@@ -128,11 +129,12 @@ async function requestQuickAnswer({
   return extractAnswer(payload);
 }
 
-async function requestAIOps({ baseUrl, query, engine }: AIOpsRequest): Promise<AIOpsPayload> {
+async function requestAIOps({ baseUrl, sessionId, query, engine }: AIOpsRequest): Promise<AIOpsPayload> {
   const res = await fetch(`${baseUrl}/ai_ops`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      session_id: sessionId,
       query,
       engine,
     }),
@@ -1259,7 +1261,7 @@ export function useChat() {
         setStreamingThoughts([]);
       }
     },
-    [isLoading, mode],
+    [isLoading, mode, sessionId],
   );
 
   const stop = useCallback(() => {

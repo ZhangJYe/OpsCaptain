@@ -11,7 +11,7 @@ import { ThinkingCollapse } from '../agent/ThinkingCollapse'
 import type { ThinkingStep } from '../agent/ThinkingCollapse'
 import { SuggestionChips } from '../agent/SuggestionChips'
 import type { Suggestion } from '../agent/SuggestionChips'
-import type { ChatMessage, ChatMode } from '../../types/chat'
+import type { AIOpsEngine, ChatMessage, ChatMode, WorkMode } from '../../types/chat'
 import { findSkillsByIds, formatSelectedSkillSummary } from '../../lib/utils'
 import { isGoSEngine } from '../../hooks/useChat'
 
@@ -32,6 +32,8 @@ interface Props {
   isLoading: boolean
   loadingEngine?: string | null
   mode: ChatMode
+  workMode: WorkMode
+  aiOpsEngine: AIOpsEngine
   selectedSkillIds: string[]
   petEnabled: boolean
   onSend: (query: string) => void
@@ -50,6 +52,8 @@ export function ChatView({
   isLoading,
   loadingEngine,
   mode,
+  workMode,
+  aiOpsEngine,
   selectedSkillIds,
   petEnabled,
   onSend,
@@ -80,10 +84,10 @@ export function ChatView({
       <div className="shrink-0 border-b border-zinc-200/80 bg-white/70 px-4 py-2 backdrop-blur-xl dark:border-zinc-900/80 dark:bg-zinc-950/40">
         <div className="mx-auto flex max-w-4xl items-center gap-3 text-xs text-zinc-500 dark:text-zinc-500">
           <span className="inline-flex items-center gap-1.5">
-            {mode === 'quick' ? <Activity size={12} className="text-accent" /> : <Waves size={12} className="text-accent" />}
-            {mode === 'quick' ? '快速回答' : '流式输出'}
+            {workMode === 'aiops' ? <Activity size={12} className="text-accent" /> : mode === 'quick' ? <Activity size={12} className="text-accent" /> : <Waves size={12} className="text-accent" />}
+            {workMode === 'aiops' ? `AIOps 排障 · ${aiOpsEngine === 'gos_engine' ? 'GoS' : 'Plan'}` : mode === 'quick' ? '快速回答' : '流式输出'}
           </span>
-          {selectedSkills.length > 0 ? (
+          {workMode === 'react' && selectedSkills.length > 0 ? (
             <>
               <span className="text-zinc-300 dark:text-zinc-700">·</span>
               <span>{selectedSkills.length} 项能力</span>
@@ -91,12 +95,12 @@ export function ChatView({
                 {selectedSkills.map(s => s.label).join('、')}
               </span>
             </>
-          ) : (
+          ) : workMode === 'react' ? (
             <>
               <span className="text-zinc-300 dark:text-zinc-700">·</span>
               <span>{formatSelectedSkillSummary(selectedSkillIds)}</span>
             </>
-          )}
+          ) : null}
           <button
             type="button"
             onClick={onTogglePet}

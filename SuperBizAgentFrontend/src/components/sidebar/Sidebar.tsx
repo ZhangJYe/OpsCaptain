@@ -1,19 +1,22 @@
-import { X, Plus } from 'lucide-react'
+import { Plus, X } from 'lucide-react'
 import { OperatorCard } from './OperatorCard'
 import { ModeSelector } from './ModeSelector'
 import { HistoryPanel } from './HistoryPanel'
 import { ObservabilityPanel } from './ObservabilityPanel'
 import { SkillPanel } from './SkillPanel'
-import type { AIOpsEngine, ChatMessage, ChatMode, ChatSession, WorkbenchMode } from '../../types/chat'
+import type { AIOpsEngine, ChatMessage, ChatMode, ChatSession, IncidentSession, WorkbenchMode } from '../../types/chat'
 
 interface Props {
   onClose: () => void
   onNewChat: () => void
-  onLoadSession: (s: ChatSession) => void
+  onLoadSession: (session: ChatSession) => void
+  onLoadIncident: (incidentId: string) => void
   currentSessionId: string
+  currentIncidentId: string
+  incidents: IncidentSession[]
   messages: ChatMessage[]
   chatMode: ChatMode
-  onModeChange: (m: ChatMode) => void
+  onModeChange: (mode: ChatMode) => void
   workbenchMode: WorkbenchMode
   onWorkbenchModeChange: (mode: WorkbenchMode) => void
   aiOpsEngine: AIOpsEngine
@@ -27,7 +30,10 @@ export function Sidebar({
   onClose,
   onNewChat,
   onLoadSession,
+  onLoadIncident,
   currentSessionId,
+  currentIncidentId,
+  incidents,
   messages,
   chatMode,
   onModeChange,
@@ -39,6 +45,8 @@ export function Sidebar({
   onSelectedSkillIdsChange,
   isLoading,
 }: Props) {
+  const newLabel = workbenchMode === 'aiops' ? '新建事故' : '新建会话'
+
   return (
     <div className="flex h-full flex-col border-r border-zinc-200/80 bg-white/92 backdrop-blur-xl dark:border-zinc-800/60 dark:bg-zinc-950/92">
       <div className="flex items-center justify-between px-4 py-4">
@@ -59,7 +67,7 @@ export function Sidebar({
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto scrollbar-thin px-3 space-y-3">
+      <div className="flex-1 space-y-3 overflow-y-auto px-3 scrollbar-thin">
         <OperatorCard />
         <ModeSelector
           value={chatMode}
@@ -69,11 +77,14 @@ export function Sidebar({
           aiOpsEngine={aiOpsEngine}
           onAIOpsEngineChange={onAIOpsEngineChange}
         />
-        <SkillPanel selectedSkillIds={selectedSkillIds} onChange={onSelectedSkillIdsChange} />
+        {workbenchMode === 'chat' && <SkillPanel selectedSkillIds={selectedSkillIds} onChange={onSelectedSkillIdsChange} />}
         <ObservabilityPanel />
         <HistoryPanel
           onSelect={onLoadSession}
+          onSelectIncident={onLoadIncident}
           currentSessionId={currentSessionId}
+          currentIncidentId={currentIncidentId}
+          incidents={incidents}
           messageCount={messages.length}
         />
       </div>
@@ -82,11 +93,11 @@ export function Sidebar({
         <button
           onClick={onNewChat}
           disabled={isLoading}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent py-2.5 text-sm font-medium text-white shadow-sm shadow-accent/20 transition-all duration-200 hover:brightness-110 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none"
-          title={isLoading ? '请等待当前请求完成' : '新建会话'}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-accent py-2.5 text-sm font-medium text-white shadow-sm shadow-accent/20 transition-all duration-200 hover:brightness-110 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
+          title={isLoading ? '请等待当前请求完成' : newLabel}
         >
           <Plus size={16} />
-          {isLoading ? '请求中...' : '新建会话'}
+          {isLoading ? '请求中...' : newLabel}
         </button>
       </div>
     </div>

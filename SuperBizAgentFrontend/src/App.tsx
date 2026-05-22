@@ -1,8 +1,10 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTheme } from './hooks/useTheme'
 import { useChat } from './hooks/useChat'
+import { useIncidents } from './hooks/useIncidents'
 import { MainLayout } from './components/layout/MainLayout'
 import { AgentWorkbenchView } from './components/workbench/AgentWorkbenchView'
+import { IncidentView } from './components/incident/IncidentView'
 import { saveSession } from './lib/storage'
 import type { AIOpsEngine, ChatSession, WorkbenchMode } from './types/chat'
 
@@ -14,6 +16,7 @@ const PET_ENABLED_KEY = 'opscaptain-pet-enabled'
 export default function App() {
   const { theme, toggle: toggleTheme } = useTheme()
   const chat = useChat()
+  const incidents = useIncidents()
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     if (typeof window === 'undefined') return false
     return window.innerWidth >= 1024
@@ -77,32 +80,30 @@ export default function App() {
   }, [petEnabled])
 
   useEffect(() => {
-    if (chat.messages.length === 0) {
+    if (chat.messages.length === 0 || workbenchMode !== 'chat') {
       return
     }
     saveSession(chat.sessionId, chat.messages, {
       mode: chat.mode,
+      workMode: 'react',
       selectedSkillIds,
     })
-  }, [chat.sessionId, chat.messages, chat.mode, selectedSkillIds])
+  }, [chat.sessionId, chat.messages, chat.mode, selectedSkillIds, workbenchMode])
 
-  const handleSend = useCallback(
+  const handleSendChat = useCallback(
     (query: string) => {
-      if (workbenchMode === 'aiops') {
-        chat.sendAIOps(query, { aiOpsEngine })
-        return
-      }
+      setWorkbenchMode('chat')
       chat.send(query, { selectedSkillIds })
     },
-    [chat, selectedSkillIds, workbenchMode, aiOpsEngine]
+    [chat, selectedSkillIds],
   )
 
   const handleStartAIOps = useCallback(
     (query: string) => {
       setWorkbenchMode('aiops')
-      chat.sendAIOps(query, { aiOpsEngine })
+      void incidents.createIncident(query, aiOpsEngine).catch(() => undefined)
     },
-    [chat, aiOpsEngine]
+    [aiOpsEngine, incidents],
   )
 
   const handleAIOpsEngineChange = useCallback((engine: AIOpsEngine) => {
@@ -117,23 +118,37 @@ export default function App() {
         return
       }
       setSelectedSkillIds(Array.isArray(session.selectedSkillIds) ? session.selectedSkillIds : [])
+      setWorkbenchMode('chat')
     },
-    [chat]
+    [chat],
+  )
+
+  const handleLoadIncident = useCallback(
+    (incidentId: string) => {
+      setWorkbenchMode('aiops')
+      void incidents.loadIncident(incidentId).catch(() => undefined)
+    },
+    [incidents],
   )
 
   const handleNewChat = useCallback(() => {
+    if (workbenchMode === 'aiops') {
+      incidents.newIncident()
+      return
+    }
     chat.newSession()
-  }, [chat])
+  }, [chat, incidents, workbenchMode])
 
   return (
     <MainLayout
       theme={theme}
       sidebarOpen={sidebarOpen}
-      onToggleSidebar={() => setSidebarOpen((v) => !v)}
+      onToggleSidebar={() => setSidebarOpen((value) => !value)}
       onCloseSidebar={() => setSidebarOpen(false)}
       onToggleTheme={toggleTheme}
       onNewChat={handleNewChat}
       onLoadSession={handleLoadSession}
+      onLoadIncident={handleLoadIncident}
       chatMode={chat.mode}
       onModeChange={chat.setMode}
       workbenchMode={workbenchMode}
@@ -141,31 +156,46 @@ export default function App() {
       aiOpsEngine={aiOpsEngine}
       onAIOpsEngineChange={handleAIOpsEngineChange}
       sessionId={chat.sessionId}
+      currentIncidentId={incidents.incident?.incident_id || ''}
+      incidents={incidents.incidents}
       messages={chat.messages}
       selectedSkillIds={selectedSkillIds}
       onSelectedSkillIdsChange={setSelectedSkillIds}
-      isLoading={chat.isLoading}
+      isLoading={chat.isLoading || incidents.isLoading}
     >
-      <AgentWorkbenchView
-        messages={chat.messages}
-        streamingContent={chat.streamingContent}
-        streamingThoughts={chat.streamingThoughts}
-        thinkingSteps={chat.thinkingSteps}
-        suggestions={chat.suggestions}
-        isLoading={chat.isLoading}
-        loadingEngine={chat.loadingEngine}
-        mode={chat.mode}
-        workbenchMode={workbenchMode}
-        selectedSkillIds={selectedSkillIds}
-        petEnabled={petEnabled}
-        aiOpsEngine={aiOpsEngine}
-        onSend={handleSend}
-        onStartAIOps={handleStartAIOps}
-        onStop={chat.stop}
-        onModeChange={chat.setMode}
-        onTogglePet={() => setPetEnabled((v) => !v)}
-        onClearSuggestions={chat.clearSuggestions}
-      />
+      {workbenchMode === 'aiops' ? (
+        <IncidentView
+          incident={incidents.incident}
+          isLoading={incidents.isLoading}
+          error={incidents.error}
+          engine={aiOpsEngine}
+          onCreate={handleStartAIOps}
+          onAppend={(query) => {
+            void incidents.appendTurn(query).catch(() => undefined)
+          }}
+        />
+      ) : (
+        <AgentWorkbenchView
+          messages={chat.messages}
+          streamingContent={chat.streamingContent}
+          streamingThoughts={chat.streamingThoughts}
+          thinkingSteps={chat.thinkingSteps}
+          suggestions={chat.suggestions}
+          isLoading={chat.isLoading}
+          loadingEngine={chat.loadingEngine}
+          mode={chat.mode}
+          workbenchMode="chat"
+          selectedSkillIds={selectedSkillIds}
+          petEnabled={petEnabled}
+          aiOpsEngine={aiOpsEngine}
+          onSend={handleSendChat}
+          onStartAIOps={handleStartAIOps}
+          onStop={chat.stop}
+          onModeChange={chat.setMode}
+          onTogglePet={() => setPetEnabled((value) => !value)}
+          onClearSuggestions={chat.clearSuggestions}
+        />
+      )}
     </MainLayout>
   )
 }

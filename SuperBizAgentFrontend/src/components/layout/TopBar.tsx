@@ -1,4 +1,4 @@
-import { Menu, Moon, Sun, Plus } from 'lucide-react'
+import { Menu, Moon, Plus, Sun } from 'lucide-react'
 import type { AIOpsEngine, ChatMode, WorkbenchMode } from '../../types/chat'
 import { getEngineViewModel } from '../../lib/engineViewModel'
 
@@ -13,11 +13,21 @@ interface Props {
   isLoading: boolean
 }
 
-export function TopBar({ theme, onToggleSidebar, onToggleTheme, chatMode, workbenchMode, aiOpsEngine, onNewChat, isLoading }: Props) {
+export function TopBar({
+  theme,
+  onToggleSidebar,
+  onToggleTheme,
+  chatMode,
+  workbenchMode,
+  aiOpsEngine,
+  onNewChat,
+  isLoading,
+}: Props) {
   const engineView = getEngineViewModel(aiOpsEngine)
+  const newLabel = workbenchMode === 'aiops' ? '新建事故' : '新建会话'
   const statusText = workbenchMode === 'aiops'
-    ? `AIOps · ${engineView.label}`
-    : `ReAct · ${chatMode === 'quick' ? 'quick' : 'stream'}`
+    ? `事故排障 · ${engineView.label}`
+    : `问答 · ${chatMode === 'quick' ? '快速' : '流式'}`
 
   return (
     <header className="flex h-12 shrink-0 items-center justify-between gap-4 border-b border-white/40 bg-white/20 px-4 backdrop-blur-sm dark:border-white/5 dark:bg-slate-900/20 lg:px-6">
@@ -50,12 +60,12 @@ export function TopBar({ theme, onToggleSidebar, onToggleTheme, chatMode, workbe
         <button
           onClick={onNewChat}
           disabled={isLoading}
-          className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-zinc-600 transition-all hover:-translate-y-0.5 hover:bg-white/50 hover:text-sky-600 hover:shadow-sm disabled:opacity-40 disabled:cursor-not-allowed dark:text-zinc-400 dark:hover:bg-slate-700/50 dark:hover:text-sky-400"
-          aria-label="新建会话"
-          title={isLoading ? '请等待当前请求完成' : '新建会话'}
+          className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-zinc-600 transition-all hover:-translate-y-0.5 hover:bg-white/50 hover:text-sky-600 hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-40 dark:text-zinc-400 dark:hover:bg-slate-700/50 dark:hover:text-sky-400"
+          aria-label={newLabel}
+          title={isLoading ? '请等待当前请求完成' : newLabel}
         >
           <Plus size={14} />
-          <span className="hidden sm:inline">新会话</span>
+          <span className="hidden sm:inline">{newLabel}</span>
         </button>
         <span className="rounded-full bg-sky-400/15 px-2 py-0.5 text-[10px] font-semibold text-sky-600 dark:text-sky-400 md:hidden">
           {workbenchMode === 'aiops' ? engineView.label : chatMode === 'quick' ? '快速' : '流式'}

@@ -1,8 +1,8 @@
-import { useState, useRef, useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { GitBranch, Send, Square, Zap, Paperclip, X, Loader2, FileIcon } from 'lucide-react'
+import { FileIcon, GitBranch, Loader2, Paperclip, Send, Square, X, Zap } from 'lucide-react'
 import type { AIOpsEngine, ChatMode, WorkbenchMode } from '../../types/chat'
-import { formatSelectedSkillSummary, formatFileSize } from '../../lib/utils'
+import { formatFileSize, formatSelectedSkillSummary } from '../../lib/utils'
 import { useFileUpload } from '../../hooks/useFileUpload'
 import { getEngineViewModel } from '../../lib/engineViewModel'
 
@@ -14,7 +14,7 @@ interface Props {
   workbenchMode: WorkbenchMode
   aiOpsEngine: AIOpsEngine
   selectedSkillIds: string[]
-  onModeChange: (m: ChatMode) => void
+  onModeChange: (mode: ChatMode) => void
   embedded?: boolean
 }
 
@@ -25,49 +25,72 @@ const modeOptions: { id: ChatMode; label: string; icon: typeof Zap }[] = [
 
 function buildQueryWithFiles(query: string, fileNames: string[]): string {
   if (fileNames.length === 0) return query
-  const refs = fileNames.map((n) => `[已上传: ${n}]`).join('\n')
+  const refs = fileNames.map((name) => `[已上传: ${name}]`).join('\n')
   return `${refs}\n\n${query}`
 }
 
-export function ChatInput({ onSend, onStop, isLoading, mode, workbenchMode, aiOpsEngine, selectedSkillIds, onModeChange, embedded }: Props) {
+export function ChatInput({
+  onSend,
+  onStop,
+  isLoading,
+  mode,
+  workbenchMode,
+  aiOpsEngine,
+  selectedSkillIds,
+  onModeChange,
+  embedded,
+}: Props) {
   const [input, setInput] = useState('')
   const [isFocused, setIsFocused] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const { files, readyFiles, isUploading, uploadError, removeFile, clearFiles, inputId, handleChange, accept, multiple } = useFileUpload()
+  const {
+    files,
+    readyFiles,
+    isUploading,
+    uploadError,
+    removeFile,
+    clearFiles,
+    inputId,
+    handleChange,
+    accept,
+    multiple,
+  } = useFileUpload()
   const isAIOps = workbenchMode === 'aiops'
   const engineView = getEngineViewModel(aiOpsEngine)
+  const trimmedInput = input.trim()
+  const hasDraft = trimmedInput.length > 0 || readyFiles.length > 0
+  const aiOpsReady = !isAIOps || readyFiles.length > 0 || Array.from(trimmedInput).length >= 6
+  const canSend = hasDraft && aiOpsReady && !isLoading
   const submitLabel = isAIOps ? `启动 ${engineView.label}` : '发送'
   const placeholder = isAIOps
     ? `描述告警、日志或系统现象，使用 ${engineView.label} 排障...`
     : '输入问题，使用 ReAct 问答...'
   const contextLabel = isAIOps ? `AIOps · ${engineView.badge}` : formatSelectedSkillSummary(selectedSkillIds)
-  const trimmedInput = input.trim()
-  const hasDraft = trimmedInput.length > 0 || readyFiles.length > 0
-  const aiOpsReady = !isAIOps || readyFiles.length > 0 || Array.from(trimmedInput).length >= 6
-  const canSend = hasDraft && aiOpsReady && !isLoading
   const sendHint = isAIOps && hasDraft && !aiOpsReady
     ? '补充服务、告警或日志线索'
     : 'Enter 发送 · Shift+Enter 换行'
 
   useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto'
-      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 160) + 'px'
+    if (!textareaRef.current) {
+      return
     }
+    textareaRef.current.style.height = 'auto'
+    textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 160)}px`
   }, [input])
 
   const handleSubmit = () => {
-    if (!canSend) return
-    const names = readyFiles.map((f) => f.name)
-    const query = buildQueryWithFiles(trimmedInput, names)
+    if (!canSend) {
+      return
+    }
+    const query = buildQueryWithFiles(trimmedInput, readyFiles.map((file) => file.name))
     onSend(query || '请分析上传的文件')
     setInput('')
     clearFiles()
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault()
       handleSubmit()
     }
   }
@@ -75,20 +98,18 @@ export function ChatInput({ onSend, onStop, isLoading, mode, workbenchMode, aiOp
   return (
     <div className={embedded ? 'shrink-0' : 'shrink-0 border-t border-white/40 bg-white/30 px-4 py-4 backdrop-blur-sm dark:border-white/5 dark:bg-slate-900/30'}>
       <input type="file" id={inputId} onChange={handleChange} accept={accept} multiple={multiple} className="hidden" />
-
       <div className={embedded ? '' : 'mx-auto max-w-4xl'}>
         <div className={`relative rounded-[22px] rounded-bl-[6px] transition-shadow duration-300 ${isFocused ? 'shadow-lg shadow-sky-500/10 dark:shadow-none' : 'shadow-md shadow-zinc-900/5 dark:shadow-none'}`}>
           {isFocused && <div aria-hidden="true" className="glow-frame rounded-[22px] rounded-bl-[6px]" />}
-
-          <div className={`relative rounded-[22px] rounded-bl-[6px] border transition-all duration-300 ${
+          <div className={`relative rounded-[22px] rounded-bl-[6px] border backdrop-blur-xl transition-all duration-300 ${
             isFocused
               ? 'border-sky-400/50 bg-white/80 dark:border-sky-400/30 dark:bg-slate-800/70'
               : 'border-white/60 bg-white/60 dark:border-white/10 dark:bg-slate-800/50'
-          } backdrop-blur-xl`}>
+          }`}>
             <textarea
               ref={textareaRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              onChange={(event) => setInput(event.target.value)}
               onKeyDown={handleKeyDown}
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
@@ -109,10 +130,13 @@ export function ChatInput({ onSend, onStop, isLoading, mode, workbenchMode, aiOp
                     <span
                       key={file.id}
                       className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs ${
-                        file.status === 'ready' ? 'border-sky-300/50 bg-sky-50/50 text-sky-600 dark:border-sky-600/30 dark:bg-sky-900/20 dark:text-sky-400' :
-                        file.status === 'indexing' ? 'border-amber-300/50 bg-amber-50/50 text-amber-600 dark:border-amber-600/30 dark:bg-amber-900/20 dark:text-amber-400' :
-                        file.status === 'failed' ? 'border-rose-300/50 bg-rose-50/50 text-rose-500 dark:border-rose-600/30 dark:bg-rose-900/20' :
-                        'border-white/40 bg-white/50 text-zinc-500 dark:border-white/10 dark:bg-slate-700/50'
+                        file.status === 'ready'
+                          ? 'border-sky-300/50 bg-sky-50/50 text-sky-600 dark:border-sky-600/30 dark:bg-sky-900/20 dark:text-sky-400'
+                          : file.status === 'indexing'
+                            ? 'border-amber-300/50 bg-amber-50/50 text-amber-600 dark:border-amber-600/30 dark:bg-amber-900/20 dark:text-amber-400'
+                            : file.status === 'failed'
+                              ? 'border-rose-300/50 bg-rose-50/50 text-rose-500 dark:border-rose-600/30 dark:bg-rose-900/20'
+                              : 'border-white/40 bg-white/50 text-zinc-500 dark:border-white/10 dark:bg-slate-700/50'
                       }`}
                     >
                       <FileIcon size={12} />
@@ -175,22 +199,21 @@ export function ChatInput({ onSend, onStop, isLoading, mode, workbenchMode, aiOp
                 )}
 
                 <span className={`hidden max-w-[220px] truncate rounded-md px-2 py-1 text-[11px] font-medium sm:inline ${
-                  isAIOps
-                    ? `${engineView.sidebar.flowActive}`
-                    : 'text-zinc-400 dark:text-zinc-600'
+                  isAIOps ? engineView.sidebar.flowActive : 'text-zinc-400 dark:text-zinc-600'
                 }`}>
                   {contextLabel}
                 </span>
               </div>
 
               <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-                <label htmlFor={inputId}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/40 bg-white/50 px-2 py-1.5 text-xs font-medium text-zinc-600 cursor-pointer transition-all hover:-translate-y-0.5 hover:bg-white hover:text-sky-600 hover:shadow-md dark:border-white/10 dark:bg-slate-700/50 dark:text-zinc-400 dark:hover:bg-slate-600 dark:hover:text-sky-400 sm:px-2.5"
-                  title="上传文档到知识库">
+                <label
+                  htmlFor={inputId}
+                  className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-white/40 bg-white/50 px-2 py-1.5 text-xs font-medium text-zinc-600 transition-all hover:-translate-y-0.5 hover:bg-white hover:text-sky-600 hover:shadow-md dark:border-white/10 dark:bg-slate-700/50 dark:text-zinc-400 dark:hover:bg-slate-600 dark:hover:text-sky-400 sm:px-2.5"
+                  title="上传文档到知识库"
+                >
                   {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Paperclip size={14} />}
                   <span className="hidden sm:inline">上传文档</span>
                 </label>
-
                 <span className={`hidden text-[10px] lg:inline ${isAIOps && hasDraft && !aiOpsReady ? 'text-amber-500 dark:text-amber-400' : 'text-zinc-400 dark:text-zinc-600'}`}>
                   {sendHint}
                 </span>
