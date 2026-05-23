@@ -37,7 +37,7 @@ func TestValidateMilvusCollectionSchemaRejectsLegacySchema(t *testing.T) {
 				{
 					Name:       "vector",
 					DataType:   entity.FieldTypeFloatVector,
-					TypeParams: map[string]string{"dim": "1024"},
+					TypeParams: map[string]string{"dim": "2048"},
 				},
 			},
 		},

@@ -22,7 +22,7 @@ func TestGetVectorDimension_Default(t *testing.T) {
 	if dim <= 0 {
 		t.Fatalf("expected positive dimension, got %d", dim)
 	}
-	if dim != 1024 {
+	if dim != 2048 {
 		t.Logf("vector dimension from config: %d", dim)
 	}
 }

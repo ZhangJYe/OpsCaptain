@@ -179,7 +179,7 @@ embedding_model:
   model: "doubao-embedding-vision-251215"
   api_key: "${ARK_API_KEY}"
   base_url: "https://ark.cn-beijing.volces.com/api/v3"
-  dimension: 1024
+  dimension: 2048
 
 memory:
   max_window_size: 20

@@ -74,7 +74,7 @@ func GetVectorDimension(ctx context.Context) int {
 			return val.Int()
 		}
 	}
-	return 1024
+	return 2048
 }
 
 func GetRetrieverTopK(ctx context.Context) int {
