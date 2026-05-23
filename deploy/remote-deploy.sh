@@ -162,6 +162,31 @@ install_log_mcp_service() {
   fi
 }
 
+cleanup_docker_storage() {
+  docker container prune -f || true
+  docker image prune -af --filter "until=24h" || true
+  docker builder prune -af --filter "until=24h" || true
+}
+
+recover_prometheus_storage_if_full() {
+  prometheus_container="$($COMPOSE ps -q prometheus 2>/dev/null || true)"
+  if [ -z "$prometheus_container" ]; then
+    return 0
+  fi
+
+  if ! $COMPOSE logs --tail=200 prometheus 2>/dev/null | grep -q "no space left on device"; then
+    return 0
+  fi
+
+  prometheus_volume="$(docker inspect "$prometheus_container" --format '{{range .Mounts}}{{if eq .Destination "/prometheus"}}{{.Name}}{{end}}{{end}}' 2>/dev/null || true)"
+  echo "prometheus storage is full; resetting prometheus data volume"
+  $COMPOSE stop prometheus || true
+  $COMPOSE rm -f prometheus || true
+  if [ -n "$prometheus_volume" ]; then
+    docker volume rm "$prometheus_volume" || true
+  fi
+}
+
 write_site_block() {
   site_label="$1"
 
@@ -402,6 +427,8 @@ fi
 
 ensure_prometheus_bind_files
 install_log_mcp_service
+recover_prometheus_storage_if_full
+cleanup_docker_storage
 
 $COMPOSE pull
 ensure_runtime_volume_permissions
