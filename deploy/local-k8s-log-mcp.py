@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import os
 import queue
 import subprocess
 import threading
@@ -13,6 +14,9 @@ NAMESPACE = "freeexchanged"
 TOOL_NAME = "query_freeexchanged_k8s_logs"
 SESSIONS = {}
 SESSIONS_LOCK = threading.Lock()
+QUERY_TIMEOUT_SECONDS = 4.0
+POD_LOG_TIMEOUT_SECONDS = 2.0
+MAX_PODS = 8
 
 
 def jsonrpc_result(request_id, result):
@@ -38,8 +42,8 @@ def run_kubectl(args, timeout=8):
     return completed.stdout
 
 
-def list_pods():
-    raw = run_kubectl(["get", "pods", "-n", NAMESPACE, "-o", "json"], timeout=8)
+def list_pods(timeout=8):
+    raw = run_kubectl(["get", "pods", "-n", NAMESPACE, "-o", "json"], timeout=timeout)
     data = json.loads(raw)
     pods = []
     for item in data.get("items", []):
@@ -88,6 +92,7 @@ def log_terms(query):
 
 
 def query_logs(arguments):
+    deadline = time.monotonic() + QUERY_TIMEOUT_SECONDS
     query = str(arguments.get("query") or "")
     focus = str(arguments.get("focus") or "")
     limit = int(arguments.get("limit") or 5)
@@ -95,7 +100,27 @@ def query_logs(arguments):
     terms = log_terms(query + "\n" + focus)
 
     records = []
-    for pod in list_pods():
+    try:
+        pods = list_pods(timeout=remaining_timeout(deadline, 2.0))
+    except Exception as exc:
+        return {
+            "success": False,
+            "degraded": True,
+            "logs": records,
+            "error": f"failed to list pods: {exc}",
+            "message": "log backend degraded before pod discovery",
+        }
+
+    inspected = 0
+    for pod in pods[:MAX_PODS]:
+        if time.monotonic() >= deadline:
+            return {
+                "success": True,
+                "degraded": True,
+                "logs": records,
+                "message": f"partial result: inspected {inspected}/{len(pods)} pods before timeout",
+            }
+        inspected += 1
         try:
             output = run_kubectl(
                 [
@@ -108,7 +133,7 @@ def query_logs(arguments):
                     "--since=2h",
                     "--tail=160",
                 ],
-                timeout=10,
+                timeout=remaining_timeout(deadline, POD_LOG_TIMEOUT_SECONDS),
             )
         except Exception as exc:
             line = f"{pod}: failed to read pod logs: {exc}"
@@ -132,7 +157,17 @@ def query_logs(arguments):
             if len(records) >= limit:
                 return {"success": True, "logs": records, "message": f"found {len(records)} log records"}
 
-    return {"success": True, "logs": records, "message": f"found {len(records)} log records"}
+    message = f"found {len(records)} log records"
+    if len(pods) > MAX_PODS:
+        message += f"; inspected first {MAX_PODS}/{len(pods)} pods"
+    return {"success": True, "logs": records, "message": message}
+
+
+def remaining_timeout(deadline, cap):
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        return 0.1
+    return max(0.1, min(cap, remaining))
 
 
 def infer_level(line):
@@ -292,10 +327,17 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    global QUERY_TIMEOUT_SECONDS, POD_LOG_TIMEOUT_SECONDS, MAX_PODS
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=18088)
+    parser.add_argument("--query-timeout", type=float, default=float(os.getenv("LOG_MCP_QUERY_TIMEOUT_SECONDS", QUERY_TIMEOUT_SECONDS)))
+    parser.add_argument("--pod-log-timeout", type=float, default=float(os.getenv("LOG_MCP_POD_LOG_TIMEOUT_SECONDS", POD_LOG_TIMEOUT_SECONDS)))
+    parser.add_argument("--max-pods", type=int, default=int(os.getenv("LOG_MCP_MAX_PODS", MAX_PODS)))
     args = parser.parse_args()
+    QUERY_TIMEOUT_SECONDS = max(0.5, args.query_timeout)
+    POD_LOG_TIMEOUT_SECONDS = max(0.1, args.pod_log_timeout)
+    MAX_PODS = max(1, args.max_pods)
     server = ThreadingHTTPServer((args.host, args.port), Handler)
     print(f"freeexchanged local k8s log MCP listening on {args.host}:{args.port}", flush=True)
     server.serve_forever()
