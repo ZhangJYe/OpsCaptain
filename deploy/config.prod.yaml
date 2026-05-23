@@ -1,6 +1,9 @@
 server:
   address: ":8000"
 
+startup:
+  require_model_secrets: false
+
 auth:
   enabled: false
   jwt_secret: "${AUTH_JWT_SECRET}"

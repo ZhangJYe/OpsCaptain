@@ -43,6 +43,14 @@ func ValidateStartupSecrets(ctx context.Context) error {
 	return nil
 }
 
+func RequireStartupModelSecrets(ctx context.Context) bool {
+	v, err := g.Cfg().Get(ctx, "startup.require_model_secrets")
+	if err != nil {
+		return false
+	}
+	return v.Bool()
+}
+
 func firstConfiguredValue(ctx context.Context, paths ...string) (string, error) {
 	var lastErr error
 	for _, path := range paths {

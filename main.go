@@ -49,7 +49,10 @@ func main() {
 	models.SetTokenAuditHooks(aiservice.EnforceTokenLimitFromContext, aiservice.RecordTokenUsageFromContext)
 
 	if err := common.ValidateStartupSecrets(ctx); err != nil {
-		panic(err)
+		if common.RequireStartupModelSecrets(ctx) {
+			panic(err)
+		}
+		g.Log().Warningf(ctx, "AI model configuration is incomplete, AI requests may degrade until configuration is fixed: %v", err)
 	}
 	if err := aiservice.ValidateMemoryExtractionPipelineConfig(ctx); err != nil {
 		panic(err)
