@@ -155,7 +155,35 @@ func (a *aiOpsGOSAgent) Handle(ctx context.Context, task *protocol.TaskEnvelope)
 			rt.EmitInfo(emitCtx, task, a.Name(), message, payload)
 		})
 	}
-	result := engine.Run(ctx, query)
+	ch := make(chan *protocol.TaskResult, 1)
+	go func() {
+		ch <- engine.Run(ctx, query)
+	}()
+
+	var result *protocol.TaskResult
+	select {
+	case result = <-ch:
+	case <-ctx.Done():
+		now := time.Now().UnixMilli()
+		taskID := ""
+		if task != nil {
+			taskID = task.TaskID
+		}
+		result = &protocol.TaskResult{
+			TaskID:            taskID,
+			Agent:             a.Name(),
+			Status:            protocol.ResultStatusDegraded,
+			Summary:           fmt.Sprintf("GoS execution stopped by timeout: %v", ctx.Err()),
+			Confidence:        0.1,
+			DegradationReason: ctx.Err().Error(),
+			Error: &protocol.TaskError{
+				Code:    "gos_context_cancelled",
+				Message: ctx.Err().Error(),
+			},
+			StartedAt:  now,
+			FinishedAt: now,
+		}
+	}
 	if result != nil && task != nil {
 		result.TaskID = task.TaskID
 		result.Agent = a.Name()

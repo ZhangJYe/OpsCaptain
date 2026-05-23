@@ -208,7 +208,26 @@ func (e *GoSEngine) act(ctx context.Context, plan []PlanItem, frontier *belief.F
 				return nil
 			}
 
-			analysis := agent.Run(gCtx, frontier, graph)
+			ch := make(chan *experts.ExpertAnalysis, 1)
+			go func() {
+				ch <- agent.Run(gCtx, frontier, graph)
+			}()
+
+			var analysis *experts.ExpertAnalysis
+			select {
+			case analysis = <-ch:
+			case <-gCtx.Done():
+				analysis = &experts.ExpertAnalysis{
+					ExpertName:        item.ExpertName,
+					Status:            "degraded",
+					DegradationReason: "context_cancelled",
+					ToolErrors: []experts.ToolError{{
+						ToolName: "context",
+						Action:   "cancelled",
+						Error:    gCtx.Err().Error(),
+					}},
+				}
+			}
 			if analysis == nil {
 				analysis = &experts.ExpertAnalysis{
 					ExpertName:        item.ExpertName,

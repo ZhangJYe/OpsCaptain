@@ -21,6 +21,7 @@ func (l *testLogger) Error(msg string, keysAndValues ...interface{}) {}
 type mockExpert struct {
 	name     string
 	response *experts.ExpertAnalysis
+	delay    time.Duration
 }
 
 func (m *mockExpert) Name() string {
@@ -28,6 +29,9 @@ func (m *mockExpert) Name() string {
 }
 
 func (m *mockExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *belief.BeliefGraph) *experts.ExpertAnalysis {
+	if m.delay > 0 {
+		time.Sleep(m.delay)
+	}
 	return m.response
 }
 
@@ -82,6 +86,36 @@ func TestGoSEngine_Run_AllExpertsFail(t *testing.T) {
 	})
 
 	result := engine.Run(context.Background(), "服务响应超时")
+	require.NotNil(t, result)
+	assert.Equal(t, protocol.ResultStatusDegraded, result.Status)
+	assert.NotEmpty(t, result.DegradationReason)
+}
+
+func TestGoSEngine_Run_ContextCancelStopsHangingExpert(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.SessionMaxSteps = 1
+
+	logger := &testLogger{}
+	engine := NewGoSEngine(cfg, logger)
+
+	engine.RegisterExpert("linux_sre", &mockExpert{
+		name:  "linux_sre",
+		delay: 200 * time.Millisecond,
+		response: &experts.ExpertAnalysis{
+			ExpertName: "linux_sre",
+			Status:     "succeeded",
+			Analysis:   "late result",
+			Confidence: 0.9,
+		},
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	result := engine.Run(ctx, "cpu high")
+
+	assert.Less(t, time.Since(start), 150*time.Millisecond)
 	require.NotNil(t, result)
 	assert.Equal(t, protocol.ResultStatusDegraded, result.Status)
 	assert.NotEmpty(t, result.DegradationReason)

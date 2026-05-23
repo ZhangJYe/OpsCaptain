@@ -92,6 +92,17 @@ func (e *BaseExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *
 	attemptedTools := make(map[string]bool)
 
 	for step := 0; step < e.cfg.MaxRetrievalSteps; step++ {
+		if err := ctx.Err(); err != nil {
+			result.ToolErrors = append(result.ToolErrors, ToolError{
+				ToolName: "context",
+				Action:   "cancelled",
+				Error:    err.Error(),
+			})
+			result.Status = "degraded"
+			result.DegradationReason = "context_cancelled"
+			return result
+		}
+
 		isLastStep := step == e.cfg.MaxRetrievalSteps-1
 		hasEvidence := len(history) > 0 || len(result.Evidence) > 0
 
@@ -251,6 +262,17 @@ func (e *BaseExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *
 	}
 
 	if result.Analysis == "" && (len(history) > 0 || len(result.Evidence) > 0) {
+		if err := ctx.Err(); err != nil {
+			result.ToolErrors = append(result.ToolErrors, ToolError{
+				ToolName: "context",
+				Action:   "cancelled",
+				Error:    err.Error(),
+			})
+			result.Status = "degraded"
+			result.DegradationReason = "context_cancelled"
+			return result
+		}
+
 		analysis, err := e.generateContent(ctx, frontier, graph, history, map[string]string{
 			"action":     "analyze",
 			"confidence": "0.5",
@@ -399,12 +421,32 @@ func (e *BaseExpert) generateContentWithLLM(ctx context.Context, frontier *belie
 	}
 
 	prompt := e.buildContentPrompt(symptom, frontier, history, decision)
-	resp, err := chatModel.Generate(callCtx, []*einoschema.Message{
+	messages := []*einoschema.Message{
 		einoschema.SystemMessage("你是 AIOps SRE 专家。只输出当前步骤需要的内容，不要输出解释、Markdown 或多余前后缀。"),
 		einoschema.UserMessage(prompt),
-	})
-	if err != nil {
-		return "", err
+	}
+	type llmResult struct {
+		resp *einoschema.Message
+		err  error
+	}
+	ch := make(chan llmResult, 1)
+	go func() {
+		resp, err := chatModel.Generate(callCtx, messages)
+		ch <- llmResult{resp: resp, err: err}
+	}()
+
+	var resp *einoschema.Message
+	select {
+	case res := <-ch:
+		if res.err != nil {
+			return "", res.err
+		}
+		resp = res.resp
+	case <-callCtx.Done():
+		return "", callCtx.Err()
+	}
+	if resp == nil {
+		return "", fmt.Errorf("empty llm response")
 	}
 
 	content := strings.TrimSpace(resp.Content)

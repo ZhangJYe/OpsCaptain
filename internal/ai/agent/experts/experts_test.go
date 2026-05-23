@@ -17,9 +17,13 @@ import (
 type fakeExpertChatModel struct {
 	content string
 	err     error
+	delay   time.Duration
 }
 
 func (f *fakeExpertChatModel) Generate(ctx context.Context, input []*einoschema.Message, opts ...einomodel.Option) (*einoschema.Message, error) {
+	if f.delay > 0 {
+		time.Sleep(f.delay)
+	}
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -389,6 +393,34 @@ func TestBaseExpert_GenerateContent(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Contains(t, content, "CPU 高负载")
+}
+
+func TestBaseExpert_GenerateContentLLMTimeoutDegrades(t *testing.T) {
+	cfg := ExpertRuntimeConfig{
+		Name:        "test",
+		CallTimeout: 20 * time.Millisecond,
+		ChatModelFactory: func(ctx context.Context) (einomodel.ToolCallingChatModel, error) {
+			return &fakeExpertChatModel{content: "late result", delay: 200 * time.Millisecond}, nil
+		},
+	}
+	toolReg := NewToolRegistry()
+	expert := NewBaseExpert(cfg, toolReg)
+
+	graph := belief.NewBeliefGraph()
+	frontier := &belief.Frontier{
+		NodeID: "test",
+		Label:  "cpu high",
+		Why:    "usage over 90%",
+	}
+
+	start := time.Now()
+	content, err := expert.generateContent(context.Background(), frontier, graph, []RetrievalRecord{}, map[string]string{
+		"action": "retrieve",
+	})
+
+	assert.Less(t, time.Since(start), 150*time.Millisecond)
+	assert.Error(t, err)
+	assert.Empty(t, content)
 }
 
 func TestBaseExpert_Run_RAGTimeoutDegrades(t *testing.T) {
