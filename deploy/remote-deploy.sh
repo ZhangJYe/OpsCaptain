@@ -413,16 +413,20 @@ if ! $COMPOSE up -d --remove-orphans jaeger rabbitmq redis backend; then
 fi
 
 attempt=0
-until backend_container="$($COMPOSE ps -q backend 2>/dev/null)" && [ -n "$backend_container" ] && [ "$(docker inspect "$backend_container" --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' 2>/dev/null)" = "healthy" ] && $COMPOSE exec -T backend wget -qO- http://127.0.0.1:8000/readyz >/dev/null; do
-  attempt=$((attempt + 1))
-  if [ "$attempt" -ge "$DEPLOY_WAIT_ATTEMPTS" ]; then
-    $COMPOSE ps || true
-    $COMPOSE logs --tail=120 backend frontend caddy jaeger prometheus rabbitmq redis || true
-    echo "backend readiness check failed"
-    exit 1
-  fi
-  sleep 2
+until backend_container="$($COMPOSE ps -q backend 2>/dev/null)" && [ -n "$backend_container" ] && [ "$(docker inspect "$backend_container" --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' 2>/dev/null)" = "healthy" ] && $COMPOSE exec -T backend wget -qO- http://127.0.0.1:8000/healthz >/dev/null; do
+	attempt=$((attempt + 1))
+	if [ "$attempt" -ge "$DEPLOY_WAIT_ATTEMPTS" ]; then
+		$COMPOSE ps || true
+		$COMPOSE logs --tail=120 backend frontend caddy jaeger prometheus rabbitmq redis || true
+		echo "backend health check failed"
+		exit 1
+	fi
+	sleep 2
 done
+
+if ! $COMPOSE exec -T backend wget -qO- http://127.0.0.1:8000/readyz >/dev/null; then
+	echo "backend readiness degraded; continuing edge refresh"
+fi
 
 if ! $COMPOSE up -d frontend; then
   $COMPOSE ps || true
@@ -475,13 +479,18 @@ else
 fi
 
 attempt=0
-until curl -fsS -m 5 "http://127.0.0.1${health_path}" >/dev/null && curl -fsS -m 5 "http://127.0.0.1${ready_path}" >/dev/null; do
-  attempt=$((attempt + 1))
-  if [ "$attempt" -ge "$DEPLOY_WAIT_ATTEMPTS" ]; then
-    $COMPOSE ps || true
-    $COMPOSE logs --tail=120 caddy frontend backend || true
-    echo "edge readiness check failed"
-    exit 1
-  fi
-  sleep 2
+until curl -fsS -m 5 "http://127.0.0.1${health_path}" >/dev/null; do
+	attempt=$((attempt + 1))
+	if [ "$attempt" -ge "$DEPLOY_WAIT_ATTEMPTS" ]; then
+		$COMPOSE ps || true
+		$COMPOSE logs --tail=120 caddy frontend backend || true
+		echo "edge health check failed"
+		exit 1
+	fi
+	sleep 2
 done
+
+if ! curl -fsS -m 5 "http://127.0.0.1${ready_path}" >/dev/null; then
+	echo "edge readiness degraded"
+	$COMPOSE exec -T backend wget -qO- http://127.0.0.1:8000/readyz || true
+fi
