@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cloudwego/eino/adk"
 	einoschema "github.com/cloudwego/eino/schema"
 )
 
@@ -126,6 +127,61 @@ func TestPlanDetailMessageSummarizesProtocolPayloads(t *testing.T) {
 		Content: `{"response":"## report\nanalysis complete"}`,
 	}); strings.Contains(got, "analysis complete") {
 		t.Fatalf("expected summarized report event, got %q", got)
+	}
+}
+
+func TestPlanReportMessageIsTerminalAnalysis(t *testing.T) {
+	msg := &einoschema.Message{
+		Role:    einoschema.Assistant,
+		Content: "## 诊断报告\nCPU 使用率异常升高，当前需要检查最近发布、进程负载和关键错误日志。",
+	}
+	if got := analysisMessageContent(msg); !strings.Contains(got, "CPU") {
+		t.Fatalf("expected report analysis content, got %q", got)
+	}
+	if got := planDetailMessage(msg); got != "Plan generated final diagnostic report" {
+		t.Fatalf("expected summarized terminal report, got %q", got)
+	}
+	stage, message, _ := planStageEvent(msg)
+	if stage != "report_ready" || message == "" {
+		t.Fatalf("expected terminal report stage, got stage=%q message=%q", stage, message)
+	}
+}
+
+func TestConsumePlanEventsReturnsAfterTerminalReport(t *testing.T) {
+	events := []*adk.AgentEvent{
+		adk.EventFromMessage(&einoschema.Message{
+			Role:    einoschema.Assistant,
+			Content: `{"steps":["inspect logs"]}`,
+		}, nil, einoschema.Assistant, ""),
+		adk.EventFromMessage(&einoschema.Message{
+			Role:    einoschema.Assistant,
+			Content: "## 诊断报告\nCPU 使用率异常升高，当前需要检查最近发布、进程负载和关键错误日志。",
+		}, nil, einoschema.Assistant, ""),
+		adk.EventFromMessage(&einoschema.Message{
+			Role:    einoschema.Assistant,
+			Content: `{"steps":["should not be consumed"]}`,
+		}, nil, einoschema.Assistant, ""),
+	}
+	calls := 0
+	analysis, detail, err := consumePlanEvents(context.Background(), func() (*adk.AgentEvent, bool) {
+		if calls >= len(events) {
+			return nil, false
+		}
+		event := events[calls]
+		calls++
+		return event, true
+	})
+	if err != nil {
+		t.Fatalf("expected terminal report without error, got %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("expected stream to stop after report event, consumed %d events", calls)
+	}
+	if !strings.Contains(analysis, "CPU") {
+		t.Fatalf("expected report analysis, got %q", analysis)
+	}
+	if len(detail) != 2 {
+		t.Fatalf("expected plan and report detail, got %v", detail)
 	}
 }
 

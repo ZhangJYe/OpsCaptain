@@ -53,11 +53,13 @@ func BuildPlanAgent(ctx context.Context, query string) (string, []string, error)
 		Agent: planExecuteAgent,
 	})
 	iter := r.Query(ctx, queryWithFinalReportRequirement(query))
+	return consumePlanEvents(ctx, iter.Next)
+}
 
-	var lastAnalysis string
+func consumePlanEvents(ctx context.Context, next func() (*adk.AgentEvent, bool)) (string, []string, error) {
 	var detail []string
 	for {
-		event, ok := iter.Next()
+		event, ok := next()
 		if !ok {
 			break
 		}
@@ -75,19 +77,16 @@ func BuildPlanAgent(ctx context.Context, query string) (string, []string, error)
 		}
 
 		if analysis := analysisMessageContent(msg); analysis != "" {
-			lastAnalysis = analysis
+			return analysis, detail, nil
 		}
 	}
 
-	if lastAnalysis == "" {
-		if fallback := fallbackAnalysisFromDetails(detail); fallback != "" {
-			emitPlanStage(ctx, "report_degraded", "Plan 已生成降级诊断报告", nil)
-			return fallback, detail, fmt.Errorf("no analysis conclusion found in event stream")
-		}
-		emitPlanStage(ctx, "report_failed", "Plan 未生成诊断结论", nil)
-		return "", detail, fmt.Errorf("no analysis conclusion found in event stream")
+	if fallback := fallbackAnalysisFromDetails(detail); fallback != "" {
+		emitPlanStage(ctx, "report_degraded", "Plan 已生成降级诊断报告", nil)
+		return fallback, detail, fmt.Errorf("no analysis conclusion found in event stream")
 	}
-	return lastAnalysis, detail, nil
+	emitPlanStage(ctx, "report_failed", "Plan 未生成诊断结论", nil)
+	return "", detail, fmt.Errorf("no analysis conclusion found in event stream")
 }
 
 func emitPlanMessageStage(ctx context.Context, msg adk.Message) {
