@@ -11,7 +11,7 @@ import (
 
 const (
 	MilvusDBName         = "agent"
-	MilvusCollectionName = "biz"
+	MilvusCollectionName = "opscaption_knowledge_v2"
 )
 
 var (
@@ -74,7 +74,7 @@ func GetVectorDimension(ctx context.Context) int {
 			return val.Int()
 		}
 	}
-	return 2048
+	return 1024
 }
 
 func GetRetrieverTopK(ctx context.Context) int {

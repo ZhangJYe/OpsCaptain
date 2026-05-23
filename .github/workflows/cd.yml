@@ -222,10 +222,16 @@ jobs:
           set_env_value_if_missing DEEPSEEK_API_KEY "$SECRET_DEEPSEEK_API_KEY"
           set_env_value_if_missing DOMAIN_NAME "$SECRET_DOMAIN_NAME"
           set_env_value_if_missing MILVUS_ADDRESS "$SECRET_MILVUS_ADDRESS"
-          set_env_value_if_missing MILVUS_COLLECTION biz
+          set_env_value_if_missing MILVUS_COLLECTION opscaption_knowledge_v2
           set_env_value_if_missing MCP_LOG_URL http://host.docker.internal:18088/sse
           set_env_value_if_missing MCP_LOG_HTTP_URL http://host.docker.internal:18088/tools/query_logs
           set_env_value_if_missing TLS_EMAIL "$SECRET_TLS_EMAIL"
+
+          milvus_collection="$(normalize_optional_env_value MILVUS_COLLECTION opscaption_knowledge_v2)"
+          if [ "$milvus_collection" = "biz" ]; then
+            milvus_collection="opscaption_knowledge_v2"
+          fi
+          set_env_value MILVUS_COLLECTION "$milvus_collection"
 
           jaeger_endpoint="$(normalize_optional_env_value JAEGER_ENDPOINT http://jaeger:14268/api/traces)"
           prometheus_address="$(normalize_optional_env_value PROMETHEUS_ADDRESS http://prometheus:9090)"

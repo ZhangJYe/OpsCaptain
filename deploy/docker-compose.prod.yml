@@ -110,7 +110,7 @@ services:
       - ./config.prod.yaml:/app/manifest/config/config.yaml:ro
       - ./knowledge_seed:/app/knowledge_seed:ro
     entrypoint: ["./knowledge-indexer"]
-    command: ["-dir", "/app/knowledge_seed", "-collection", "opscaption_knowledge_v2", "-verify-query", "部署回滚"]
+    command: ["-dir", "/app/knowledge_seed", "-collection", "${MILVUS_COLLECTION:-opscaption_knowledge_v2}"]
 
   frontend:
     image: ${FRONTEND_IMAGE:?FRONTEND_IMAGE is required}

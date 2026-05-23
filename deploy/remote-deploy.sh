@@ -127,6 +127,24 @@ ensure_runtime_volume_permissions() {
     'mkdir -p /app/var/runtime/ledger /app/var/runtime/artifacts && chown -R 1000:1000 /app/var/runtime'
 }
 
+run_knowledge_indexer() {
+  collection="$(normalize_optional_value "$(read_env_value MILVUS_COLLECTION)")"
+  if [ -z "$collection" ]; then
+    collection="$(normalize_optional_value "$(read_config_section_value milvus collection)")"
+  fi
+  if [ -z "$collection" ]; then
+    collection="opscaption_knowledge_v2"
+  fi
+
+  if ! find ./knowledge_seed -type f -name '*.md' -print -quit | grep -q .; then
+    echo "knowledge seed is empty, skip indexing"
+    return 0
+  fi
+
+  echo "indexing knowledge collection: $collection"
+  $COMPOSE run --rm --no-deps knowledge-indexer -dir /app/knowledge_seed -collection "$collection"
+}
+
 install_log_mcp_service() {
   if [ ! -f "./local-k8s-log-mcp.py" ] || [ ! -f "./opscaptain-log-mcp.service" ]; then
     return 0
@@ -516,6 +534,8 @@ until curl -fsS -m 5 "http://127.0.0.1${health_path}" >/dev/null; do
 	fi
 	sleep 2
 done
+
+run_knowledge_indexer
 
 if ! curl -fsS -m 5 "http://127.0.0.1${ready_path}" >/dev/null; then
 	echo "edge readiness degraded"

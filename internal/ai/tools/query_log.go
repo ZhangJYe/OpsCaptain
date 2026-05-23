@@ -24,7 +24,7 @@ import (
 
 const (
 	defaultConnectTimeoutMs = 10000
-	defaultToolTimeoutMs    = 120000
+	defaultToolTimeoutMs    = 5000
 	maxReconnectRetries     = 3
 	reconnectBaseDelay      = time.Second
 )

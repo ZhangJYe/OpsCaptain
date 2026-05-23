@@ -22,7 +22,7 @@ func TestGetVectorDimension_Default(t *testing.T) {
 	if dim <= 0 {
 		t.Fatalf("expected positive dimension, got %d", dim)
 	}
-	if dim != 2048 {
+	if dim != 1024 {
 		t.Logf("vector dimension from config: %d", dim)
 	}
 }
@@ -31,15 +31,15 @@ func TestConstants(t *testing.T) {
 	if MilvusDBName != "agent" {
 		t.Fatalf("expected MilvusDBName 'agent', got '%s'", MilvusDBName)
 	}
-	if MilvusCollectionName != "biz" {
-		t.Fatalf("expected MilvusCollectionName 'biz', got '%s'", MilvusCollectionName)
+	if MilvusCollectionName != "opscaption_knowledge_v2" {
+		t.Fatalf("expected MilvusCollectionName 'opscaption_knowledge_v2', got '%s'", MilvusCollectionName)
 	}
 }
 
 func TestGetMilvusCollectionName_Default(t *testing.T) {
 	ctx := context.Background()
-	if got := GetMilvusCollectionName(ctx); got != "biz" {
-		t.Fatalf("expected default collection 'biz', got %q", got)
+	if got := GetMilvusCollectionName(ctx); got != "opscaption_knowledge_v2" {
+		t.Fatalf("expected default collection 'opscaption_knowledge_v2', got %q", got)
 	}
 }
 

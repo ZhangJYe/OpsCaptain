@@ -179,7 +179,7 @@ embedding_model:
   model: "doubao-embedding-vision-251215"
   api_key: "${ARK_API_KEY}"
   base_url: "https://ark.cn-beijing.volces.com/api/v3"
-  dimension: 2048
+  dimension: 1024
 
 memory:
   max_window_size: 20
@@ -263,7 +263,7 @@ mcp:
   log_url: ""
   log_http_url: ""
   connect_timeout_ms: 10000
-  tool_timeout_ms: 120000
+  tool_timeout_ms: 5000
 
 mysql:
   dsn: ""
