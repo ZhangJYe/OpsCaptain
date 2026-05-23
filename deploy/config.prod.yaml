@@ -151,6 +151,7 @@ log_topic:
 mcp:
   log_url: "${MCP_LOG_URL}"
   log_http_url: "${MCP_LOG_HTTP_URL}"
+  prefer_http_log_tool: true
   connect_timeout_ms: 10000
   tool_timeout_ms: 5000
 

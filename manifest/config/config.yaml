@@ -262,6 +262,7 @@ log_topic:
 mcp:
   log_url: ""
   log_http_url: ""
+  prefer_http_log_tool: true
   connect_timeout_ms: 10000
   tool_timeout_ms: 5000
 

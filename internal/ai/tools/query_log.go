@@ -456,6 +456,9 @@ func GetLogMcpTool() ([]tool.BaseTool, error) {
 		return []tool.BaseTool{NewUnavailableLogQueryTool("mcp.log_url is not configured")}, nil
 	}
 	httpURL := resolveLogHTTPURL(ctx, mcpURL)
+	if httpURL != "" && g.Cfg().MustGet(ctx, "mcp.prefer_http_log_tool", false).Bool() {
+		return []tool.BaseTool{NewHTTPLogQueryTool(httpURL, "mcp.prefer_http_log_tool is enabled")}, nil
+	}
 
 	// 检查缓存
 	if ct, ok := getCachedTools(mcpURL); ok {
