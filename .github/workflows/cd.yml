@@ -223,6 +223,9 @@ jobs:
           set_env_value_if_missing DOMAIN_NAME "$SECRET_DOMAIN_NAME"
           set_env_value_if_missing MILVUS_ADDRESS "$SECRET_MILVUS_ADDRESS"
           set_env_value_if_missing MILVUS_COLLECTION opscaption_knowledge_v2
+          set_env_value_if_missing KNOWLEDGE_INDEX_ON_DEPLOY if-missing
+          set_env_value_if_missing KNOWLEDGE_INDEX_TIMEOUT_SECONDS 180
+          set_env_value_if_missing KNOWLEDGE_INDEX_REQUIRED false
           set_env_value_if_missing MCP_LOG_URL http://host.docker.internal:18088/sse
           set_env_value_if_missing MCP_LOG_HTTP_URL http://host.docker.internal:18088/tools/query_logs
           set_env_value_if_missing TLS_EMAIL "$SECRET_TLS_EMAIL"

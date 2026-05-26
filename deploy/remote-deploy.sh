@@ -128,6 +128,33 @@ ensure_runtime_volume_permissions() {
 }
 
 run_knowledge_indexer() {
+  mode="$(normalize_optional_value "$(read_env_value KNOWLEDGE_INDEX_ON_DEPLOY)" | tr '[:upper:]' '[:lower:]')"
+  if [ -z "$mode" ]; then
+    mode="if-missing"
+  fi
+
+  case "$mode" in
+    skip|false|off|disabled|none)
+      echo "knowledge indexing disabled by KNOWLEDGE_INDEX_ON_DEPLOY=$mode"
+      return 0
+      ;;
+    if-missing|missing|auto)
+      if knowledge_collection_ready; then
+        echo "knowledge collection is ready, skip indexing"
+        return 0
+      fi
+      ;;
+    always|true|on|enabled)
+      ;;
+    *)
+      echo "unknown KNOWLEDGE_INDEX_ON_DEPLOY=$mode, using if-missing"
+      if knowledge_collection_ready; then
+        echo "knowledge collection is ready, skip indexing"
+        return 0
+      fi
+      ;;
+  esac
+
   collection="$(normalize_optional_value "$(read_env_value MILVUS_COLLECTION)")"
   if [ -z "$collection" ]; then
     collection="$(normalize_optional_value "$(read_config_section_value milvus collection)")"
@@ -141,8 +168,52 @@ run_knowledge_indexer() {
     return 0
   fi
 
-  echo "indexing knowledge collection: $collection"
-  $COMPOSE run --rm --no-deps knowledge-indexer -dir /app/knowledge_seed -collection "$collection"
+  timeout_seconds="$(normalize_optional_value "$(read_env_value KNOWLEDGE_INDEX_TIMEOUT_SECONDS)")"
+  case "$timeout_seconds" in
+    ''|*[!0-9]*)
+      timeout_seconds=180
+      ;;
+  esac
+  if [ "$timeout_seconds" -le 0 ]; then
+    timeout_seconds=180
+  fi
+
+  log_file="./knowledge-indexer.log"
+  rm -f "$log_file"
+  echo "indexing knowledge collection: $collection, timeout=${timeout_seconds}s"
+  set +e
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$timeout_seconds" $COMPOSE run --rm --no-deps knowledge-indexer -dir /app/knowledge_seed -collection "$collection" > "$log_file" 2>&1
+  else
+    $COMPOSE run --rm --no-deps knowledge-indexer -dir /app/knowledge_seed -collection "$collection" > "$log_file" 2>&1
+  fi
+  status="$?"
+  set -e
+  if [ -f "$log_file" ]; then
+    tail -n 80 "$log_file" || true
+  fi
+  if [ "$status" -eq 0 ]; then
+    echo "knowledge indexing completed"
+    return 0
+  fi
+  echo "knowledge indexing did not complete, status=$status"
+  if is_truthy "$(read_env_value KNOWLEDGE_INDEX_REQUIRED)"; then
+    return "$status"
+  fi
+  echo "knowledge indexing is best-effort, continue deployment"
+  return 0
+}
+
+knowledge_collection_ready() {
+  ready_payload="$($COMPOSE exec -T backend wget -qO- http://127.0.0.1:8000/readyz 2>/dev/null || true)"
+  case "$ready_payload" in
+    *'"knowledge":{"ready":true'*|*'"knowledge": {"ready": true'*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
 }
 
 install_log_mcp_service() {
