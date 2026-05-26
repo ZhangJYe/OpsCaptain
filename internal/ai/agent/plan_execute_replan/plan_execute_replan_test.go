@@ -163,7 +163,7 @@ func TestConsumePlanEventsReturnsAfterTerminalReport(t *testing.T) {
 		}, nil, einoschema.Assistant, ""),
 	}
 	calls := 0
-	analysis, detail, err := consumePlanEvents(context.Background(), func() (*adk.AgentEvent, bool) {
+	analysis, detail, err := consumePlanEvents(context.Background(), "分析 paymentservice", func() (*adk.AgentEvent, bool) {
 		if calls >= len(events) {
 			return nil, false
 		}
@@ -182,6 +182,51 @@ func TestConsumePlanEventsReturnsAfterTerminalReport(t *testing.T) {
 	}
 	if len(detail) != 2 {
 		t.Fatalf("expected plan and report detail, got %v", detail)
+	}
+}
+
+func TestConsumePlanEventsSynthesizesFinalReport(t *testing.T) {
+	old := synthesizePlanReportFn
+	synthesizePlanReportFn = func(_ context.Context, query string, detail []string) (string, error) {
+		if !strings.Contains(query, "paymentservice") {
+			t.Fatalf("expected query to be passed, got %q", query)
+		}
+		if len(detail) == 0 {
+			t.Fatalf("expected detail to be passed")
+		}
+		return "## 诊断报告\npaymentservice 下游异常导致失败率升高。", nil
+	}
+	defer func() {
+		synthesizePlanReportFn = old
+	}()
+
+	events := []*adk.AgentEvent{
+		adk.EventFromMessage(&einoschema.Message{
+			Role:    einoschema.Assistant,
+			Content: `{"steps":["inspect logs"]}`,
+		}, nil, einoschema.Assistant, ""),
+		adk.EventFromMessage(&einoschema.Message{
+			Role:    einoschema.Tool,
+			Content: `{"success":true,"logs":[{"message":"downstream timeout"}]}`,
+		}, nil, einoschema.Tool, ""),
+	}
+	calls := 0
+	analysis, detail, err := consumePlanEvents(context.Background(), "分析 paymentservice", func() (*adk.AgentEvent, bool) {
+		if calls >= len(events) {
+			return nil, false
+		}
+		event := events[calls]
+		calls++
+		return event, true
+	})
+	if err != nil {
+		t.Fatalf("expected synthesized report without error, got %v", err)
+	}
+	if !strings.Contains(analysis, "paymentservice") {
+		t.Fatalf("expected synthesized report, got %q", analysis)
+	}
+	if detail[len(detail)-1] != "Plan generated final diagnostic report" {
+		t.Fatalf("expected report detail marker, got %v", detail)
 	}
 }
 

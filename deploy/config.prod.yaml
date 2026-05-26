@@ -118,6 +118,7 @@ aiops:
   engine: "plan_execute_replan"
   plan:
     model_path: "chat_model_fast"
+    report_timeout_ms: 45000
   gos:
     enabled: true
     model_path: "chat_model_fast"

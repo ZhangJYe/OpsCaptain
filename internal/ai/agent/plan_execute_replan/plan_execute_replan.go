@@ -9,12 +9,15 @@ import (
 
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/adk/prebuilt/planexecute"
+	"github.com/cloudwego/eino/schema"
 	"github.com/gogf/gf/v2/frame/g"
 )
 
 type StageEmitter func(context.Context, string, map[string]any)
 
 type stageEmitterContextKey struct{}
+
+var synthesizePlanReportFn = synthesizePlanReport
 
 func WithStageEmitter(ctx context.Context, emit StageEmitter) context.Context {
 	if ctx == nil || emit == nil {
@@ -53,10 +56,10 @@ func BuildPlanAgent(ctx context.Context, query string) (string, []string, error)
 		Agent: planExecuteAgent,
 	})
 	iter := r.Query(ctx, queryWithFinalReportRequirement(query))
-	return consumePlanEvents(ctx, iter.Next)
+	return consumePlanEvents(ctx, query, iter.Next)
 }
 
-func consumePlanEvents(ctx context.Context, next func() (*adk.AgentEvent, bool)) (string, []string, error) {
+func consumePlanEvents(ctx context.Context, query string, next func() (*adk.AgentEvent, bool)) (string, []string, error) {
 	var detail []string
 	for {
 		event, ok := next()
@@ -81,12 +84,62 @@ func consumePlanEvents(ctx context.Context, next func() (*adk.AgentEvent, bool))
 		}
 	}
 
+	if report, err := synthesizePlanReportFn(ctx, query, detail); err == nil && strings.TrimSpace(report) != "" {
+		emitPlanStage(ctx, "report_ready", "诊断报告已生成", nil)
+		detail = append(detail, "Plan generated final diagnostic report")
+		return strings.TrimSpace(report), detail, nil
+	} else if err != nil {
+		detail = append(detail, "final_report_synthesis_failed: "+err.Error())
+	}
+
 	if fallback := fallbackAnalysisFromDetails(detail); fallback != "" {
 		emitPlanStage(ctx, "report_degraded", "Plan 已生成降级诊断报告", nil)
 		return fallback, detail, fmt.Errorf("no analysis conclusion found in event stream")
 	}
 	emitPlanStage(ctx, "report_failed", "Plan 未生成诊断结论", nil)
 	return "", detail, fmt.Errorf("no analysis conclusion found in event stream")
+}
+
+func synthesizePlanReport(ctx context.Context, query string, detail []string) (string, error) {
+	if len(detail) == 0 {
+		return "", nil
+	}
+	model, err := newPlanChatModel(ctx)
+	if err != nil {
+		return "", err
+	}
+	timeout := 45 * time.Second
+	if v, err := g.Cfg().Get(ctx, "aiops.plan.report_timeout_ms"); err == nil && v.Int() > 0 {
+		timeout = time.Duration(v.Int()) * time.Millisecond
+	}
+	reportCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	resp, err := model.Generate(reportCtx, []*schema.Message{
+		schema.SystemMessage("你是 AIOps 值班排障助手。基于已执行的计划、工具返回和知识库结果，输出一份中文 Markdown 诊断报告。不要复述工具原始 JSON，不要输出思考过程。"),
+		schema.UserMessage(buildPlanReportPrompt(query, detail)),
+	})
+	if err != nil {
+		return "", err
+	}
+	if resp == nil {
+		return "", nil
+	}
+	return strings.TrimSpace(resp.Content), nil
+}
+
+func buildPlanReportPrompt(query string, detail []string) string {
+	var b strings.Builder
+	b.WriteString("用户问题：\n")
+	b.WriteString(strings.TrimSpace(query))
+	b.WriteString("\n\n已执行过程摘要：\n")
+	for _, signal := range compactPlanDetails(detail, 30) {
+		b.WriteString("- ")
+		b.WriteString(signal)
+		b.WriteString("\n")
+	}
+	b.WriteString("\n请输出以下章节：\n")
+	b.WriteString("## 现象\n## 已检查证据\n## 初步判断\n## 不确定性\n## 下一步建议\n")
+	return b.String()
 }
 
 func emitPlanMessageStage(ctx context.Context, msg adk.Message) {
