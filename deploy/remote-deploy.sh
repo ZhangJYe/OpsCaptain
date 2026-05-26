@@ -310,6 +310,22 @@ cleanup_docker_storage() {
   docker builder prune -af --filter "until=24h" || true
 }
 
+wait_for_compose_service_health() {
+  service="$1"
+  attempts="${2:-$DEPLOY_WAIT_ATTEMPTS}"
+  attempt=0
+  until container="$($COMPOSE ps -q "$service" 2>/dev/null)" && [ -n "$container" ] && [ "$(docker inspect "$container" --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' 2>/dev/null)" = "healthy" ]; do
+    attempt=$((attempt + 1))
+    if [ "$attempt" -ge "$attempts" ]; then
+      $COMPOSE ps || true
+      $COMPOSE logs --tail=120 "$service" || true
+      echo "$service health check failed"
+      return 1
+    fi
+    sleep 2
+  done
+}
+
 recover_prometheus_storage_if_full() {
   prometheus_container="$($COMPOSE ps -q prometheus 2>/dev/null || true)"
   if [ -z "$prometheus_container" ]; then
@@ -478,6 +494,7 @@ redis_password="$(normalize_optional_value "$(read_env_value REDIS_PASSWORD)")"
 rabbitmq_url="$(normalize_optional_value "$(read_env_value RABBITMQ_URL)")"
 rabbitmq_username="$(normalize_optional_value "$(read_env_value RABBITMQ_USERNAME)")"
 rabbitmq_password="$(normalize_optional_value "$(read_env_value RABBITMQ_PASSWORD)")"
+milvus_deploy_mode="$(normalize_optional_value "$(read_env_value MILVUS_DEPLOY_MODE)" | tr '[:upper:]' '[:lower:]')"
 app_base_path="$(normalize_path_prefix "$(read_env_value APP_BASE_PATH)")"
 
 if [ -z "$jaeger_endpoint" ]; then
@@ -503,6 +520,18 @@ fi
 if [ -z "$rabbitmq_url" ]; then
   rabbitmq_url="amqp://${rabbitmq_username}:${rabbitmq_password}@rabbitmq:5672/"
 fi
+
+case "$milvus_deploy_mode" in
+  ""|local)
+    milvus_deploy_mode="local"
+    ;;
+  external)
+    ;;
+  *)
+    echo "MILVUS_DEPLOY_MODE must be local or external"
+    exit 1
+    ;;
+esac
 
 export JAEGER_ENDPOINT="$jaeger_endpoint"
 export PROMETHEUS_ADDRESS="$prometheus_address"
@@ -574,6 +603,17 @@ cleanup_docker_storage
 
 $COMPOSE pull
 ensure_runtime_volume_permissions
+if [ "$milvus_deploy_mode" = "local" ]; then
+  if ! $COMPOSE up -d etcd minio milvus; then
+    $COMPOSE ps || true
+    $COMPOSE logs --tail=120 etcd minio milvus || true
+    echo "milvus deployment failed"
+    exit 1
+  fi
+  wait_for_compose_service_health etcd
+  wait_for_compose_service_health minio
+  wait_for_compose_service_health milvus
+fi
 if ! $COMPOSE up -d --remove-orphans jaeger rabbitmq redis backend; then
   $COMPOSE ps || true
   $COMPOSE logs --tail=120 backend jaeger rabbitmq redis || true
