@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: cd-main
+  cancel-in-progress: true
+
 env:
   GOPROXY: https://goproxy.cn,https://proxy.golang.org,direct
 

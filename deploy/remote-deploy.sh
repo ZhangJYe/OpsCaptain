@@ -192,13 +192,28 @@ run_knowledge_indexer() {
   cleanup_knowledge_indexer_containers
   echo "indexing knowledge collection: $collection, timeout=${timeout_seconds}s"
   set +e
-  if command -v timeout >/dev/null 2>&1; then
-    timeout "$timeout_seconds" $COMPOSE run --rm --no-deps knowledge-indexer -dir /app/knowledge_seed -collection "$collection" > "$log_file" 2>&1
-  else
-    $COMPOSE run --rm --no-deps knowledge-indexer -dir /app/knowledge_seed -collection "$collection" > "$log_file" 2>&1
-  fi
+  indexer_container="$($COMPOSE run -d --no-deps knowledge-indexer -dir /app/knowledge_seed -collection "$collection" 2> "$log_file")"
   status="$?"
   set -e
+  if [ "$status" -eq 0 ] && [ -n "$indexer_container" ]; then
+    elapsed=0
+    status=124
+    while [ "$elapsed" -lt "$timeout_seconds" ]; do
+      running="$(docker inspect "$indexer_container" --format '{{.State.Running}}' 2>/dev/null || true)"
+      if [ "$running" != "true" ]; then
+        status="$(docker inspect "$indexer_container" --format '{{.State.ExitCode}}' 2>/dev/null || printf '1')"
+        break
+      fi
+      sleep 2
+      elapsed=$((elapsed + 2))
+    done
+    docker logs "$indexer_container" > "$log_file" 2>&1 || true
+    if [ "$status" -eq 124 ]; then
+      docker rm -f "$indexer_container" >/dev/null 2>&1 || true
+    else
+      docker rm "$indexer_container" >/dev/null 2>&1 || true
+    fi
+  fi
   cleanup_knowledge_indexer_containers
   if [ -f "$log_file" ]; then
     tail -n 80 "$log_file" || true
