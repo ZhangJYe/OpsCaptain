@@ -253,12 +253,25 @@ knowledge_collection_ready() {
   ready_payload="$($COMPOSE exec -T backend wget -qO- http://127.0.0.1:8000/readyz 2>/dev/null || true)"
   case "$ready_payload" in
     *'"knowledge":{"ready":true'*|*'"knowledge": {"ready": true'*)
-      return 0
       ;;
     *)
       return 1
       ;;
   esac
+  case "$ready_payload" in
+    *'"schema_ok":true'*|*'"schema_ok": true'*)
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+  doc_count="$(printf '%s' "$ready_payload" | sed -n 's/.*"doc_count"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p')"
+  case "$doc_count" in
+    ''|*[!0-9]*)
+      return 1
+      ;;
+  esac
+  [ "$doc_count" -gt 0 ]
 }
 
 cleanup_knowledge_indexer_containers() {
