@@ -143,6 +143,15 @@ run_knowledge_indexer() {
         echo "knowledge collection is ready, skip indexing"
         return 0
       fi
+      if ! wait_for_milvus_ready_for_indexing; then
+        echo "milvus is not ready for indexing, skip best-effort knowledge indexing"
+        cleanup_knowledge_indexer_containers
+        return 0
+      fi
+      if knowledge_collection_ready; then
+        echo "knowledge collection is ready, skip indexing"
+        return 0
+      fi
       ;;
     always|true|on|enabled)
       ;;
@@ -180,6 +189,7 @@ run_knowledge_indexer() {
 
   log_file="./knowledge-indexer.log"
   rm -f "$log_file"
+  cleanup_knowledge_indexer_containers
   echo "indexing knowledge collection: $collection, timeout=${timeout_seconds}s"
   set +e
   if command -v timeout >/dev/null 2>&1; then
@@ -189,6 +199,7 @@ run_knowledge_indexer() {
   fi
   status="$?"
   set -e
+  cleanup_knowledge_indexer_containers
   if [ -f "$log_file" ]; then
     tail -n 80 "$log_file" || true
   fi
@@ -204,6 +215,40 @@ run_knowledge_indexer() {
   return 0
 }
 
+wait_for_milvus_ready_for_indexing() {
+  attempts="$(normalize_optional_value "$(read_env_value KNOWLEDGE_INDEX_READY_WAIT_ATTEMPTS)")"
+  interval="$(normalize_optional_value "$(read_env_value KNOWLEDGE_INDEX_READY_WAIT_INTERVAL_SECONDS)")"
+  case "$attempts" in
+    ''|*[!0-9]*)
+      attempts=24
+      ;;
+  esac
+  case "$interval" in
+    ''|*[!0-9]*)
+      interval=5
+      ;;
+  esac
+  if [ "$attempts" -le 0 ]; then
+    attempts=24
+  fi
+  if [ "$interval" -le 0 ]; then
+    interval=5
+  fi
+
+  attempt=0
+  while [ "$attempt" -lt "$attempts" ]; do
+    ready_payload="$($COMPOSE exec -T backend wget -qO- http://127.0.0.1:8000/readyz 2>/dev/null || true)"
+    case "$ready_payload" in
+      *'"knowledge":{"ready":true'*|*'"knowledge": {"ready": true'*|*'"milvus":{"ready":true'*|*'"milvus": {"ready": true'*)
+        return 0
+        ;;
+    esac
+    attempt=$((attempt + 1))
+    sleep "$interval"
+  done
+  return 1
+}
+
 knowledge_collection_ready() {
   ready_payload="$($COMPOSE exec -T backend wget -qO- http://127.0.0.1:8000/readyz 2>/dev/null || true)"
   case "$ready_payload" in
@@ -214,6 +259,14 @@ knowledge_collection_ready() {
       return 1
       ;;
   esac
+}
+
+cleanup_knowledge_indexer_containers() {
+  docker ps -aq --filter "label=com.docker.compose.service=knowledge-indexer" | while IFS= read -r container_id; do
+    if [ -n "$container_id" ]; then
+      docker rm -f "$container_id" >/dev/null 2>&1 || true
+    fi
+  done
 }
 
 install_log_mcp_service() {
