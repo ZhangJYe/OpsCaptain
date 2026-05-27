@@ -237,7 +237,7 @@ aiops:
     max_tokens: 4096
     session_max_steps: 5
     max_retrieval_steps: 3
-    call_timeout_ms: 5000
+    call_timeout_ms: 15000
     fsm:
       gap_delta: 0.3
       min_support: 2

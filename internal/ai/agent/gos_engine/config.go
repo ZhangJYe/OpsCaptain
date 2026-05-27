@@ -44,7 +44,7 @@ func DefaultConfig() *Config {
 		MaxTokens:         4096,
 		SessionMaxSteps:   5,
 		MaxRetrievalSteps: 3,
-		CallTimeoutMs:     5000,
+		CallTimeoutMs:     15000,
 		FSM: FSMConfig{
 			GapDelta:      0.3,
 			MinSupport:    2,
