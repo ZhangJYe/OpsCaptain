@@ -203,13 +203,13 @@ func (e *BaseExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *
 				continue
 			}
 
-			sanitizedOutput := redactSecrets(output)
+			sanitizedOutput := truncateString(redactSecrets(output), 500)
 			history = append(history, RetrievalRecord{Query: content, Output: sanitizedOutput, Tool: toolName})
 			result.Evidence = append(result.Evidence, EvidenceItem{
 				SourceType: "tool",
 				SourceID:   fmt.Sprintf("%s-%d", toolName, step),
 				Title:      fmt.Sprintf("%s output", toolName),
-				Snippet:    truncateString(sanitizedOutput, 500),
+				Snippet:    sanitizedOutput,
 				Score:      1.0,
 			})
 
@@ -242,13 +242,13 @@ func (e *BaseExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *
 			for _, d := range docs {
 				combined += d.Content + "\n"
 			}
-			sanitizedCombined := redactSecrets(combined)
+			sanitizedCombined := truncateString(redactSecrets(combined), 500)
 			history = append(history, RetrievalRecord{Query: content, Output: sanitizedCombined, Tool: "rag"})
 			result.Evidence = append(result.Evidence, EvidenceItem{
 				SourceType: "rag",
 				SourceID:   fmt.Sprintf("rag-%d", step),
 				Title:      "RAG retrieval",
-				Snippet:    truncateString(sanitizedCombined, 500),
+				Snippet:    sanitizedCombined,
 				Score:      1.0,
 			})
 
@@ -566,15 +566,13 @@ func redactSecrets(s string) string {
 	for _, pattern := range secretPatterns {
 		result = pattern.ReplaceAllString(result, "[REDACTED]")
 	}
-	if len(result) > 500 {
-		result = result[:500] + "..."
-	}
 	return result
 }
 
 func truncateString(s string, maxLen int) string {
-	if len(s) > maxLen {
-		return s[:maxLen] + "..."
+	runes := []rune(s)
+	if len(runes) > maxLen {
+		return string(runes[:maxLen]) + "..."
 	}
 	return s
 }

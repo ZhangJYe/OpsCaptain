@@ -3,6 +3,7 @@ package experts
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -421,6 +422,40 @@ func TestBaseExpert_GenerateContentLLMTimeoutDegrades(t *testing.T) {
 	assert.Less(t, time.Since(start), 150*time.Millisecond)
 	assert.Error(t, err)
 	assert.Empty(t, content)
+}
+
+func TestBaseExpert_GenerateContentKeepsLongUTF8Report(t *testing.T) {
+	report := strings.Repeat("检查是否有异常进程（包括残留任务、重复推理进程和驱动异常）。", 20)
+	cfg := ExpertRuntimeConfig{
+		Name:        "test",
+		CallTimeout: time.Second,
+		ChatModelFactory: func(ctx context.Context) (einomodel.ToolCallingChatModel, error) {
+			return &fakeExpertChatModel{content: report}, nil
+		},
+	}
+	toolReg := NewToolRegistry()
+	expert := NewBaseExpert(cfg, toolReg)
+	graph := belief.NewBeliefGraph()
+	frontier := &belief.Frontier{
+		NodeID: "test",
+		Label:  "gpu high",
+		Why:    "gpu usage over 90%",
+	}
+
+	content, err := expert.generateContent(context.Background(), frontier, graph, nil, map[string]string{
+		"action": "analyze",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, report, content)
+	assert.NotContains(t, content, "�")
+}
+
+func TestTruncateStringKeepsUTF8Valid(t *testing.T) {
+	got := truncateString("检查是否有异常进程（包括残留任务）", 8)
+
+	assert.Equal(t, "检查是否有异常进...", got)
+	assert.NotContains(t, got, "�")
 }
 
 func TestBaseExpert_Run_RAGTimeoutDegrades(t *testing.T) {
