@@ -1,14 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Send, Paperclip, X, Loader2, FileIcon, ArrowRight, AlertTriangle, Activity, BookOpen, GitBranch } from 'lucide-react'
+import { Send, Paperclip, X, Loader2, FileIcon, Search, Database, MessageSquareText, ShieldCheck } from 'lucide-react'
 import { useFileUpload } from '../../hooks/useFileUpload'
 import { formatFileSize } from '../../lib/utils'
-import type { AIOpsEngine } from '../../types/chat'
 
 interface Props {
   onSend: (query: string) => void
-  onStartAIOps: (query: string) => void
-  aiOpsEngine: AIOpsEngine
 }
 
 function buildQueryWithFiles(query: string, fileNames: string[]): string {
@@ -18,43 +15,37 @@ function buildQueryWithFiles(query: string, fileNames: string[]): string {
 }
 
 const quickStarters = [
-  'paymentservice 延迟升高，先看错误率和队列堆积',
-  '请分析 checkout path 最近的 timeout 日志',
-  '帮我检索支付超时相关 SOP 和历史案例',
-  '请给出回滚、限流和验证步骤',
+  '分析 paymentservice p95 延迟升高，先看错误率和队列堆积',
+  '检索 checkout path 最近 timeout 相关日志和历史回答',
+  '根据支付超时 SOP 总结排查顺序和验证项',
+  '把这段告警整理成影响范围、可能原因和下一步动作',
 ]
 
 const workbenchNotes = [
   {
-    icon: AlertTriangle,
-    label: 'Incident',
-    value: '从告警、报错或异常现象开始',
+    icon: Search,
+    label: 'Context',
+    value: '先理解问题和约束',
   },
   {
-    icon: Activity,
+    icon: Database,
     label: 'Evidence',
-    value: '优先对齐 metrics、logs、knowledge',
+    value: '补齐历史、知识库和文件',
   },
   {
-    icon: BookOpen,
-    label: 'Output',
-    value: '结论、原因、处置建议要分层',
+    icon: ShieldCheck,
+    label: 'Answer',
+    value: '给出结论、证据和动作',
   },
 ]
 
-const aiopsDraftQuery = `请按一次真实值班排障的方式分析这个问题：
+const contextSteps = [
+  '识别服务、时间窗、错误类型和影响面',
+  '关联已选能力、会话记忆和上传文档',
+  '输出可复核的结论与后续追问建议',
+]
 
-- 先判断影响范围和风险等级
-- 再对齐 metrics、logs、knowledge 三路证据
-- 最后给出回滚、限流和验证步骤
-
-异常现象：paymentservice p95 延迟升高，错误率开始抬升，checkout path 出现 timeout。`
-
-function aiOpsEngineLabel(engine: AIOpsEngine): string {
-  return engine === 'gos_engine' ? 'GoS Belief' : 'Plan-Execute'
-}
-
-export function WelcomeScreen({ onSend, onStartAIOps, aiOpsEngine }: Props) {
+export function WelcomeScreen({ onSend }: Props) {
   const [input, setInput] = useState('')
   const [isFocused, setIsFocused] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -86,39 +77,55 @@ export function WelcomeScreen({ onSend, onStartAIOps, aiOpsEngine }: Props) {
   const canSend = input.trim().length > 0 || readyFiles.length > 0
 
   return (
-    <div className="h-full overflow-y-auto scrollbar-thin">
+    <div className="h-full overflow-y-auto bg-[radial-gradient(circle_at_50%_0%,rgba(59,130,246,0.08),transparent_32%),linear-gradient(180deg,#ffffff_0%,#fafafa_52%,#f6f8fb_100%)] scrollbar-thin dark:bg-[radial-gradient(circle_at_50%_0%,rgba(59,130,246,0.13),transparent_34%),linear-gradient(180deg,#09090b_0%,#0b0d10_100%)]">
       <input type="file" id={inputId} onChange={handleChange} accept={accept} multiple={multiple} className="hidden" />
 
-      <div className="mx-auto flex max-w-4xl flex-col px-6 py-10 lg:py-14">
+      <div className="mx-auto flex min-h-full max-w-5xl flex-col px-4 py-8 sm:px-6 lg:py-10">
         <motion.div
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35 }}
-          className="mb-8"
+          className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-end"
         >
-          <div className="mb-3 text-[11px] font-medium uppercase tracking-[0.22em] text-zinc-400 dark:text-zinc-600">
-            OpsCaption / AI Workbench
+          <div>
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-zinc-200/80 bg-white/80 px-3 py-1.5 text-[11px] font-medium text-zinc-500 shadow-sm dark:border-zinc-800/70 dark:bg-zinc-900/70 dark:text-zinc-400">
+              <MessageSquareText size={13} className="text-accent" />
+              ReAct 问答工作台
+            </div>
+            <h1 className="max-w-3xl text-[2rem] font-semibold tracking-normal text-zinc-950 dark:text-zinc-50 sm:text-[2.45rem]">
+              描述问题，OpsCaption 会先收集上下文再回答。
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm leading-7 text-zinc-500 dark:text-zinc-400">
+              适合日常问答、知识检索、日志片段分析和文档归纳。事故排障入口保留在左侧模式切换里，问答首页只呈现问答能力。
+            </p>
           </div>
-          <h1 className="max-w-3xl text-[2rem] font-semibold tracking-[-0.04em] text-zinc-950 dark:text-zinc-50 sm:text-[2.5rem]">
-            先给我现象，我去收证据。
-          </h1>
-          <p className="mt-3 max-w-2xl text-sm leading-7 text-zinc-500 dark:text-zinc-400">
-            直接贴告警、错误日志、服务名、变更信息，或者上传文档。界面尽量少说话，把注意力留给诊断过程本身。
-          </p>
+          <div className="rounded-2xl border border-zinc-200/80 bg-white/76 p-4 shadow-sm shadow-zinc-900/[0.03] backdrop-blur dark:border-zinc-800/60 dark:bg-zinc-900/54">
+            <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-600">Context Loop</div>
+            <div className="mt-3 space-y-2.5">
+              {contextSteps.map((step, index) => (
+                <div key={step} className="flex items-start gap-3">
+                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/10 text-[11px] font-semibold text-accent">
+                    {index + 1}
+                  </span>
+                  <span className="text-sm leading-6 text-zinc-600 dark:text-zinc-300">{step}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </motion.div>
 
         <motion.div
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, delay: 0.05 }}
-          className="mb-6 grid gap-3 sm:grid-cols-3"
+          className="mt-6 grid gap-3 sm:grid-cols-3"
         >
           {workbenchNotes.map((note) => (
             <div
               key={note.label}
-              className="rounded-2xl border border-zinc-200/80 bg-white/70 px-4 py-3 dark:border-zinc-800/60 dark:bg-zinc-900/50"
+              className="rounded-xl border border-zinc-200/80 bg-white/74 px-4 py-3 shadow-sm shadow-zinc-900/[0.02] backdrop-blur dark:border-zinc-800/60 dark:bg-zinc-900/50"
             >
-              <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-600">
+              <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-600">
                 <note.icon size={13} className="text-accent" />
                 {note.label}
               </div>
@@ -127,19 +134,18 @@ export function WelcomeScreen({ onSend, onStartAIOps, aiOpsEngine }: Props) {
           ))}
         </motion.div>
 
-        {/* Input area */}
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.3 }}
-          className="w-full"
+          className="mt-5 w-full"
         >
           <div
             className={`rounded-2xl border transition-all duration-300 ${
               isFocused
-                ? 'border-accent/40 shadow-[0_0_0_4px_rgba(59,130,246,0.1)] dark:shadow-[0_0_0_4px_rgba(59,130,246,0.08)]'
-                : 'border-zinc-200/80 shadow-sm dark:border-zinc-800/60'
-            } bg-white/90 backdrop-blur dark:bg-zinc-900/70`}
+                ? 'border-accent/45 shadow-[0_18px_52px_rgba(59,130,246,0.13)] dark:shadow-[0_18px_52px_rgba(59,130,246,0.08)]'
+                : 'border-zinc-200/80 shadow-lg shadow-zinc-900/[0.04] dark:border-zinc-800/60 dark:shadow-black/20'
+            } bg-white/94 backdrop-blur dark:bg-zinc-900/74`}
           >
             <textarea
               ref={textareaRef}
@@ -148,9 +154,9 @@ export function WelcomeScreen({ onSend, onStartAIOps, aiOpsEngine }: Props) {
               onKeyDown={handleKeyDown}
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
-              placeholder="描述告警、日志或系统现象..."
+              placeholder="输入问题、日志片段、服务名或知识库检索需求..."
               rows={1}
-              className="min-h-[52px] w-full resize-none bg-transparent px-5 py-4 text-sm leading-6 text-zinc-900 outline-none placeholder:text-zinc-400 dark:text-zinc-100 dark:placeholder:text-zinc-500"
+              className="min-h-[74px] w-full resize-none bg-transparent px-5 py-4 text-sm leading-7 text-zinc-900 outline-none placeholder:text-zinc-400 dark:text-zinc-100 dark:placeholder:text-zinc-500"
             />
 
             <AnimatePresence>
@@ -190,8 +196,8 @@ export function WelcomeScreen({ onSend, onStartAIOps, aiOpsEngine }: Props) {
               )}
             </AnimatePresence>
 
-            <div className="flex items-center justify-between border-t border-zinc-100 px-4 py-3 dark:border-zinc-800">
-              <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 px-4 py-3 dark:border-zinc-800">
+              <div className="flex flex-wrap items-center gap-3">
                 <label htmlFor={inputId}
                   className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200/80 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-600 cursor-pointer transition-all hover:border-accent/30 hover:text-accent dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400 dark:hover:border-accent/30 dark:hover:text-accent"
                   title="上传文档到知识库">
@@ -216,13 +222,13 @@ export function WelcomeScreen({ onSend, onStartAIOps, aiOpsEngine }: Props) {
           transition={{ duration: 0.35, delay: 0.15 }}
           className="mt-5"
         >
-          <div className="mb-2 text-[11px] text-zinc-400 dark:text-zinc-600">可以这样开始</div>
+          <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-600">Quick Prompts</div>
           <div className="flex flex-wrap gap-2">
             {quickStarters.map((starter) => (
               <button
                 key={starter}
                 onClick={() => onSend(starter)}
-                className="rounded-full border border-zinc-200/80 bg-white/70 px-3 py-2 text-xs text-zinc-600 transition-colors hover:border-accent/30 hover:text-accent dark:border-zinc-800/60 dark:bg-zinc-900/50 dark:text-zinc-400 dark:hover:border-accent/30 dark:hover:text-accent"
+                className="rounded-full border border-zinc-200/80 bg-white/74 px-3 py-2 text-xs text-zinc-600 shadow-sm shadow-zinc-900/[0.02] transition-colors hover:border-accent/30 hover:bg-accent/5 hover:text-accent dark:border-zinc-800/60 dark:bg-zinc-900/50 dark:text-zinc-400 dark:hover:border-accent/30 dark:hover:text-accent"
               >
                 {starter}
               </button>
@@ -230,38 +236,11 @@ export function WelcomeScreen({ onSend, onStartAIOps, aiOpsEngine }: Props) {
           </div>
         </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, delay: 0.22 }}
-          className="mt-6 overflow-hidden rounded-2xl border border-zinc-200/80 bg-white/70 dark:border-zinc-800/60 dark:bg-zinc-900/50"
-        >
-          <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">
-            <div className="flex items-center gap-2">
-              <div className="text-xs font-medium text-zinc-500 dark:text-zinc-400">AIOps Draft</div>
-              <span className="inline-flex items-center gap-1 rounded-md border border-zinc-200/80 px-2 py-1 text-[10px] font-medium text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-                <GitBranch size={11} />
-                {aiOpsEngineLabel(aiOpsEngine)}
-              </span>
-            </div>
-            <button
-              onClick={() => onStartAIOps(aiopsDraftQuery)}
-              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-accent dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-accent"
-            >
-              直接开始
-              <ArrowRight size={13} />
-            </button>
-          </div>
-          <pre className="overflow-x-auto whitespace-pre-wrap px-4 py-4 text-[12px] leading-6 text-zinc-600 dark:text-zinc-400">
-{aiopsDraftQuery}
-          </pre>
-        </motion.div>
-
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5, delay: 0.28 }}
-          className="mt-5 text-xs text-zinc-400 dark:text-zinc-600"
+          className="mt-auto pt-6 text-xs text-zinc-400 dark:text-zinc-600"
         >
           支持上传 .md .txt .pdf .csv .json .yaml 到知识库
         </motion.p>

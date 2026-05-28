@@ -1,8 +1,6 @@
 import { motion } from 'framer-motion'
-import { ArrowRight, Network, Route } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
+import { Database, MessageSquareText, Search, ShieldCheck } from 'lucide-react'
 import type { AIOpsEngine } from '../../types/chat'
-import { getEngineViewModel } from '../../lib/engineViewModel'
 
 interface Props {
   onSend: (query: string) => void
@@ -17,108 +15,103 @@ const quickStarters = [
   '请给出回滚、限流和验证步骤',
 ]
 
-const aiopsDraftQuery = `请按一次真实值班排障的方式分析这个问题：
+const workbenchNotes = [
+  {
+    icon: Search,
+    label: 'Context',
+    value: '先理解问题和约束',
+  },
+  {
+    icon: Database,
+    label: 'Evidence',
+    value: '补齐历史、知识库和文件',
+  },
+  {
+    icon: ShieldCheck,
+    label: 'Answer',
+    value: '给出结论、证据和动作',
+  },
+]
 
-- 先判断影响范围和风险等级
-- 再对齐 metrics、logs、knowledge 三路证据
-- 最后给出回滚、限流和验证步骤
+const contextSteps = [
+  '识别服务、时间窗、错误类型和影响面',
+  '关联已选能力、会话记忆和上传文档',
+  '输出可复核的结论与后续追问建议',
+]
 
-异常现象：paymentservice p95 延迟升高，错误率开始抬升，checkout path 出现 timeout。`
-
-const ENGINE_ICONS: Record<AIOpsEngine, LucideIcon> = {
-  plan_execute_replan: Route,
-  gos_engine: Network,
-}
-
-export function WorkbenchEmptyState({ onSend, onStartAIOps, aiOpsEngine }: Props) {
-  const view = getEngineViewModel(aiOpsEngine)
-  const EngineIcon = ENGINE_ICONS[aiOpsEngine]
-
+export function WorkbenchEmptyState({ onSend }: Props) {
   return (
-    <div className="mx-auto flex max-w-3xl flex-col items-center px-4 py-5 text-center sm:py-6">
+    <div className="mx-auto flex w-full max-w-5xl flex-col px-4 py-5 sm:py-6">
       <motion.div
-        initial={{ opacity: 0, y: 12 }}
+        initial={{ opacity: 0, y: 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35 }}
-        className="mb-4 sm:mb-5"
+        className="grid gap-6 text-left lg:grid-cols-[minmax(0,1fr)_320px] lg:items-end"
       >
-        <h1 className="text-2xl font-semibold tracking-normal text-zinc-900 dark:text-zinc-100">
-          先给我现象，我去收证据。
-        </h1>
-        <p className="mt-2 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-          直接贴告警、错误日志、服务名、变更信息，或者上传文档。
-        </p>
+        <div>
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/50 bg-white/70 px-3 py-1.5 text-[11px] font-medium text-zinc-500 shadow-sm backdrop-blur-sm dark:border-white/10 dark:bg-slate-800/50 dark:text-zinc-400">
+            <MessageSquareText size={13} className="text-sky-500" />
+            ReAct 问答工作台
+          </div>
+          <h1 className="max-w-3xl text-[2rem] font-semibold tracking-normal text-zinc-950 dark:text-zinc-50 sm:text-[2.45rem]">
+            描述问题，OpsCaption 会先收集上下文再回答。
+          </h1>
+          <p className="mt-3 max-w-2xl text-sm leading-7 text-zinc-500 dark:text-zinc-400">
+            适合日常问答、知识检索、日志片段分析和文档归纳。事故排障入口保留在左侧模式切换里，问答首页只呈现问答能力。
+          </p>
+        </div>
+        <div className="rounded-2xl border border-white/50 bg-white/55 p-4 shadow-sm shadow-zinc-900/[0.03] backdrop-blur-sm dark:border-white/10 dark:bg-slate-800/35">
+          <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-600">Context Loop</div>
+          <div className="mt-3 space-y-2.5">
+            {contextSteps.map((step, index) => (
+              <div key={step} className="flex items-start gap-3">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-sky-500/10 text-[11px] font-semibold text-sky-600 dark:text-sky-400">
+                  {index + 1}
+                </span>
+                <span className="text-sm leading-6 text-zinc-600 dark:text-zinc-300">{step}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       </motion.div>
 
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35, delay: 0.08 }}
-        className="mb-4 flex flex-wrap justify-center gap-1.5 sm:mb-5 sm:gap-2"
+        className="mt-6 grid gap-3 sm:grid-cols-3"
       >
-        {quickStarters.map((starter) => (
-          <button
-            key={starter}
-            onClick={() => onSend(starter)}
-            className="rounded-full border border-white/40 bg-white/50 px-3 py-1.5 text-xs text-zinc-600 backdrop-blur-sm transition-all hover:-translate-y-0.5 hover:border-sky-400/30 hover:text-sky-600 hover:shadow-md dark:border-white/10 dark:bg-slate-700/40 dark:text-zinc-400 dark:hover:border-sky-400/30 dark:hover:text-sky-400 sm:px-3.5 sm:py-2"
+        {workbenchNotes.map((note) => (
+          <div
+            key={note.label}
+            className="rounded-xl border border-white/50 bg-white/55 px-4 py-3 shadow-sm shadow-zinc-900/[0.02] backdrop-blur-sm dark:border-white/10 dark:bg-slate-800/35"
           >
-            {starter}
-          </button>
+            <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-600">
+              <note.icon size={13} className="text-sky-500" />
+              {note.label}
+            </div>
+            <div className="mt-2 text-sm leading-6 text-zinc-700 dark:text-zinc-300">{note.value}</div>
+          </div>
         ))}
       </motion.div>
 
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, delay: 0.18 }}
-        className="w-full overflow-hidden rounded-xl border border-white/40 bg-white/40 text-left backdrop-blur-sm dark:border-white/5 dark:bg-slate-800/30"
+        transition={{ duration: 0.35, delay: 0.15 }}
+        className="mt-5"
       >
-        <div className="flex items-center justify-between border-b border-white/30 px-4 py-2.5 dark:border-white/5">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">AIOps Draft</span>
-            <span className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ring-1 ${view.sidebar.flowActive}`}>
-              <EngineIcon size={10} />
-              {view.badge}
-            </span>
-          </div>
-          <button
-            onClick={() => onStartAIOps(aiopsDraftQuery)}
-            className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition-all hover:-translate-y-0.5 hover:shadow-md ${view.action}`}
-          >
-            运行示例
-            <ArrowRight size={12} />
-          </button>
-        </div>
-        <div className="px-3 py-3 sm:px-4">
-          <div className="flex items-start gap-3">
-            <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ring-1 ${view.sidebar.icon}`}>
-              <EngineIcon size={16} />
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">{view.draft.title}</span>
-                <span className="text-[10px] font-medium text-zinc-400 dark:text-zinc-600">{view.trace}</span>
-              </div>
-              <p className="mt-1 text-[11px] leading-5 text-zinc-500 dark:text-zinc-500">{view.draft.intro}</p>
-            </div>
-          </div>
-          <div className="mt-3 grid grid-cols-3 gap-1.5 sm:gap-2">
-            {view.draft.steps.map((step, index) => (
-              <div
-                key={step.label}
-                className="rounded-lg border border-white/40 bg-white/40 px-2 py-2 backdrop-blur-sm dark:border-white/5 dark:bg-slate-800/30 sm:px-3"
-              >
-                <div className="flex flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-2">
-                  <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ring-1 ${view.sidebar.flowActive}`}>
-                    {index + 1}
-                  </span>
-                  <span className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-300">{step.label}</span>
-                </div>
-                <p className="mt-1 line-clamp-2 text-[10px] leading-4 text-zinc-500 dark:text-zinc-500">{step.detail}</p>
-              </div>
-            ))}
-          </div>
-          <p className="mt-2 line-clamp-2 text-[11px] leading-5 text-zinc-400 dark:text-zinc-600">{view.draft.footer}</p>
+        <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.14em] text-zinc-400 dark:text-zinc-600">Quick Prompts</div>
+        <div className="flex flex-wrap gap-2">
+          {quickStarters.map((starter) => (
+            <button
+              key={starter}
+              onClick={() => onSend(starter)}
+              className="rounded-full border border-white/50 bg-white/55 px-3 py-2 text-xs text-zinc-600 shadow-sm shadow-zinc-900/[0.02] backdrop-blur-sm transition-all hover:-translate-y-0.5 hover:border-sky-400/30 hover:bg-sky-50/80 hover:text-sky-600 dark:border-white/10 dark:bg-slate-800/35 dark:text-zinc-400 dark:hover:border-sky-400/30 dark:hover:bg-sky-500/10 dark:hover:text-sky-400"
+            >
+              {starter}
+            </button>
+          ))}
         </div>
       </motion.div>
 
@@ -126,7 +119,7 @@ export function WorkbenchEmptyState({ onSend, onStartAIOps, aiOpsEngine }: Props
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5, delay: 0.25 }}
-        className="mt-4 text-[11px] text-zinc-400 dark:text-zinc-600"
+        className="mt-6 text-[11px] text-zinc-400 dark:text-zinc-600"
       >
         支持上传 .md .txt .pdf .csv .json .yaml 到知识库
       </motion.p>
