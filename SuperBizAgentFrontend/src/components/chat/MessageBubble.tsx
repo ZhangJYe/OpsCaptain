@@ -61,7 +61,7 @@ export function MessageBubble({ message, onOpenDetail }: Props) {
           className={`px-4 py-3 ${
             isUser
               ? 'rounded-2xl rounded-tr-sm bg-sky-500 text-white shadow-md shadow-sky-500/20'
-              : 'rounded-[22px] rounded-bl-[6px] border border-white/60 bg-white/70 text-zinc-800 shadow-sm backdrop-blur-md dark:border-white/10 dark:bg-slate-800/50 dark:text-zinc-200'
+              : 'rounded-xl rounded-bl-md border border-white/70 bg-white/80 text-zinc-800 shadow-[0_12px_34px_rgba(15,23,42,0.06)] backdrop-blur-md dark:border-white/10 dark:bg-slate-800/60 dark:text-zinc-200'
           }`}
         >
           {isUser ? (
@@ -69,7 +69,7 @@ export function MessageBubble({ message, onOpenDetail }: Props) {
           ) : (
             <>
               {message.executionSteps && message.executionSteps.length > 0 && (
-                <ThinkingCollapse steps={message.executionSteps} defaultOpen onStepClick={onOpenDetail} />
+                <ThinkingCollapse steps={message.executionSteps} onStepClick={onOpenDetail} />
               )}
               <div className="prose-chat">
                 <ReactMarkdown remarkPlugins={[remarkGfm, remarkFixHeadings]}>

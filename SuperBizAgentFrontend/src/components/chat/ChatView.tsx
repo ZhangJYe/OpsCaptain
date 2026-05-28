@@ -135,10 +135,9 @@ export function ChatView({
             ))}
           </AnimatePresence>
 
-          {/* Streaming bubble — thinking collapse embedded inside */}
           {isLoading && (
             <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-accent/20 bg-accent/10 text-xs font-semibold text-accent">
+              <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-accent/20 bg-accent/10 text-xs font-semibold text-accent shadow-sm shadow-accent/10">
                 OC
               </div>
               <div className="min-w-0 flex-1 max-w-[85%]">
@@ -155,7 +154,7 @@ export function ChatView({
                     isStreaming
                   />
                 ) : (
-                  <div className="rounded-2xl border border-zinc-200/80 bg-white/95 px-4 py-3 shadow-sm shadow-zinc-900/[0.03] dark:border-zinc-800/60 dark:bg-zinc-900/80">
+                  <div className="rounded-xl rounded-bl-md border border-white/70 bg-white/80 px-4 py-3 shadow-[0_14px_38px_rgba(15,23,42,0.07)] backdrop-blur-md dark:border-white/10 dark:bg-zinc-900/80">
                     <ThinkingCollapse steps={thinkingSteps} isStreaming />
                     {streamingContent ? (
                       <StreamingText content={streamingContent} />

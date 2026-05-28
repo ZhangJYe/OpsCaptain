@@ -499,6 +499,66 @@ function appendStepMeta(
   });
 }
 
+function streamModeLabel(mode?: string): string {
+  if (!mode) return "流式会话";
+  if (mode === "chat") return "ReAct 问答";
+  if (mode === "degraded") return "降级回复";
+  return mode;
+}
+
+function handleStreamMetaEvent(
+  data: string,
+  setThinkingSteps: SetThinkingSteps,
+  setStreamingThoughts: Dispatch<SetStateAction<string[]>>,
+) {
+  const payload = parseJsonSafe(data);
+  if (!payload || typeof payload !== "object") return;
+
+  const details = Array.isArray(payload.detail)
+    ? payload.detail.map((item: any) => String(item)).filter(Boolean)
+    : [];
+  const metaParts = [
+    streamModeLabel(payload.mode),
+    payload.trace_id ? `trace ${String(payload.trace_id).slice(0, 12)}` : "",
+    payload.degraded ? "已进入降级路径" : "",
+    payload.degradation_reason ? String(payload.degradation_reason) : "",
+  ].filter(Boolean);
+
+  const detail = payload.degraded
+    ? "已建立降级流式会话"
+    : details.length > 0
+      ? "已收到上下文摘要"
+      : "已建立流式会话";
+  const meta = metaParts.join(" · ") || detail;
+
+  setThinkingSteps((prev) =>
+    appendStepMeta(
+      upsertStep(
+        prev.map((s) =>
+          s.id === "intent" && s.status === "active"
+            ? { ...s, status: "done" as const, detail: "请求已识别" }
+            : s,
+        ),
+        "context",
+        "装配上下文",
+        { status: payload.degraded ? "error" : "active", detail },
+      ),
+      "context",
+      "装配上下文",
+      details[0] || meta,
+    ),
+  );
+
+  setStreamingThoughts((prev) => {
+    const items = [meta, ...details.slice(0, 2)].filter(Boolean);
+    const next = [...prev];
+    for (const item of items) {
+      if (!next.includes(item)) next.push(item);
+    }
+    return next;
+  });
+}
+
 function completeExecutionSteps(steps: ThinkingStep[]): ThinkingStep[] {
   let hasVisibleReporter = false;
   const next = steps.map((step) => {
@@ -846,6 +906,12 @@ export function useChat() {
                   "开始向前端流式输出",
                 ),
               );
+            } else if (event === "meta") {
+              handleStreamMetaEvent(
+                data,
+                commitThinkingSteps,
+                setStreamingThoughts,
+              );
             } else if (event === "agent_event") {
               const agentEvt = parseJsonSafe(data);
               if (agentEvt) {
@@ -963,6 +1029,12 @@ export function useChat() {
                 "生成回复",
                 "开始向前端流式输出",
               ),
+            );
+          } else if (event === "meta") {
+            handleStreamMetaEvent(
+              data,
+              commitThinkingSteps,
+              setStreamingThoughts,
             );
           } else if (event === "done") {
             streamDone = true;
