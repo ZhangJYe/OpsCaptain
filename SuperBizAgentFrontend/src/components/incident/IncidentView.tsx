@@ -5,11 +5,14 @@ import {
   Activity,
   AlertTriangle,
   ArrowRight,
+  BarChart3,
+  BookOpen,
   CheckCircle2,
   Clock3,
   FileSearch,
   GitBranch,
   Loader2,
+  Route,
   Send,
   ShieldAlert,
 } from 'lucide-react'
@@ -97,6 +100,42 @@ function terminalTone(turn: IncidentTurn): string {
   return 'text-zinc-500 dark:text-zinc-400'
 }
 
+const incidentStarters = [
+  {
+    title: '延迟升高',
+    detail: '按服务、时间窗和错误率先判断影响面。',
+    query: 'paymentservice p95 延迟升高，checkout path 出现 timeout，错误率开始抬升，请创建一次事故排障。',
+  },
+  {
+    title: '发布后异常',
+    detail: '把指标变化和最近变更窗口放在一起看。',
+    query: '发布后订单链路错误率升高，请结合最近变更、日志和回滚条件进行排障。',
+  },
+  {
+    title: '容量风险',
+    detail: '先看资源、队列、重试和降级条件。',
+    query: '核心服务吞吐下降且队列堆积，请判断是否存在容量瓶颈并给出处置步骤。',
+  },
+]
+
+const emptyStageCards = [
+  {
+    icon: Route,
+    title: 'Plan',
+    text: '拆成影响面、证据收集、处置建议三个阶段。',
+  },
+  {
+    icon: BarChart3,
+    title: 'Evidence',
+    text: '聚合 metrics、logs、knowledge，保留 trace 和降级原因。',
+  },
+  {
+    icon: BookOpen,
+    title: 'Report',
+    text: '沉淀轮次、结论、风险和后续验证项。',
+  },
+]
+
 export function IncidentView({ incident, isLoading, error, engine, onCreate, onAppend }: Props) {
   const [query, setQuery] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -143,7 +182,7 @@ export function IncidentView({ incident, isLoading, error, engine, onCreate, onA
               事故排障
             </div>
             <h1 className="truncate text-xl font-semibold text-zinc-950 dark:text-white">
-              {incident?.title || '描述首条现象，创建事故记录'}
+              {incident?.title || '创建事故，按证据链推进排障'}
             </h1>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -198,8 +237,43 @@ export function IncidentView({ incident, isLoading, error, engine, onCreate, onA
             )}
 
             {recentEvents.length === 0 ? (
-              <div className="flex min-h-[220px] items-center justify-center border border-dashed border-zinc-300 px-6 text-center text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-500">
-                输入首条现象后，这里会显示排障阶段和证据回放。
+              <div className="border border-zinc-200/80 bg-white/78 p-4 shadow-sm shadow-zinc-900/[0.03] dark:border-zinc-800/70 dark:bg-zinc-900/45">
+                <div className="flex items-start gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-accent">
+                    <Activity size={18} />
+                  </span>
+                  <div>
+                    <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">创建事故后开始记录排障轨迹</h3>
+                    <p className="mt-1 text-xs leading-6 text-zinc-500 dark:text-zinc-400">
+                      AIOps 模式会把计划、执行、重规划和降级事件写入同一事故，适合需要过程留痕的排障任务。
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                  {emptyStageCards.map((card) => (
+                    <div key={card.title} className="border border-zinc-200/80 bg-zinc-50/70 px-3 py-3 dark:border-zinc-800/70 dark:bg-zinc-950/30">
+                      <card.icon size={15} className="text-accent" />
+                      <div className="mt-2 text-xs font-semibold text-zinc-800 dark:text-zinc-200">{card.title}</div>
+                      <p className="mt-1 text-[11px] leading-5 text-zinc-500 dark:text-zinc-500">{card.text}</p>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 space-y-2">
+                  {incidentStarters.map((starter) => (
+                    <button
+                      key={starter.title}
+                      onClick={() => onCreate(starter.query)}
+                      disabled={isLoading}
+                      className="group flex w-full items-start justify-between gap-3 border border-zinc-200/80 bg-white px-3 py-3 text-left transition hover:border-accent/30 hover:bg-accent/5 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800/70 dark:bg-zinc-900/55 dark:hover:border-accent/30 dark:hover:bg-accent/10"
+                    >
+                      <span>
+                        <span className="block text-sm font-medium text-zinc-800 dark:text-zinc-100">{starter.title}</span>
+                        <span className="mt-1 block text-xs text-zinc-500 dark:text-zinc-500">{starter.detail}</span>
+                      </span>
+                      <ArrowRight size={14} className="mt-1 shrink-0 text-zinc-400 transition group-hover:translate-x-0.5 group-hover:text-accent" />
+                    </button>
+                  ))}
+                </div>
               </div>
             ) : (
               <div className="space-y-2">
@@ -257,8 +331,8 @@ export function IncidentView({ incident, isLoading, error, engine, onCreate, onA
                 </div>
               </div>
             ) : (
-              <div className="border border-dashed border-zinc-300 px-4 py-8 text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-500">
-                当前还没有最终结论。
+              <div className="border border-dashed border-zinc-300 bg-white/55 px-4 py-8 text-sm leading-7 text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900/25 dark:text-zinc-500">
+                {incident ? '当前还没有最终结论。' : `输入首条现象后，将使用 ${engineLabel(engine)} 策略生成诊断结论。`}
               </div>
             )}
 

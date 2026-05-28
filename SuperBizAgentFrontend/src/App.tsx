@@ -187,8 +187,6 @@ export default function App() {
       ) : showWelcome && chat.messages.length === 0 ? (
         <WelcomeScreen
           onSend={handleSend}
-          onStartAIOps={handleStartAIOps}
-          aiOpsEngine={aiOpsEngine}
         />
       ) : (
         <ChatView
