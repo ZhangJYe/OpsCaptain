@@ -1,9 +1,9 @@
 package chat_pipeline
 
 import (
-	"SuperBizAgent/internal/ai/agent/skillspecialists/knowledge"
-	"SuperBizAgent/internal/ai/agent/skillspecialists/logs"
-	"SuperBizAgent/internal/ai/agent/skillspecialists/metrics"
+	"SuperBizAgent/internal/ai/skills/domains/knowledge"
+	"SuperBizAgent/internal/ai/skills/domains/logs"
+	"SuperBizAgent/internal/ai/skills/domains/metrics"
 	"SuperBizAgent/internal/ai/events"
 	"SuperBizAgent/internal/ai/skills"
 	"SuperBizAgent/internal/ai/tools"
@@ -88,7 +88,7 @@ func newReactAgentLambda(ctx context.Context) (lba *compose.Lambda, err error) {
 
 func newReactAgentLambdaWithQuery(ctx context.Context, query string) (lba *compose.Lambda, err error) {
 	config := &react.AgentConfig{
-		MaxStep:                25,
+		MaxStep:                chatConfigInt(ctx, "chat.react.max_step", 25),
 		ToolReturnDirectly:     map[string]struct{}{},
 		StreamToolCallChecker:  fullStreamToolCallChecker,
 	}
@@ -123,7 +123,7 @@ func newReactAgentLambdaWithQuery(ctx context.Context, query string) (lba *compo
 			emitter,
 			traceID,
 			events.ValidateBeforeToolCall(),    // 参数基础校验
-			events.SummaryAfterToolCall(4000),  // afterToolCall: 截断过长结果，减少 token 消耗
+			events.SummaryAfterToolCall(chatConfigInt(ctx, "events.tool_summary_max_len", 4000)),
 		)
 	}
 
@@ -136,4 +136,12 @@ func newReactAgentLambdaWithQuery(ctx context.Context, query string) (lba *compo
 		return nil, err
 	}
 	return lba, nil
+}
+
+func chatConfigInt(ctx context.Context, key string, fallback int) int {
+	v, err := g.Cfg().Get(ctx, key)
+	if err == nil && v.Int() > 0 {
+		return v.Int()
+	}
+	return fallback
 }

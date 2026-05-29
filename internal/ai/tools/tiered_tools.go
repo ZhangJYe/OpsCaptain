@@ -2,29 +2,35 @@ package tools
 
 import (
 	"SuperBizAgent/internal/ai/skills"
+	"context"
 
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/gogf/gf/v2/frame/g"
 )
 
 func BuildTieredTools() []skills.TieredTool {
+	ctx := context.Background()
 	var tiered []skills.TieredTool
 
-	tiered = append(tiered, skills.TieredTool{
-		Tool:    NewGetCurrentTimeTool(),
-		Tier:    skills.TierAlwaysOn,
-		Domains: nil,
-	})
+	if t := NewGetCurrentTimeTool(); t != nil {
+		tiered = append(tiered, skills.TieredTool{
+			Tool:    t,
+			Tier:    skills.TierAlwaysOn,
+			Domains: nil,
+		})
+	}
 
-	tiered = append(tiered, skills.TieredTool{
-		Tool:    NewQueryInternalDocsTool(),
-		Tier:    skills.TierAlwaysOn,
-		Domains: nil,
-	})
+	if t := NewQueryInternalDocsTool(); t != nil {
+		tiered = append(tiered, skills.TieredTool{
+			Tool:    t,
+			Tier:    skills.TierAlwaysOn,
+			Domains: nil,
+		})
+	}
 
 	mcpTools, err := GetLogMcpTool()
 	if err != nil {
-		g.Log().Warningf(nil, "progressive disclosure: MCP log tools unavailable: %v", err)
+		g.Log().Warningf(ctx, "progressive disclosure: MCP log tools unavailable: %v", err)
 	}
 	for _, mt := range mcpTools {
 		tiered = append(tiered, skills.TieredTool{
@@ -34,20 +40,24 @@ func BuildTieredTools() []skills.TieredTool {
 		})
 	}
 
-	tiered = append(tiered, skills.TieredTool{
-		Tool:    NewPrometheusAlertsQueryTool(),
-		Tier:    skills.TierAlwaysOn,
-		Domains: []string{"metrics"},
-	})
+	if t := NewPrometheusAlertsQueryTool(); t != nil {
+		tiered = append(tiered, skills.TieredTool{
+			Tool:    t,
+			Tier:    skills.TierAlwaysOn,
+			Domains: []string{"metrics"},
+		})
+	}
 
 	if MySQLToolEnabled() {
-		tiered = append(tiered, skills.TieredTool{
-			Tool:    NewMysqlCrudTool(),
-			Tier:    skills.TierOnDemand,
-			Domains: []string{"logs", "metrics", "knowledge"},
-		})
+		if t := NewMysqlCrudTool(); t != nil {
+			tiered = append(tiered, skills.TieredTool{
+				Tool:    t,
+				Tier:    skills.TierOnDemand,
+				Domains: []string{"logs", "metrics", "knowledge"},
+			})
+		}
 	} else {
-		g.Log().Warningf(nil, "progressive disclosure: mysql tool disabled because mysql.allowed_tables is empty")
+		g.Log().Warningf(ctx, "progressive disclosure: mysql tool disabled because mysql.allowed_tables is empty")
 	}
 
 	return tiered

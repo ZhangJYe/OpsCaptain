@@ -15,7 +15,7 @@ const (
 )
 
 var (
-	FileDir  = "./docs/"
+	FileDir  = "./docs/knowledge/"
 	envVarRe = regexp.MustCompile(`^\$\{(\w+)\}$`)
 )
 

@@ -52,7 +52,8 @@ func NewQueryInternalDocsTool() tool.InvokableTool {
 			return string(respBytes), nil
 		})
 	if err != nil {
-		panic(fmt.Sprintf("failed to create query_internal_docs tool: %v", err))
+		g.Log().Warningf(context.Background(), "failed to create query_internal_docs tool, will be unavailable: %v", err)
+		return nil
 	}
 	return t
 }

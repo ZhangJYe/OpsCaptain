@@ -181,7 +181,8 @@ func NewPrometheusAlertsQueryTool() tool.InvokableTool {
 			return string(jsonBytes), nil
 		})
 	if err != nil {
-		panic(fmt.Sprintf("failed to create query_prometheus_alerts tool: %v", err))
+		g.Log().Warningf(context.Background(), "failed to create query_prometheus_alerts tool, will be unavailable: %v", err)
+		return nil
 	}
 	return t
 }

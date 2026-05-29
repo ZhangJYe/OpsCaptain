@@ -50,7 +50,7 @@ cost:
   hourly_alert_tokens: "${COST_HOURLY_ALERT_TOKENS}"
   user_daily_alert_tokens: "${COST_USER_DAILY_ALERT_TOKENS}"
 
-file_dir: "/app/docs"
+file_dir: "/app/docs/knowledge"
 
 upload:
   max_size_mb: 20

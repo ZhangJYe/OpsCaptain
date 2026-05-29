@@ -24,7 +24,7 @@ COPY --from=builder /build/superbizagent .
 COPY --from=builder /build/knowledge-indexer .
 COPY --from=builder /build/manifest/config/config.yaml manifest/config/config.yaml
 
-RUN mkdir -p /app/docs /app/docs/quarantine /app/var/runtime && \
+RUN mkdir -p /app/docs/knowledge /app/docs/knowledge/quarantine /app/var/runtime && \
     chown -R appuser:appuser /app
 
 USER appuser

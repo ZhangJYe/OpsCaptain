@@ -1,9 +1,9 @@
 package service
 
 import (
-	"SuperBizAgent/internal/ai/agent/skillspecialists/knowledge"
-	"SuperBizAgent/internal/ai/agent/skillspecialists/logs"
-	"SuperBizAgent/internal/ai/agent/skillspecialists/metrics"
+	"SuperBizAgent/internal/ai/skills/domains/knowledge"
+	"SuperBizAgent/internal/ai/skills/domains/logs"
+	"SuperBizAgent/internal/ai/skills/domains/metrics"
 	"SuperBizAgent/internal/consts"
 	"context"
 	"fmt"

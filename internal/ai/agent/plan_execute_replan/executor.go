@@ -17,11 +17,17 @@ func NewExecutor(ctx context.Context) (adk.Agent, error) {
 	}
 	toolList := mcpTool
 	// alerts
-	toolList = append(toolList, tools.NewPrometheusAlertsQueryTool())
+	if t := tools.NewPrometheusAlertsQueryTool(); t != nil {
+		toolList = append(toolList, t)
+	}
 	// file
-	toolList = append(toolList, tools.NewQueryInternalDocsTool())
+	if t := tools.NewQueryInternalDocsTool(); t != nil {
+		toolList = append(toolList, t)
+	}
 	// time
-	toolList = append(toolList, tools.NewGetCurrentTimeTool())
+	if t := tools.NewGetCurrentTimeTool(); t != nil {
+		toolList = append(toolList, t)
+	}
 	execModel, err := newPlanChatModel(ctx)
 	if err != nil {
 		return nil, err

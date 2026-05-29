@@ -3,7 +3,6 @@ package tools
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/cloudwego/eino/components/tool"
@@ -56,7 +55,8 @@ func NewGetCurrentTimeTool() tool.InvokableTool {
 		})
 
 	if err != nil {
-		panic(fmt.Sprintf("failed to create get_current_time tool: %v", err))
+		g.Log().Warningf(context.Background(), "failed to create get_current_time tool, will be unavailable: %v", err)
+		return nil
 	}
 
 	return t

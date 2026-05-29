@@ -340,7 +340,9 @@ func loadAIOpsGOSConfig(ctx context.Context) *gos_engine.Config {
 }
 
 func registerAIOpsGOSTools(toolReg *experts.ToolRegistry) {
-	toolReg.Register("query_internal_docs", aitools.NewQueryInternalDocsTool())
+	if t := aitools.NewQueryInternalDocsTool(); t != nil {
+		toolReg.Register("query_internal_docs", t)
+	}
 	logTools, err := aitools.GetLogMcpTool()
 	registeredLog := false
 	for _, t := range logTools {

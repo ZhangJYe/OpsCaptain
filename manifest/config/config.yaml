@@ -33,6 +33,7 @@ tracing:
 events:
   health_report_enabled: true
   health_report_interval_ms: 300000
+  tool_summary_max_len: 4000
 
 hallucination:
   enabled: true
@@ -138,7 +139,7 @@ cost:
   hourly_alert_tokens: 200000
   user_daily_alert_tokens: 50000
 
-file_dir: "./docs/"
+file_dir: "./docs/knowledge/"
 
 upload:
   max_size_mb: 20
@@ -198,6 +199,10 @@ chat_async:
   task_ttl_seconds: 86400
   execute_timeout_ms: 120000
   redis_key_prefix: "opscaptionai:chat_task"
+
+chat:
+  react:
+    max_step: 25
 
 context:
   chat_max_history_messages: 10

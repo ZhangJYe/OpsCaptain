@@ -82,7 +82,7 @@ func parseOptions(args []string) (options, error) {
 	fs := flag.NewFlagSet("knowledge-indexer", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	opts := options{}
-	fs.StringVar(&opts.dir, "dir", "./docs", "directory containing markdown files to index")
+	fs.StringVar(&opts.dir, "dir", "./docs/knowledge", "directory containing markdown files to index")
 	fs.StringVar(&opts.collection, "collection", "", "milvus collection override")
 	fs.StringVar(&opts.verifyQuery, "verify-query", "", "query to verify indexed documents")
 	fs.BoolVar(&opts.dryRun, "dry-run", false, "scan files without indexing")
@@ -103,6 +103,9 @@ func collectMarkdownFiles(dir string) ([]string, error) {
 		}
 
 		if !strings.HasSuffix(path, ".md") {
+			return nil
+		}
+		if strings.EqualFold(d.Name(), "README.md") {
 			return nil
 		}
 		paths = append(paths, path)

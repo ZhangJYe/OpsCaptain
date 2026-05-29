@@ -123,7 +123,8 @@ func NewMysqlCrudTool() tool.InvokableTool {
 			return string(resBytes), nil
 		})
 	if err != nil {
-		panic(fmt.Sprintf("failed to create mysql_crud tool: %v", err))
+		g.Log().Warningf(context.Background(), "failed to create mysql_crud tool, will be unavailable: %v", err)
+		return nil
 	}
 	return t
 }

@@ -183,8 +183,10 @@ graph TD
 ```
 
 **设计依据**：
-- **Stage 1 优先按标题切**：运维文档（SOP/Runbook/复盘）的 Markdown 标题层级本身就是最佳边界——`## 排查步骤` 和 `## 解决方案` 天然应该分成两块。
-- **Stage 2 对大块语义补切**：超过 800 字符的块（如某个 `###` 下面的一大段文字），用 embedding 计算相邻句子的相似度，在相似度骤降处切分——保证每块都在"同一个话题"内。
+- **Stage 1 优先按标题切**：
+	- 运维文档（SOP/Runbook/复盘）的 Markdown 标题层级本身就是最佳边界——`## 排查步骤` 和 `## 解决方案` 天然应该分成两块。
+- **Stage 2 对大块语义补切**：
+	- 超过 800 字符的块（如某个 `###` 下面的一大段文字），用 embedding 计算相邻句子的相似度，在相似度骤降处切分——保证每块都在"同一个话题"内。
 - **非 Markdown 文档**（JSON/YAML）目前依赖 semantic splitter 或走专门的 chunking 策略（AGENTS.md 提到 `"RAG chunking 不能只按 Markdown 标题切，要支持 JSONL case 级切分"`）。
 
 ### 2.5.3 Embedding 向量化：文本 → 向量
@@ -195,7 +197,9 @@ eb, _ := embedder.DoubaoEmbedding(ctx)
 // → 生成 1024 维向量，写入 Milvus 向量库
 ```
 
-**选型原因**：Doubao Embedding 对中文技术文档效果好，与 Milvus 配合写入向量库。文档元数据（service_tokens、pod_tokens 等）作为 Milvus 的标量字段一起存储，供 RetrieveRefine 阶段做结构化交叉打分。
+**选型原因**：
+	Doubao Embedding 对中文技术文档效果好，与 Milvus 配合写入向量库。
+	文档元数据（service_tokens、pod_tokens 等）作为 Milvus 的标量字段一起存储，供 RetrieveRefine 阶段做结构化交叉打分。
 
 ### 2.5.4 BM25 索引同步：双索引策略
 

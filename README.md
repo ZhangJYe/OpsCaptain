@@ -74,7 +74,8 @@ internal/ai/service/                  memory、approval、ai_ops、异步任务�
 internal/ai/tools/                    指标、日志、知识库、数据库等工具
 utility/                              auth、cache、health、logging、mem、metrics、safety、tracing
 frontend/                             React 前端
-docs/                                 RAG 原始知识语料，不是普通工程文档目录
+docs/knowledge/                       RAG 知识语料（索引入库）
+docs/reference/                       工程参考文档（不进 RAG）
 Learn/system/                         当前系统架构、数据流、代码地图、Prompt 导览
 Learn/operations/                     上线、域名、日常更新等运维手册
 todo/                                 设计稿与执行计划
@@ -260,7 +261,8 @@ docker compose --env-file .env.production -f docker-compose.prod.yml ps
 | `Learn/system/02-data-flow-guide.md` | 数据流说明 |
 | `Learn/system/03-code-map.md` | 代码阅读地图 |
 | `Learn/system/04-prompt-architecture-guide.md` | Prompt 架构 |
-| `docs/README.md` | RAG 知识库语料说明 |
+| `docs/knowledge/README.md` | RAG 知识库语料说明 |
+| `docs/reference/README.md` | 工程参考文档说明 |
 | `todo/rag-engineering-complete-design.md` | RAG 工程设计 |
 | `res/harness-engineering-for-opscaptionai.md` | Harness Engineering 记录 |
 | `frontend/README.md` | 前端开发与部署说明 |

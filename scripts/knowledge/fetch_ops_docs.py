@@ -96,7 +96,7 @@ def write_doc(source, raw, output_dir, fetched_at):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--sources", default="scripts/knowledge/sources.json")
-    parser.add_argument("--output", default="docs/upstream")
+    parser.add_argument("--output", default="docs/knowledge/upstream")
     parser.add_argument("--source", action="append", default=[])
     parser.add_argument("--timeout", type=float, default=20)
     parser.add_argument("--dry-run", action="store_true")
