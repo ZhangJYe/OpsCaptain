@@ -28,7 +28,7 @@ Date: 2026-04-05
 
 实现点：
 
-- `SuperBizAgentFrontend/app.js`
+- `frontend/app.js`
   - `sendQuickMessage(...)`
   - `addAssistantMessageWithMeta(...)`
   - `renderAssistantMeta(...)`
@@ -263,7 +263,7 @@ Chat Multi-Agent：
 
 已通过：
 
-- `node --check SuperBizAgentFrontend/app.js`
+- `node --check frontend/app.js`
 - `go test ./internal/controller/chat ./internal/ai/service ./internal/ai/agent/supervisor`
 - `go test ./...`
 - `go build ./...`

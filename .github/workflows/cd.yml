@@ -92,10 +92,10 @@ jobs:
       - name: Build and push frontend image
         run: |
           docker build \
-            -f SuperBizAgentFrontend/Dockerfile \
+            -f frontend/Dockerfile \
             -t "${FRONTEND_IMAGE}:${GITHUB_SHA}" \
             -t "${FRONTEND_IMAGE}:latest" \
-            SuperBizAgentFrontend
+            frontend
           docker push "${FRONTEND_IMAGE}:${GITHUB_SHA}"
           docker push "${FRONTEND_IMAGE}:latest"
 

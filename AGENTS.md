@@ -97,7 +97,7 @@ curl -k https://opscaptain.top/ai/readyz
 - LLM 框架：cloudwego/eino v0.7+ / cloudwego/eino-ext
 - LLM 模型：DeepSeek V3（推理/rewrite/rerank）、Doubao Embedding（向量化）
 - 向量数据库：Milvus (milvus-sdk-go/v2)
-- 前端：React + TypeScript（SuperBizAgentFrontend/），历史静态前端代码仍在仓库中
+- 前端：React + TypeScript（frontend/），历史静态前端代码仍在仓库中
 - 数据预处理：Python 3.11+（pandas、pyarrow）
 - 配置管理：manifest/config/config.yaml
 - CI/CD：GitHub Actions（.github/workflows/ci.yml、cd.yml）
@@ -168,7 +168,7 @@ todo/                                  → 设计文档与执行计划
 Learn/                                 → 学习笔记与设计稿
 scripts/                               → 数据预处理脚本（Python + PowerShell + Bash）
 aiopschallenge2025/                    → AIOps 故障案例数据集
-SuperBizAgentFrontend/                 → 前端
+frontend/                              → 前端
 ```
 
 ---

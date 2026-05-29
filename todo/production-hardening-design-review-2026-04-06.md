@@ -11,7 +11,7 @@
 - 向量数据库：Milvus
 - 关系数据库：MySQL（GORM）
 - 缓存：Redis（GoFrame redis adapter）
-- 前端：独立 SPA（SuperBizAgentFrontend）
+- 前端：独立 SPA（frontend）
 - 部署：Docker Compose + Caddy + 阿里云 ECS 单机
 - CI/CD：GitHub Actions → ACR → ECS SSH 部署
 - LLM 后端：GLM-4.5-AIR（智谱 AI）、SiliconFlow embedding

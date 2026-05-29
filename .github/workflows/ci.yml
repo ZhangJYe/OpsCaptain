@@ -42,4 +42,4 @@ jobs:
         run: docker build -t opscaptain-backend:${{ github.sha }} .
 
       - name: Build frontend image
-        run: docker build -f SuperBizAgentFrontend/Dockerfile -t opscaptain-frontend:${{ github.sha }} SuperBizAgentFrontend
+        run: docker build -f frontend/Dockerfile -t opscaptain-frontend:${{ github.sha }} frontend

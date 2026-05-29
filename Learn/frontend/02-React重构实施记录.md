@@ -74,13 +74,13 @@ src/
 
 ```bash
 # 1. 上传新前端目录到服务器
-rsync -avz SuperBizAgentFrontend/ user@124.222.57.178:/path/to/SuperBizAgentFrontend/
+rsync -avz frontend/ user@124.222.57.178:/path/to/frontend/
 
 # 2. SSH 到服务器
 ssh user@124.222.57.178
 
 # 3. 构建 Docker 镜像
-cd /path/to/SuperBizAgentFrontend
+cd /path/to/frontend
 docker build -t opscaption-frontend:v2 .
 
 # 4. 替换旧容器

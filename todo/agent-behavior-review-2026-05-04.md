@@ -26,7 +26,7 @@
 
 ### 问题 1（致命）：前端默认 quick 模式，完全绕过 Agent
 
-文件：`SuperBizAgentFrontend/src/hooks/useChat.ts:334`
+文件：`frontend/src/hooks/useChat.ts:334`
 
 ```typescript
 const [mode, setMode] = useState<ChatMode>("quick");

@@ -59,7 +59,7 @@ OpsCaptain/
 ├── utility/                ← 🧰 公共工具（认证、日志、监控...）
 ├── manifest/config/        ← ⚙️ 配置文件
 ├── deploy/                 ← 🚀 部署相关（Docker、K8s...）
-├── SuperBizAgentFrontend/  ← 🖥️ 前端代码
+├── frontend/  ← 🖥️ 前端代码
 ├── scripts/                ← 🐍 数据预处理脚本
 └── Learn/                  ← 📚 学习笔记（你现在在这里）
 ```

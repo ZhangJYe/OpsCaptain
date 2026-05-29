@@ -9,7 +9,7 @@
 > **项目定位：** 面向 AIOps 场景的智能运维助手  
 > **Go Module：** SuperBizAgent  
 > **技术栈：** Go 1.24+ / GoFrame v2 / Eino / DeepSeek V3 / Milvus / RabbitMQ / Redis  
-> **前端：** 原生 HTML/JS (SuperBizAgentFrontend)
+> **前端：** 原生 HTML/JS (frontend)
 
 ---
 
@@ -848,7 +848,7 @@ OpsCaptain/
 │   ├── middleware/   # HTTP 中间件
 │   └── common/      # 公共配置/Env
 │
-├── SuperBizAgentFrontend/           # 原生 JS 前端 (SSE + 拖拽上传)
+├── frontend/           # 原生 JS 前端 (SSE + 拖拽上传)
 ├── deploy/                          # 生产部署 (docker-compose/Caddy/Prometheus)
 ├── scripts/aiops/                   # Python 数据预处理
 ├── docs/                            # 运维知识库文档

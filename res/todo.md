@@ -1464,8 +1464,8 @@ Controller 改造：
 
 修改文件：
 
-- `SuperBizAgentFrontend/app.js`
-- `SuperBizAgentFrontend/styles.css`
+- `frontend/app.js`
+- `frontend/styles.css`
 - `internal/controller/chat/chat_v1_chat_stream.go`
 
 实现内容：
