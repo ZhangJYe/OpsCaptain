@@ -58,12 +58,14 @@ __pycache__/
 # Local agent / hook artifacts
 .claude-audit.log
 rag_eval_cmd
+/rag_online_eval_cmd
 .playwright-cli/
 
 # Local evaluation artifacts
 gos_eval
 baseline_result*.json
 eval_compare*.json
+internal/ai/cmd/rag_online_eval_cmd/results/
 
 # Local editor metadata
 Learn/.obsidian/

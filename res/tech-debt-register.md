@@ -202,3 +202,21 @@
   - `SchemaDocsToRetrievedDocs` 从文档 MetaData 提取 trace。
   - 新增 `NewQueryExecutor(pool)` 适配器，包装 `rag.Query()` 为 `QueryExecutor`，自动捕获 trace 和 latency。
   - 新增 `TestRunComputesMRR`、`TestReciprocalRank` 测试。
+
+---
+
+## RAG v2 baseline 实验基础设施（2026-05-30）
+
+### TD-27 ✅ eval CLI 增强与 baseline 实验脚本
+
+- **文件**：`internal/ai/cmd/rag_online_eval_cmd/main.go`、`run_baseline.sh`、`eval/testdata/baseline_cases.jsonl`、`docs/rag-baseline-experiment.md`
+- **修复**：
+  - eval CLI `printSummary` 新增 MRR、CitationCoverage、EmptyRate（百分比格式）显示。
+  - 新增 `rerank` eval mode（rerank=true, rewrite=false），支持单独测试 rerank 效果。
+  - `-eval` 默认为空时自动使用 `eval.SampleCases()` 内置用例。
+  - `warmupBM25` 支持无 evalPath 时从 `common.FileDir` 加载文档。
+  - 失败 case 自动打印到 stderr。
+  - `baseline_cases.jsonl`：18 条覆盖单文档/多文档/跨域/口语化/英文/同义改写场景，`relevant_ids` 对齐 `docs/knowledge/*.md` canonical ID。
+  - `run_baseline.sh`：一键跑 `hybrid-retrieve` vs `hybrid-rerank` 生产路径对比实验。
+  - `docs/rag-baseline-experiment.md`：实验方法论、指标说明、trace 分析指南。
+- **待完成**：实际实验运行（需 Milvus 服务可用）。

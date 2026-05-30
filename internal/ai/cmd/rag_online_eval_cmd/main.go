@@ -26,7 +26,7 @@ type report struct {
 }
 
 func main() {
-	evalPath := flag.String("eval", filepath.Join(".", "aiopschallenge2025", "baseline", "eval", "eval_cases.jsonl"), "path to eval_cases.jsonl")
+	evalPath := flag.String("eval", "", "path to eval_cases.jsonl (default: built-in sample cases)")
 	ksRaw := flag.String("ks", "1,3,5", "comma-separated k values, e.g. 1,3,5")
 	modeRaw := flag.String("mode", "hybrid", "eval mode: hybrid, retrieve, rewrite, or full")
 	limit := flag.Int("limit", 0, "optional limit on number of eval cases")
@@ -40,13 +40,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	wantRewrite, wantRerank, isHybrid := parseEvalMode(*modeRaw)
+	wantRewrite, wantRerank, isHybrid, useConfigDefaults := parseEvalMode(*modeRaw)
 	rag.NewRetrieverFunc = retriever.NewMilvusRetriever
 
-	cases, err := eval.LoadEvalCasesJSONL(*evalPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "load eval cases failed: %v\n", err)
-		os.Exit(1)
+	var cases []eval.EvalCase
+	if strings.TrimSpace(*evalPath) == "" {
+		cases = eval.SampleCases()
+		fmt.Fprintf(os.Stderr, "using %d built-in sample cases\n", len(cases))
+	} else {
+		cases, err = eval.LoadEvalCasesJSONL(*evalPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "load eval cases failed: %v\n", err)
+			os.Exit(1)
+		}
 	}
 	if *limit > 0 && *limit < len(cases) {
 		cases = cases[:*limit]
@@ -72,6 +78,10 @@ func main() {
 		var queryErr error
 
 		if isHybrid {
+			if !useConfigDefaults {
+				queryCtx = rag.WithRewriteOverride(queryCtx, wantRewrite)
+				queryCtx = rag.WithRerankOverride(queryCtx, wantRerank)
+			}
 			docs, trace, queryErr = rag.Query(queryCtx, rag.SharedPool(), query)
 		} else {
 			docs, trace, queryErr = rag.QueryForEval(queryCtx, rag.SharedPool(), query, wantRewrite, wantRerank)
@@ -101,6 +111,13 @@ func main() {
 
 	printSummary(*modeRaw, summary, ks)
 
+	if summary.Failed > 0 {
+		fmt.Fprintf(os.Stderr, "\n--- %d failures ---\n", summary.Failed)
+		for _, f := range summary.Failures {
+			fmt.Fprintf(os.Stderr, "  %s: %s\n", f.CaseID, f.Error)
+		}
+	}
+
 	if strings.TrimSpace(*outPath) != "" {
 		raw, err := json.MarshalIndent(report{Mode: *modeRaw, Summary: summary, Results: results}, "", "  ")
 		if err != nil {
@@ -119,29 +136,42 @@ func main() {
 	}
 }
 
-func parseEvalMode(raw string) (wantRewrite, wantRerank, isHybrid bool) {
+func parseEvalMode(raw string) (wantRewrite, wantRerank, isHybrid, useConfigDefaults bool) {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "hybrid":
-		return false, false, true
+		return false, false, true, true
+	case "hybrid-retrieve":
+		return false, false, true, false
+	case "hybrid-rerank":
+		return false, true, true, false
 	case "retrieve":
-		return false, false, false
+		return false, false, false, false
 	case "rewrite":
-		return true, false, false
+		return true, false, false, false
+	case "rerank":
+		return false, true, false, false
 	case "full":
-		return true, true, false
+		return true, true, false, false
 	default:
 		fmt.Fprintf(os.Stderr, "unknown eval mode %q, falling back to hybrid\n", raw)
-		return false, false, true
+		return false, false, true, true
 	}
 }
 
 func warmupBM25(ctx context.Context, evalPath string) {
-	docsDir := filepath.Dir(filepath.Dir(evalPath))
-	evidenceDir := filepath.Join(docsDir, "evidence")
-	historyDir := filepath.Join(docsDir, "history")
+	var dirs []string
+	if strings.TrimSpace(evalPath) != "" {
+		docsDir := filepath.Dir(filepath.Dir(evalPath))
+		dirs = []string{filepath.Join(docsDir, "evidence"), filepath.Join(docsDir, "history")}
+	} else {
+		fileDir := common.FileDir
+		if fileDir != "" {
+			dirs = []string{fileDir}
+		}
+	}
 	idx := rag.SharedBM25Index()
 	count := 0
-	for _, dir := range []string{evidenceDir, historyDir} {
+	for _, dir := range dirs {
 		entries, err := os.ReadDir(dir)
 		if err != nil {
 			continue
@@ -159,7 +189,7 @@ func warmupBM25(ctx context.Context, evalPath string) {
 			count++
 		}
 	}
-	fmt.Fprintf(os.Stderr, "BM25 warm-up: indexed %d docs from %s and %s\n", count, evidenceDir, historyDir)
+	fmt.Fprintf(os.Stderr, "BM25 warm-up: indexed %d docs\n", count)
 }
 
 func parseKs(raw string) ([]int, error) {
@@ -188,14 +218,16 @@ func printSummary(mode string, summary eval.QuerySummary, ks []int) {
 	fmt.Println("  RAG Online Baseline Report")
 	fmt.Println("========================================")
 	fmt.Printf("  Mode         : %s\n", mode)
-	fmt.Printf("  Cases        : %d\n", summary.Cases)
+	fmt.Printf("  Cases        : %d (ok=%d, fail=%d)\n", summary.Cases, summary.Succeeded, summary.Failed)
+	fmt.Printf("  MRR          : %.4f\n", summary.MRR)
+	fmt.Printf("  Citation Cov : %.2f%%\n", summary.CitationCoverage*100)
+	fmt.Printf("  Empty Rate   : %.2f%%\n", summary.EmptyRate*100)
+	fmt.Printf("  Cache Hit    : %.2f%%\n", summary.CacheHitRate*100)
 	fmt.Printf("  Avg Init ms  : %.2f\n", summary.AvgInitLatencyMs)
 	fmt.Printf("  Avg Rewrite  : %.2f\n", summary.AvgRewriteLatencyMs)
 	fmt.Printf("  Avg Retrieve : %.2f\n", summary.AvgRetrieveLatencyMs)
 	fmt.Printf("  Avg Rerank   : %.2f\n", summary.AvgRerankLatencyMs)
 	fmt.Printf("  Avg Total ms : %.2f\n", summary.AvgTotalLatencyMs)
-	fmt.Printf("  Cache Hit    : %.2f\n", summary.CacheHitRate)
-	fmt.Printf("  Empty Rate   : %.2f\n", summary.EmptyRate)
 	fmt.Println("========================================")
 
 	fmt.Printf("%-12s", "Metric")

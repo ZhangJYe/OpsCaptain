@@ -10,6 +10,21 @@ import (
 	"github.com/gogf/gf/v2/frame/g"
 )
 
+type ctxKey string
+
+const (
+	ctxOverrideRewrite ctxKey = "rag.override.rewrite"
+	ctxOverrideRerank  ctxKey = "rag.override.rerank"
+)
+
+func WithRerankOverride(ctx context.Context, v bool) context.Context {
+	return context.WithValue(ctx, ctxOverrideRerank, v)
+}
+
+func WithRewriteOverride(ctx context.Context, v bool) context.Context {
+	return context.WithValue(ctx, ctxOverrideRewrite, v)
+}
+
 type QueryTrace struct {
 	Hybrid            *HybridTrace
 	Mode              string
@@ -162,6 +177,18 @@ func QueryForEval(ctx context.Context, pool *RetrieverPool, query string, wantRe
 }
 
 func ragConfigBool(ctx context.Context, key string) bool {
+	var overrideKey ctxKey
+	switch key {
+	case "rag.rewrite_enabled":
+		overrideKey = ctxOverrideRewrite
+	case "rag.rerank_enabled":
+		overrideKey = ctxOverrideRerank
+	}
+	if overrideKey != "" {
+		if v, ok := ctx.Value(overrideKey).(bool); ok {
+			return v
+		}
+	}
 	v, err := g.Cfg().Get(ctx, key)
 	if err != nil {
 		return false
