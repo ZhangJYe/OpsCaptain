@@ -1,16 +1,15 @@
-# AGENTS.md — OpsCaption Agent 协作规则
+# AGENTS.md — OpsCaption 工程护栏
 
-本文件是所有 AI Agent（Trae、Copilot、Cursor、OpsCaption 自身 Agent 等）在本项目中工作时的唯一行为约束。
-Agent 每次启动时应自动加载本文件。犯错时由人类更新本文件，形成反馈循环。
-本文件优先级高于任何外部 Wiki、Slack、飞书文档。
+本文件是所有 AI Agent 在本项目中工作时的行为约束。每次启动自动加载。
+犯错时由人类更新本文件，形成反馈循环。优先级高于外部 Wiki、Slack、飞书文档。
 
 ---
 
-## ⚡ 行为红线（每次改代码前必须过一遍）
+## 1. 行为红线
 
 | # | 规则 | 违反后果 |
 |---|------|---------|
-| 1 | **不加注释**，除非用户明确要求 | 代码里出现多余注释 = 噪音 |
+| 1 | **不加注释**，除非用户明确要求 | 代码噪音 |
 | 2 | **不主动 commit / push**，除非用户明确要求 | 用户可能想先 review |
 | 3 | **推送前必须跑 `go test ./...` 和 `npm run build`** | CI 会挂 |
 | 4 | commit message **用中文** | 团队规范 |
@@ -19,143 +18,53 @@ Agent 每次启动时应自动加载本文件。犯错时由人类更新本文�
 | 7 | 新增能力必须**可配置**（budget / top_k / timeout / feature flag） | 无法调参 |
 | 8 | 错误处理走 `ResultStatusDegraded`，**不直接 fatal** | 服务崩溃 |
 | 9 | **不要暴露或日志记录 secrets / keys** | 安全事故 |
-| 10 | **不要重新接回 `chat_multi_agent`** 路由 | 已废弃的架构 |
-| 11 | 修改 RAG / Agent / ContextEngine 后，**必须跑对应 package 的测试** | 局部改动可能破坏上游 |
-| 12 | **每次 push 前必须先 pull 最新远端代码**（建议 `git pull --rebase`） | 避免覆盖远端更新或推送失败 |
-
-**检查清单（每次提交前）：**
-- [ ] `go build ./...` 通过
-- [ ] `go test ./...` 通过
-- [ ] 没有新增注释（除非用户要求）
-- [ ] 没有创建不必要的新文件
-- [ ] commit message 是中文
-- [ ] 配置项走 config.yaml，没有硬编码
-- [ ] push 前已 pull 最新远端代码
+| 10 | **不要重新接回 `chat_multi_agent`** 路由 | 已废弃架构 |
+| 11 | 修改 RAG / Agent / ContextEngine 后，**必须跑对应 package 测试** | 局部改动可能破坏上游 |
+| 12 | **每次 push 前必须先 pull 最新远端代码** | 避免推送失败 |
 
 ---
 
-## 项目概述
+## 2. AI Coding Rules v1
 
-- 项目名称：OpsCaption / OpsCaptionAI
-- 模块名：SuperBizAgent（go.mod module name）
-- 定位：面向 AIOps 场景的智能运维助手，具备 ReAct 对话、Plan-Execute-Replan 运维分析、RAG 知识检索、故障诊断能力
-- 当前主链路：
-  - Chat：用户输入 → ContextEngine / MemoryService → Eino ReAct Agent → Tools / RAG → JSON / SSE 输出
-  - AIOps：用户输入 → Approval / Degradation / Memory → Runtime → Plan-Execute-Replan → 输出分析结论
-- 目标用户：内部运维团队
-- 当前阶段：P1 完成，正在做 RAG baseline 评测与 Harness Engineering
+### 2.1 硬规则（违反即 revert）
 
-## 新窗口快速背景
+- **Controller 不直连 DB / infra SDK**。Controller 只做参数解析、鉴权上下文、响应映射。
+- **`internal/ai/rag/` 不 import `internal/infra/milvus`、`milvus-sdk-go`、`utility/client`**。✅ 已有 import guard test 自动检查。
+- **`utility/` 不新增 `internal/` 依赖**。现有例外已登记，不允许新增同类违规。
+- **新增配置不得 hardcode**，必须进入 `manifest/config/config.yaml`。
+- **不允许恢复 `chat_multi_agent` 路由**和 `supervisor/triage/reporter/skillspecialists` 编排。
 
-如果是新开的 Codex / Cursor / Claude / Trae 会话，先按下面这段理解项目，不要重新猜架构：
-
-- 这是一个 Go 后端为主的 AIOps Agent 项目，不是纯前端 demo。
-- 核心目标是让运维人员用自然语言描述告警、日志、指标异常或知识库问题，系统自动组织上下文、调用工具/RAG，并输出带证据的诊断建议。
-- 当前有效主链路只有两条：
-  - Chat：ReAct Agent + Tools + RAG + Memory + SSE。
-  - AIOps：Plan-Execute-Replan，用于更结构化的运维分析。
-- `chat_multi_agent` 已废弃并移除，不要再把 supervisor / triage / reporter 当成当前聊天入口。
-- 后端能力重点：GoFrame HTTP 控制器、Eino Agent 编排、Redis 治理、RabbitMQ 异步任务、Milvus RAG、MySQL/文件持久化、Prometheus/Jaeger 可观测性、SSE 流式响应。
-- 记忆系统通过 `MemoryService` 封装，聊天结果持久化和记忆抽取不能裸调用底层 `internal/ai/memory`。
-- RAG 优化必须先看 baseline / holdout 评测，不要只凭单次问答效果判断。
-- 所有设计口径以本文件和 `Learn/system/` 下当前文档为准，旧的 multi-agent 学习稿只作为历史材料。
-
-## 线上部署与验证
-
-- 线上服务器：`124.222.57.178`
-- 线上域名：`https://opscaptain.top/ai/`
-- SSH 用户：`root@124.222.57.178`
-- 部署目录：`/opt/opscaptain`
-- 生产编排：`docker-compose.prod.yml` + `.env.production` + `release.env`
-- 注意：执行 compose 命令前需要加载 `release.env`，否则 `BACKEND_IMAGE` / `FRONTEND_IMAGE` 变量会缺失。
-
-常用只读验证命令：
-
-```bash
-ssh root@124.222.57.178
-cd /opt/opscaptain
-set -a; . ./release.env; set +a
-docker compose --env-file .env.production -f docker-compose.prod.yml ps
-curl -sS http://127.0.0.1/ai/healthz
-curl -sS http://127.0.0.1/ai/readyz
-docker logs --since=10m opscaptain-backend-1
-docker logs --since=10m opscaptain-caddy-1
-```
-
-对外健康检查：
-
-```bash
-curl -k https://opscaptain.top/ai/healthz
-curl -k https://opscaptain.top/ai/readyz
-```
-
----
-
-## 技术栈
-
-- Go 1.24+，GoFrame v2 (github.com/gogf/gf/v2)
-- LLM 框架：cloudwego/eino v0.7+ / cloudwego/eino-ext
-- LLM 模型：DeepSeek V3（推理/rewrite/rerank）、Doubao Embedding（向量化）
-- 向量数据库：Milvus (milvus-sdk-go/v2)
-- 前端：React + TypeScript（frontend/），历史静态前端代码仍在仓库中
-- 数据预处理：Python 3.11+（pandas、pyarrow）
-- 配置管理：manifest/config/config.yaml
-- CI/CD：GitHub Actions（.github/workflows/ci.yml、cd.yml）
-
----
-
-## 当前有效架构
-
-### Chat 路径
-
-- 控制器入口：`internal/controller/chat/chat_v1_chat.go` / `chat_v1_chat_stream.go`
-- 执行核心：`internal/ai/agent/chat_pipeline/`
-- 模式：Eino ReAct Agent + ProgressiveDisclosure + ContextEngine + MemoryService
-- 输出：普通 JSON 响应或 SSE 流式事件
-
-### AIOps 路径
-
-- 服务入口：`internal/ai/service/ai_ops_service.go`
-- Runtime 包装：`internal/ai/runtime/`
-- 执行核心：`internal/ai/agent/plan_execute_replan/`
-- 模式：Plan-Execute-Replan
-- 说明：当前保留的是 AIOps runtime 壳 + Plan-Execute-Replan 执行核心，不再存在 chat multi-agent 路由
-
-### 上下文工程
-
-- ContextAssembler 统一装配 history / memory / docs / tool outputs
-- ContextProfile 和 ContextBudget 做预算控制
-- ContextTrace 记录装配细节
-
-### RAG 链路
-
-- Query Rewrite → RetrieverPool (Milvus) → Rerank (LLM) → Evidence Assembly
-- 当前正在做 AIOps baseline 评测和 telemetry evidence 预处理
-
-### 历史/实验代码
-
-- `internal/ai/agent/supervisor/`
-- `internal/ai/agent/triage/`
-- `internal/ai/agent/reporter/`
-- `internal/ai/agent/skillspecialists/`
-
-这些目录目前不作为当前主链路的设计依据。除非用户明确要求恢复或研究历史方案，否则不要再把它们当作现行架构来描述或重新接回聊天入口。
-
----
-
-## 工程分层与 import 规则
-
-### 五层模型
+### 2.2 分层规则
 
 ```
 API Layer            internal/controller/       参数解析 → 调用 Application → 格式化响应
-Application Layer    internal/app/              编排业务流程：Chat、AIOps、Knowledge
+Application Layer    internal/app/              编排业务流程：ChatApp、AIOpsApp、KnowledgeApp
 Domain Layer         internal/ai/               核心业务规则：检索、推理、证据、Agent
 Infrastructure Layer internal/infra/            外部系统适配：Milvus、RabbitMQ、Redis
 Common Layer         utility/                   通用横切关注点：认证、限流、安全、健康检查
 ```
 
-### import 规则（目标态）
+各层职责边界详见 [01-system-architecture-guide.md](./Learn/system/01-system-architecture-guide.md) 第 3 节。
+
+文件大小警戒线：
+- Controller 方法 < 50 行
+- Application Service < 300 行
+- Domain Service < 500 行
+- Infrastructure Adapter < 400 行
+
+### 2.3 Agent / RAG / Tool 规则
+
+- **Agent 输出诊断结论时必须带 evidence**；没有证据时输出 `ResultStatusDegraded` 或明确说明证据不足。
+- **RAG 检索默认必须经过 rewrite / retrieve / rerank / token budget 控制**，除非测试或显式配置关闭。
+- **检索结果进入上下文前必须经过 ContextEngine budget 裁剪**。
+- **Memory 只能作为执行上下文，不能替代原始 query 做 routing**。
+- **新增 tool 必须补充 schema、timeout、权限边界、失败降级行为、最小测试**。
+- **工具调用逻辑不能散落在 Controller 或随意业务代码里**，应进入 tool registry / skill / app 编排层。
+- **RAG 优化必须先看 baseline / holdout 评测**，不要只凭单次问答效果判断。
+
+---
+
+## 3. import 规则（目标态）
 
 ```
 controller/ → app/                     ✅
@@ -167,14 +76,7 @@ utility/    → internal/                ❌
 任何层      → utility/                 ✅
 ```
 
-关键约束：
-- `internal/ai/rag/` 不得 import `internal/infra/milvus`、`milvus-sdk-go`、`utility/client`。VectorStore 和 RetrieverFactory 通过 main.go 注入。✅ 已强制（import guard test 覆盖）
-- `internal/infra/milvus/` 是 Milvus SDK 的唯一适配点。其他包不得直接 import `milvus-sdk-go`。
-- `utility/` 不得 import `internal/` 下任何包。Milvus 健康检查和关闭通过 main.go 注入函数变量。
-
-### 已知例外（待清理）
-
-以下文件违反目标规则，已登记为例外。修改这些文件时应优先消除违规。
+### 已知例外（待清理，不允许新增同类违规）
 
 | 文件 | 违规 | 原因 |
 |------|------|------|
@@ -187,136 +89,56 @@ utility/    → internal/                ❌
 | `utility/tracing/tracing.go` | `utility/ → internal/consts` | 读取 tracing 常量 |
 | `utility/middleware/middleware.go` | `utility/ → internal/consts` | 读取中间件常量 |
 
-### 文件大小警戒线
+---
 
-- Controller 方法 < 50 行
-- Application Service < 300 行
-- Domain Service < 500 行
-- Infrastructure Adapter < 400 行
+## 4. 当前项目口径
+
+- **项目**：OpsCaption / OpsCaptionAI，模块名 `SuperBizAgent`（go.mod）
+- **定位**：面向 AIOps 的智能运维助手，Go 后端为主
+- **当前有效主链路**：
+  - Chat：`ContextEngine / MemoryService → Eino ReAct Agent → Tools / RAG → JSON / SSE`
+  - AIOps：`Approval / Degradation / Memory → Runtime → Plan-Execute-Replan`
+- **`chat_multi_agent` 已废弃**，`supervisor/triage/reporter/skillspecialists` 不再作为当前架构依据
+- **MemoryService** 封装 `internal/ai/memory`，不直接裸调底层
+- **设计口径**以本文件和 `Learn/system/` 下当前文档为准
 
 ---
 
-## 目录结构
+## 5. 提交与验证流程
 
-```
-internal/controller/                   → API Layer：HTTP 控制器
-internal/app/                          → Application Layer：ChatApp、AIOpsApp、KnowledgeApp
-internal/ai/agent/chat_pipeline/       → Chat ReAct 执行链路
-internal/ai/agent/plan_execute_replan/ → AIOps Plan-Execute-Replan
-internal/ai/rag/                       → Domain：RAG 链路（query/rewrite/rerank/retriever_pool）
-internal/ai/contextengine/             → Domain：上下文装配和 budget 管理
-internal/ai/memory/                    → Domain：记忆系统（session/long_term/extraction）
-internal/ai/skills/                    → Domain：skill 抽象和 registry
-internal/ai/service/                   → Domain：服务层（memory/approval/ai_ops）
-internal/ai/retriever/                 → Domain：Milvus retriever 实现
-internal/ai/indexer/                   → Domain：Milvus indexer 实现
-internal/infra/milvus/                 → Infrastructure：Milvus 适配（client、VectorStore、config）
-internal/ai/cmd/                       → CLI 入口
-utility/                               → Common Layer：auth、safety、metrics、tracing、health、common
-manifest/config/                       → 配置文件
-```
+每次提交前：
+
+- [ ] `go build ./...` 通过
+- [ ] `go test ./...` 通过
+- [ ] `npm run build` 通过（如有前端改动）
+- [ ] 没有新增注释（除非用户要求）
+- [ ] 没有创建不必要的新文件
+- [ ] commit message 是中文
+- [ ] 配置项走 config.yaml，没有硬编码
+- [ ] push 前已 `git pull --rebase`
 
 ---
 
-## 代码规范
+## 6. 关键踩坑摘要
 
-- 不加注释，除非明确要求
-- 错误处理统一走 `ResultStatusDegraded`，不直接 fatal
-- 新增执行链路或 tool 前先补最小 replay / 回归 case
-- 配置项不硬编码，走 `config.yaml`
-- 不在 `main.go` 里内联工具函数
-- 所有新能力都要进入配置：预算、top_k、timeouts、rerank、feature flags
-- commit message 用中文
-- 不主动 commit，除非用户明确要求
-- 所有新增文档默认使用中文
-- 不创建不必要的文件
-- 优先编辑已有文件，而不是新建文件
+完整列表见 [res/agent-coding-retrospective.md](./res/agent-coding-retrospective.md)。
+
+- **不恢复 `chat_multi_agent`** — 已废弃的架构，不要重新接回。
+- **Memory 不参与 routing** — 只作为执行上下文，不替代原始 query。
+- **RAG 先看 baseline / holdout** — 不能拿全量数据自证效果。
+- **不暴露 secrets** — 不要日志记录 API keys、tokens、内部 IP。
+- **push 前必须测试 + pull rebase** — CI 会挂，远端更新会冲突。
 
 ---
 
-## 禁止事项
+## 7. 必读文档索引
 
-- 不要把 `groundtruth` 标签直接当实时证据喂给模型
-- 不要把原始 parquet 直接入向量库，必须先预处理成 serving docs
-- 不要把历史标签和实时证据混在同一层，必须分层
-- 不要暴露或日志记录 secrets 和 keys
-- 不要提交大体积数据集、缓存目录、临时日志
-- 不要删除 `res/` 或 `todo/` 下的重要历史文档
-- 不要假设任何第三方库可用，先检查 `go.mod` 或 `package.json`
-- 不要重新接回 `chat_multi_agent` 关键词路由
-- 不要让聊天链路重新依赖 `supervisor/triage/reporter/skillspecialists`
-- 不要把 memory 直接拼进 routing 判断，memory 只能作为执行上下文，不替代原始 query
-
----
-
-## 历史踩坑规则
-
-每一条规则对应一个真实发生过的失败案例。
-
-- `Reporter` 首字母大写用自定义函数 `displayAgentName`，不用 `strings.Title`。`strings.Title` 已废弃且对 Unicode 不稳定。（问题 4，§9）
-- env file 加载走 `utility/common.LoadEnvFile`，不在 `main.go` 内联写。原先逻辑不便复用且 scanner error 没处理。（问题 6，§11）
-- Revoked token 吊销表必须有自动过期清理，否则长期运行内存泄漏。已补 `clearExpiredRevokedTokens` + 后台清理协程。（问题 1，§6）
-- Long-term memory 必须有全局上限和 per-session 上限，否则内存无限增长。通过 `config.yaml` 配置 `memory.long_term_max_entries`。（问题 2，§7）
-- `LongTermMemory.Retrieve` 应使用 `RLock` 而非写锁，只在更新 `AccessCnt/LastUsed` 时短暂获取写锁。（问题 9，§14）
-- CORS 默认策略不能过宽。`allowed_origins` 为空时不应原样回写 Origin。SSE 不能无条件设 `*`。统一走 `ResolveAllowedOrigin`。（问题 7，§12）
-- 知识库检索 `top_k` 不要 hardcode 3，走 config 读取 `multi_agent.knowledge_evidence_limit`。（问题 8，§13）
-- AI Ops 不要每次请求重建 runtime，走 `getOrCreateAIOpsRuntime` 按 dataDir 复用。（§22.1）
-- `task_completed` 事件不要把完整 Markdown 报告塞进 `Message`，长摘要折叠并把 `status/summary_length` 放 `Payload`。（§24.2）
-- `query_internal_docs` 不要每次新建 retriever，按 Milvus 地址和 top_k 复用，失败走短 TTL 缓存。（§24.3）
-- Chat 和 ChatStream 的 memory 持久化统一走 `MemoryService.PersistOutcome`，不裸起 `go ExtractMemories(context.Background())`。（§23.2）
-- 异步记忆抽取必须有 timeout 保护，用 `context.WithoutCancel + context.WithTimeout`，配置项 `memory.extract_timeout_ms`。（§21.1）
-- 记忆写入前必须做基础过滤：assistant boilerplate、代码块、异常长度内容应丢弃。走 `ExtractMemoryCandidates + ValidateMemoryCandidate`。（§27.2）
-- RAG chunking 不能只按 Markdown 标题切，要支持 JSONL case 级切分。当前 `transformer.go` 偏 Markdown 结构。
-- observation 不能只保留一个关键词。`context canceled` 不是完整观察，`paymentservice + error log + context canceled` 才有区分度。
-- 图谱关系必须标记来源和置信度（`source_type/derivation_type/extractor_version`），否则后续无法 debug。
-- `CASE_SIMILAR_TO_CASE` 边必须记录 `similarity_score`、`similarity_components`、`computed_by`。
-- build split 和 eval split 必须严格分开，不能拿全量数据自证效果。
-- metric score 阈值 `< 0.1 and abs(delta) < 0.5` 是当前硬编码，后续需按 metric 类型调整。
-- PowerShell here-string 中 shell 变量要避免和 PS 变量名冲突。用 `probe_status` 而非 `$status`。
-
----
-
-## 测试要求
-
-- `go test ./internal/ai/...` 必须通过
-- `go test ./utility/...` 必须通过
-- `go test ./...` 必须通过
-- `go build ./...` 必须通过
-- 新增 skill 必须有对应 registry 单测
-- 涉及 AIOps runtime 或 Plan-Execute-Replan 变更时，必须补对应 runtime / replay case
-- RAG eval 必须有 build/holdout split
-- Python 脚本运行前确认 pandas、pyarrow 已安装
-
----
-
-## 当前进行中的工作
-
-- AIOps baseline 评测：telemetry evidence 预处理脚本（`scripts/aiops/build_telemetry_evidence.py`）
-- RAG 优化：待 baseline 结果出来后决定优先级
-- 知识图谱设计：已完成设计稿（`Learn/graph/00.md`），待 baseline 后再决定是否实施
-- Harness Engineering：P0 落地中
-
----
-
-## 关键设计决策记录
-
-- Chat 已收敛到 ReAct 单链路，不再做 `chat_multi_agent` 条件路由。
-- AIOps 保留单体内 runtime，而执行核心收敛为 Plan-Execute-Replan。
-- Ledger 和 Artifact Store 先用文件存储，不增加额外部署依赖。（§17.1）
-- Memory Service 封装 `internal/ai/memory`，不直接重写底层。（§17.2）
-- 历史 `skillspecialists` / `supervisor` / `triage` / `reporter` 代码保留为实验或复盘材料，不再作为当前聊天架构依据。
-- 图谱设计以 Case Graph 为中心，不做百科式知识图谱。（`Learn/graph/00.md`）
-- 证据与结论分层：原始证据 / 归一化事实 / 历史标签 / 图谱 / Serving。
-- 上下文工程覆盖四类主来源：history / memory / docs / tool outputs。（§27-29）
-
----
-
-## 文档索引
-
-- 历史修改与复盘：`res/todo.md`
-- Harness Engineering 落地说明：`res/harness-engineering-for-opscaptionai.md`
-- 复盘手册：`res/next-phase-retrospective-playbook.md`
-- RAG 工程设计：`todo/rag-engineering-complete-design.md`
-- 三阶段执行计划：`todo/three-phase-execution-plan.md`
-- 知识图谱设计：`Learn/graph/00.md`
-- Harness 学习指南：`Learn/harness/harness-p0-agents-md.md`
+| 文档 | 内容 |
+|------|------|
+| [系统架构导览](./Learn/system/01-system-architecture-guide.md) | 五层模型、import 规则、主链路、关键模块、设计决策 |
+| [代码导读地图](./Learn/system/03-code-map.md) | 技术栈、目录结构、按文件的阅读顺序 |
+| [部署手册](./Learn/system/deployment-runbook.md) | 线上环境信息、验证命令 |
+| [踩坑规则全集](./res/agent-coding-retrospective.md) | 20 条真实失败案例及对应规则 |
+| [历史修改与复盘](./res/todo.md) | 修改记录 |
+| [Harness Engineering](./res/harness-engineering-for-opscaptionai.md) | Harness 落地说明 |
+| [知识图谱设计](./Learn/graph/00.md) | Case Graph 设计稿 |

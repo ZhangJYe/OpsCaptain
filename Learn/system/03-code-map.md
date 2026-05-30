@@ -9,6 +9,46 @@
 
 ---
 
+## 技术栈
+
+| 类别 | 技术 |
+|------|------|
+| 后端语言 | Go 1.24+ |
+| Web 框架 | GoFrame v2 (github.com/gogf/gf/v2) |
+| LLM 框架 | cloudwego/eino v0.7+ / cloudwego/eino-ext |
+| LLM 模型 | DeepSeek V3（推理/rewrite/rerank）、Doubao Embedding（向量化） |
+| 向量数据库 | Milvus (milvus-sdk-go/v2) |
+| 前端 | React + TypeScript（frontend/） |
+| 数据预处理 | Python 3.11+（pandas、pyarrow） |
+| 配置管理 | manifest/config/config.yaml |
+| CI/CD | GitHub Actions（.github/workflows/ci.yml、cd.yml） |
+
+---
+
+## 目录结构
+
+```
+internal/controller/                   → API Layer：HTTP 控制器
+internal/app/                          → Application Layer：ChatApp、AIOpsApp、KnowledgeApp
+internal/ai/agent/chat_pipeline/       → Chat ReAct 执行链路
+internal/ai/agent/plan_execute_replan/ → AIOps Plan-Execute-Replan
+internal/ai/rag/                       → Domain：RAG 链路（query/rewrite/rerank/retriever_pool）
+internal/ai/contextengine/             → Domain：上下文装配和 budget 管理
+internal/ai/memory/                    → Domain：记忆系统（session/long_term/extraction）
+internal/ai/skills/                    → Domain：skill 抽象和 registry
+internal/ai/service/                   → Domain：服务层（memory/approval/ai_ops）
+internal/ai/retriever/                 → Domain：Milvus retriever 实现
+internal/ai/indexer/                   → Domain：Milvus indexer 实现
+internal/infra/milvus/                 → Infrastructure：Milvus 适配（client、VectorStore、config）
+internal/ai/cmd/                       → CLI 入口
+utility/                               → Common Layer：auth、safety、metrics、tracing、health、common
+manifest/config/                       → 配置文件
+```
+
+五层模型和 import 规则详见 [01-system-architecture-guide.md](./01-system-architecture-guide.md) 第 3 节。
+
+---
+
 ## 1. 先看入口
 
 | 文件 | 作用 | 为什么先看 |

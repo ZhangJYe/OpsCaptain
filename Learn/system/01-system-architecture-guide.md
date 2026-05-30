@@ -1,6 +1,6 @@
 # OpsCaption 当前系统架构导览
 
-> 更新时间：2026-05-02
+> 更新时间：2026-05-30
 > 适用范围：当前主干代码
 > 结论先行：**Chat 已统一收敛为 ReAct 单链路；AIOps 保留 runtime 包装，但执行核心是 Plan-Execute-Replan。**
 
@@ -263,4 +263,26 @@ utility/    → internal/                ❌
 
 > 我们把聊天链路统一收敛到了 ReAct Agent，让模型按需调用 Prometheus、日志、知识库等工具；而复杂运维分析场景则通过 runtime 包装，执行核心收敛为 Plan-Execute-Replan，用规划、执行、复核三段式来完成多步排查。
 
-这比说“现在还在跑 supervisor/triage/reporter 聊天编排”更准确。
+这比说”现在还在跑 supervisor/triage/reporter 聊天编排”更准确。
+
+---
+
+## 8. 关键设计决策记录
+
+- Chat 已收敛到 ReAct 单链路，不再做 `chat_multi_agent` 条件路由。
+- AIOps 保留单体内 runtime，而执行核心收敛为 Plan-Execute-Replan。
+- Ledger 和 Artifact Store 先用文件存储，不增加额外部署依赖。（§17.1）
+- Memory Service 封装 `internal/ai/memory`，不直接重写底层。（§17.2）
+- 历史 `skillspecialists` / `supervisor` / `triage` / `reporter` 代码保留为实验或复盘材料，不再作为当前聊天架构依据。
+- 图谱设计以 Case Graph 为中心，不做百科式知识图谱。（`Learn/graph/00.md`）
+- 证据与结论分层：原始证据 / 归一化事实 / 历史标签 / 图谱 / Serving。
+- 上下文工程覆盖四类主来源：history / memory / docs / tool outputs。（§27-29）
+
+---
+
+## 9. 当前进行中的工作
+
+- AIOps baseline 评测：telemetry evidence 预处理脚本（`scripts/aiops/build_telemetry_evidence.py`）
+- RAG 优化：待 baseline 结果出来后决定优先级
+- 知识图谱设计：已完成设计稿（`Learn/graph/00.md`），待 baseline 后再决定是否实施
+- Harness Engineering：P0 落地中
