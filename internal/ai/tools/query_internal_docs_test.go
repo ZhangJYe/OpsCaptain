@@ -47,8 +47,15 @@ func TestQueryInternalDocsToolReusesRetriever(t *testing.T) {
 		if err != nil {
 			t.Fatalf("run %d: %v", i+1, err)
 		}
-		if output != "[]" {
-			t.Fatalf("expected empty docs output, got %q", output)
+		var payload rag.KnowledgeSearchOutput
+		if err := json.Unmarshal([]byte(output), &payload); err != nil {
+			t.Fatalf("run %d: failed to parse output %q: %v", i+1, output, err)
+		}
+		if !payload.Success {
+			t.Fatalf("run %d: expected success=true, got %#v", i+1, payload)
+		}
+		if len(payload.Citations) != 0 {
+			t.Fatalf("run %d: expected 0 citations, got %d", i+1, len(payload.Citations))
 		}
 	}
 	if created != 1 {

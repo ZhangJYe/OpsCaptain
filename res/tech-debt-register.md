@@ -57,12 +57,15 @@
 
 ## P2：质量债，影响可观测性和可维护性
 
-### TD-08 RAG citation schema 不完整
+### TD-08 ✅ RAG citation schema 不完整
 
-- **文件**：`internal/ai/contextengine/documents.go:93`、`internal/ai/tools/query_internal_docs.go:36`
-- **现象**：DocumentsContent() 只输出 `[序号] title + content`，没有稳定 citation id、source uri、score。工具直接返回 `[]schema.Document` JSON，没有归一化成 `{answer, citations, evidence}`。
-- **风险**：模型生成的引用无法追踪到源文档，用户无法验证。
-- **建议**：定义 `Citation` 结构体（id, source, title, score, snippet），DocumentsContent 输出带 citation 标记，工具返回归一化 schema。
+- **文件**：`internal/ai/rag/citation.go`（新增）、`internal/ai/contextengine/documents.go`、`internal/ai/tools/query_internal_docs.go`
+- **修复**：
+  - 新增 `rag.Citation`/`Evidence`/`KnowledgeSearchOutput` schema + `CitationFromDocument`/`BuildCitations` helper
+  - `DocumentsContent()` 输出 `[ctx-doc-N] title/source/score/content` 格式
+  - `query_internal_docs` 工具成功时返回 `{success, answer, citations, evidence}` 归一化 schema
+  - `chat_evidence.txt` 和 `chat_runtime_context.txt` 添加引用规则
+  - 单测覆盖 citation 生成、metadata 映射、snippet 截断、工具 JSON schema
 
 ### TD-09 ✅ RAG rewrite/rerank 失败 trace 不足
 

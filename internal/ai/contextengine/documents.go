@@ -96,7 +96,16 @@ func DocumentsContent(pkg *ContextPackage) string {
 	}
 	parts := make([]string, 0, len(pkg.DocumentItems))
 	for idx, item := range pkg.DocumentItems {
-		parts = append(parts, fmt.Sprintf("[%d] %s\n%s", idx+1, item.Title, item.Content))
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("[ctx-doc-%d] title: %s", idx+1, item.Title))
+		if item.SourceID != "" && item.SourceID != item.Title {
+			sb.WriteString(fmt.Sprintf("\nsource: %s", item.SourceID))
+		}
+		if item.Score > 0 {
+			sb.WriteString(fmt.Sprintf("\nscore: %.2f", item.Score))
+		}
+		sb.WriteString(fmt.Sprintf("\ncontent:\n%s", item.Content))
+		parts = append(parts, sb.String())
 	}
 	return strings.Join(parts, "\n\n")
 }

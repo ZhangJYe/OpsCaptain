@@ -48,7 +48,14 @@ func NewQueryInternalDocsTool() tool.InvokableTool {
 				}
 				return string(respBytes), nil
 			}
-			respBytes, err := json.Marshal(resp)
+			citations, evidence := rag.BuildCitations(resp, "kb-doc")
+			out := rag.KnowledgeSearchOutput{
+				Success:   true,
+				Answer:    fmt.Sprintf("找到 %d 条相关知识库证据，请基于 citations/evidence 作答。", len(citations)),
+				Citations: citations,
+				Evidence:  evidence,
+			}
+			respBytes, err := json.Marshal(out)
 			if err != nil {
 				return "", fmt.Errorf("failed to marshal response: %w", err)
 			}
