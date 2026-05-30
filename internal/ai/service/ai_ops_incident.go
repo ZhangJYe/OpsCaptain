@@ -173,6 +173,7 @@ func (s *FileIncidentStore) List(_ context.Context) ([]IncidentSession, error) {
 		}
 		incident, err := s.read(strings.TrimSuffix(entry.Name(), ".json"))
 		if err != nil {
+			g.Log().Warningf(context.Background(), "[incident] read file %s failed: %v", entry.Name(), err)
 			continue
 		}
 		items = append(items, *incident)

@@ -57,6 +57,12 @@ func (a *ChatApp) SetDegradationCheck(fn func(ctx context.Context, entrypoint st
 
 // HandleChat executes the full synchronous chat flow.
 func (a *ChatApp) HandleChat(ctx context.Context, input *ChatInput) (*ChatResult, error) {
+	if d := chatTimeout(ctx); d > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, d)
+		defer cancel()
+	}
+
 	id := input.SessionID
 	msg := input.Question
 	selectedSkillIDs := chat_pipeline.NormalizeSelectedSkillIDs(input.SkillIDs)
@@ -208,4 +214,12 @@ func (a *ChatApp) releaseSessionLock(id string, entry *sessionLockEntry) {
 	if entry.refCount == 0 {
 		delete(a.sessionLocks, id)
 	}
+}
+
+func chatTimeout(ctx context.Context) time.Duration {
+	v, err := g.Cfg().Get(ctx, "chat.timeout_ms")
+	if err == nil && v.Int64() > 0 {
+		return time.Duration(v.Int64()) * time.Millisecond
+	}
+	return 0
 }

@@ -60,7 +60,7 @@ func Rerank(ctx context.Context, query string, docs []*schema.Document, topK int
 		{Role: schema.User, Content: userMsg},
 	})
 	if err != nil {
-		g.Log().Debugf(ctx, "rerank failed: %v", err)
+		g.Log().Warningf(ctx, "[rag] rerank failed, returning original docs: %v", err)
 		return RerankResult{Docs: docs, Enabled: false}
 	}
 

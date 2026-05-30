@@ -42,7 +42,10 @@ func NewQueryInternalDocsTool() tool.InvokableTool {
 					Message:  "内部知识库检索暂时不可用。请继续基于可用的 metrics、logs 和用户提供的上下文诊断，并明确标注缺失知识库证据。",
 					Error:    fmt.Sprintf("failed to query internal docs: %v", err),
 				}
-				respBytes, _ := json.Marshal(out)
+				respBytes, marshalErr := json.Marshal(out)
+				if marshalErr != nil {
+					return fmt.Sprintf(`{"success":false,"degraded":true,"message":"%s"}`, out.Message), nil
+				}
 				return string(respBytes), nil
 			}
 			respBytes, err := json.Marshal(resp)

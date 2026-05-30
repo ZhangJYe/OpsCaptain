@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/util/guid"
@@ -125,6 +126,12 @@ type AIOpsLookupResult struct {
 }
 
 func (a *AIOpsApp) HandleAIOps(ctx context.Context, input *AIOpsInput) (*AIOpsResult, error) {
+	if d := aiOpsAppTimeout(ctx); d > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, d)
+		defer cancel()
+	}
+
 	requestID := guid.S()
 	sessionID := strings.TrimSpace(input.SessionID)
 	if sessionID != "" {
@@ -286,4 +293,12 @@ func validatePrompt(ctx context.Context, input string) (context.Context, error) 
 		g.Log().Warningf(ctx, "[prompt_guard] suspicious input detected, risk_score=%.2f reason=%q", decision.RiskScore, decision.Reason)
 	}
 	return ctx, nil
+}
+
+func aiOpsAppTimeout(ctx context.Context) time.Duration {
+	v, err := g.Cfg().Get(ctx, "aiops.timeout_ms")
+	if err == nil && v.Int64() > 0 {
+		return time.Duration(v.Int64()) * time.Millisecond
+	}
+	return 0
 }

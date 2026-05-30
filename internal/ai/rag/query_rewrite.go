@@ -76,6 +76,7 @@ func RewriteQueryMulti(ctx context.Context, query string, n int) []string {
 
 	chatModel, err := models.OpenAIForGLMFast(rewriteCtx)
 	if err != nil {
+		g.Log().Warningf(ctx, "[rag] query rewrite multi skipped: model init failed: %v", err)
 		return []string{query}
 	}
 
@@ -88,6 +89,7 @@ Output one query per line, no numbering, no explanation.`, n)
 		{Role: schema.User, Content: trimmed},
 	})
 	if err != nil {
+		g.Log().Warningf(ctx, "[rag] query rewrite multi failed, using original: %v", err)
 		return []string{query}
 	}
 

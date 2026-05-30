@@ -64,26 +64,20 @@
 - **风险**：模型生成的引用无法追踪到源文档，用户无法验证。
 - **建议**：定义 `Citation` 结构体（id, source, title, score, snippet），DocumentsContent 输出带 citation 标记，工具返回归一化 schema。
 
-### TD-09 RAG rewrite/rerank 失败 trace 不足
+### TD-09 ✅ RAG rewrite/rerank 失败 trace 不足
 
-- **文件**：`internal/ai/rag/query_rewrite.go:77`、`internal/ai/rag/rerank.go:59`
-- **现象**：rewrite 失败回退原 query，rerank 失败返回原文档，行为合理但日志/trace 颗粒度弱。
-- **风险**：RAG 评测时无法判断 rewrite/rerank 是否生效，影响优化决策。
-- **建议**：降级时记录 structured log（original_query, rewritten_query, reason）+ trace span attribute。
+- **文件**：`internal/ai/rag/query_rewrite.go`、`internal/ai/rag/rerank.go`
+- **修复**：`RewriteQueryMulti` 模型初始化和 Generate 失败添加 Warningf 日志；`Rerank` Generate 失败从 Debugf 升级为 Warningf。
 
-### TD-10 同步 Chat 缺少 Application 级 timeout
+### TD-10 ✅ 同步 Chat 缺少 Application 级 timeout
 
-- **文件**：`internal/app/chat_app.go:149`、`internal/app/chat_app.go:424`、`internal/app/aiops_app.go:158`
-- **现象**：同步 Chat/AIOps 调用依赖外层请求 ctx 和底层模型 timeout，没有 Application 级 timeout 包裹。
-- **风险**：底层超时配置变更时上层无保护。
-- **建议**：在 HandleChat/HandleAIOps 入口使用 `context.WithTimeout`，timeout 走配置 `chat.timeout_ms` / `aiops.timeout_ms`。
+- **文件**：`internal/app/chat_app.go`、`internal/app/aiops_app.go`
+- **修复**：HandleChat/HandleAIOps 入口添加 `context.WithTimeout`，timeout 走配置 `chat.timeout_ms` / `aiops.timeout_ms`，默认 0（不启用，向后兼容）。
 
-### TD-11 多处工具/降级 json.Marshal 错误被忽略
+### TD-11 ✅ 多处工具/降级 json.Marshal 错误被忽略
 
-- **文件**：`internal/ai/tools/query_metrics_alerts.go:143`、`internal/ai/tools/query_internal_docs.go:45`
-- **现象**：降级响应 json.Marshal 错误被忽略。
-- **风险**：概率低但静默失败不符合工具层规范。
-- **建议**：检查 error，失败时返回纯文本降级消息。
+- **文件**：`internal/ai/tools/query_internal_docs.go:45`
+- **修复**：`query_metrics_alerts.go` 已在 TD-01 中修复；`query_internal_docs.go` 降级响应 json.Marshal 错误改为 fallback 纯文本。
 
 ### TD-12 skills/domains/metrics 工具创建无 nil 检查
 
@@ -92,12 +86,10 @@
 - **风险**：工具创建失败时 panic。
 - **建议**：nil 检查 + 返回 error。
 
-### TD-13 incident list 读文件失败静默跳过
+### TD-13 ✅ incident list 读文件失败静默跳过
 
 - **文件**：`internal/ai/service/ai_ops_incident.go:174`
-- **现象**：读取单个文件失败时 continue，无日志。
-- **风险**：坏文件或权限问题被吞掉，排查困难。
-- **建议**：记录 warn 日志（file path, error）。
+- **修复**：读取单个文件失败时记录 `g.Log().Warningf`（file name, error）。
 
 ### TD-14 MCP reconnect 用 time.Sleep 不响应 ctx
 
