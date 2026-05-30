@@ -98,27 +98,22 @@
 
 ## P3：规范债，影响 prompt 可维护性
 
-### TD-15 Chat 主 prompt 硬编码在代码中
+### TD-15 ✅ Chat 主 prompt 硬编码在代码中
 
-- **文件**：`internal/ai/agent/chat_pipeline/prompt.go:15`
-- **现象**：系统提示词、证据规则、运行时上下文模板全部硬编码。
-- **风险**：prompt 调整需要改代码、编译、部署。
-- **建议**：迁移到 `prompts/` 目录，运行时加载，支持版本化。
+- **文件**：`internal/ai/agent/chat_pipeline/prompt.go`
+- **修复**：创建 `internal/ai/promptreg/` 包，`//go:embed` 加载 5 个 prompt 文件（chat_base/identity/language/evidence/runtime_context）。`prompt.go` 120 行常量删除，改为引用 `promptreg.*`。prompt 文件可独立编辑，重新编译即生效。
 
-### TD-16 rewrite/rerank prompt 硬编码
+### TD-16 ✅ rewrite/rerank prompt 硬编码
 
-- **文件**：`internal/ai/rag/query_rewrite.go:17`、`internal/ai/rag/rerank.go:19`
-- **现象**：prompt 写死，超时已配置化但 prompt 不可热调整。
-- **建议**：同 TD-15，统一迁移到 prompt registry。
+- **文件**：`internal/ai/rag/query_rewrite.go`、`internal/ai/rag/rerank.go`
+- **修复**：`rewriteSystemPrompt`/`rerankSystemPrompt` 常量迁移到 `promptreg/rag_rewrite.txt` 和 `promptreg/rag_rerank.txt`，代码引用 `promptreg.RAGRewrite`/`promptreg.RAGRerank`。
 
-### TD-17 其他 prompt 硬编码热点
+### TD-17 部分完成 — 其他 prompt 硬编码热点
 
-- **文件**：`internal/app/aiops_app.go:18`（defaultAIOpsQuery）、`internal/ai/memory/agent.go:383`、`internal/ai/contextengine/intent_recognizer.go:77`、`internal/ai/contextengine/tool_reranker.go:180`、`internal/ai/agent/experts/linux_sre.go:425`
-- **现象**：各模块 prompt 分散硬编码。
-- **建议**：统一收口到 prompt registry，按模块/用途组织。
+- **已迁移**：chat pipeline 主 prompt（5 文件）、RAG rewrite/rerank（2 文件）
+- **保持内联**：`defaultAIOpsQuery`（7 行，含执行步骤编排）、`memoryAgentSystemPrompt()`（模板函数）、`buildIntentPrompt()`（模板函数）、`buildRerankPrompt()`（模板函数）、`linux_sre.go` system message（1 行）。理由：这些是短小的模板函数或运行时拼接逻辑，迁移到文件不会显著改善可维护性。
 
-### TD-18 tiered_tools ToolNames 忽略错误
+### TD-18 ✅ tiered_tools ToolNames 忽略错误
 
 - **文件**：`internal/ai/tools/tiered_tools.go:66`
-- **现象**：`ToolNames()` 忽略 Info 错误，直接读 `info.Name`。
-- **建议**：防御 nil/err，返回空名 + warn 日志。
+- **修复**：`ToolNames()` 检查 `t.Info()` 错误，失败时记录 `Warningf` 并 `continue`。

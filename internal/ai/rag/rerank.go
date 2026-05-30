@@ -9,19 +9,13 @@ import (
 	"time"
 
 	"SuperBizAgent/internal/ai/models"
+	"SuperBizAgent/internal/ai/promptreg"
 
 	"github.com/cloudwego/eino/schema"
 	"github.com/gogf/gf/v2/frame/g"
 )
 
-const (
-	defaultRerankTimeout = 5 * time.Second
-	rerankSystemPrompt   = `You are a document relevance judge for IT operations.
-Given a query and a list of documents, rate each document's relevance to the query on a scale of 0-10.
-Output ONLY a comma-separated list of scores in the same order as the documents.
-Example output: 9,3,7,1,8
-Do not output anything else.`
-)
+const defaultRerankTimeout = 5 * time.Second
 
 type RerankResult struct {
 	Docs    []*schema.Document
@@ -56,7 +50,7 @@ func Rerank(ctx context.Context, query string, docs []*schema.Document, topK int
 	userMsg := fmt.Sprintf("Query: %s\n\nDocuments:\n%s", query, sb.String())
 
 	resp, err := chatModel.Generate(rerankCtx, []*schema.Message{
-		{Role: schema.System, Content: rerankSystemPrompt},
+		{Role: schema.System, Content: promptreg.RAGRerank},
 		{Role: schema.User, Content: userMsg},
 	})
 	if err != nil {

@@ -7,22 +7,13 @@ import (
 	"time"
 
 	"SuperBizAgent/internal/ai/models"
+	"SuperBizAgent/internal/ai/promptreg"
 
 	"github.com/cloudwego/eino/schema"
 	"github.com/gogf/gf/v2/frame/g"
 )
 
-const (
-	defaultRewriteTimeout = 3 * time.Second
-	rewriteSystemPrompt   = `You are a search query optimizer for an IT operations knowledge base.
-Your job: rewrite the user's question into a concise, keyword-rich search query that maximizes retrieval recall.
-Rules:
-- Output ONLY the rewritten query, nothing else.
-- Keep technical terms, error codes, and proper nouns unchanged.
-- Expand abbreviations and slang into standard terms.
-- Use Chinese if the original is Chinese, English if English.
-- Maximum 50 characters.`
-)
+const defaultRewriteTimeout = 3 * time.Second
 
 func RewriteQuery(ctx context.Context, query string) string {
 	trimmed := strings.TrimSpace(query)
@@ -40,7 +31,7 @@ func RewriteQuery(ctx context.Context, query string) string {
 	}
 
 	resp, err := chatModel.Generate(rewriteCtx, []*schema.Message{
-		{Role: schema.System, Content: rewriteSystemPrompt},
+		{Role: schema.System, Content: promptreg.RAGRewrite},
 		{Role: schema.User, Content: trimmed},
 	})
 	if err != nil {
