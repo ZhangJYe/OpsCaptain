@@ -219,4 +219,4 @@
   - `baseline_cases.jsonl`：18 条覆盖单文档/多文档/跨域/口语化/英文/同义改写场景，`relevant_ids` 对齐 `docs/knowledge/*.md` canonical ID。
   - `run_baseline.sh`：一键跑 `hybrid-retrieve` vs `hybrid-rerank` 生产路径对比实验。
   - `docs/rag-baseline-experiment.md`：实验方法论、指标说明、trace 分析指南。
-- **待完成**：实际实验运行（需 Milvus 服务可用）。
+- **实验结果**（2026-05-30）：hybrid-retrieve MRR=0.8148 Recall@3=1.00 160ms；hybrid-rerank MRR=0.9352 Recall@3=1.00 3895ms。Rerank 输入压缩后超时降为 1/18，质量明显提升，但延迟仍高。结论：不开全局 rerank，下一步做选择性 rerank 或继续压缩候选数/输入长度。

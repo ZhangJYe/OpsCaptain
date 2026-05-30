@@ -229,6 +229,7 @@ rag:
   rerank_enabled: false
   rewrite_timeout_ms: 3000
   rerank_timeout_ms: 5000
+  rerank_max_candidates: 10
   hybrid_dense_top_k: 50
   hybrid_lexical_top_k: 50
   hybrid_fusion_k: 60

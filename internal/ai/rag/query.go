@@ -94,6 +94,10 @@ func Query(ctx context.Context, pool *RetrieverPool, query string) ([]*schema.Do
 		if topK <= 0 {
 			topK = 10
 		}
+		maxCandidates := RerankMaxCandidates(ctx)
+		if len(docs) > maxCandidates {
+			docs = docs[:maxCandidates]
+		}
 		rerankStart := time.Now()
 		rerankResult := Rerank(ctx, query, docs, topK)
 		trace.RerankLatencyMs = time.Since(rerankStart).Milliseconds()

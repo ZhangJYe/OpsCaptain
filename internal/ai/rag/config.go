@@ -36,6 +36,15 @@ func RetrieverCandidateTopK(ctx context.Context) int {
 	return candidate
 }
 
+const defaultRerankMaxCandidates = 10
+
+func RerankMaxCandidates(ctx context.Context) int {
+	if v, err := g.Cfg().Get(ctx, "rag.rerank_max_candidates"); err == nil && v.Int() > 0 {
+		return v.Int()
+	}
+	return defaultRerankMaxCandidates
+}
+
 func DefaultRetrieverCacheKey(ctx context.Context) string {
 	return fmt.Sprintf("%s|%s|%d", common.GetMilvusAddr(ctx), common.GetMilvusCollectionName(ctx), RetrieverTopK(ctx))
 }

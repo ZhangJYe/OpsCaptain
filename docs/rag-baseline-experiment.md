@@ -97,9 +97,33 @@ These modes call `QueryForEval()` which does **dense-only** retrieval (no BM25, 
 | `rewrite` | on | off | `QueryForEval()` rewrite + dense |
 | `full` | on | on | `QueryForEval()` rewrite + dense + rerank |
 
-## Next Steps (after baseline)
+## Results (2026-05-30)
 
-1. Run the experiment and record results here
-2. Identify top 3 failure cases
-3. For each failure, trace through dense/BM25/fusion/rerank stages
-4. Decide: tune chunk, tune BM25, tune fusion, or adjust prompt/rewrite
+Run environment: Linux container on opscaptain_default Docker network, Milvus reachable.
+
+| Mode | MRR | Recall@1 | Recall@3 | Recall@5 | Avg Total |
+|------|-----|----------|----------|----------|-----------|
+| hybrid-retrieve | 0.8148 | 0.61 | **1.00** | **1.00** | 160ms |
+| hybrid-rerank | **0.9352** | **0.83** | **1.00** | **1.00** | 3895ms |
+
+Key observations:
+- Recall@3/5 is perfect in both modes — the main quality gap is top-1 ranking.
+- Rerank improves MRR (+0.1204) and Recall@1 (+0.22) after limiting rerank input to top-10 candidates and 100 runes per doc.
+- Rerank latency is still much higher (160ms → 3895ms). 1/18 cases timed out and degraded.
+- RAG-03, RAG-05, RAG-10, RAG-11, RAG-16 improved to rank 1 with rerank. RAG-18 still regressed from rank 1 to rank 3.
+
+### Failure analysis
+
+| Case | Issue | Stage |
+|------|-------|-------|
+| RAG-18 | Rerank moved relevant doc from #1 to #3 | rerank regression |
+| RAG-03, RAG-05, RAG-10, RAG-11, RAG-16 | Relevant doc reaches #1 only after rerank | fusion ranking gap |
+| 1/18 cases | Rerank timeout → degraded to no-rerank fallback | rerank stability |
+
+### Decision
+
+Do NOT enable global rerank yet. Next steps:
+1. Keep `rag.rerank_enabled=false` by default.
+2. Try selective rerank only for low-confidence queries or interactive flows that can tolerate ~4s extra latency.
+3. Continue cost tuning: candidate count 6-8, shorter snippets, or a faster rerank model.
+4. No chunk changes or rewrite for now.
