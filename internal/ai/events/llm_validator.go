@@ -8,6 +8,7 @@ import (
 
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/schema"
+	"github.com/gogf/gf/v2/frame/g"
 )
 
 // LLMValidator 使用 LLM 进行高级防幻觉校验
@@ -121,7 +122,7 @@ func (v *LLMValidator) callLLMForWarnings(ctx context.Context, prompt string) []
 
 	cm, err := v.modelFactory(ctx)
 	if err != nil {
-		// 不静默吞错，返回 nil 但调用方可以通过日志感知
+		g.Log().Warningf(ctx, "[LLMValidator] model creation failed, validation skipped: %v", err)
 		return nil
 	}
 
@@ -132,7 +133,7 @@ func (v *LLMValidator) callLLMForWarnings(ctx context.Context, prompt string) []
 
 	resp, err := cm.Generate(ctx, messages)
 	if err != nil {
-		// 超时或错误返回 nil，调用方记录日志
+		g.Log().Warningf(ctx, "[LLMValidator] LLM generate failed, validation skipped: %v", err)
 		return nil
 	}
 

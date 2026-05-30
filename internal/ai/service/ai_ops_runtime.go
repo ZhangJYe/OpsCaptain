@@ -364,7 +364,10 @@ func registerAIOpsGOSTools(toolReg *experts.ToolRegistry) {
 		if err != nil {
 			reason = err.Error()
 		}
-		toolReg.Register("query_logs", aitools.NewUnavailableLogQueryTool(reason))
+		unavailTool := aitools.NewUnavailableLogQueryTool(reason)
+		if unavailTool != nil {
+			toolReg.Register("query_logs", unavailTool)
+		}
 	}
 }
 

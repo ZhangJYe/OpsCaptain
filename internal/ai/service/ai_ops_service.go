@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"SuperBizAgent/internal/ai/protocol"
 	"SuperBizAgent/internal/ai/skills"
@@ -306,7 +307,11 @@ func RunAIOpsAsync(ctx context.Context, query string) (*AIOpsRunInfo, error) {
 		bgCtx = context.WithValue(bgCtx, consts.CtxKeyRequestID, ctx.Value(consts.CtxKeyRequestID))
 		bgCtx = WithAIOpsEngine(bgCtx, agentName)
 
-		g.Log().Infof(bgCtx, "[AIOps] async dispatch started, trace_id=%s", rootTask.TraceID)
+		asyncTimeout := aiOpsAsyncTimeout(ctx)
+		bgCtx, cancel := context.WithTimeout(bgCtx, asyncTimeout)
+		defer cancel()
+
+		g.Log().Infof(bgCtx, "[AIOps] async dispatch started, trace_id=%s, timeout=%s", rootTask.TraceID, asyncTimeout)
 		result, dispatchErr := rt.Dispatch(bgCtx, rootTask)
 		if dispatchErr != nil {
 			g.Log().Warningf(bgCtx, "[AIOps] async dispatch failed, trace_id=%s: %v", rootTask.TraceID, dispatchErr)
@@ -391,6 +396,15 @@ func parseApprovalStatus(status string) ApprovalStatus {
 	default:
 		return ApprovalStatusPending
 	}
+}
+
+func aiOpsAsyncTimeout(ctx context.Context) time.Duration {
+	const defaultTimeout = 5 * time.Minute
+	v, err := g.Cfg().Get(ctx, "aiops.async_timeout_ms")
+	if err == nil && v.Int64() > 0 {
+		return time.Duration(v.Int64()) * time.Millisecond
+	}
+	return defaultTimeout
 }
 
 func aiOpsMultiAgentEnabled(ctx context.Context) bool {

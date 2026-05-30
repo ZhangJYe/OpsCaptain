@@ -8,6 +8,7 @@ import (
 	aiservice "SuperBizAgent/internal/ai/service"
 	"SuperBizAgent/internal/app"
 	"SuperBizAgent/internal/controller/chat"
+	infrafs "SuperBizAgent/internal/infra/filestore"
 	inframv "SuperBizAgent/internal/infra/milvus"
 	"SuperBizAgent/utility/auth"
 	"SuperBizAgent/utility/common"
@@ -107,7 +108,7 @@ func main() {
 	}
 
 	chatApp := app.NewChatApp()
-	knowledgeApp := app.NewKnowledgeApp()
+	knowledgeApp := app.NewKnowledgeApp(infrafs.NewLocalUploadStore(common.FileDir))
 	aiopsApp := app.NewAIOpsApp()
 	app.RegisterChatTaskExecutor(chatApp)
 

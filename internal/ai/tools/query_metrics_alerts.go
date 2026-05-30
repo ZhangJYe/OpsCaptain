@@ -84,6 +84,11 @@ func queryPrometheusAlerts(ctx context.Context) (PrometheusAlertsResult, error) 
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return result, fmt.Errorf("prometheus returned HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
 	if err != nil {
 		return result, fmt.Errorf("failed to read response: %v", err)
@@ -91,6 +96,10 @@ func queryPrometheusAlerts(ctx context.Context) (PrometheusAlertsResult, error) 
 
 	if err = json.Unmarshal(body, &result); err != nil {
 		return result, fmt.Errorf("failed to parse response: %v", err)
+	}
+
+	if result.Status != "success" {
+		return result, fmt.Errorf("prometheus query error: type=%s msg=%s", result.ErrorType, result.Error)
 	}
 
 	return result, nil
@@ -140,7 +149,10 @@ func NewPrometheusAlertsQueryTool() tool.InvokableTool {
 					Error:    err.Error(),
 					Message:  "Failed to query Prometheus alerts. The service may not be configured or is unreachable.",
 				}
-				jsonBytes, _ := json.MarshalIndent(alertsOut, "", "  ")
+				jsonBytes, marshalErr := json.MarshalIndent(alertsOut, "", "  ")
+				if marshalErr != nil {
+					return fmt.Sprintf(`{"success":false,"degraded":true,"error":"%s"}`, err.Error()), nil
+				}
 				return string(jsonBytes), nil
 			}
 

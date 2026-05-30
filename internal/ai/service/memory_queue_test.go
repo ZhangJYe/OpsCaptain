@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"SuperBizAgent/internal/consts"
+	"SuperBizAgent/internal/infra/rabbitmq"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -41,7 +42,7 @@ func TestNewMemoryExtractionEventCarriesContextMetadata(t *testing.T) {
 }
 
 func TestTTLSetMarkAndHas(t *testing.T) {
-	set := newTTLSet(40*time.Millisecond, 2)
+	set := rabbitmq.NewTTLSet(40*time.Millisecond, 2)
 	if set.Has("k1") {
 		t.Fatal("expected key to be absent before mark")
 	}
@@ -112,7 +113,7 @@ func TestHandleDeliveryConsumeFailureAckWhenRetryPublished(t *testing.T) {
 			MemoryExtractDLQRoutingKey:   "dlq",
 			MemoryExtractMaxRetries:      3,
 		},
-		completed: newTTLSet(time.Minute, 100),
+		completed: rabbitmq.NewTTLSet(time.Minute, 100),
 	}
 	client.handleDelivery(amqp.Delivery{Body: []byte(`{"session_id":"s","query":"q","summary":"a","attempt":0}`)})
 
@@ -164,7 +165,7 @@ func TestHandleDeliveryConsumeFailureNackWhenRetryAndDLQFailed(t *testing.T) {
 			MemoryExtractDLQRoutingKey:   "dlq",
 			MemoryExtractMaxRetries:      3,
 		},
-		completed: newTTLSet(time.Minute, 100),
+		completed: rabbitmq.NewTTLSet(time.Minute, 100),
 	}
 	client.handleDelivery(amqp.Delivery{Body: []byte(`{"session_id":"s","query":"q","summary":"a","attempt":0}`)})
 
@@ -216,7 +217,7 @@ func TestHandleDeliveryDecodeFailureNackWhenDLQFailed(t *testing.T) {
 			MemoryExtractDLQRoutingKey:   "dlq",
 			MemoryExtractMaxRetries:      3,
 		},
-		completed: newTTLSet(time.Minute, 100),
+		completed: rabbitmq.NewTTLSet(time.Minute, 100),
 	}
 	client.handleDelivery(amqp.Delivery{Body: []byte("bad-json")})
 
@@ -245,7 +246,7 @@ func TestStartMemoryQueueInitLoopRetriesUntilConnected(t *testing.T) {
 		}
 		return &rabbitMQMemoryClient{
 			cfg:       cfg,
-			completed: newTTLSet(time.Minute, 32),
+			completed: rabbitmq.NewTTLSet(time.Minute, 32),
 		}, nil
 	}
 

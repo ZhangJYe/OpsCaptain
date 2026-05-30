@@ -63,7 +63,7 @@ func (c *ControllerV1) FileUpload(ctx context.Context, req *v1.FileUploadReq) (r
 }
 
 func (c *ControllerV1) UploadStatus(ctx context.Context, req *v1.UploadStatusReq) (res *v1.UploadStatusRes, err error) {
-	result, err := c.knowledgeApp.HandleUploadStatus(req.FileID)
+	result, err := c.knowledgeApp.HandleUploadStatus(ctx, req.FileID)
 	if err != nil {
 		return nil, gerror.New(err.Error())
 	}

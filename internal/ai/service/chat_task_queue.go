@@ -3,12 +3,12 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
 
+	"SuperBizAgent/internal/infra/rabbitmq"
 	"SuperBizAgent/utility/common"
 	"SuperBizAgent/utility/metrics"
 
@@ -103,20 +103,8 @@ type rabbitMQChatTaskConfig struct {
 
 type rabbitMQChatTaskClient struct {
 	cfg       rabbitMQChatTaskConfig
-	conn      *amqp.Connection
-	publishCh *amqp.Channel
-	consumeCh *amqp.Channel
-
-	stateMu     sync.RWMutex
-	reconnectMu sync.Mutex
-	publishMu   sync.Mutex
-
-	consumeCtx    context.Context
-	consumeCancel context.CancelFunc
-	consumeDone   chan struct{}
-	closed        bool
-
-	completed *ttlSet
+	client    *rabbitmq.Client
+	completed *rabbitmq.TTLSet
 }
 
 var (
@@ -283,7 +271,7 @@ func startChatTaskInitLoop(cfg rabbitMQChatTaskConfig) {
 			}
 
 			metrics.ObserveChatTask("bootstrap_failed")
-			if !sleepMemoryReconnect(initCtx, delay) {
+			if !rabbitmq.SleepReconnect(initCtx, delay) {
 				return
 			}
 		}
@@ -340,187 +328,45 @@ func getChatTaskExecutor() func(context.Context, string, string) (ChatTaskExecut
 }
 
 func newRabbitMQChatTaskClient(cfg rabbitMQChatTaskConfig) (*rabbitMQChatTaskClient, error) {
-	client := &rabbitMQChatTaskClient{
-		cfg:       cfg,
-		completed: newTTLSet(10*time.Minute, 20000),
+	client := rabbitmq.NewClient(chatTaskTopology(cfg), "[chat_task]")
+	client.OnReconnectFailed = func(err error) {
+		metrics.ObserveChatTask("reconnect_failed")
+		g.Log().Warningf(context.Background(), "[chat_task] rabbitmq reconnect failed: %v", err)
 	}
-	if err := client.connect(); err != nil {
+	if err := client.Connect(); err != nil {
 		return nil, err
 	}
-	return client, nil
+	return &rabbitMQChatTaskClient{
+		cfg:       cfg,
+		client:    client,
+		completed: rabbitmq.NewTTLSet(10*time.Minute, 20000),
+	}, nil
 }
 
-func (c *rabbitMQChatTaskClient) connect() error {
-	conn, publishCh, consumeCh, err := openChatTaskChannels(c.cfg)
-	if err != nil {
-		return err
+func chatTaskTopology(cfg rabbitMQChatTaskConfig) rabbitmq.TopologyConfig {
+	return rabbitmq.TopologyConfig{
+		URL:               cfg.URL,
+		Exchange:          cfg.Exchange,
+		Queue:             cfg.Queue,
+		RoutingKey:        cfg.RoutingKey,
+		RetryQueue:        cfg.RetryQueue,
+		RetryRoutingKey:   cfg.RetryRoutingKey,
+		DLQ:               cfg.DLQ,
+		DLQRoutingKey:     cfg.DLQRoutingKey,
+		RetryDelay:        cfg.RetryDelay,
+		Prefetch:          cfg.Prefetch,
+		ConsumerEnabled:   cfg.ConsumerEnabled,
+		ConnectionTimeout: cfg.ConnectionTimeout,
 	}
-	c.stateMu.Lock()
-	c.conn = conn
-	c.publishCh = publishCh
-	c.consumeCh = consumeCh
-	c.stateMu.Unlock()
-	return nil
-}
-
-func openChatTaskChannels(cfg rabbitMQChatTaskConfig) (*amqp.Connection, *amqp.Channel, *amqp.Channel, error) {
-	if strings.TrimSpace(cfg.URL) == "" {
-		return nil, nil, nil, fmt.Errorf("rabbitmq url is empty")
-	}
-	conn, err := amqp.DialConfig(cfg.URL, amqp.Config{
-		Dial: amqp.DefaultDial(cfg.ConnectionTimeout),
-	})
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("connect rabbitmq failed: %w", err)
-	}
-
-	publishCh, err := conn.Channel()
-	if err != nil {
-		_ = conn.Close()
-		return nil, nil, nil, fmt.Errorf("open publish channel failed: %w", err)
-	}
-	if err := declareChatTaskTopology(publishCh, cfg); err != nil {
-		_ = publishCh.Close()
-		_ = conn.Close()
-		return nil, nil, nil, err
-	}
-
-	var consumeCh *amqp.Channel
-	if cfg.ConsumerEnabled {
-		consumeCh, err = conn.Channel()
-		if err != nil {
-			_ = publishCh.Close()
-			_ = conn.Close()
-			return nil, nil, nil, fmt.Errorf("open consume channel failed: %w", err)
-		}
-		if err := consumeCh.Qos(cfg.Prefetch, 0, false); err != nil {
-			_ = consumeCh.Close()
-			_ = publishCh.Close()
-			_ = conn.Close()
-			return nil, nil, nil, fmt.Errorf("set consume qos failed: %w", err)
-		}
-	}
-
-	return conn, publishCh, consumeCh, nil
-}
-
-func declareChatTaskTopology(ch *amqp.Channel, cfg rabbitMQChatTaskConfig) error {
-	if err := ch.ExchangeDeclare(cfg.Exchange, "direct", true, false, false, false, nil); err != nil {
-		return fmt.Errorf("declare exchange failed: %w", err)
-	}
-	if _, err := ch.QueueDeclare(cfg.Queue, true, false, false, false, nil); err != nil {
-		return fmt.Errorf("declare queue failed: %w", err)
-	}
-	if err := ch.QueueBind(cfg.Queue, cfg.RoutingKey, cfg.Exchange, false, nil); err != nil {
-		return fmt.Errorf("bind queue failed: %w", err)
-	}
-
-	retryArgs := amqp.Table{
-		"x-dead-letter-exchange":    cfg.Exchange,
-		"x-dead-letter-routing-key": cfg.RoutingKey,
-		"x-message-ttl":             int32(cfg.RetryDelay.Milliseconds()),
-	}
-	if _, err := ch.QueueDeclare(cfg.RetryQueue, true, false, false, false, retryArgs); err != nil {
-		return fmt.Errorf("declare retry queue failed: %w", err)
-	}
-	if err := ch.QueueBind(cfg.RetryQueue, cfg.RetryRoutingKey, cfg.Exchange, false, nil); err != nil {
-		return fmt.Errorf("bind retry queue failed: %w", err)
-	}
-
-	if _, err := ch.QueueDeclare(cfg.DLQ, true, false, false, false, nil); err != nil {
-		return fmt.Errorf("declare dlq failed: %w", err)
-	}
-	if err := ch.QueueBind(cfg.DLQ, cfg.DLQRoutingKey, cfg.Exchange, false, nil); err != nil {
-		return fmt.Errorf("bind dlq failed: %w", err)
-	}
-	return nil
 }
 
 func (c *rabbitMQChatTaskClient) startConsumer() error {
-	if !c.cfg.ConsumerEnabled {
-		return nil
+	if c.client == nil {
+		return fmt.Errorf("rabbitmq client not initialized")
 	}
-	c.stateMu.Lock()
-	if c.consumeDone != nil {
-		c.stateMu.Unlock()
-		return nil
-	}
-	c.consumeCtx, c.consumeCancel = context.WithCancel(context.Background())
-	c.consumeDone = make(chan struct{})
-	consumeCtx := c.consumeCtx
-	consumeDone := c.consumeDone
-	c.stateMu.Unlock()
-
-	go func() {
-		defer close(consumeDone)
-		for {
-			select {
-			case <-consumeCtx.Done():
-				return
-			default:
-			}
-
-			deliveries, err := c.openConsumerDeliveries()
-			if err != nil {
-				metrics.ObserveChatTask("consume_failed")
-				g.Log().Warningf(context.Background(), "[chat_task] open deliveries failed: %v", err)
-				if !sleepMemoryReconnect(consumeCtx, c.cfg.ReconnectDelay) {
-					return
-				}
-				if reconnectErr := c.reconnect(context.Background()); reconnectErr != nil {
-					g.Log().Warningf(context.Background(), "[chat_task] reconnect failed: %v", reconnectErr)
-				}
-				continue
-			}
-
-		consumeLoop:
-			for {
-				select {
-				case <-consumeCtx.Done():
-					return
-				case delivery, ok := <-deliveries:
-					if !ok {
-						metrics.ObserveChatTask("consume_channel_closed")
-						if !sleepMemoryReconnect(consumeCtx, c.cfg.ReconnectDelay) {
-							return
-						}
-						if reconnectErr := c.reconnect(context.Background()); reconnectErr != nil {
-							g.Log().Warningf(context.Background(), "[chat_task] reconnect after channel closed failed: %v", reconnectErr)
-						}
-						break consumeLoop
-					}
-					c.handleDelivery(delivery)
-				}
-			}
-		}
-	}()
-	return nil
-}
-
-func (c *rabbitMQChatTaskClient) openConsumerDeliveries() (<-chan amqp.Delivery, error) {
-	consumeCh := c.getConsumeChannel()
-	if consumeCh == nil {
-		if err := c.reconnect(context.Background()); err != nil {
-			return nil, err
-		}
-		consumeCh = c.getConsumeChannel()
-		if consumeCh == nil {
-			return nil, fmt.Errorf("chat task consume channel unavailable")
-		}
-	}
-
-	deliveries, err := consumeCh.Consume(c.cfg.Queue, "", false, false, false, false, nil)
-	if err == nil {
-		return deliveries, nil
-	}
-	if reconnectErr := c.reconnect(context.Background()); reconnectErr != nil {
-		return nil, err
-	}
-	consumeCh = c.getConsumeChannel()
-	if consumeCh == nil {
-		return nil, err
-	}
-	return consumeCh.Consume(c.cfg.Queue, "", false, false, false, false, nil)
+	return c.client.StartConsumer(context.Background(), func(delivery amqp.Delivery) {
+		c.handleDelivery(delivery)
+	}, c.cfg.ReconnectDelay)
 }
 
 func (c *rabbitMQChatTaskClient) handleDelivery(delivery amqp.Delivery) {
@@ -546,13 +392,14 @@ func (c *rabbitMQChatTaskClient) handleDelivery(delivery amqp.Delivery) {
 	if err := c.processEvent(event); err != nil {
 		if event.Attempt < c.cfg.MaxRetries {
 			event.Attempt++
-			if publishErr := c.publishEvent(context.Background(), event, c.cfg.RetryRoutingKey); publishErr == nil {
+			publishErr := c.publishEvent(context.Background(), event, c.cfg.RetryRoutingKey)
+			if publishErr == nil {
 				metrics.ObserveChatTask("retried")
 				c.ack(delivery)
 				return
 			}
 			metrics.ObserveChatTask("consume_failed")
-			g.Log().Errorf(context.Background(), "[chat_task] publish retry event failed: %v", err)
+			g.Log().Errorf(context.Background(), "[chat_task] publish retry event failed: %v", publishErr)
 		}
 
 		if dlqErr := c.publishEvent(context.Background(), event, c.cfg.DLQRoutingKey); dlqErr == nil {
@@ -645,6 +492,9 @@ func (c *rabbitMQChatTaskClient) publishEvent(ctx context.Context, event chatTas
 }
 
 func (c *rabbitMQChatTaskClient) publishRaw(ctx context.Context, body []byte, routingKey string, headers amqp.Table) error {
+	if c.client == nil {
+		return fmt.Errorf("rabbitmq client not initialized")
+	}
 	publishCtx := ctx
 	if publishCtx == nil {
 		publishCtx = context.Background()
@@ -654,97 +504,7 @@ func (c *rabbitMQChatTaskClient) publishRaw(ctx context.Context, body []byte, ro
 		defer cancel()
 		publishCtx = timeoutCtx
 	}
-
-	c.publishMu.Lock()
-	defer c.publishMu.Unlock()
-
-	if c.isClosed() {
-		return fmt.Errorf("chat task rabbitmq client closed")
-	}
-	if err := c.publishWithCurrentChannel(publishCtx, body, routingKey, headers); err == nil {
-		return nil
-	}
-	if reconnectErr := c.reconnect(context.Background()); reconnectErr != nil {
-		return reconnectErr
-	}
-	return c.publishWithCurrentChannel(publishCtx, body, routingKey, headers)
-}
-
-func (c *rabbitMQChatTaskClient) publishWithCurrentChannel(ctx context.Context, body []byte, routingKey string, headers amqp.Table) error {
-	publishCh := c.getPublishChannel()
-	if publishCh == nil {
-		return fmt.Errorf("chat task publish channel unavailable")
-	}
-	return publishCh.PublishWithContext(
-		ctx,
-		c.cfg.Exchange,
-		routingKey,
-		false,
-		false,
-		amqp.Publishing{
-			ContentType:  "application/json",
-			DeliveryMode: amqp.Persistent,
-			Timestamp:    time.Now(),
-			Headers:      headers,
-			Body:         body,
-		},
-	)
-}
-
-func (c *rabbitMQChatTaskClient) reconnect(_ context.Context) error {
-	if c.isClosed() {
-		return fmt.Errorf("chat task rabbitmq client closed")
-	}
-	c.reconnectMu.Lock()
-	defer c.reconnectMu.Unlock()
-	if c.isClosed() {
-		return fmt.Errorf("chat task rabbitmq client closed")
-	}
-
-	conn, publishCh, consumeCh, err := openChatTaskChannels(c.cfg)
-	if err != nil {
-		return err
-	}
-	oldConn, oldPublishCh, oldConsumeCh := c.swapAMQPState(conn, publishCh, consumeCh)
-	_ = closeMemoryChannel(oldConsumeCh)
-	_ = closeMemoryChannel(oldPublishCh)
-	_ = closeMemoryConnection(oldConn)
-	metrics.ObserveChatTask("reconnected")
-	return nil
-}
-
-func (c *rabbitMQChatTaskClient) swapAMQPState(
-	conn *amqp.Connection,
-	publishCh *amqp.Channel,
-	consumeCh *amqp.Channel,
-) (*amqp.Connection, *amqp.Channel, *amqp.Channel) {
-	c.stateMu.Lock()
-	defer c.stateMu.Unlock()
-	oldConn := c.conn
-	oldPublishCh := c.publishCh
-	oldConsumeCh := c.consumeCh
-	c.conn = conn
-	c.publishCh = publishCh
-	c.consumeCh = consumeCh
-	return oldConn, oldPublishCh, oldConsumeCh
-}
-
-func (c *rabbitMQChatTaskClient) getPublishChannel() *amqp.Channel {
-	c.stateMu.RLock()
-	defer c.stateMu.RUnlock()
-	return c.publishCh
-}
-
-func (c *rabbitMQChatTaskClient) getConsumeChannel() *amqp.Channel {
-	c.stateMu.RLock()
-	defer c.stateMu.RUnlock()
-	return c.consumeCh
-}
-
-func (c *rabbitMQChatTaskClient) isClosed() bool {
-	c.stateMu.RLock()
-	defer c.stateMu.RUnlock()
-	return c.closed
+	return c.client.Publish(publishCtx, body, routingKey, headers)
 }
 
 func (c *rabbitMQChatTaskClient) ack(delivery amqp.Delivery) {
@@ -759,51 +519,11 @@ func (c *rabbitMQChatTaskClient) nackRequeue(delivery amqp.Delivery) {
 	}
 }
 
-func (c *rabbitMQChatTaskClient) Close(ctx context.Context) error {
-	var errs []string
-
-	c.stateMu.Lock()
-	if c.closed {
-		c.stateMu.Unlock()
+func (c *rabbitMQChatTaskClient) Close(_ context.Context) error {
+	if c.client == nil {
 		return nil
 	}
-	c.closed = true
-	consumeCancel := c.consumeCancel
-	consumeDone := c.consumeDone
-	c.stateMu.Unlock()
-
-	if consumeCancel != nil {
-		consumeCancel()
-	}
-	if consumeDone != nil {
-		waitCtx := ctx
-		if waitCtx == nil {
-			waitCtx = context.Background()
-		}
-		select {
-		case <-consumeDone:
-		case <-waitCtx.Done():
-			errs = append(errs, waitCtx.Err().Error())
-		case <-time.After(time.Second):
-		}
-	}
-
-	c.reconnectMu.Lock()
-	oldConn, oldPublishCh, oldConsumeCh := c.swapAMQPState(nil, nil, nil)
-	c.reconnectMu.Unlock()
-	if err := closeMemoryChannel(oldConsumeCh); err != nil {
-		errs = append(errs, err.Error())
-	}
-	if err := closeMemoryChannel(oldPublishCh); err != nil {
-		errs = append(errs, err.Error())
-	}
-	if err := closeMemoryConnection(oldConn); err != nil {
-		errs = append(errs, err.Error())
-	}
-	if len(errs) > 0 {
-		return errors.New(strings.Join(errs, "; "))
-	}
-	return nil
+	return c.client.Close()
 }
 
 func decodeChatTaskEvent(body []byte) (chatTaskEvent, error) {
@@ -846,32 +566,32 @@ func loadRabbitMQChatTaskConfig(ctx context.Context) rabbitMQChatTaskConfig {
 		cfg.ExecuteTimeout = time.Duration(v.Int64()) * time.Millisecond
 	}
 	if v, err := g.Cfg().Get(ctx, "chat_async.redis_key_prefix"); err == nil {
-		cfg.RedisKeyPrefix = resolveRabbitMQString(v.String(), cfg.RedisKeyPrefix)
+		cfg.RedisKeyPrefix = rabbitmq.ResolveRabbitMQString(v.String(), cfg.RedisKeyPrefix)
 	}
 
 	if v, err := g.Cfg().Get(ctx, "rabbitmq.url"); err == nil {
-		cfg.URL = resolveRabbitMQString(v.String(), "")
+		cfg.URL = rabbitmq.ResolveRabbitMQString(v.String(), "")
 	}
 	if v, err := g.Cfg().Get(ctx, "rabbitmq.exchange"); err == nil {
-		cfg.Exchange = resolveRabbitMQString(v.String(), cfg.Exchange)
+		cfg.Exchange = rabbitmq.ResolveRabbitMQString(v.String(), cfg.Exchange)
 	}
 	if v, err := g.Cfg().Get(ctx, "rabbitmq.chat_task_routing_key"); err == nil {
-		cfg.RoutingKey = resolveRabbitMQString(v.String(), cfg.RoutingKey)
+		cfg.RoutingKey = rabbitmq.ResolveRabbitMQString(v.String(), cfg.RoutingKey)
 	}
 	if v, err := g.Cfg().Get(ctx, "rabbitmq.chat_task_retry_routing_key"); err == nil {
-		cfg.RetryRoutingKey = resolveRabbitMQString(v.String(), cfg.RetryRoutingKey)
+		cfg.RetryRoutingKey = rabbitmq.ResolveRabbitMQString(v.String(), cfg.RetryRoutingKey)
 	}
 	if v, err := g.Cfg().Get(ctx, "rabbitmq.chat_task_dlq_routing_key"); err == nil {
-		cfg.DLQRoutingKey = resolveRabbitMQString(v.String(), cfg.DLQRoutingKey)
+		cfg.DLQRoutingKey = rabbitmq.ResolveRabbitMQString(v.String(), cfg.DLQRoutingKey)
 	}
 	if v, err := g.Cfg().Get(ctx, "rabbitmq.chat_task_queue"); err == nil {
-		cfg.Queue = resolveRabbitMQString(v.String(), cfg.Queue)
+		cfg.Queue = rabbitmq.ResolveRabbitMQString(v.String(), cfg.Queue)
 	}
 	if v, err := g.Cfg().Get(ctx, "rabbitmq.chat_task_retry_queue"); err == nil {
-		cfg.RetryQueue = resolveRabbitMQString(v.String(), "")
+		cfg.RetryQueue = rabbitmq.ResolveRabbitMQString(v.String(), "")
 	}
 	if v, err := g.Cfg().Get(ctx, "rabbitmq.chat_task_dlq"); err == nil {
-		cfg.DLQ = resolveRabbitMQString(v.String(), "")
+		cfg.DLQ = rabbitmq.ResolveRabbitMQString(v.String(), "")
 	}
 	if v, err := g.Cfg().Get(ctx, "rabbitmq.chat_task_prefetch"); err == nil && v.Int() > 0 {
 		cfg.Prefetch = v.Int()

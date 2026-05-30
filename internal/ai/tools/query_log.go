@@ -274,6 +274,31 @@ type LogQueryUnavailableOutput struct {
 	Window   string `json:"window,omitempty"`
 }
 
+func logToolOrDegraded(t tool.InvokableTool, reason string) tool.InvokableTool {
+	if t != nil {
+		return t
+	}
+	return &degradedLogTool{reason: reason}
+}
+
+type degradedLogTool struct {
+	reason string
+}
+
+func (d *degradedLogTool) Info(ctx context.Context) (*schema.ToolInfo, error) {
+	return &schema.ToolInfo{Name: "query_logs", Desc: "log tool degraded: " + d.reason}, nil
+}
+
+func (d *degradedLogTool) InvokableRun(ctx context.Context, args string, opts ...tool.Option) (string, error) {
+	out := LogQueryUnavailableOutput{
+		Success: false, Degraded: true,
+		Message: "日志检索工具创建失败，已返回降级结果。",
+		Error:   d.reason,
+	}
+	data, _ := json.Marshal(out)
+	return string(data), nil
+}
+
 func NewUnavailableLogQueryTool(reason string) tool.InvokableTool {
 	t, err := utils.InferOptionableTool(
 		"query_logs",
@@ -299,7 +324,8 @@ func NewUnavailableLogQueryTool(reason string) tool.InvokableTool {
 		},
 	)
 	if err != nil {
-		panic(fmt.Sprintf("failed to create query_logs fallback tool: %v", err))
+		g.Log().Errorf(context.Background(), "failed to create query_logs fallback tool: %v", err)
+		return nil
 	}
 	return t
 }
@@ -318,13 +344,18 @@ func NewHTTPLogQueryTool(httpURL string, reason string) tool.InvokableTool {
 			}
 			result, err := callLogHTTPFallback(ctx, httpURL, string(payload), time.Duration(defaultToolTimeoutMs)*time.Millisecond)
 			if err != nil {
-				return NewUnavailableLogQueryTool(fmt.Sprintf("%s; http fallback failed: %v", reason, err)).InvokableRun(ctx, string(payload))
+				unavail := NewUnavailableLogQueryTool(fmt.Sprintf("%s; http fallback failed: %v", reason, err))
+				if unavail == nil {
+					return "", fmt.Errorf("log http fallback failed and degraded tool unavailable: %w", err)
+				}
+				return unavail.InvokableRun(ctx, string(payload))
 			}
 			return result, nil
 		},
 	)
 	if err != nil {
-		panic(fmt.Sprintf("failed to create query_logs http fallback tool: %v", err))
+		g.Log().Errorf(context.Background(), "failed to create query_logs http fallback tool: %v", err)
+		return nil
 	}
 	return t
 }
@@ -450,14 +481,14 @@ func GetLogMcpTool() ([]tool.BaseTool, error) {
 		httpURL := resolveLogHTTPURL(ctx, "")
 		if httpURL != "" {
 			g.Log().Warning(ctx, "mcp.log_url is not configured, log query tool will use HTTP fallback")
-			return []tool.BaseTool{NewHTTPLogQueryTool(httpURL, "mcp.log_url is not configured")}, nil
+			return []tool.BaseTool{logToolOrDegraded(NewHTTPLogQueryTool(httpURL, "mcp.log_url is not configured"), "mcp.log_url is not configured")}, nil
 		}
 		g.Log().Warning(ctx, "mcp.log_url is not configured, log query tool will use degraded fallback")
-		return []tool.BaseTool{NewUnavailableLogQueryTool("mcp.log_url is not configured")}, nil
+		return []tool.BaseTool{logToolOrDegraded(NewUnavailableLogQueryTool("mcp.log_url is not configured"), "mcp.log_url is not configured")}, nil
 	}
 	httpURL := resolveLogHTTPURL(ctx, mcpURL)
 	if httpURL != "" && g.Cfg().MustGet(ctx, "mcp.prefer_http_log_tool", false).Bool() {
-		return []tool.BaseTool{NewHTTPLogQueryTool(httpURL, "mcp.prefer_http_log_tool is enabled")}, nil
+		return []tool.BaseTool{logToolOrDegraded(NewHTTPLogQueryTool(httpURL, "mcp.prefer_http_log_tool is enabled"), "mcp.prefer_http_log_tool is enabled")}, nil
 	}
 
 	// 检查缓存
@@ -472,9 +503,9 @@ func GetLogMcpTool() ([]tool.BaseTool, error) {
 	pc, err := globalPool.getOrCreate(mcpURL, connectTimeoutMs, toolTimeoutMs)
 	if err != nil {
 		if httpURL != "" {
-			return []tool.BaseTool{NewHTTPLogQueryTool(httpURL, err.Error())}, nil
+			return []tool.BaseTool{logToolOrDegraded(NewHTTPLogQueryTool(httpURL, err.Error()), err.Error())}, nil
 		}
-		return []tool.BaseTool{NewUnavailableLogQueryTool(err.Error())}, nil
+		return []tool.BaseTool{logToolOrDegraded(NewUnavailableLogQueryTool(err.Error()), err.Error())}, nil
 	}
 
 	// 用 eino 适配器发现工具（获取完整 schema），带超时保护避免 SSE 卡死阻塞启动
@@ -483,9 +514,9 @@ func GetLogMcpTool() ([]tool.BaseTool, error) {
 	einoTools, err := e_mcp.GetTools(listCtx, &e_mcp.Config{Cli: pc.cli})
 	if err != nil {
 		if httpURL != "" {
-			return []tool.BaseTool{NewHTTPLogQueryTool(httpURL, fmt.Sprintf("failed to get MCP tools: %v", err))}, nil
+			return []tool.BaseTool{logToolOrDegraded(NewHTTPLogQueryTool(httpURL, fmt.Sprintf("failed to get MCP tools: %v", err)), fmt.Sprintf("failed to get MCP tools: %v", err))}, nil
 		}
-		return []tool.BaseTool{NewUnavailableLogQueryTool(fmt.Sprintf("failed to get MCP tools: %v", err))}, nil
+		return []tool.BaseTool{logToolOrDegraded(NewUnavailableLogQueryTool(fmt.Sprintf("failed to get MCP tools: %v", err)), fmt.Sprintf("failed to get MCP tools: %v", err))}, nil
 	}
 
 	// 包装每个工具，实际调用走连接池（超时 + 重连），缓存工具名
