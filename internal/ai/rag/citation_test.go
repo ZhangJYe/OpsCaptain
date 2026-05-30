@@ -113,3 +113,86 @@ func TestBuildCitations_Empty(t *testing.T) {
 		t.Fatal("expected nil for empty input")
 	}
 }
+
+func TestCitationFromDocument_WithTrace(t *testing.T) {
+	doc := &schema.Document{
+		ID:      "doc-1",
+		Content: "test content",
+		MetaData: map[string]any{
+			"title":              "Test Doc",
+			metaKeyDenseRank:     2,
+			metaKeyLexicalRank:   1,
+			metaKeyFusionScore:   0.045,
+			metaKeyMetadataBoost: 3.0,
+			metaKeyRerankScore:   0.87,
+		},
+	}
+	c := CitationFromDocument(doc, "kb-doc-1")
+	if c.Trace == nil {
+		t.Fatal("expected non-nil trace")
+	}
+	if c.Trace.DenseRank != 2 {
+		t.Fatalf("DenseRank: got %d", c.Trace.DenseRank)
+	}
+	if c.Trace.LexicalRank != 1 {
+		t.Fatalf("LexicalRank: got %d", c.Trace.LexicalRank)
+	}
+	if c.Trace.FusionScore != 0.045 {
+		t.Fatalf("FusionScore: got %f", c.Trace.FusionScore)
+	}
+	if c.Trace.MetadataBoost != 3.0 {
+		t.Fatalf("MetadataBoost: got %f", c.Trace.MetadataBoost)
+	}
+	if c.Trace.RerankScore != 0.87 {
+		t.Fatalf("RerankScore: got %f", c.Trace.RerankScore)
+	}
+}
+
+func TestCitationFromDocument_NoTraceMeta(t *testing.T) {
+	doc := &schema.Document{
+		ID:      "doc-1",
+		Content: "test content",
+		MetaData: map[string]any{
+			"title": "Test Doc",
+		},
+	}
+	c := CitationFromDocument(doc, "kb-doc-1")
+	if c.Trace != nil {
+		t.Fatalf("expected nil trace when no trace metadata, got %+v", c.Trace)
+	}
+}
+
+func TestBuildCitations_WithTrace(t *testing.T) {
+	docs := []*schema.Document{
+		{
+			ID:      "d1",
+			Content: "first doc",
+			MetaData: map[string]any{
+				"title":            "Doc One",
+				metaKeyDenseRank:   1,
+				metaKeyFusionScore: 0.05,
+			},
+		},
+		{
+			ID:      "d2",
+			Content: "second doc",
+			MetaData: map[string]any{
+				metaKeyLexicalRank: 1,
+				metaKeyRerankScore: 0.9,
+			},
+		},
+	}
+	citations, _ := BuildCitations(docs, "kb-doc")
+	if citations[0].Trace == nil {
+		t.Fatal("expected trace for first citation")
+	}
+	if citations[0].Trace.DenseRank != 1 {
+		t.Fatalf("DenseRank: got %d", citations[0].Trace.DenseRank)
+	}
+	if citations[1].Trace == nil {
+		t.Fatal("expected trace for second citation")
+	}
+	if citations[1].Trace.RerankScore != 0.9 {
+		t.Fatalf("RerankScore: got %f", citations[1].Trace.RerankScore)
+	}
+}

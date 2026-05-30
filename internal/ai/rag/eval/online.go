@@ -36,6 +36,7 @@ type QuerySummary struct {
 	AvgTotalLatencyMs    float64 `json:"avg_total_latency_ms"`
 	CacheHitRate         float64 `json:"cache_hit_rate"`
 	EmptyRate            float64 `json:"empty_rate"`
+	CitationCoverage     float64 `json:"citation_coverage"`
 }
 
 func RunQueryEval(ctx context.Context, exec QueryExecutor, cases []EvalCase, ks []int) (QuerySummary, []QueryCaseResult, error) {
@@ -98,6 +99,8 @@ func accumulateQueryMetrics(qSummary *QuerySummary, metrics QueryMetrics, ranked
 	}
 	if len(rankedIDs) == 0 {
 		qSummary.EmptyRate++
+	} else {
+		qSummary.CitationCoverage++
 	}
 }
 
@@ -114,7 +117,16 @@ func finalizeQuerySummary(qSummary *QuerySummary, ks []int) {
 	qSummary.AvgTotalLatencyMs /= caseCount
 	qSummary.CacheHitRate /= caseCount
 	qSummary.EmptyRate /= caseCount
+	qSummary.CitationCoverage /= caseCount
 }
+
+const (
+	traceKeyDenseRank     = "_trace_dense_rank"
+	traceKeyLexicalRank   = "_trace_lexical_rank"
+	traceKeyFusionScore   = "_trace_fusion_score"
+	traceKeyMetadataBoost = "_trace_metadata_boost"
+	traceKeyRerankScore   = "_trace_rerank_score"
+)
 
 func SchemaDocsToRetrievedDocs(docs []*schema.Document) []RetrievedDoc {
 	if len(docs) == 0 {
@@ -125,14 +137,48 @@ func SchemaDocsToRetrievedDocs(docs []*schema.Document) []RetrievedDoc {
 		if doc == nil {
 			continue
 		}
-		results = append(results, RetrievedDoc{
+		rd := RetrievedDoc{
 			ID:      CanonicalSchemaDocID(doc),
 			Title:   metadataTitle(doc.MetaData),
 			Content: doc.Content,
 			Score:   doc.Score(),
-		})
+			Trace:   docTraceFromMeta(doc.MetaData),
+		}
+		results = append(results, rd)
 	}
 	return results
+}
+
+func docTraceFromMeta(meta map[string]any) *DocTrace {
+	if meta == nil {
+		return nil
+	}
+	t := &DocTrace{}
+	hasAny := false
+	if v, ok := meta[traceKeyDenseRank].(int); ok {
+		t.DenseRank = v
+		hasAny = true
+	}
+	if v, ok := meta[traceKeyLexicalRank].(int); ok {
+		t.LexicalRank = v
+		hasAny = true
+	}
+	if v, ok := meta[traceKeyFusionScore].(float64); ok {
+		t.FusionScore = v
+		hasAny = true
+	}
+	if v, ok := meta[traceKeyMetadataBoost].(float64); ok {
+		t.MetadataBoost = v
+		hasAny = true
+	}
+	if v, ok := meta[traceKeyRerankScore].(float64); ok {
+		t.RerankScore = v
+		hasAny = true
+	}
+	if !hasAny {
+		return nil
+	}
+	return t
 }
 
 func CanonicalSchemaDocID(doc *schema.Document) string {

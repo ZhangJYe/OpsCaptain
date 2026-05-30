@@ -3,10 +3,19 @@ package eval
 import "context"
 
 type RetrievedDoc struct {
-	ID      string  `json:"id"`
-	Title   string  `json:"title,omitempty"`
-	Content string  `json:"content,omitempty"`
-	Score   float64 `json:"score"`
+	ID      string    `json:"id"`
+	Title   string    `json:"title,omitempty"`
+	Content string    `json:"content,omitempty"`
+	Score   float64   `json:"score"`
+	Trace   *DocTrace `json:"trace,omitempty"`
+}
+
+type DocTrace struct {
+	DenseRank     int     `json:"dense_rank,omitempty"`
+	LexicalRank   int     `json:"lexical_rank,omitempty"`
+	FusionScore   float64 `json:"fusion_score,omitempty"`
+	MetadataBoost float64 `json:"metadata_boost,omitempty"`
+	RerankScore   float64 `json:"rerank_score,omitempty"`
 }
 
 type EvalCase struct {
@@ -41,6 +50,7 @@ type Summary struct {
 	AvgRecallAtK  map[int]float64 `json:"avg_recall_at_k"`
 	HitRateAtK    map[int]float64 `json:"hit_rate_at_k"`
 	FullRecallAtK map[int]int     `json:"full_recall_at_k"`
+	MRR           float64         `json:"mrr"`
 	Failures      []CaseFailure   `json:"failures,omitempty"`
 }
 

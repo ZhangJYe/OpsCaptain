@@ -169,3 +169,36 @@
 
 - **文件**：`internal/ai/rag/rerank.go:44`
 - **修复**：`content[:200]` 字节截断改为 `[]rune` 截断。
+
+---
+
+## RAG v2 citation trace（2026-05-30）
+
+### TD-25 ✅ 每条 citation 补检索 trace
+
+- **文件**：`internal/ai/rag/citation.go`、`internal/ai/rag/hybrid.go`、`internal/ai/rag/query.go`
+- **现象**：citation 只有 score/snippet/source，无法追溯文档在检索管线中各阶段的排名和得分。
+- **修复**：
+  - `CitationTrace` 结构体：`DenseRank`、`LexicalRank`、`FusionScore`、`MetadataBoost`、`RerankScore`。
+  - `Citation` 新增 `Trace *CitationTrace` 字段。
+  - `rrfFusion` 完成后将 `dense_rank`、`lexical_rank`、`fusion_score` 写入文档 MetaData。
+  - `HybridRetrieveWithRetriever` 在 `refineRetrievedDocs` 后计算 `metadata_boost`（位置提升量）。
+  - `Query()` 在 rerank 后将 `rerank_score` 写入文档 MetaData。
+  - `CitationFromDocument` 从 MetaData 提取 trace，无 trace 时 `Trace` 为 nil（不增加无意义字段）。
+  - 新增 3 个测试覆盖 trace 有/无/部分场景。
+
+---
+
+## RAG v2 评测框架（2026-05-30）
+
+### TD-26 ✅ eval 框架补 MRR 和 per-doc trace
+
+- **文件**：`internal/ai/rag/eval/types.go`、`runner.go`、`online.go`、`query_adapter.go`
+- **现象**：eval 框架只有 Recall@K/HitRate@K/FullRecall@K，缺少 MRR；`RetrievedDoc` 无 trace 字段；无 `rag.Query()` 适配器。
+- **修复**：
+  - `Summary` 新增 `MRR` 字段，`runner.go` 新增 `reciprocalRank()` 计算。
+  - `RetrievedDoc` 新增 `Trace *DocTrace` 字段（`DenseRank`、`LexicalRank`、`FusionScore`、`MetadataBoost`、`RerankScore`）。
+  - `QuerySummary` 新增 `CitationCoverage`（非空结果比例）。
+  - `SchemaDocsToRetrievedDocs` 从文档 MetaData 提取 trace。
+  - 新增 `NewQueryExecutor(pool)` 适配器，包装 `rag.Query()` 为 `QueryExecutor`，自动捕获 trace 和 latency。
+  - 新增 `TestRunComputesMRR`、`TestReciprocalRank` 测试。

@@ -326,3 +326,43 @@ func (s *conditionalSearcher) Search(_ context.Context, query string, topK int) 
 	}
 	return docs, nil
 }
+
+func TestRunComputesMRR(t *testing.T) {
+	searcher := stubSearcher{
+		results: map[string][]RetrievedDoc{
+			"q1": {{ID: "d1"}, {ID: "d2"}},
+			"q2": {{ID: "x1"}, {ID: "d3"}},
+			"q3": {{ID: "x2"}, {ID: "x3"}, {ID: "d4"}},
+		},
+	}
+	cases := []EvalCase{
+		{ID: "c1", Query: "q1", RelevantIDs: []string{"d1"}},
+		{ID: "c2", Query: "q2", RelevantIDs: []string{"d3"}},
+		{ID: "c3", Query: "q3", RelevantIDs: []string{"d4"}},
+	}
+
+	summary, _, err := Run(context.Background(), searcher, cases, []int{3})
+	if err != nil {
+		t.Fatalf("run eval: %v", err)
+	}
+	// c1: rank 1 -> RR=1.0, c2: rank 2 -> RR=0.5, c3: rank 3 -> RR=0.333
+	expectedMRR := (1.0 + 0.5 + 1.0/3.0) / 3.0
+	if diff := summary.MRR - expectedMRR; diff > 0.001 || diff < -0.001 {
+		t.Fatalf("expected MRR ~%.3f, got %.3f", expectedMRR, summary.MRR)
+	}
+}
+
+func TestReciprocalRank(t *testing.T) {
+	if rr := reciprocalRank([]string{"a"}, []string{"b", "a"}); rr != 0.5 {
+		t.Fatalf("expected 0.5, got %v", rr)
+	}
+	if rr := reciprocalRank([]string{"a"}, []string{"a", "b"}); rr != 1.0 {
+		t.Fatalf("expected 1.0, got %v", rr)
+	}
+	if rr := reciprocalRank([]string{"a"}, []string{"b", "c"}); rr != 0 {
+		t.Fatalf("expected 0, got %v", rr)
+	}
+	if rr := reciprocalRank(nil, []string{"a"}); rr != 0 {
+		t.Fatalf("expected 0 for nil relevant, got %v", rr)
+	}
+}

@@ -76,6 +76,7 @@ func accumulateMetrics(summary *Summary, result CaseResult, evalCase EvalCase, k
 			summary.FullRecallAtK[k]++
 		}
 	}
+	summary.MRR += reciprocalRank(evalCase.RelevantIDs, result.RankedIDs)
 }
 
 func finalizeSummary(summary *Summary, ks []int) {
@@ -87,6 +88,7 @@ func finalizeSummary(summary *Summary, ks []int) {
 		summary.AvgRecallAtK[k] /= caseCount
 		summary.HitRateAtK[k] /= caseCount
 	}
+	summary.MRR /= caseCount
 }
 
 func newSummary(totalCases int, ks []int) Summary {
@@ -179,4 +181,19 @@ func uniqueIDs(ids []string) []string {
 		out = append(out, id)
 	}
 	return out
+}
+
+func reciprocalRank(relevantIDs, rankedIDs []string) float64 {
+	relevant := make(map[string]struct{}, len(relevantIDs))
+	for _, id := range relevantIDs {
+		if id != "" {
+			relevant[id] = struct{}{}
+		}
+	}
+	for i, id := range rankedIDs {
+		if _, ok := relevant[id]; ok {
+			return 1.0 / float64(i+1)
+		}
+	}
+	return 0
 }

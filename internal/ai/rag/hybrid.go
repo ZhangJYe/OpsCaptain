@@ -161,7 +161,19 @@ func HybridRetrieveWithRetriever(
 	}
 
 	if cfg.MetadataBoostEnabled {
+		preRefinePositions := make(map[string]int, len(docs))
+		for i, d := range docs {
+			preRefinePositions[d.ID] = i
+		}
 		docs = refineRetrievedDocs(query, docs)
+		for i, d := range docs {
+			if pre, ok := preRefinePositions[d.ID]; ok && d.MetaData != nil {
+				boost := float64(pre - i)
+				if boost > 0 {
+					d.MetaData[metaKeyMetadataBoost] = boost
+				}
+			}
+		}
 	}
 
 	candidateTopK := cfg.CandidateTopK
@@ -240,6 +252,14 @@ func rrfFusion(denseDocs []*schema.Document, lexHits []BM25Hit, k int) []fusedDo
 		return results[i].score > results[j].score
 	})
 
+	for i, r := range results {
+		ensureDocMeta(r.doc)
+		r.doc.MetaData[metaKeyDenseRank] = r.denseRank
+		r.doc.MetaData[metaKeyLexicalRank] = r.lexRank
+		r.doc.MetaData[metaKeyFusionScore] = r.score
+		r.doc.MetaData["_trace_fusion_position"] = i + 1
+	}
+
 	return results
 }
 
@@ -299,6 +319,12 @@ func AddDocToBM25Index(idx *BM25Index, doc *schema.Document) {
 	}
 	meta := extractBM25Meta(doc)
 	idx.AddDocument(id, doc.Content, meta)
+}
+
+func ensureDocMeta(doc *schema.Document) {
+	if doc.MetaData == nil {
+		doc.MetaData = make(map[string]any)
+	}
 }
 
 func extractBM25Meta(doc *schema.Document) map[string]string {

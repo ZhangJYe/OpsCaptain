@@ -9,13 +9,29 @@ import (
 
 const maxSnippetLen = 300
 
-// Citation represents a traceable reference to a source document.
+const (
+	metaKeyDenseRank     = "_trace_dense_rank"
+	metaKeyLexicalRank   = "_trace_lexical_rank"
+	metaKeyFusionScore   = "_trace_fusion_score"
+	metaKeyMetadataBoost = "_trace_metadata_boost"
+	metaKeyRerankScore   = "_trace_rerank_score"
+)
+
+type CitationTrace struct {
+	DenseRank     int     `json:"dense_rank,omitempty"`
+	LexicalRank   int     `json:"lexical_rank,omitempty"`
+	FusionScore   float64 `json:"fusion_score,omitempty"`
+	MetadataBoost float64 `json:"metadata_boost,omitempty"`
+	RerankScore   float64 `json:"rerank_score,omitempty"`
+}
+
 type Citation struct {
-	ID      string  `json:"id"`
-	Source  string  `json:"source,omitempty"`
-	Title   string  `json:"title,omitempty"`
-	Score   float64 `json:"score,omitempty"`
-	Snippet string  `json:"snippet,omitempty"`
+	ID      string         `json:"id"`
+	Source  string         `json:"source,omitempty"`
+	Title   string         `json:"title,omitempty"`
+	Score   float64        `json:"score,omitempty"`
+	Snippet string         `json:"snippet,omitempty"`
+	Trace   *CitationTrace `json:"trace,omitempty"`
 }
 
 // Evidence links a citation to the specific text used in an answer.
@@ -53,6 +69,7 @@ func CitationFromDocument(doc *schema.Document, id string) Citation {
 	c.Title = extractMetaField(doc, titleKeys)
 	c.Score = doc.Score()
 	c.Snippet = truncateSnippet(doc.Content)
+	c.Trace = citationTraceFromMeta(doc.MetaData)
 
 	// Fallbacks
 	if c.Source == "" && doc.ID != "" {
@@ -111,4 +128,36 @@ func truncateSnippet(content string) string {
 		return content
 	}
 	return content[:maxSnippetLen] + "..."
+}
+
+func citationTraceFromMeta(meta map[string]any) *CitationTrace {
+	if meta == nil {
+		return nil
+	}
+	t := &CitationTrace{}
+	hasAny := false
+	if v, ok := meta[metaKeyDenseRank].(int); ok {
+		t.DenseRank = v
+		hasAny = true
+	}
+	if v, ok := meta[metaKeyLexicalRank].(int); ok {
+		t.LexicalRank = v
+		hasAny = true
+	}
+	if v, ok := meta[metaKeyFusionScore].(float64); ok {
+		t.FusionScore = v
+		hasAny = true
+	}
+	if v, ok := meta[metaKeyMetadataBoost].(float64); ok {
+		t.MetadataBoost = v
+		hasAny = true
+	}
+	if v, ok := meta[metaKeyRerankScore].(float64); ok {
+		t.RerankScore = v
+		hasAny = true
+	}
+	if !hasAny {
+		return nil
+	}
+	return t
 }

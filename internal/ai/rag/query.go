@@ -85,6 +85,11 @@ func Query(ctx context.Context, pool *RetrieverPool, query string) ([]*schema.Do
 		trace.RerankEnabled = rerankResult.Enabled
 		if rerankResult.Enabled {
 			docs = rerankResult.Docs
+			for i, doc := range docs {
+				if i < len(rerankResult.Scores) && doc.MetaData != nil {
+					doc.MetaData[metaKeyRerankScore] = rerankResult.Scores[i]
+				}
+			}
 		} else {
 			docs = trimRetrievedDocs(docs, topK)
 		}
