@@ -105,6 +105,7 @@ func (s *IndexingService) IndexSource(ctx context.Context, path string) (IndexBu
 func (s *IndexingService) SyncBM25Index(ctx context.Context) {
 	loader, err := s.newLoader(ctx)
 	if err != nil {
+		g.Log().Warningf(ctx, "SyncBM25Index: newLoader failed, BM25 index not rebuilt: %v", err)
 		return
 	}
 

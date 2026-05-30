@@ -21,13 +21,15 @@ type bm25Doc struct {
 	id       string
 	tokens   []string
 	tokenLen int
+	content  string
 	meta     map[string]string
 }
 
 type BM25Hit struct {
-	DocID string
-	Score float64
-	Meta  map[string]string
+	DocID   string
+	Score   float64
+	Content string
+	Meta    map[string]string
 }
 
 func NewBM25Index() *BM25Index {
@@ -49,6 +51,7 @@ func (idx *BM25Index) AddDocument(id string, content string, meta map[string]str
 		id:       id,
 		tokens:   tokens,
 		tokenLen: len(tokens),
+		content:  content,
 		meta:     meta,
 	}
 
@@ -130,9 +133,10 @@ func (idx *BM25Index) Search(query string, topK int) []BM25Hit {
 	for _, r := range results[:limit] {
 		doc := docs[r.idx]
 		hits = append(hits, BM25Hit{
-			DocID: doc.id,
-			Score: r.score,
-			Meta:  doc.meta,
+			DocID:   doc.id,
+			Score:   r.score,
+			Content: doc.content,
+			Meta:    doc.meta,
 		})
 	}
 	return hits
@@ -167,10 +171,15 @@ func (idx *BM25Index) rebuildStatsLocked() {
 	idx.avgDL = float64(totalLen) / float64(idx.totalDoc)
 }
 
+func isCJK(r rune) bool {
+	return (r >= 0x4e00 && r <= 0x9fff) || (r >= 0x3400 && r <= 0x4dbf)
+}
+
 func bm25Tokenize(text string) []string {
 	lower := strings.ToLower(text)
 	var tokens []string
 	var buf strings.Builder
+	var prevCJK rune
 	flush := func() {
 		if buf.Len() == 0 {
 			return
@@ -184,8 +193,19 @@ func bm25Tokenize(text string) []string {
 			return
 		}
 		tokens = append(tokens, t)
+		prevCJK = 0
 	}
 	for _, r := range lower {
+		if isCJK(r) {
+			flush()
+			tokens = append(tokens, string(r))
+			if prevCJK != 0 {
+				tokens = append(tokens, string([]rune{prevCJK, r}))
+			}
+			prevCJK = r
+			continue
+		}
+		prevCJK = 0
 		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' || r == '-' || r == '.' || r == '/' || r == ':' {
 			buf.WriteRune(r)
 			continue

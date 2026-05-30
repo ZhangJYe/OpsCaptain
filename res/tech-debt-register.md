@@ -120,3 +120,52 @@
 
 - **文件**：`internal/ai/tools/tiered_tools.go:66`
 - **修复**：`ToolNames()` 添加 nil tool 跳过、`info == nil` 防御、`err != nil` Warningf + continue。
+
+---
+
+## RAG 质量治理（2026-05-30）
+
+### TD-19 ✅ BM25 中文分词完全失效
+
+- **文件**：`internal/ai/rag/bm25.go:170`
+- **现象**：`bm25Tokenize()` 仅保留 `[a-z0-9_\-./:]`，所有中文字符被丢弃。中文查询无法命中任何文档。
+- **修复**：新增 `isCJK()` 判断，CJK 字符（`一-鿿`、`㐀-䶿`）生成 unigram + bigram token。新增 `TestBM25Tokenize_Chinese` 和 `TestBM25Index_ChineseSearch` 测试。
+
+### TD-20 ✅ BM25 命中文档丢失正文
+
+- **文件**：`internal/ai/rag/bm25.go`、`internal/ai/rag/hybrid.go:249`
+- **现象**：`BM25Hit` 无 Content 字段，`bm25Doc` 不存储原始内容。`lexHitToDoc()` 创建的 `schema.Document` 没有正文，导致 BM25-only 命中的文档在 citation 输出中无内容。
+- **修复**：`bm25Doc` 和 `BM25Hit` 新增 `Content` 字段；`AddDocument` 存储原始内容；`Search` 返回 Content；`lexHitToDoc` 设置 `doc.Content`。新增 `TestBM25Hit_PreservesContent` 测试。
+
+### TD-21 ✅ BM25 索引重启后为空
+
+- **文件**：`main.go:85`
+- **现象**：BM25 索引纯内存，无持久化。进程重启后 `SharedBM25Index()` 返回空索引，hybrid 检索退化为 dense-only，直到有人触发 `IndexSource()`。
+- **修复**：`main.go` 启动时调用 `rag.DefaultIndexingService().SyncBM25Index(ctx)` 从 `common.FileDir` 预热索引。
+
+---
+
+## RAG v2 生产 rerank 接入（2026-05-30）
+
+### TD-22 ✅ 生产 Query 接入 rewrite/rerank
+
+- **文件**：`internal/ai/rag/query.go`、`internal/ai/rag/hybrid.go`、`manifest/config/config.yaml`
+- **现象**：`rag.Query()` 不走 rewrite/rerank，hybrid 直接返回 FinalTopK（默认 5）。rerank 仅在 eval 路径可用。
+- **修复**：
+  - `HybridConfig` 新增 `CandidateTopK` 字段，`DefaultHybridConfig` 默认等于 `FinalTopK`。
+  - `HybridRetrieveWithRetriever` 用 `CandidateTopK` 做裁剪，不再提前 trim 到 `FinalTopK`。
+  - `Query()` 新增配置开关：`rag.rewrite_enabled`、`rag.rerank_enabled`。rerank 启用时自动用 `RetrieverCandidateTopK`（默认 topK*4，[20,50]）。
+  - 流程：optional rewrite → hybrid candidate retrieve → optional rerank → final trim。
+  - trace 记录 `RerankEnabled`、`RerankLatencyMs`、`RewriteLatencyMs`、`RawResultCount`、`ResultCount`。
+  - `config.yaml` 补齐 `rag:` 默认配置块，rewrite/rerank 默认关闭。
+  - 回归测试 `TestQuery_DefaultConfigDisablesRewriteAndRerank` 确认默认行为不变。
+
+### TD-23 ✅ SyncBM25Index newLoader 失败静默
+
+- **文件**：`internal/ai/rag/indexing_service.go:107`
+- **修复**：`newLoader` 失败时添加 `g.Log().Warningf`。
+
+### TD-24 ✅ rerank 中文截断坏 UTF-8
+
+- **文件**：`internal/ai/rag/rerank.go:44`
+- **修复**：`content[:200]` 字节截断改为 `[]rune` 截断。

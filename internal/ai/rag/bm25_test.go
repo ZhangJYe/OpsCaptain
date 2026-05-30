@@ -116,3 +116,64 @@ func TestBM25Tokenize_Consistency(t *testing.T) {
 		}
 	}
 }
+
+func TestBM25Tokenize_Chinese(t *testing.T) {
+	t.Parallel()
+
+	tokens := bm25Tokenize("checkoutservice 超时 支付失败")
+	got := make(map[string]bool)
+	for _, tok := range tokens {
+		got[tok] = true
+	}
+
+	if !got["checkoutservice"] {
+		t.Error("expected checkoutservice token")
+	}
+
+	if !got["超"] || !got["时"] || !got["支"] || !got["付"] || !got["失"] || !got["败"] {
+		t.Errorf("expected CJK unigram tokens, got %v", tokens)
+	}
+
+	if !got["超时"] {
+		t.Errorf("expected bigram '超时', got %v", tokens)
+	}
+	if !got["支付"] {
+		t.Errorf("expected bigram '支付', got %v", tokens)
+	}
+	if !got["失败"] {
+		t.Errorf("expected bigram '失败', got %v", tokens)
+	}
+}
+
+func TestBM25Index_ChineseSearch(t *testing.T) {
+	t.Parallel()
+
+	idx := NewBM25Index()
+	idx.AddDocument("case-001", "checkoutservice 超时 支付服务下游故障", nil)
+	idx.AddDocument("case-002", "frontend 页面加载慢 用户体验下降", nil)
+	idx.AddDocument("case-003", "recommendationservice 推荐服务响应延迟", nil)
+
+	hits := idx.Search("超时 支付", 5)
+	if len(hits) == 0 {
+		t.Fatal("expected at least one hit for Chinese query")
+	}
+	if hits[0].DocID != "case-001" {
+		t.Fatalf("expected case-001 to rank first for '超时 支付', got %s", hits[0].DocID)
+	}
+}
+
+func TestBM25Hit_PreservesContent(t *testing.T) {
+	t.Parallel()
+
+	idx := NewBM25Index()
+	idx.AddDocument("doc-1", "checkoutservice rrt timeout spike with paymentservice", nil)
+	idx.AddDocument("doc-2", "frontend high latency", nil)
+
+	hits := idx.Search("checkoutservice timeout", 5)
+	if len(hits) == 0 {
+		t.Fatal("expected at least one hit")
+	}
+	if hits[0].Content != "checkoutservice rrt timeout spike with paymentservice" {
+		t.Fatalf("expected content preserved in hit, got %q", hits[0].Content)
+	}
+}

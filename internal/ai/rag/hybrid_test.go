@@ -154,6 +154,45 @@ func TestHybridRetrieve_Integration(t *testing.T) {
 	}
 }
 
+func TestHybridRetrieve_CandidateTopKReturnsMoreThanFinalTopK(t *testing.T) {
+	t.Parallel()
+
+	denseResults := []*schema.Document{
+		{ID: "d1", Content: "a", MetaData: map[string]any{"case_id": "case-001"}},
+		{ID: "d2", Content: "b", MetaData: map[string]any{"case_id": "case-002"}},
+		{ID: "d3", Content: "c", MetaData: map[string]any{"case_id": "case-003"}},
+		{ID: "d4", Content: "d", MetaData: map[string]any{"case_id": "case-004"}},
+		{ID: "d5", Content: "e", MetaData: map[string]any{"case_id": "case-005"}},
+		{ID: "d6", Content: "f", MetaData: map[string]any{"case_id": "case-006"}},
+	}
+
+	fr := &fakeHybridRetriever{docs: denseResults}
+	pool := NewRetrieverPool(
+		func(ctx context.Context) (retrieverapi.Retriever, error) { return fr, nil },
+		func(ctx context.Context) string { return "test-candidate" },
+		nil,
+	)
+
+	cfg := HybridConfig{
+		DenseTopK:     10,
+		LexicalTopK:   10,
+		FusionK:       60,
+		CandidateTopK: 6,
+		FinalTopK:     2,
+	}
+
+	docs, _, err := HybridRetrieve(context.Background(), pool, nil, "test query", cfg)
+	if err != nil {
+		t.Fatalf("HybridRetrieve returned error: %v", err)
+	}
+	if len(docs) > 6 {
+		t.Fatalf("expected at most 6 candidates (CandidateTopK), got %d", len(docs))
+	}
+	if len(docs) < 2 {
+		t.Fatalf("expected at least 2 docs, got %d", len(docs))
+	}
+}
+
 func TestQuery_HybridWithPopulatedSharedBM25(t *testing.T) {
 	ResetSharedBM25Index()
 	defer ResetSharedBM25Index()

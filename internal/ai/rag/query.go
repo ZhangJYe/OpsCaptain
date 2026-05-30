@@ -7,6 +7,7 @@ import (
 
 	retrieverapi "github.com/cloudwego/eino/components/retriever"
 	"github.com/cloudwego/eino/schema"
+	"github.com/gogf/gf/v2/frame/g"
 )
 
 type QueryTrace struct {
@@ -36,6 +37,20 @@ func Query(ctx context.Context, pool *RetrieverPool, query string) ([]*schema.Do
 		RewrittenQuery: query,
 	}
 
+	wantRewrite := ragConfigBool(ctx, "rag.rewrite_enabled")
+	wantRerank := ragConfigBool(ctx, "rag.rerank_enabled")
+
+	searchQuery := query
+	if wantRewrite {
+		rewriteStart := time.Now()
+		rewritten := RewriteQuery(ctx, query)
+		trace.RewriteLatencyMs = time.Since(rewriteStart).Milliseconds()
+		if rewritten != "" {
+			searchQuery = rewritten
+		}
+		trace.RewrittenQuery = searchQuery
+	}
+
 	rr, acquisition, err := pool.GetOrCreate(ctx)
 	trace.CacheKey = acquisition.CacheKey
 	trace.CacheHit = acquisition.CacheHit
@@ -47,15 +62,41 @@ func Query(ctx context.Context, pool *RetrieverPool, query string) ([]*schema.Do
 
 	lexIdx := SharedBM25Index()
 	cfg := DefaultHybridConfig(ctx)
+	if wantRerank {
+		cfg.CandidateTopK = RetrieverCandidateTopK(ctx)
+	}
 
-	docs, hybridTrace, err := HybridRetrieveWithRetriever(ctx, rr, lexIdx, query, cfg)
+	docs, hybridTrace, err := HybridRetrieveWithRetriever(ctx, rr, lexIdx, searchQuery, cfg)
 	trace.Hybrid = &hybridTrace
 	trace.RetrieveLatencyMs = hybridTrace.DenseLatencyMs
 	trace.RawResultCount = hybridTrace.FusedCount
-	trace.ResultCount = len(docs)
 	if err != nil {
 		return nil, trace, err
 	}
+
+	if wantRerank {
+		topK := cfg.FinalTopK
+		if topK <= 0 {
+			topK = 10
+		}
+		rerankStart := time.Now()
+		rerankResult := Rerank(ctx, query, docs, topK)
+		trace.RerankLatencyMs = time.Since(rerankStart).Milliseconds()
+		trace.RerankEnabled = rerankResult.Enabled
+		if rerankResult.Enabled {
+			docs = rerankResult.Docs
+		} else {
+			docs = trimRetrievedDocs(docs, topK)
+		}
+	} else {
+		topK := cfg.FinalTopK
+		if topK <= 0 {
+			topK = 10
+		}
+		docs = trimRetrievedDocs(docs, topK)
+	}
+
+	trace.ResultCount = len(docs)
 	return docs, trace, nil
 }
 
@@ -113,4 +154,12 @@ func QueryForEval(ctx context.Context, pool *RetrieverPool, query string, wantRe
 	finalDocs := rerankResult.Docs
 	trace.ResultCount = len(finalDocs)
 	return finalDocs, trace, nil
+}
+
+func ragConfigBool(ctx context.Context, key string) bool {
+	v, err := g.Cfg().Get(ctx, key)
+	if err != nil {
+		return false
+	}
+	return v.Bool()
 }

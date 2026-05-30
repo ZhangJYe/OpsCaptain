@@ -15,16 +15,19 @@ type HybridConfig struct {
 	DenseTopK            int
 	LexicalTopK          int
 	FusionK              int
+	CandidateTopK        int
 	FinalTopK            int
 	MetadataBoostEnabled bool
 }
 
 func DefaultHybridConfig(ctx context.Context) HybridConfig {
+	topK := RetrieverTopK(ctx)
 	cfg := HybridConfig{
 		DenseTopK:            50,
 		LexicalTopK:          50,
 		FusionK:              60,
-		FinalTopK:            RetrieverTopK(ctx),
+		CandidateTopK:        topK,
+		FinalTopK:            topK,
 		MetadataBoostEnabled: true,
 	}
 	if v, err := g.Cfg().Get(ctx, "rag.hybrid_dense_top_k"); err == nil && v.Int() > 0 {
@@ -38,6 +41,9 @@ func DefaultHybridConfig(ctx context.Context) HybridConfig {
 	}
 	if v, err := g.Cfg().Get(ctx, "rag.hybrid_final_top_k"); err == nil && v.Int() > 0 {
 		cfg.FinalTopK = v.Int()
+	}
+	if v, err := g.Cfg().Get(ctx, "rag.hybrid_candidate_top_k"); err == nil && v.Int() > 0 {
+		cfg.CandidateTopK = v.Int()
 	}
 	if v, err := g.Cfg().Get(ctx, "rag.hybrid_metadata_boost_enabled"); err == nil {
 		cfg.MetadataBoostEnabled = v.Bool()
@@ -158,11 +164,14 @@ func HybridRetrieveWithRetriever(
 		docs = refineRetrievedDocs(query, docs)
 	}
 
-	finalTopK := cfg.FinalTopK
-	if finalTopK <= 0 {
-		finalTopK = 10
+	candidateTopK := cfg.CandidateTopK
+	if candidateTopK <= 0 {
+		candidateTopK = cfg.FinalTopK
 	}
-	docs = trimRetrievedDocs(docs, finalTopK)
+	if candidateTopK <= 0 {
+		candidateTopK = 10
+	}
+	docs = trimRetrievedDocs(docs, candidateTopK)
 
 	return docs, trace, nil
 }
@@ -253,6 +262,7 @@ func lexHitToDoc(hit BM25Hit) *schema.Document {
 	}
 	return &schema.Document{
 		ID:       hit.DocID,
+		Content:  hit.Content,
 		MetaData: meta,
 	}
 }

@@ -41,8 +41,9 @@ func Rerank(ctx context.Context, query string, docs []*schema.Document, topK int
 	for i, doc := range docs {
 		title := docTitle(doc)
 		content := doc.Content
-		if len(content) > 200 {
-			content = content[:200] + "..."
+		runes := []rune(content)
+		if len(runes) > 200 {
+			content = string(runes[:200]) + "..."
 		}
 		fmt.Fprintf(&sb, "[%d] %s\n%s\n\n", i+1, title, content)
 	}

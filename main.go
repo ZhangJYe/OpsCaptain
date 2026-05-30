@@ -81,6 +81,7 @@ func main() {
 	}
 	common.FileDir = fileDir.String()
 
+	rag.DefaultIndexingService().SyncBM25Index(ctx)
 	rag.SetDefaultVectorStore(inframv.NewMilvusVectorStore(inframv.NewMilvusClient))
 	rag.NewRetrieverFunc = retriever.NewMilvusRetriever
 	health.CloseAllMilvusClientsFunc = inframv.CloseAllClients

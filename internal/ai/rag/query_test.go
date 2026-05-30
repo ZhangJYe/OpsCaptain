@@ -65,6 +65,53 @@ func TestQueryForEval_RetrieveOnlySkipsRewriteAndRerank(t *testing.T) {
 	}
 }
 
+func TestQuery_DefaultConfigDisablesRewriteAndRerank(t *testing.T) {
+	ResetSharedBM25Index()
+	defer ResetSharedBM25Index()
+
+	idx := SharedBM25Index()
+	idx.AddDocument("case-A", "checkoutservice rrt timeout", nil)
+	idx.AddDocument("case-B", "frontend latency high", nil)
+	idx.AddDocument("case-C", "emailservice smtp error", nil)
+
+	retriever := &fakeQueryRetriever{docs: []*schema.Document{
+		{ID: "d1", Content: "checkoutservice issue", MetaData: map[string]any{"case_id": "case-A"}},
+		{ID: "d2", Content: "frontend issue", MetaData: map[string]any{"case_id": "case-B"}},
+		{ID: "d3", Content: "email issue", MetaData: map[string]any{"case_id": "case-C"}},
+	}}
+	pool := NewRetrieverPool(
+		func(context.Context) (retrieverapi.Retriever, error) { return retriever, nil },
+		func(context.Context) string { return "test-default-query" },
+		nil,
+	)
+
+	docs, trace, err := Query(context.Background(), pool, "checkoutservice timeout")
+	if err != nil {
+		t.Fatalf("Query returned error: %v", err)
+	}
+	if trace.Mode != "hybrid" {
+		t.Fatalf("expected mode hybrid, got %s", trace.Mode)
+	}
+	if trace.RerankEnabled {
+		t.Fatal("expected RerankEnabled=false with default config")
+	}
+	if trace.RewriteLatencyMs != 0 {
+		t.Fatalf("expected rewrite skipped, got latency %dms", trace.RewriteLatencyMs)
+	}
+	if trace.RerankLatencyMs != 0 {
+		t.Fatalf("expected rerank skipped, got latency %dms", trace.RerankLatencyMs)
+	}
+	if trace.RewrittenQuery != "checkoutservice timeout" {
+		t.Fatalf("expected rewritten query unchanged, got %q", trace.RewrittenQuery)
+	}
+	if len(docs) == 0 {
+		t.Fatal("expected at least one result")
+	}
+	if trace.ResultCount != len(docs) {
+		t.Fatalf("ResultCount %d != len(docs) %d", trace.ResultCount, len(docs))
+	}
+}
+
 func TestRefineRetrievedDocs_PrefersMetadataAndLexicalOverlap(t *testing.T) {
 	t.Parallel()
 
