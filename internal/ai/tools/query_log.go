@@ -109,7 +109,7 @@ func (p *mcpClientPool) connect(url string, connectTimeoutMs int) (client.MCPCli
 
 // reconnect 断线重连，指数退避
 // mu 防止并发重连，rw 保护 cli/connected 更新
-func (pc *pooledClient) reconnect() error {
+func (pc *pooledClient) reconnect(ctx context.Context) error {
 	pc.mu.Lock()
 	defer pc.mu.Unlock()
 
@@ -127,7 +127,11 @@ func (pc *pooledClient) reconnect() error {
 		if delay > 60*time.Second {
 			delay = 60 * time.Second
 		}
-		time.Sleep(delay)
+		select {
+		case <-time.After(delay):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 
 		cli, err := globalPool.connect(pc.url, pc.connectTimeoutMs)
 		if err != nil {
@@ -157,7 +161,7 @@ func (pc *pooledClient) CallTool(ctx context.Context, toolName string, argsJSON 
 		pc.rw.Unlock()
 
 		g.Log().Warningf(ctx, "MCP tool %s connection lost, attempting reconnect...", toolName)
-		if reconnectErr := pc.reconnect(); reconnectErr != nil {
+		if reconnectErr := pc.reconnect(ctx); reconnectErr != nil {
 			return "", fmt.Errorf("MCP tool %s call failed and reconnect failed: %w (original: %v)", toolName, reconnectErr, err)
 		}
 		// 重连成功，重试一次

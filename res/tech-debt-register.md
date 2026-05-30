@@ -79,24 +79,20 @@
 - **文件**：`internal/ai/tools/query_internal_docs.go:45`
 - **修复**：`query_metrics_alerts.go` 已在 TD-01 中修复；`query_internal_docs.go` 降级响应 json.Marshal 错误改为 fallback 纯文本。
 
-### TD-12 skills/domains/metrics 工具创建无 nil 检查
+### TD-12 ✅ skills/domains/metrics 工具创建无 nil 检查
 
-- **文件**：`internal/ai/skills/domains/metrics/agent.go:144`
-- **现象**：`newPrometheusAlertsQueryTool()` 返回值无 nil 检查，后续直接 `tool.InvokableRun`。
-- **风险**：工具创建失败时 panic。
-- **建议**：nil 检查 + 返回 error。
+- **文件**：`internal/ai/skills/domains/metrics/agent.go`
+- **修复**：`runPrometheusAlertQuery` 和 `runPrometheusAlertQueryWithFocus` 两处调用点添加 nil 检查，返回 degraded TaskResult。
 
 ### TD-13 ✅ incident list 读文件失败静默跳过
 
 - **文件**：`internal/ai/service/ai_ops_incident.go:174`
 - **修复**：读取单个文件失败时记录 `g.Log().Warningf`（file name, error）。
 
-### TD-14 MCP reconnect 用 time.Sleep 不响应 ctx
+### TD-14 ✅ MCP reconnect 用 time.Sleep 不响应 ctx
 
-- **文件**：`internal/ai/tools/query_log.go:130`
-- **现象**：MCP reconnect 用 `time.Sleep`，不响应 ctx cancel。
-- **风险**：shutdown 时 reconnect 阻塞优雅退出。
-- **建议**：改用 `time.After` + ctx.Done select。
+- **文件**：`internal/ai/tools/query_log.go`
+- **修复**：`reconnect()` 签名改为 `reconnect(ctx context.Context)`，`time.Sleep` 替换为 `select { case <-time.After(delay): case <-ctx.Done(): return ctx.Err() }`。
 
 ---
 

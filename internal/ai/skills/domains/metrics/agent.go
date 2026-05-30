@@ -143,6 +143,15 @@ func buildMetricsSkillRegistry() *skills.Registry {
 
 func runPrometheusAlertQueryWithFocus(ctx context.Context, task *protocol.TaskEnvelope, mode string, focus string) (*protocol.TaskResult, error) {
 	tool := newPrometheusAlertsQueryTool()
+	if tool == nil {
+		return &protocol.TaskResult{
+			TaskID:     task.TaskID,
+			Agent:      AgentName,
+			Status:     protocol.ResultStatusDegraded,
+			Summary:    "prometheus alerts tool unavailable",
+			Confidence: 0.1,
+		}, nil
+	}
 	queryCtx, cancel := context.WithTimeout(ctx, metricsQueryTimeout(ctx))
 	defer cancel()
 
@@ -288,6 +297,15 @@ func mustNewSkillRegistry() *skills.Registry {
 
 func runPrometheusAlertQuery(ctx context.Context, task *protocol.TaskEnvelope, mode string) (*protocol.TaskResult, error) {
 	tool := newPrometheusAlertsQueryTool()
+	if tool == nil {
+		return &protocol.TaskResult{
+			TaskID:     task.TaskID,
+			Agent:      AgentName,
+			Status:     protocol.ResultStatusDegraded,
+			Summary:    "prometheus alerts tool unavailable",
+			Confidence: 0.1,
+		}, nil
+	}
 	queryCtx, cancel := context.WithTimeout(ctx, metricsQueryTimeout(ctx))
 	defer cancel()
 
