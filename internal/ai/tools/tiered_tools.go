@@ -66,9 +66,12 @@ func BuildTieredTools() []skills.TieredTool {
 func ToolNames(tools []tool.BaseTool) []string {
 	names := make([]string, 0, len(tools))
 	for _, t := range tools {
+		if t == nil {
+			continue
+		}
 		info, err := t.Info(nil)
-		if err != nil {
-			g.Log().Warningf(context.Background(), "ToolNames: failed to get tool info: %v", err)
+		if err != nil || info == nil {
+			g.Log().Warningf(context.Background(), "ToolNames: failed to get tool info: err=%v info=%v", err, info)
 			continue
 		}
 		names = append(names, info.Name)

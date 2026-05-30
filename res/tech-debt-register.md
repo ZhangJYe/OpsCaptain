@@ -116,4 +116,4 @@
 ### TD-18 ✅ tiered_tools ToolNames 忽略错误
 
 - **文件**：`internal/ai/tools/tiered_tools.go:66`
-- **修复**：`ToolNames()` 检查 `t.Info()` 错误，失败时记录 `Warningf` 并 `continue`。
+- **修复**：`ToolNames()` 添加 nil tool 跳过、`info == nil` 防御、`err != nil` Warningf + continue。
