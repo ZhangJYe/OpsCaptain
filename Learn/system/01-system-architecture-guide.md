@@ -88,9 +88,72 @@ Planner → Executor → RePlanner
 
 ---
 
-## 3. 关键模块
+## 3. 工程分层模型
 
-### 3.1 Controller 层
+当前代码采用五层架构：
+
+```text
+┌─────────────────────────────────────────────────┐
+│              API Layer                           │
+│         internal/controller/                     │
+│  参数解析 → 调用 Application → 格式化响应         │
+├─────────────────────────────────────────────────┤
+│           Application Layer                      │
+│         internal/app/                            │
+│  编排业务流程：ChatApp、AIOpsApp、KnowledgeApp    │
+├─────────────────────────────────────────────────┤
+│             Domain Layer                         │
+│    internal/ai/{rag,contextengine,memory,...}     │
+│  核心业务规则：检索、推理、证据、Agent             │
+├─────────────────────────────────────────────────┤
+│        Infrastructure Layer                      │
+│    internal/infra/milvus/                        │
+│  外部系统适配：Milvus SDK、RabbitMQ、Redis        │
+├─────────────────────────────────────────────────┤
+│            Common Layer                          │
+│         utility/{auth,safety,health,...}          │
+│  通用横切关注点：认证、限流、安全、健康检查        │
+└─────────────────────────────────────────────────┘
+```
+
+### import 规则（目标态）
+
+```text
+controller/ → app/                     ✅
+app/        → ai/                      ✅
+app/        → infra/                   ✅（通过 interface）
+ai/         → infra/                   ❌（必须通过 interface 注入）
+infra/      → ai/                      ❌
+utility/    → internal/                ❌
+任何层      → utility/                 ✅
+```
+
+关键约束：
+
+- `internal/ai/rag/` 不得 import `internal/infra/milvus`、`milvus-sdk-go`、`utility/client`。VectorStore 和 RetrieverFactory 通过 main.go 注入。✅ 已强制（import guard test 覆盖）
+- `internal/infra/milvus/` 是 Milvus SDK 的唯一适配点。其他包不得直接 import `milvus-sdk-go`。
+- `utility/` 不得 import `internal/` 下任何包。Milvus 健康检查和关闭通过 main.go 注入函数变量。
+
+### 已知例外（待清理）
+
+以下文件违反目标规则，已登记为例外。修改这些文件时应优先消除违规。
+
+| 文件 | 违规 | 原因 |
+|------|------|------|
+| `internal/ai/retriever/retriever.go` | `ai/ → infra/milvus`、`ai/ → milvus-sdk-go` | eino-ext retriever 组件要求 raw Milvus client |
+| `internal/ai/indexer/indexer.go` | `ai/ → infra/milvus` | eino-ext indexer 组件要求 raw Milvus client |
+| `internal/ai/cmd/knowledge_cmd/main.go` | `ai/ → infra/milvus` | CLI 入口，组装时需要 infra 适配 |
+| `utility/health/health.go` | `utility/ → ai/tools` | MySQL 健康检查依赖 tools.CloseMySQL |
+| `utility/safety/injection_classifier.go` | `utility/ → ai/models` | 调用 models.TokenCount |
+| `utility/logging/logging.go` | `utility/ → internal/consts` | 读取日志级别常量 |
+| `utility/tracing/tracing.go` | `utility/ → internal/consts` | 读取 tracing 常量 |
+| `utility/middleware/middleware.go` | `utility/ → internal/consts` | 读取中间件常量 |
+
+---
+
+## 4. 关键模块
+
+### 4.1 Controller 层
 
 - `internal/controller/chat/chat_v1_chat.go`
 - `internal/controller/chat/chat_v1_chat_stream.go`
@@ -103,7 +166,7 @@ Planner → Executor → RePlanner
 - 降级判断
 - SSE 输出编排
 
-### 3.2 Chat Pipeline
+### 4.2 Chat Pipeline
 
 - `internal/ai/agent/chat_pipeline/orchestration.go`
 - `internal/ai/agent/chat_pipeline/flow.go`
@@ -116,7 +179,7 @@ Planner → Executor → RePlanner
 - 动态裁剪工具暴露范围
 - 组织 prompt 规则
 
-### 3.3 AIOps Runtime
+### 4.3 AIOps Runtime
 
 - `internal/ai/service/ai_ops_service.go`
 - `internal/ai/service/ai_ops_runtime.go`
@@ -128,7 +191,7 @@ Planner → Executor → RePlanner
 - runtime dispatch
 - Plan-Execute-Replan 规划分析
 
-### 3.4 ContextEngine
+### 4.4 ContextEngine
 
 - `internal/ai/contextengine/`
 
@@ -138,10 +201,10 @@ Planner → Executor → RePlanner
 - 做 token budget 控制
 - 输出 context trace
 
-### 3.5 MemoryService
+### 4.5 MemoryService
 
 - `internal/ai/service/memory_service.go`
-- `utility/mem/`
+- `internal/ai/memory/`
 
 职责：
 
@@ -149,7 +212,7 @@ Planner → Executor → RePlanner
 - 结果持久化
 - 长期记忆抽取与过滤
 
-### 3.6 RAG
+### 4.6 RAG
 
 - `internal/ai/rag/`
 - `internal/ai/retriever/`
@@ -163,7 +226,7 @@ Planner → Executor → RePlanner
 
 ---
 
-## 4. 已不再作为当前架构依据的内容
+## 5. 已不再作为当前架构依据的内容
 
 以下目录仍可能留在仓库中，但**不代表当前聊天主链路设计**：
 
@@ -182,7 +245,7 @@ Planner → Executor → RePlanner
 
 ---
 
-## 5. 学习顺序建议
+## 6. 学习顺序建议
 
 如果你现在要系统学习这个项目，推荐顺序是：
 
@@ -190,11 +253,11 @@ Planner → Executor → RePlanner
 2. 再看 `MemoryService` 和 `ContextEngine`
 3. 再看 `chat_pipeline/`，理解 ReAct 是怎么装起来的
 4. 再看 `ai_ops_service.go` + `plan_execute_replan/`
-5. 最后看 `rag/`、`skills/`、`utility/mem/`
+5. 最后看 `rag/`、`skills/`、`internal/ai/memory/`
 
 ---
 
-## 6. 面试口径
+## 7. 面试口径
 
 现在最稳的讲法是：
 

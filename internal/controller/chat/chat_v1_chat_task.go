@@ -3,8 +3,8 @@ package chat
 import (
 	v1 "SuperBizAgent/api/chat/v1"
 	aiservice "SuperBizAgent/internal/ai/service"
+	"SuperBizAgent/internal/app"
 	"SuperBizAgent/internal/consts"
-	"SuperBizAgent/utility/mem"
 	"context"
 	"fmt"
 	"net/http"
@@ -23,7 +23,7 @@ func (c *ControllerV1) ChatSubmit(ctx context.Context, req *v1.ChatSubmitReq) (r
 	id := req.Id
 	msg := req.Question
 
-	if err := mem.ValidateSessionID(id); err != nil {
+	if err := app.ValidateSessionID(id); err != nil {
 		return nil, fmt.Errorf("invalid session ID: %w", err)
 	}
 

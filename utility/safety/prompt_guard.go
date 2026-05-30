@@ -9,9 +9,9 @@ import (
 )
 
 type PromptGuardDecision struct {
-	Allowed  bool
-	Reason   string
-	Pattern  string
+	Allowed   bool
+	Reason    string
+	Pattern   string
 	RiskScore float64 // 0.0 = safe, 1.0 = definitely injection
 	RiskLevel string  // "safe" | "suspicious" | "dangerous"
 }

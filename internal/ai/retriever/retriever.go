@@ -2,7 +2,7 @@ package retriever
 
 import (
 	"SuperBizAgent/internal/ai/embedder"
-	"SuperBizAgent/utility/client"
+	inframv "SuperBizAgent/internal/infra/milvus"
 	"SuperBizAgent/utility/common"
 	"context"
 	"fmt"
@@ -29,7 +29,7 @@ func (s *safeRetriever) Retrieve(ctx context.Context, query string, opts ...retr
 }
 
 func NewMilvusRetriever(ctx context.Context) (rtr retriever.Retriever, err error) {
-	cli, err := client.NewMilvusClient(ctx)
+	cli, err := inframv.NewMilvusClient(ctx)
 	if err != nil {
 		return nil, err
 	}

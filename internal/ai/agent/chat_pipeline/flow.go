@@ -1,11 +1,11 @@
 package chat_pipeline
 
 import (
+	"SuperBizAgent/internal/ai/events"
+	"SuperBizAgent/internal/ai/skills"
 	"SuperBizAgent/internal/ai/skills/domains/knowledge"
 	"SuperBizAgent/internal/ai/skills/domains/logs"
 	"SuperBizAgent/internal/ai/skills/domains/metrics"
-	"SuperBizAgent/internal/ai/events"
-	"SuperBizAgent/internal/ai/skills"
 	"SuperBizAgent/internal/ai/tools"
 	"SuperBizAgent/internal/consts"
 	"context"
@@ -88,9 +88,9 @@ func newReactAgentLambda(ctx context.Context) (lba *compose.Lambda, err error) {
 
 func newReactAgentLambdaWithQuery(ctx context.Context, query string) (lba *compose.Lambda, err error) {
 	config := &react.AgentConfig{
-		MaxStep:                chatConfigInt(ctx, "chat.react.max_step", 25),
-		ToolReturnDirectly:     map[string]struct{}{},
-		StreamToolCallChecker:  fullStreamToolCallChecker,
+		MaxStep:               chatConfigInt(ctx, "chat.react.max_step", 25),
+		ToolReturnDirectly:    map[string]struct{}{},
+		StreamToolCallChecker: fullStreamToolCallChecker,
 	}
 	chatModelIns11, err := newChatModel(ctx)
 	if err != nil {
@@ -122,7 +122,7 @@ func newReactAgentLambdaWithQuery(ctx context.Context, query string) (lba *compo
 			config.ToolsConfig.Tools,
 			emitter,
 			traceID,
-			events.ValidateBeforeToolCall(),    // 参数基础校验
+			events.ValidateBeforeToolCall(), // 参数基础校验
 			events.SummaryAfterToolCall(chatConfigInt(ctx, "events.tool_summary_max_len", 4000)),
 		)
 	}

@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"SuperBizAgent/internal/ai/memory"
 	"SuperBizAgent/internal/consts"
-	"SuperBizAgent/utility/mem"
 )
 
 func TestPersistOutcomeUsesBoundedContext(t *testing.T) {
@@ -31,10 +31,10 @@ func TestPersistOutcomeUsesBoundedContext(t *testing.T) {
 	}
 
 	ctxCh := make(chan context.Context, 1)
-	processMemoryEventFunc = func(ctx context.Context, event mem.MemoryEvent) *mem.MemoryExtractionReport {
+	processMemoryEventFunc = func(ctx context.Context, event memory.MemoryEvent) *memory.MemoryExtractionReport {
 		ctxCh <- ctx
 		<-ctx.Done()
-		return &mem.MemoryExtractionReport{}
+		return &memory.MemoryExtractionReport{}
 	}
 	memoryExtractionTimeout = func(context.Context) time.Duration {
 		return 20 * time.Millisecond
@@ -89,14 +89,14 @@ func TestPersistOutcomeDropsWhenExtractionQueueBusy(t *testing.T) {
 	var calls int32
 	started := make(chan struct{}, 1)
 	release := make(chan struct{})
-	processMemoryEventFunc = func(ctx context.Context, event mem.MemoryEvent) *mem.MemoryExtractionReport {
+	processMemoryEventFunc = func(ctx context.Context, event memory.MemoryEvent) *memory.MemoryExtractionReport {
 		atomic.AddInt32(&calls, 1)
 		select {
 		case started <- struct{}{}:
 		default:
 		}
 		<-release
-		return &mem.MemoryExtractionReport{}
+		return &memory.MemoryExtractionReport{}
 	}
 	memoryExtractionTimeout = func(context.Context) time.Duration {
 		return time.Second
@@ -141,9 +141,9 @@ func TestPersistOutcomeEnqueuedSkipsLocalExtraction(t *testing.T) {
 	resetMemoryExtractionSemaphoreForTest()
 
 	var calls int32
-	processMemoryEventFunc = func(context.Context, mem.MemoryEvent) *mem.MemoryExtractionReport {
+	processMemoryEventFunc = func(context.Context, memory.MemoryEvent) *memory.MemoryExtractionReport {
 		atomic.AddInt32(&calls, 1)
-		return &mem.MemoryExtractionReport{}
+		return &memory.MemoryExtractionReport{}
 	}
 	enqueueMemoryExtraction = func(context.Context, string, string, string) (bool, error) {
 		return true, nil
@@ -186,10 +186,10 @@ func TestPersistOutcomePassesMemoryEventMetadata(t *testing.T) {
 		return 20 * time.Millisecond
 	}
 
-	eventCh := make(chan mem.MemoryEvent, 1)
-	processMemoryEventFunc = func(ctx context.Context, event mem.MemoryEvent) *mem.MemoryExtractionReport {
+	eventCh := make(chan memory.MemoryEvent, 1)
+	processMemoryEventFunc = func(ctx context.Context, event memory.MemoryEvent) *memory.MemoryExtractionReport {
 		eventCh <- event
-		return &mem.MemoryExtractionReport{}
+		return &memory.MemoryExtractionReport{}
 	}
 
 	ctx := context.WithValue(context.Background(), consts.CtxKeyUserID, "user-meta")
@@ -211,11 +211,11 @@ func TestPersistOutcomePassesMemoryEventMetadata(t *testing.T) {
 }
 
 func TestBuildChatPackageReturnsContextTraceDetails(t *testing.T) {
-	mem.ClearSession("ctx-chat")
-	mem.GetLongTermMemory().Forget(context.Background(), 10)
-	sessionMem := mem.GetSimpleMemory("ctx-chat")
+	memory.ClearSession("ctx-chat")
+	memory.GetLongTermMemory().Forget(context.Background(), 10)
+	sessionMem := memory.GetSimpleMemory("ctx-chat")
 	sessionMem.AddUserAssistantPair("之前问了什么", "之前答了什么")
-	mem.GetLongTermMemory().Store(context.Background(), "ctx-chat", mem.MemoryTypeFact, "服务名是payment-service", "test")
+	memory.GetLongTermMemory().Store(context.Background(), "ctx-chat", memory.MemoryTypeFact, "服务名是payment-service", "test")
 
 	svc := NewMemoryService()
 	pkg, details := svc.BuildChatPackage(context.Background(), "ctx-chat", "请继续分析 payment-service", sessionMem.GetContextMessages())
@@ -242,17 +242,17 @@ func TestResolveSessionIDPrefersExistingContextSession(t *testing.T) {
 }
 
 func TestMemoryServiceManagementMethods(t *testing.T) {
-	mem.GetLongTermMemory().Forget(context.Background(), 10)
+	memory.GetLongTermMemory().Forget(context.Background(), 10)
 	svc := NewMemoryService()
 	ctx := context.WithValue(context.Background(), consts.CtxKeySessionID, "manage-session")
 
-	id := mem.GetLongTermMemory().Store(context.Background(), "manage-session", mem.MemoryTypeFact, "可管理的 payment-service 记忆", "test")
+	id := memory.GetLongTermMemory().Store(context.Background(), "manage-session", memory.MemoryTypeFact, "可管理的 payment-service 记忆", "test")
 	items := svc.ListMemories(ctx, MemoryListOptions{})
 	if len(items) != 1 {
 		t.Fatalf("expected one memory item, got %d", len(items))
 	}
 	if !svc.PromoteMemory(ctx, id, MemoryPromoteOptions{
-		Scope:      mem.MemoryScopeProject,
+		Scope:      string(memory.MemoryScopeProject),
 		ScopeID:    "manage-project",
 		Confidence: 0.95,
 	}) {

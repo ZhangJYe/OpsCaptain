@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"SuperBizAgent/utility/mem"
+	"SuperBizAgent/internal/ai/memory"
 
 	"github.com/gogf/gf/v2/frame/g"
 )
@@ -24,7 +24,7 @@ func NewPolicyResolver() *PolicyResolver {
 }
 
 func (r *PolicyResolver) Resolve(ctx context.Context, req ContextRequest) ContextProfile {
-	budget := mem.GetTokenBudget()
+	budget := memory.GetTokenBudget()
 	base := ContextProfile{
 		Name:                "chat-default",
 		AllowHistory:        true,

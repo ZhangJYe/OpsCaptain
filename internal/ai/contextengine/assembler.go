@@ -7,18 +7,18 @@ import (
 	"strings"
 	"time"
 
-	"SuperBizAgent/utility/mem"
+	"SuperBizAgent/internal/ai/memory"
 
 	"github.com/cloudwego/eino/schema"
 )
 
 type Assembler struct {
-	resolver   *PolicyResolver
-	now        func() time.Time
-	historyRec *HistoryRecaller
-	toolRec    *ToolRecaller
+	resolver     *PolicyResolver
+	now          func() time.Time
+	historyRec   *HistoryRecaller
+	toolRec      *ToolRecaller
 	toolReranker *ToolReranker
-	intentRec  *IntentRecognizer
+	intentRec    *IntentRecognizer
 }
 
 func NewAssembler() *Assembler {
@@ -101,7 +101,7 @@ func (a *Assembler) Assemble(ctx context.Context, req ContextRequest, history []
 		if retrieveLimit < 1 {
 			retrieveLimit = 1
 		}
-		entries := mem.GetLongTermMemory().RetrieveScoped(ctx, req.Query, retrieveLimit*3, mem.MemoryRetrievePolicy{
+		entries := memory.GetLongTermMemory().RetrieveScoped(ctx, req.Query, retrieveLimit*3, memory.MemoryRetrievePolicy{
 			ReadOnly:  true,
 			ScopeRefs: memoryScopeRefs(req),
 		})
@@ -186,16 +186,16 @@ func MemoryContext(pkg *ContextPackage) string {
 	return strings.Join(parts, "\n")
 }
 
-func memoryScopeRefs(req ContextRequest) []mem.MemoryScopeRef {
-	refs := []mem.MemoryScopeRef{
-		{Scope: mem.MemoryScopeSession, ScopeID: req.SessionID},
-		{Scope: mem.MemoryScopeGlobal, ScopeID: "global"},
+func memoryScopeRefs(req ContextRequest) []memory.MemoryScopeRef {
+	refs := []memory.MemoryScopeRef{
+		{Scope: memory.MemoryScopeSession, ScopeID: req.SessionID},
+		{Scope: memory.MemoryScopeGlobal, ScopeID: "global"},
 	}
 	if strings.TrimSpace(req.UserID) != "" {
-		refs = append(refs, mem.MemoryScopeRef{Scope: mem.MemoryScopeUser, ScopeID: strings.TrimSpace(req.UserID)})
+		refs = append(refs, memory.MemoryScopeRef{Scope: memory.MemoryScopeUser, ScopeID: strings.TrimSpace(req.UserID)})
 	}
 	if strings.TrimSpace(req.ProjectID) != "" {
-		refs = append(refs, mem.MemoryScopeRef{Scope: mem.MemoryScopeProject, ScopeID: strings.TrimSpace(req.ProjectID)})
+		refs = append(refs, memory.MemoryScopeRef{Scope: memory.MemoryScopeProject, ScopeID: strings.TrimSpace(req.ProjectID)})
 	}
 	return refs
 }
@@ -210,21 +210,21 @@ func selectToolItems(items []ContextItem, profile ContextProfile) ([]ContextItem
 	dropped := make([]ContextItem, 0)
 	used := 0
 	for idx, item := range items {
-		item.TokenEstimate = mem.EstimateTokens(item.Content)
+		item.TokenEstimate = memory.EstimateTokens(item.Content)
 		if idx >= profile.MaxToolItems {
 			item.DroppedReason = "tool_window"
 			dropped = append(dropped, item)
 			continue
 		}
 		if item.TokenEstimate > remaining {
-			trimmed := mem.TrimToTokenBudget(item.Content, remaining)
+			trimmed := memory.TrimToTokenBudget(item.Content, remaining)
 			if strings.TrimSpace(trimmed) == "" {
 				item.DroppedReason = "tool_budget"
 				dropped = append(dropped, item)
 				continue
 			}
 			item.Content = trimmed
-			item.TokenEstimate = mem.EstimateTokens(trimmed)
+			item.TokenEstimate = memory.EstimateTokens(trimmed)
 			item.CompressionLevel = "trimmed"
 		}
 		item.Selected = true
@@ -304,7 +304,7 @@ func selectHistory(history []*schema.Message, profile ContextProfile) ([]*schema
 			dropped = append(dropped, newDroppedHistoryItem(i, history[i], "history_window"))
 			continue
 		}
-		tokens := mem.EstimateTokens(history[i].Content)
+		tokens := memory.EstimateTokens(history[i].Content)
 		if tokens > remaining {
 			dropped = append(dropped, newDroppedHistoryItem(i, history[i], "history_budget"))
 			continue
@@ -316,14 +316,14 @@ func selectHistory(history []*schema.Message, profile ContextProfile) ([]*schema
 	}
 
 	if len(history) > 0 && hasSummaryPrefix(history[0]) && !selectedIdx[0] {
-		summaryTokens := mem.EstimateTokens(history[0].Content)
+		summaryTokens := memory.EstimateTokens(history[0].Content)
 		if summaryTokens <= remaining {
 			selectedIdx[0] = true
 			remaining -= summaryTokens
 			used += summaryTokens
 		}
 		if len(history) > 1 && !selectedIdx[1] {
-			replyTokens := mem.EstimateTokens(history[1].Content)
+			replyTokens := memory.EstimateTokens(history[1].Content)
 			if replyTokens <= remaining {
 				selectedIdx[1] = true
 				remaining -= replyTokens
@@ -344,7 +344,7 @@ func selectHistory(history []*schema.Message, profile ContextProfile) ([]*schema
 	return selected, dropped, used, notes
 }
 
-func selectMemories(entries []*mem.MemoryEntry, profile ContextProfile, now time.Time) ([]ContextItem, []ContextItem, int, []string) {
+func selectMemories(entries []*memory.MemoryEntry, profile ContextProfile, now time.Time) ([]ContextItem, []ContextItem, int, []string) {
 	if len(entries) == 0 || profile.MaxMemoryItems == 0 || profile.Budget.MemoryTokens == 0 {
 		return nil, nil, 0, []string{"memory disabled or empty"}
 	}
@@ -400,7 +400,7 @@ func selectMemories(entries []*mem.MemoryEntry, profile ContextProfile, now time
 	return selected, dropped, used, notes
 }
 
-func newMemoryItem(entry *mem.MemoryEntry) ContextItem {
+func newMemoryItem(entry *memory.MemoryEntry) ContextItem {
 	freshness := 1.0
 	hours := time.Since(entry.LastUsed).Hours()
 	freshness = 1.0 / (1.0 + hours/24.0)
@@ -412,7 +412,7 @@ func newMemoryItem(entry *mem.MemoryEntry) ContextItem {
 		Content:        entry.Content,
 		Score:          entry.Relevance,
 		TrustLevel:     memoryTrustLevel(entry),
-		TokenEstimate:  mem.EstimateTokens(entry.Content),
+		TokenEstimate:  memory.EstimateTokens(entry.Content),
 		Timestamp:      entry.UpdatedAt.UnixMilli(),
 		FreshnessScore: freshness,
 		SafetyLabel:    entry.SafetyLabel,
@@ -430,7 +430,7 @@ func memoryItemExpired(item ContextItem, now time.Time) bool {
 
 func memoryScopeAllowed(scope string, allowed []string) bool {
 	if scope == "" {
-		scope = string(mem.MemoryScopeSession)
+		scope = string(memory.MemoryScopeSession)
 	}
 	if len(allowed) == 0 {
 		return true
@@ -452,7 +452,7 @@ func memorySafetyAllowed(label string) bool {
 	}
 }
 
-func memoryTrustLevel(entry *mem.MemoryEntry) string {
+func memoryTrustLevel(entry *memory.MemoryEntry) string {
 	if entry.SafetyLabel != "" {
 		return entry.SafetyLabel
 	}
@@ -486,7 +486,7 @@ func newDroppedHistoryItem(idx int, msg *schema.Message, reason string) ContextI
 		SourceType:    "history",
 		SourceID:      fmt.Sprintf("%d", idx),
 		Content:       content,
-		TokenEstimate: mem.EstimateTokens(content),
+		TokenEstimate: memory.EstimateTokens(content),
 		DroppedReason: reason,
 	}
 }
@@ -508,12 +508,12 @@ func hasSummaryPrefix(msg *schema.Message) bool {
 	return strings.HasPrefix(strings.TrimSpace(msg.Content), "[对话历史摘要]")
 }
 
-func rankMemoryEntries(entries []*mem.MemoryEntry, profile ContextProfile, now time.Time) []*mem.MemoryEntry {
+func rankMemoryEntries(entries []*memory.MemoryEntry, profile ContextProfile, now time.Time) []*memory.MemoryEntry {
 	if len(entries) <= 1 {
 		return entries
 	}
 	type scored struct {
-		entry *mem.MemoryEntry
+		entry *memory.MemoryEntry
 		score float64
 	}
 	scoredEntries := make([]scored, len(entries))
@@ -523,14 +523,14 @@ func rankMemoryEntries(entries []*mem.MemoryEntry, profile ContextProfile, now t
 	sort.Slice(scoredEntries, func(i, j int) bool {
 		return scoredEntries[i].score > scoredEntries[j].score
 	})
-	result := make([]*mem.MemoryEntry, len(entries))
+	result := make([]*memory.MemoryEntry, len(entries))
 	for i, s := range scoredEntries {
 		result[i] = s.entry
 	}
 	return result
 }
 
-func memoryCompositeScore(entry *mem.MemoryEntry, profile ContextProfile, now time.Time) float64 {
+func memoryCompositeScore(entry *memory.MemoryEntry, profile ContextProfile, now time.Time) float64 {
 	confidence := entry.Confidence
 
 	freshness := 1.0
@@ -539,13 +539,13 @@ func memoryCompositeScore(entry *mem.MemoryEntry, profile ContextProfile, now ti
 
 	scopePriority := 0.0
 	switch entry.Scope {
-	case mem.MemoryScopeSession:
+	case memory.MemoryScopeSession:
 		scopePriority = 0.4
-	case mem.MemoryScopeUser:
+	case memory.MemoryScopeUser:
 		scopePriority = 0.3
-	case mem.MemoryScopeProject:
+	case memory.MemoryScopeProject:
 		scopePriority = 0.2
-	case mem.MemoryScopeGlobal:
+	case memory.MemoryScopeGlobal:
 		scopePriority = 0.1
 	}
 

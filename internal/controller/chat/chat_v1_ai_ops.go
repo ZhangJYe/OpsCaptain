@@ -1,85 +1,39 @@
 package chat
 
 import (
-	"SuperBizAgent/api/chat/v1"
-	"SuperBizAgent/internal/ai/service"
-	"SuperBizAgent/internal/consts"
-	"SuperBizAgent/utility/mem"
+	v1 "SuperBizAgent/api/chat/v1"
+	"SuperBizAgent/internal/app"
 	"context"
 	"errors"
-	"fmt"
-	"strings"
+	"net/http"
 
-	"github.com/gogf/gf/v2/util/guid"
-)
-
-var (
-	runAIOpsMultiAgent = service.RunAIOpsMultiAgent
-	runAIOpsAsync      = service.RunAIOpsAsync
-	getAIOpsResult     = service.GetAIOpsResult
+	"github.com/gogf/gf/v2/frame/g"
 )
 
 func (c *ControllerV1) AIOps(ctx context.Context, req *v1.AIOpsReq) (res *v1.AIOpsRes, err error) {
-	requestID := guid.S()
-	sessionID := strings.TrimSpace(req.SessionID)
-	if sessionID != "" {
-		if err := mem.ValidateSessionID(sessionID); err != nil {
-			return nil, fmt.Errorf("invalid session ID: %w", err)
-		}
-		ctx = context.WithValue(ctx, consts.CtxKeySessionID, sessionID)
-	}
-	ctx = context.WithValue(ctx, consts.CtxKeyRequestID, requestID)
-	ctx = enrichRequestContext(ctx, sessionID, requestID)
-
-	if ctx, _, err = checkAndGuardPrompt(ctx, req.Query); err != nil {
-		return nil, err
-	}
-	if decision := getDegradationDecision(ctx, "ai_ops"); decision.Enabled {
-		return &v1.AIOpsRes{
-			Result:            decision.Message,
-			Detail:            []string{decision.Reason},
-			Degraded:          true,
-			DegradationReason: decision.Reason,
-		}, nil
-	}
-
-	query := req.Query
-	ctx = service.WithAIOpsEngine(ctx, req.Engine)
-	if query == "" {
-		query = `你是一个 AIOps 事故分析助手，请严格按以下顺序执行：
-1. 查询当前活跃的 Prometheus 告警。
-2. 对每条告警查询匹配的内部文档或 runbook。
-3. 只能基于工具结果和内部文档进行分析。
-4. 如果某个工具失败，跳过该步骤，并在报告中明确说明一次。
-5. 默认使用中文输出报告，除非用户明确要求其他语言。
-6. 报告使用 Markdown，包含这些章节：活跃告警、根因分析、缓解建议、结论。`
-	}
-
-	response, err := runAIOpsMultiAgent(ctx, query)
+	result, err := c.aiopsApp.HandleAIOps(ctx, &app.AIOpsInput{
+		SessionID: req.SessionID,
+		Query:     req.Query,
+		Engine:    req.Engine,
+	})
 	if err != nil {
-		if fallback := userFacingAIOpsError(ctx, err); fallback != nil {
-			return fallback, nil
+		var rejected *app.PromptRejectedError
+		if errors.As(err, &rejected) {
+			if r := g.RequestFromCtx(ctx); r != nil {
+				r.Response.WriteStatus(http.StatusBadRequest)
+			}
+			return nil, err
 		}
 		return nil, err
 	}
-
-	result := response.Content
-	if result == "" {
-		if len(response.Detail) > 0 && response.Detail[0] != "" {
-			result = response.Detail[0]
-		} else {
-			return nil, errors.New("internal error")
+	if result.HTTPStatus != 0 {
+		if r := g.RequestFromCtx(ctx); r != nil {
+			r.Response.WriteStatus(result.HTTPStatus)
 		}
 	}
-	result, detail := filterAssistantPayload(ctx, result, response.Detail)
-	executionPlan := make([]string, 0, len(response.ExecutionPlan))
-	for _, step := range response.ExecutionPlan {
-		filtered, _ := filterAssistantPayload(ctx, step, nil)
-		executionPlan = append(executionPlan, filtered)
-	}
 
-	evidence := make([]v1.EvidenceItem, 0, len(response.Evidence))
-	for _, e := range response.Evidence {
+	evidence := make([]v1.EvidenceItem, 0, len(result.Evidence))
+	for _, e := range result.Evidence {
 		evidence = append(evidence, v1.EvidenceItem{
 			SourceType: e.SourceType,
 			SourceID:   e.SourceID,
@@ -91,32 +45,32 @@ func (c *ControllerV1) AIOps(ctx context.Context, req *v1.AIOpsReq) (res *v1.AIO
 	}
 
 	return &v1.AIOpsRes{
-		TraceID:           response.TraceID,
-		Result:            result,
-		Detail:            detail,
-		Engine:            response.Engine,
-		ApprovalRequired:  response.ApprovalRequired,
-		ApprovalRequestID: response.ApprovalRequestID,
-		ApprovalStatus:    response.ApprovalStatus,
-		ExecutionPlan:     executionPlan,
-		Degraded:          response.Degraded(),
-		DegradationReason: response.DegradationReason,
-		Confidence:        response.Confidence,
+		TraceID:           result.TraceID,
+		Result:            result.Result,
+		Detail:            result.Detail,
+		Engine:            result.Engine,
+		ApprovalRequired:  result.ApprovalRequired,
+		ApprovalRequestID: result.ApprovalRequestID,
+		ApprovalStatus:    result.ApprovalStatus,
+		ExecutionPlan:     result.ExecutionPlan,
+		Degraded:          result.Degraded,
+		DegradationReason: result.DegradationReason,
+		Confidence:        result.Confidence,
 		Evidence:          evidence,
-		NextActions:       response.NextActions,
-		StartedAt:         response.StartedAt,
-		FinishedAt:        response.FinishedAt,
+		NextActions:       result.NextActions,
+		StartedAt:         result.StartedAt,
+		FinishedAt:        result.FinishedAt,
 	}, nil
 }
 
 func (c *ControllerV1) AIOpsTrace(ctx context.Context, req *v1.AIOpsTraceReq) (res *v1.AIOpsTraceRes, err error) {
-	events, detail, err := service.GetAIOpsTrace(ctx, req.TraceID)
+	result, err := c.aiopsApp.HandleAIOpsTrace(ctx, req.TraceID)
 	if err != nil {
 		return nil, err
 	}
 
-	out := make([]v1.AIOpsTraceEvent, 0, len(events))
-	for _, event := range events {
+	out := make([]v1.AIOpsTraceEvent, 0, len(result.Events))
+	for _, event := range result.Events {
 		if event == nil {
 			continue
 		}
@@ -134,56 +88,46 @@ func (c *ControllerV1) AIOpsTrace(ctx context.Context, req *v1.AIOpsTraceReq) (r
 
 	return &v1.AIOpsTraceRes{
 		TraceID: req.TraceID,
-		Detail:  detail,
+		Detail:  result.Detail,
 		Events:  out,
 	}, nil
 }
 
 func (c *ControllerV1) AIOpsRuns(ctx context.Context, req *v1.AIOpsRunsReq) (res *v1.AIOpsRunsRes, err error) {
-	requestID := guid.S()
-	ctx = context.WithValue(ctx, consts.CtxKeyRequestID, requestID)
-	ctx = enrichRequestContext(ctx, "", requestID)
-
-	if ctx, _, err = checkAndGuardPrompt(ctx, req.Query); err != nil {
-		return nil, err
-	}
-
-	query := req.Query
-	ctx = service.WithAIOpsEngine(ctx, req.Engine)
-	if query == "" {
-		query = `你是一个 AIOps 事故分析助手，请严格按以下顺序执行：
-1. 查询当前活跃的 Prometheus 告警。
-2. 对每条告警查询匹配的内部文档或 runbook。
-3. 只能基于工具结果和内部文档进行分析。
-4. 如果某个工具失败，跳过该步骤，并在报告中明确说明一次。
-5. 默认使用中文输出报告，除非用户明确要求其他语言。
-6. 报告使用 Markdown，包含这些章节：活跃告警、根因分析、缓解建议、结论。`
-	}
-
-	runs, err := runAIOpsAsync(ctx, query)
+	result, err := c.aiopsApp.HandleAIOpsRuns(ctx, &app.AIOpsRunsInput{
+		Query:  req.Query,
+		Engine: req.Engine,
+	})
 	if err != nil {
+		var rejected *app.PromptRejectedError
+		if errors.As(err, &rejected) {
+			if r := g.RequestFromCtx(ctx); r != nil {
+				r.Response.WriteStatus(http.StatusBadRequest)
+			}
+			return nil, err
+		}
 		return nil, err
 	}
 
 	return &v1.AIOpsRunsRes{
-		TraceID:           runs.TraceID,
-		TaskID:            runs.TaskID,
-		Engine:            runs.Engine,
-		Status:            runs.Status,
-		Degraded:          runs.Degraded,
-		DegradationReason: runs.DegradationReason,
-		ApprovalRequired:  runs.ApprovalRequired,
-		ApprovalRequestID: runs.ApprovalRequestID,
-		ApprovalStatus:    runs.ApprovalStatus,
+		TraceID:           result.TraceID,
+		TaskID:            result.TaskID,
+		Engine:            result.Engine,
+		Status:            result.Status,
+		Degraded:          result.Degraded,
+		DegradationReason: result.DegradationReason,
+		ApprovalRequired:  result.ApprovalRequired,
+		ApprovalRequestID: result.ApprovalRequestID,
+		ApprovalStatus:    result.ApprovalStatus,
 	}, nil
 }
 
 func (c *ControllerV1) AIOpsResult(ctx context.Context, req *v1.AIOpsResultReq) (res *v1.AIOpsResultRes, err error) {
-	result, err := getAIOpsResult(ctx, req.TraceID)
+	result, err := c.aiopsApp.HandleAIOpsResult(ctx, req.TraceID)
 	if err != nil {
 		return nil, err
 	}
-	if result == nil {
+	if !result.Found {
 		return &v1.AIOpsResultRes{Found: false, TraceID: req.TraceID}, nil
 	}
 
@@ -201,15 +145,15 @@ func (c *ControllerV1) AIOpsResult(ctx context.Context, req *v1.AIOpsResultReq) 
 
 	return &v1.AIOpsResultRes{
 		Found:             true,
-		Status:            string(result.Status),
-		TraceID:           req.TraceID,
-		Result:            result.Content,
+		Status:            result.Status,
+		TraceID:           result.TraceID,
+		Result:            result.Result,
 		Detail:            result.Detail,
 		Engine:            result.Engine,
 		Confidence:        result.Confidence,
 		Evidence:          evidence,
 		NextActions:       result.NextActions,
-		Degraded:          result.Degraded(),
+		Degraded:          result.Degraded,
 		DegradationReason: result.DegradationReason,
 		StartedAt:         result.StartedAt,
 		FinishedAt:        result.FinishedAt,

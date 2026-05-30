@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"SuperBizAgent/utility/mem"
+	"SuperBizAgent/internal/ai/memory"
 
 	"github.com/cloudwego/eino/schema"
 )
@@ -56,14 +56,14 @@ func selectDocuments(ctx context.Context, query string, profile ContextProfile) 
 	for idx, doc := range docs {
 		item := newDocumentItem(doc, idx)
 		if item.TokenEstimate > remaining {
-			trimmed := mem.TrimToTokenBudget(item.Content, remaining)
+			trimmed := memory.TrimToTokenBudget(item.Content, remaining)
 			if strings.TrimSpace(trimmed) == "" {
 				item.DroppedReason = "document_budget"
 				dropped = append(dropped, item)
 				continue
 			}
 			item.Content = trimmed
-			item.TokenEstimate = mem.EstimateTokens(trimmed)
+			item.TokenEstimate = memory.EstimateTokens(trimmed)
 			item.CompressionLevel = "trimmed"
 		}
 		item.Selected = true
@@ -129,7 +129,7 @@ func newDocumentItem(doc *schema.Document, idx int) ContextItem {
 		Content:       content,
 		Score:         score,
 		TrustLevel:    "retrieved",
-		TokenEstimate: mem.EstimateTokens(content),
+		TokenEstimate: memory.EstimateTokens(content),
 		SafetyLabel:   "retrieved_doc",
 		UpdatePolicy:  "refresh_on_retrieval",
 	}

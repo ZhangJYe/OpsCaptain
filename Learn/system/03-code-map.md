@@ -83,9 +83,9 @@
 
 | 文件 | 作用 | 一句话说明 |
 |---|---|---|
-| `utility/mem/mem.go` | 短期记忆 | 会话窗口、摘要、working state |
-| `utility/mem/long_term.go` | 长期记忆 | scope、衰减、检索、上限控制 |
-| `utility/mem/extraction.go` | 记忆提取 | 从用户明确陈述中抽候选记忆并做过滤 |
+| `internal/ai/memory/session.go` | 短期记忆 | 会话窗口、摘要、working state |
+| `internal/ai/memory/long_term.go` | 长期记忆 | scope、衰减、检索、上限控制 |
+| `internal/ai/memory/extraction.go` | 记忆提取 | 从用户明确陈述中抽候选记忆并做过滤 |
 | `utility/cache/llm_cache.go` | 回答缓存 | 按 session + query + skill scope 做缓存 |
 | `internal/ai/service/chat_task_queue.go` | Chat 异步任务 | 聊天异步执行 |
 | `internal/ai/service/memory_queue.go` | 记忆异步任务 | 记忆抽取异步执行 |
@@ -117,7 +117,7 @@
 7. `internal/ai/service/ai_ops_service.go`
 8. `internal/ai/agent/plan_execute_replan/`
 9. `internal/ai/rag/`
-10. `utility/mem/`、`utility/cache/`、`internal/ai/service/*queue.go`
+10. `internal/ai/memory/`、`utility/cache/`、`internal/ai/service/*queue.go`
 
 ---
 

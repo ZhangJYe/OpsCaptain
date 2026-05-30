@@ -1,15 +1,15 @@
 package rag
 
 import (
-	ragretriever "SuperBizAgent/internal/ai/retriever"
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
 	retrieverapi "github.com/cloudwego/eino/components/retriever"
 )
 
-var NewRetrieverFunc RetrieverFactory = ragretriever.NewMilvusRetriever
+var NewRetrieverFunc RetrieverFactory
 
 var (
 	sharedPoolOnce sync.Once
@@ -20,6 +20,9 @@ func SharedPool() *RetrieverPool {
 	sharedPoolOnce.Do(func() {
 		sharedPool = NewRetrieverPool(
 			func(ctx context.Context) (retrieverapi.Retriever, error) {
+				if NewRetrieverFunc == nil {
+					return nil, fmt.Errorf("rag.NewRetrieverFunc is not set; call rag.NewRetrieverFunc = ... before using SharedPool")
+				}
 				return NewRetrieverFunc(ctx)
 			},
 			DefaultRetrieverCacheKey,

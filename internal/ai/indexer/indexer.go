@@ -2,8 +2,7 @@ package indexer
 
 import (
 	embedder2 "SuperBizAgent/internal/ai/embedder"
-	"SuperBizAgent/utility/client"
-	"SuperBizAgent/utility/common"
+	inframv "SuperBizAgent/internal/infra/milvus"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -13,7 +12,7 @@ import (
 )
 
 func NewMilvusIndexer(ctx context.Context) (*milvus.Indexer, error) {
-	cli, err := client.NewMilvusClient(ctx)
+	cli, err := inframv.NewMilvusClient(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -21,10 +20,11 @@ func NewMilvusIndexer(ctx context.Context) (*milvus.Indexer, error) {
 	if err != nil {
 		return nil, err
 	}
+	cfg := inframv.MilvusConfigFromContext(ctx)
 	config := &milvus.IndexerConfig{
 		Client:            cli,
-		Collection:        common.GetMilvusCollectionName(ctx),
-		Fields:            client.BuildMilvusFields(ctx),
+		Collection:        cfg.CollectionName,
+		Fields:            inframv.BuildMilvusFields(cfg),
 		Embedding:         eb,
 		DocumentConverter: buildFloatVectorRows,
 	}

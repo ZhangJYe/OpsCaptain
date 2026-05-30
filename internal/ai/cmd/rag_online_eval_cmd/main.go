@@ -3,6 +3,7 @@ package main
 import (
 	"SuperBizAgent/internal/ai/rag"
 	"SuperBizAgent/internal/ai/rag/eval"
+	"SuperBizAgent/internal/ai/retriever"
 	"SuperBizAgent/utility/common"
 	"context"
 	"encoding/json"
@@ -40,6 +41,7 @@ func main() {
 	}
 
 	wantRewrite, wantRerank, isHybrid := parseEvalMode(*modeRaw)
+	rag.NewRetrieverFunc = retriever.NewMilvusRetriever
 
 	cases, err := eval.LoadEvalCasesJSONL(*evalPath)
 	if err != nil {

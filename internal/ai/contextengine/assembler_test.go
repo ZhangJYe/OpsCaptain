@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"SuperBizAgent/internal/ai/memory"
 	"SuperBizAgent/internal/ai/rag"
-	"SuperBizAgent/utility/mem"
 
 	retrieverapi "github.com/cloudwego/eino/components/retriever"
 	"github.com/cloudwego/eino/schema"
@@ -43,10 +43,10 @@ func TestAssemblerBuildsStagedChatContext(t *testing.T) {
 		}, nil
 	}
 
-	ltm := mem.GetLongTermMemory()
+	ltm := memory.GetLongTermMemory()
 	ctx := context.Background()
-	ltm.Store(ctx, "sess-chat", mem.MemoryTypeFact, "服务名是payment-service", "test")
-	ltm.Store(ctx, "sess-chat", mem.MemoryTypePreference, "用户偏好简洁回答", "test")
+	ltm.Store(ctx, "sess-chat", memory.MemoryTypeFact, "服务名是payment-service", "test")
+	ltm.Store(ctx, "sess-chat", memory.MemoryTypePreference, "用户偏好简洁回答", "test")
 
 	history := []*schema.Message{
 		schema.UserMessage("[对话历史摘要] 用户之前关注过支付服务"),
@@ -145,9 +145,9 @@ func TestAssemblerBuildsAIOpsMemoryOnlyContext(t *testing.T) {
 	}()
 	rag.ResetSharedPool()
 
-	ltm := mem.GetLongTermMemory()
+	ltm := memory.GetLongTermMemory()
 	ctx := context.Background()
-	ltm.Store(ctx, "sess-aiops", mem.MemoryTypeFact, "支付服务最近出现连接超时", "test")
+	ltm.Store(ctx, "sess-aiops", memory.MemoryTypeFact, "支付服务最近出现连接超时", "test")
 
 	assembler := NewAssembler()
 	pkg, err := assembler.Assemble(ctx, ContextRequest{
@@ -173,19 +173,19 @@ func TestAssemblerBuildsAIOpsMemoryOnlyContext(t *testing.T) {
 
 func TestAssemblerDropsUnusableMemoriesWithTrace(t *testing.T) {
 	resetLongTermMemory()
-	ltm := mem.GetLongTermMemory()
+	ltm := memory.GetLongTermMemory()
 	ctx := context.Background()
-	ltm.StoreWithOptions(ctx, "sess-policy", mem.MemoryTypeFact, "payment-service 正常记忆", "test", mem.MemoryStoreOptions{
+	ltm.StoreWithOptions(ctx, "sess-policy", memory.MemoryTypeFact, "payment-service 正常记忆", "test", memory.MemoryStoreOptions{
 		Confidence: 0.90,
 	})
-	ltm.StoreWithOptions(ctx, "sess-policy", mem.MemoryTypeFact, "payment-service 低可信记忆", "test", mem.MemoryStoreOptions{
+	ltm.StoreWithOptions(ctx, "sess-policy", memory.MemoryTypeFact, "payment-service 低可信记忆", "test", memory.MemoryStoreOptions{
 		Confidence: 0.20,
 	})
-	ltm.StoreWithOptions(ctx, "sess-policy", mem.MemoryTypeFact, "payment-service 过期记忆", "test", mem.MemoryStoreOptions{
+	ltm.StoreWithOptions(ctx, "sess-policy", memory.MemoryTypeFact, "payment-service 过期记忆", "test", memory.MemoryStoreOptions{
 		Confidence: 0.90,
 		ExpiresAt:  1,
 	})
-	ltm.StoreWithOptions(ctx, "sess-policy", mem.MemoryTypeFact, "payment-service 敏感记忆", "test", mem.MemoryStoreOptions{
+	ltm.StoreWithOptions(ctx, "sess-policy", memory.MemoryTypeFact, "payment-service 敏感记忆", "test", memory.MemoryStoreOptions{
 		Confidence:  0.90,
 		SafetyLabel: "secret",
 	})
@@ -215,15 +215,15 @@ func TestAssemblerDropsUnusableMemoriesWithTrace(t *testing.T) {
 
 func TestAssemblerExpiredMemoriesDoNotCrowdOutValidMemory(t *testing.T) {
 	resetLongTermMemory()
-	ltm := mem.GetLongTermMemory()
+	ltm := memory.GetLongTermMemory()
 	ctx := context.Background()
 	for i := 0; i < 20; i++ {
-		ltm.StoreWithOptions(ctx, "sess-expired-window", mem.MemoryTypeFact, fmt.Sprintf("payment-service 过期记忆-%d", i), "test", mem.MemoryStoreOptions{
+		ltm.StoreWithOptions(ctx, "sess-expired-window", memory.MemoryTypeFact, fmt.Sprintf("payment-service 过期记忆-%d", i), "test", memory.MemoryStoreOptions{
 			Confidence: 0.90,
 			ExpiresAt:  1,
 		})
 	}
-	ltm.StoreWithOptions(ctx, "sess-expired-window", mem.MemoryTypeFact, "payment-service 有效记忆", "test", mem.MemoryStoreOptions{
+	ltm.StoreWithOptions(ctx, "sess-expired-window", memory.MemoryTypeFact, "payment-service 有效记忆", "test", memory.MemoryStoreOptions{
 		Confidence: 0.90,
 	})
 
@@ -246,19 +246,19 @@ func TestAssemblerExpiredMemoriesDoNotCrowdOutValidMemory(t *testing.T) {
 
 func TestAssemblerLoadsLayeredMemoryScopes(t *testing.T) {
 	resetLongTermMemory()
-	ltm := mem.GetLongTermMemory()
+	ltm := memory.GetLongTermMemory()
 	ctx := context.Background()
-	ltm.Store(context.Background(), "sess-layer", mem.MemoryTypeFact, "session scoped payment-service memory", "test")
-	ltm.StoreWithOptions(ctx, "user-layer", mem.MemoryTypeFact, "user scoped payment-service memory", "test", mem.MemoryStoreOptions{
-		Scope:   mem.MemoryScopeUser,
+	ltm.Store(context.Background(), "sess-layer", memory.MemoryTypeFact, "session scoped payment-service memory", "test")
+	ltm.StoreWithOptions(ctx, "user-layer", memory.MemoryTypeFact, "user scoped payment-service memory", "test", memory.MemoryStoreOptions{
+		Scope:   memory.MemoryScopeUser,
 		ScopeID: "user-layer",
 	})
-	ltm.StoreWithOptions(ctx, "project-layer", mem.MemoryTypeFact, "project scoped payment-service memory", "test", mem.MemoryStoreOptions{
-		Scope:   mem.MemoryScopeProject,
+	ltm.StoreWithOptions(ctx, "project-layer", memory.MemoryTypeFact, "project scoped payment-service memory", "test", memory.MemoryStoreOptions{
+		Scope:   memory.MemoryScopeProject,
 		ScopeID: "project-layer",
 	})
-	ltm.StoreWithOptions(ctx, "global", mem.MemoryTypeFact, "global scoped payment-service memory", "test", mem.MemoryStoreOptions{
-		Scope: mem.MemoryScopeGlobal,
+	ltm.StoreWithOptions(ctx, "global", memory.MemoryTypeFact, "global scoped payment-service memory", "test", memory.MemoryStoreOptions{
+		Scope: memory.MemoryScopeGlobal,
 	})
 
 	assembler := NewAssembler()
@@ -293,6 +293,6 @@ func TestNormalizeUnitFloatRejectsOutOfRangeValues(t *testing.T) {
 }
 
 func resetLongTermMemory() {
-	ltm := mem.GetLongTermMemory()
+	ltm := memory.GetLongTermMemory()
 	ltm.Forget(context.Background(), 10)
 }

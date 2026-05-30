@@ -186,4 +186,3 @@ func TestRequiredRolesForPath(t *testing.T) {
 		t.Fatalf("unexpected memory action roles: %v", memoryActionRoles)
 	}
 }
-

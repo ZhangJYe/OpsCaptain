@@ -56,7 +56,7 @@ Agent 每次启动时应自动加载本文件。犯错时由人类更新本文�
   - AIOps：Plan-Execute-Replan，用于更结构化的运维分析。
 - `chat_multi_agent` 已废弃并移除，不要再把 supervisor / triage / reporter 当成当前聊天入口。
 - 后端能力重点：GoFrame HTTP 控制器、Eino Agent 编排、Redis 治理、RabbitMQ 异步任务、Milvus RAG、MySQL/文件持久化、Prometheus/Jaeger 可观测性、SSE 流式响应。
-- 记忆系统通过 `MemoryService` 封装，聊天结果持久化和记忆抽取不能裸调用底层 `utility/mem`。
+- 记忆系统通过 `MemoryService` 封装，聊天结果持久化和记忆抽取不能裸调用底层 `internal/ai/memory`。
 - RAG 优化必须先看 baseline / holdout 评测，不要只凭单次问答效果判断。
 - 所有设计口径以本文件和 `Learn/system/` 下当前文档为准，旧的 multi-agent 学习稿只作为历史材料。
 
@@ -143,32 +143,77 @@ curl -k https://opscaptain.top/ai/readyz
 
 ---
 
+## 工程分层与 import 规则
+
+### 五层模型
+
+```
+API Layer            internal/controller/       参数解析 → 调用 Application → 格式化响应
+Application Layer    internal/app/              编排业务流程：Chat、AIOps、Knowledge
+Domain Layer         internal/ai/               核心业务规则：检索、推理、证据、Agent
+Infrastructure Layer internal/infra/            外部系统适配：Milvus、RabbitMQ、Redis
+Common Layer         utility/                   通用横切关注点：认证、限流、安全、健康检查
+```
+
+### import 规则（目标态）
+
+```
+controller/ → app/                     ✅
+app/        → ai/                      ✅
+app/        → infra/                   ✅（通过 interface）
+ai/         → infra/                   ❌（必须通过 interface 注入）
+infra/      → ai/                      ❌
+utility/    → internal/                ❌
+任何层      → utility/                 ✅
+```
+
+关键约束：
+- `internal/ai/rag/` 不得 import `internal/infra/milvus`、`milvus-sdk-go`、`utility/client`。VectorStore 和 RetrieverFactory 通过 main.go 注入。✅ 已强制（import guard test 覆盖）
+- `internal/infra/milvus/` 是 Milvus SDK 的唯一适配点。其他包不得直接 import `milvus-sdk-go`。
+- `utility/` 不得 import `internal/` 下任何包。Milvus 健康检查和关闭通过 main.go 注入函数变量。
+
+### 已知例外（待清理）
+
+以下文件违反目标规则，已登记为例外。修改这些文件时应优先消除违规。
+
+| 文件 | 违规 | 原因 |
+|------|------|------|
+| `internal/ai/retriever/retriever.go` | `ai/ → infra/milvus`、`ai/ → milvus-sdk-go` | eino-ext retriever 组件要求 raw Milvus client |
+| `internal/ai/indexer/indexer.go` | `ai/ → infra/milvus` | eino-ext indexer 组件要求 raw Milvus client |
+| `internal/ai/cmd/knowledge_cmd/main.go` | `ai/ → infra/milvus` | CLI 入口，组装时需要 infra 适配 |
+| `utility/health/health.go` | `utility/ → ai/tools` | MySQL 健康检查依赖 tools.CloseMySQL |
+| `utility/safety/injection_classifier.go` | `utility/ → ai/models` | 调用 models.TokenCount |
+| `utility/logging/logging.go` | `utility/ → internal/consts` | 读取日志级别常量 |
+| `utility/tracing/tracing.go` | `utility/ → internal/consts` | 读取 tracing 常量 |
+| `utility/middleware/middleware.go` | `utility/ → internal/consts` | 读取中间件常量 |
+
+### 文件大小警戒线
+
+- Controller 方法 < 50 行
+- Application Service < 300 行
+- Domain Service < 500 行
+- Infrastructure Adapter < 400 行
+
+---
+
 ## 目录结构
 
 ```
+internal/controller/                   → API Layer：HTTP 控制器
+internal/app/                          → Application Layer：ChatApp、AIOpsApp、KnowledgeApp
 internal/ai/agent/chat_pipeline/       → Chat ReAct 执行链路
 internal/ai/agent/plan_execute_replan/ → AIOps Plan-Execute-Replan
-internal/ai/agent/                     → 其他 agent/历史实验代码
-internal/ai/skills/                    → skill 抽象和 registry
-internal/ai/protocol/                  → 统一协议
-internal/ai/runtime/                   → AIOps Runtime（registry/ledger/bus/artifacts）
-internal/ai/rag/                       → RAG 链路（query/rewrite/rerank/retriever_pool）
-internal/ai/rag/eval/                  → RAG 评测（baseline/runner/online）
-internal/ai/contextengine/             → 上下文装配和 budget 管理
-internal/ai/service/                   → 服务层（memory/approval/ai_ops）
-internal/ai/models/                    → 模型初始化
-internal/ai/embedder/                  → embedding 管理
-internal/ai/retriever/                 → Milvus retriever
-internal/ai/cmd/                       → CLI 入口（knowledge_cmd/rag_eval_cmd/rag_online_eval_cmd 等）
-internal/controller/                   → HTTP 控制器
-utility/                               → 公共工具（auth/mem/metrics/tracing/health/client/common）
+internal/ai/rag/                       → Domain：RAG 链路（query/rewrite/rerank/retriever_pool）
+internal/ai/contextengine/             → Domain：上下文装配和 budget 管理
+internal/ai/memory/                    → Domain：记忆系统（session/long_term/extraction）
+internal/ai/skills/                    → Domain：skill 抽象和 registry
+internal/ai/service/                   → Domain：服务层（memory/approval/ai_ops）
+internal/ai/retriever/                 → Domain：Milvus retriever 实现
+internal/ai/indexer/                   → Domain：Milvus indexer 实现
+internal/infra/milvus/                 → Infrastructure：Milvus 适配（client、VectorStore、config）
+internal/ai/cmd/                       → CLI 入口
+utility/                               → Common Layer：auth、safety、metrics、tracing、health、common
 manifest/config/                       → 配置文件
-res/                                   → 历史经验与复盘文档
-todo/                                  → 设计文档与执行计划
-Learn/                                 → 学习笔记与设计稿
-scripts/                               → 数据预处理脚本（Python + PowerShell + Bash）
-aiopschallenge2025/                    → AIOps 故障案例数据集
-frontend/                              → 前端
 ```
 
 ---
@@ -258,7 +303,7 @@ frontend/                              → 前端
 - Chat 已收敛到 ReAct 单链路，不再做 `chat_multi_agent` 条件路由。
 - AIOps 保留单体内 runtime，而执行核心收敛为 Plan-Execute-Replan。
 - Ledger 和 Artifact Store 先用文件存储，不增加额外部署依赖。（§17.1）
-- Memory Service 封装 `utility/mem`，不直接重写底层。（§17.2）
+- Memory Service 封装 `internal/ai/memory`，不直接重写底层。（§17.2）
 - 历史 `skillspecialists` / `supervisor` / `triage` / `reporter` 代码保留为实验或复盘材料，不再作为当前聊天架构依据。
 - 图谱设计以 Case Graph 为中心，不做百科式知识图谱。（`Learn/graph/00.md`）
 - 证据与结论分层：原始证据 / 归一化事实 / 历史标签 / 图谱 / Serving。

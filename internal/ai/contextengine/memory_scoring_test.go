@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"SuperBizAgent/utility/mem"
+	"SuperBizAgent/internal/ai/memory"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -13,15 +13,15 @@ func TestMemoryCompositeScore_ConfidenceDominates(t *testing.T) {
 	now := time.Now()
 	profile := ContextProfile{}
 
-	highConf := &mem.MemoryEntry{
+	highConf := &memory.MemoryEntry{
 		Confidence: 0.9,
 		LastUsed:   now,
-		Scope:      mem.MemoryScopeSession,
+		Scope:      memory.MemoryScopeSession,
 	}
-	lowConf := &mem.MemoryEntry{
+	lowConf := &memory.MemoryEntry{
 		Confidence: 0.2,
 		LastUsed:   now,
-		Scope:      mem.MemoryScopeSession,
+		Scope:      memory.MemoryScopeSession,
 	}
 
 	high := memoryCompositeScore(highConf, profile, now)
@@ -33,15 +33,15 @@ func TestMemoryCompositeScore_FreshnessMatters(t *testing.T) {
 	now := time.Now()
 	profile := ContextProfile{}
 
-	recent := &mem.MemoryEntry{
+	recent := &memory.MemoryEntry{
 		Confidence: 0.7,
 		LastUsed:   now,
-		Scope:      mem.MemoryScopeSession,
+		Scope:      memory.MemoryScopeSession,
 	}
-	old := &mem.MemoryEntry{
+	old := &memory.MemoryEntry{
 		Confidence: 0.7,
 		LastUsed:   now.Add(-72 * time.Hour),
-		Scope:      mem.MemoryScopeSession,
+		Scope:      memory.MemoryScopeSession,
 	}
 
 	recentScore := memoryCompositeScore(recent, profile, now)
@@ -53,15 +53,15 @@ func TestMemoryCompositeScore_ScopePriority(t *testing.T) {
 	now := time.Now()
 	profile := ContextProfile{}
 
-	session := &mem.MemoryEntry{
+	session := &memory.MemoryEntry{
 		Confidence: 0.7,
 		LastUsed:   now,
-		Scope:      mem.MemoryScopeSession,
+		Scope:      memory.MemoryScopeSession,
 	}
-	global := &mem.MemoryEntry{
+	global := &memory.MemoryEntry{
 		Confidence: 0.7,
 		LastUsed:   now,
-		Scope:      mem.MemoryScopeGlobal,
+		Scope:      memory.MemoryScopeGlobal,
 	}
 
 	sessionScore := memoryCompositeScore(session, profile, now)
@@ -73,10 +73,10 @@ func TestRankMemoryEntries_SortsCorrectly(t *testing.T) {
 	now := time.Now()
 	profile := ContextProfile{}
 
-	entries := []*mem.MemoryEntry{
-		{ID: "low", Confidence: 0.3, LastUsed: now.Add(-48 * time.Hour), Scope: mem.MemoryScopeGlobal},
-		{ID: "high", Confidence: 0.9, LastUsed: now, Scope: mem.MemoryScopeSession},
-		{ID: "mid", Confidence: 0.6, LastUsed: now.Add(-12 * time.Hour), Scope: mem.MemoryScopeUser},
+	entries := []*memory.MemoryEntry{
+		{ID: "low", Confidence: 0.3, LastUsed: now.Add(-48 * time.Hour), Scope: memory.MemoryScopeGlobal},
+		{ID: "high", Confidence: 0.9, LastUsed: now, Scope: memory.MemoryScopeSession},
+		{ID: "mid", Confidence: 0.6, LastUsed: now.Add(-12 * time.Hour), Scope: memory.MemoryScopeUser},
 	}
 
 	ranked := rankMemoryEntries(entries, profile, now)
@@ -86,7 +86,7 @@ func TestRankMemoryEntries_SortsCorrectly(t *testing.T) {
 }
 
 func TestRankMemoryEntries_SingleEntry(t *testing.T) {
-	entries := []*mem.MemoryEntry{
+	entries := []*memory.MemoryEntry{
 		{ID: "only", Confidence: 0.5},
 	}
 	ranked := rankMemoryEntries(entries, ContextProfile{}, time.Now())

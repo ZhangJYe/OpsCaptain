@@ -3,8 +3,12 @@ package main
 import (
 	"SuperBizAgent/internal/ai/events"
 	"SuperBizAgent/internal/ai/models"
+	"SuperBizAgent/internal/ai/rag"
+	"SuperBizAgent/internal/ai/retriever"
 	aiservice "SuperBizAgent/internal/ai/service"
+	"SuperBizAgent/internal/app"
 	"SuperBizAgent/internal/controller/chat"
+	inframv "SuperBizAgent/internal/infra/milvus"
 	"SuperBizAgent/utility/auth"
 	"SuperBizAgent/utility/common"
 	"SuperBizAgent/utility/health"
@@ -76,6 +80,19 @@ func main() {
 	}
 	common.FileDir = fileDir.String()
 
+	rag.SetDefaultVectorStore(inframv.NewMilvusVectorStore(inframv.NewMilvusClient))
+	rag.NewRetrieverFunc = retriever.NewMilvusRetriever
+	health.CloseAllMilvusClientsFunc = inframv.CloseAllClients
+	health.MilvusReadyCheckFunc = inframv.PingMilvus
+	health.InspectMilvusCollectionFunc = func(ctx context.Context) (health.MilvusCollectionReport, error) {
+		r, err := inframv.InspectCollection(ctx)
+		return health.MilvusCollectionReport{
+			Collection: r.Collection,
+			SchemaOK:   r.SchemaOK,
+			DocCount:   r.DocCount,
+		}, err
+	}
+
 	s := g.Server()
 	s.SetGraceful(true)
 	s.SetGracefulShutdownTimeout(30)
@@ -88,6 +105,12 @@ func main() {
 	} else {
 		memoryPipelineShutdown = shutdownFn
 	}
+
+	chatApp := app.NewChatApp()
+	knowledgeApp := app.NewKnowledgeApp()
+	aiopsApp := app.NewAIOpsApp()
+	app.RegisterChatTaskExecutor(chatApp)
+
 	chatTaskPipelineShutdown := func(context.Context) error { return nil }
 	if shutdownFn, startErr := aiservice.StartChatTaskPipeline(ctx); startErr != nil {
 		g.Log().Warningf(ctx, "chat task pipeline init failed: %v", startErr)
@@ -123,7 +146,7 @@ func main() {
 		group.Middleware(middleware.AuthMiddleware)
 		group.Middleware(middleware.RateLimitMiddleware)
 		group.Middleware(middleware.ResponseMiddleware)
-		group.Bind(chat.NewV1())
+		group.Bind(chat.NewV1(chatApp, knowledgeApp, aiopsApp))
 	})
 
 	if err := s.Start(); err != nil {
@@ -183,6 +206,9 @@ func waitForShutdown(
 		g.Log().Warningf(ctx, "dependency shutdown completed with errors: %v", err)
 	} else {
 		g.Log().Info(ctx, "all dependencies closed")
+	}
+	if err := inframv.CloseAllClients(); err != nil {
+		g.Log().Warningf(ctx, "infra milvus clients close failed: %v", err)
 	}
 
 	if traceShutdown != nil {

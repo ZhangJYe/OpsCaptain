@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
+	"SuperBizAgent/internal/ai/memory"
 	"SuperBizAgent/internal/consts"
 	"SuperBizAgent/utility/common"
-	"SuperBizAgent/utility/mem"
 	"SuperBizAgent/utility/metrics"
 
 	"github.com/gogf/gf/v2/frame/g"
@@ -540,7 +540,7 @@ func (c *rabbitMQMemoryClient) consumeEvent(event memoryExtractionEvent) (err er
 	extractCtx, cancel := context.WithTimeout(context.Background(), c.cfg.MemoryExtractTimeout)
 	defer cancel()
 
-	report := processMemoryEventFunc(extractCtx, mem.MemoryEvent{
+	report := processMemoryEventFunc(extractCtx, memory.MemoryEvent{
 		SessionID: event.SessionID,
 		UserID:    event.UserID,
 		ProjectID: event.ProjectID,

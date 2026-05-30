@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"SuperBizAgent/internal/ai/memory"
 	"SuperBizAgent/internal/ai/protocol"
-	"SuperBizAgent/utility/mem"
 )
 
 func ToolItemsFromResults(results []*protocol.TaskResult) []ContextItem {
@@ -31,7 +31,7 @@ func ToolItemsFromResults(results []*protocol.TaskResult) []ContextItem {
 					Content:       content,
 					Score:         evidence.Score,
 					TrustLevel:    "tool_evidence",
-					TokenEstimate: mem.EstimateTokens(content),
+					TokenEstimate: memory.EstimateTokens(content),
 					OriginAgent:   result.Agent,
 					SafetyLabel:   "tool_output",
 					UpdatePolicy:  "ephemeral",
@@ -53,7 +53,7 @@ func ToolItemsFromResults(results []*protocol.TaskResult) []ContextItem {
 			Content:       summary,
 			Score:         result.Confidence,
 			TrustLevel:    "tool_result",
-			TokenEstimate: mem.EstimateTokens(summary),
+			TokenEstimate: memory.EstimateTokens(summary),
 			OriginAgent:   result.Agent,
 			SafetyLabel:   "tool_output",
 			UpdatePolicy:  "ephemeral",

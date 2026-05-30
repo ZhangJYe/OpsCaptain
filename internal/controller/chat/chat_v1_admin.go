@@ -3,7 +3,6 @@ package chat
 import (
 	v1 "SuperBizAgent/api/chat/v1"
 	"SuperBizAgent/internal/ai/service"
-	"SuperBizAgent/utility/mem"
 	"context"
 	"errors"
 	"fmt"
@@ -149,24 +148,21 @@ func (c *ControllerV1) MemoryAction(ctx context.Context, req *v1.MemoryActionReq
 
 func (c *ControllerV1) MemoryPromote(ctx context.Context, req *v1.MemoryPromoteReq) (res *v1.MemoryActionRes, err error) {
 	success := service.NewMemoryService().PromoteMemory(ctx, req.ID, service.MemoryPromoteOptions{
-		Scope:      mem.MemoryScope(req.Scope),
+		Scope:      req.Scope,
 		ScopeID:    req.ScopeID,
 		Confidence: req.Confidence,
 	})
 	return &v1.MemoryActionRes{Success: success}, nil
 }
 
-func toMemoryItem(item *mem.MemoryEntry) v1.MemoryItem {
-	if item == nil {
-		return v1.MemoryItem{}
-	}
+func toMemoryItem(item service.MemoryItemView) v1.MemoryItem {
 	return v1.MemoryItem{
 		ID:            item.ID,
 		SessionID:     item.SessionID,
-		Type:          string(item.Type),
+		Type:          item.Type,
 		Content:       item.Content,
 		Source:        item.Source,
-		Scope:         string(item.Scope),
+		Scope:         item.Scope,
 		ScopeID:       item.ScopeID,
 		Confidence:    item.Confidence,
 		SafetyLabel:   item.SafetyLabel,
@@ -174,8 +170,8 @@ func toMemoryItem(item *mem.MemoryEntry) v1.MemoryItem {
 		UpdatePolicy:  item.UpdatePolicy,
 		ConflictGroup: item.ConflictGroup,
 		ExpiresAt:     item.ExpiresAt,
-		CreatedAt:     item.CreatedAt.UnixMilli(),
-		UpdatedAt:     item.UpdatedAt.UnixMilli(),
-		LastUsed:      item.LastUsed.UnixMilli(),
+		CreatedAt:     item.CreatedAt,
+		UpdatedAt:     item.UpdatedAt,
+		LastUsed:      item.LastUsed,
 	}
 }

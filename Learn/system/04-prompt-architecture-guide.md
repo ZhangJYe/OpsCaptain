@@ -45,7 +45,7 @@ internal/ai/service/            # MemoryService、chat multi-agent、异步任�
 internal/ai/protocol/           # TaskEnvelope / TaskResult / EvidenceItem
 internal/ai/runtime/            # Runtime / Ledger / Bus / ArtifactStore
 internal/ai/models/             # OpenAI-compatible 模型接入
-utility/mem/                    # SimpleMemory / LongTermMemory / token budget
+internal/ai/memory/             # SimpleMemory / LongTermMemory / token budget
 utility/safety/                 # prompt guard / output filter
 ```
 

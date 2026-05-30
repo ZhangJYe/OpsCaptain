@@ -32,21 +32,6 @@ func filterAssistantPayload(ctx context.Context, content string, details []strin
 	return filtered.Content, safety.FilterDetails(ctx, details)
 }
 
-func userFacingChatError(ctx context.Context, err error) *v1.ChatRes {
-	status, message := userFacingExecutionError(err)
-	if status == 0 {
-		return nil
-	}
-	writeStatus(ctx, status)
-	return &v1.ChatRes{
-		Answer:            message,
-		Detail:            []string{message},
-		Mode:              "degraded",
-		Degraded:          true,
-		DegradationReason: message,
-	}
-}
-
 func userFacingAIOpsError(ctx context.Context, err error) *v1.AIOpsRes {
 	status, message := userFacingExecutionError(err)
 	if status == 0 {

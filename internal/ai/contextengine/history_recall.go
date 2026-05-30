@@ -36,13 +36,13 @@ type HistoryRecallResult struct {
 
 // HistoryRecaller 基于 embedding 相似度召回历史消息
 type HistoryRecaller struct {
-	embedder    embedding.Embedder
-	cache       *embeddingCache
-	timeout     time.Duration
-	recentKeep  int
-	threshold   float64
-	embedOnce   sync.Once
-	embedErr    error
+	embedder   embedding.Embedder
+	cache      *embeddingCache
+	timeout    time.Duration
+	recentKeep int
+	threshold  float64
+	embedOnce  sync.Once
+	embedErr   error
 }
 
 // NewHistoryRecaller 创建 HistoryRecaller
@@ -375,8 +375,8 @@ func cosineSimilarity(a, b []float64) float64 {
 }
 
 const (
-	recencyDecay    = 0.9
-	roleUserBonus   = 0.2
+	recencyDecay     = 0.9
+	roleUserBonus    = 0.2
 	entityMatchBonus = 0.3
 )
 
@@ -492,5 +492,3 @@ func (c *embeddingCache) Set(key string, vec []float64) {
 	c.items[key] = &cacheEntry{vec: vec, expiresAt: time.Now().Add(c.ttl)}
 	c.order = append(c.order, key)
 }
-
-

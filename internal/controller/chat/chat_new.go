@@ -6,15 +6,22 @@ package chat
 
 import (
 	"SuperBizAgent/api/chat"
+	"SuperBizAgent/internal/app"
 	"SuperBizAgent/internal/logic/sse"
 )
 
 type ControllerV1 struct {
-	service *sse.Service
+	service      *sse.Service
+	chatApp      *app.ChatApp
+	knowledgeApp *app.KnowledgeApp
+	aiopsApp     *app.AIOpsApp
 }
 
-func NewV1() chat.IChatV1 {
+func NewV1(chatApp *app.ChatApp, knowledgeApp *app.KnowledgeApp, aiopsApp *app.AIOpsApp) chat.IChatV1 {
 	return &ControllerV1{
-		service: sse.New(),
+		service:      sse.New(),
+		chatApp:      chatApp,
+		knowledgeApp: knowledgeApp,
+		aiopsApp:     aiopsApp,
 	}
 }

@@ -2,6 +2,8 @@ package main
 
 import (
 	"SuperBizAgent/internal/ai/rag"
+	"SuperBizAgent/internal/ai/retriever"
+	inframv "SuperBizAgent/internal/infra/milvus"
 	"context"
 	"flag"
 	"fmt"
@@ -17,6 +19,8 @@ import (
 
 func main() {
 	ctx := context.Background()
+	rag.SetDefaultVectorStore(inframv.NewMilvusVectorStore(inframv.NewMilvusClient))
+	rag.NewRetrieverFunc = retriever.NewMilvusRetriever
 	if err := run(ctx, os.Args[1:], rag.DefaultIndexingService(), os.Stdout); err != nil {
 		g.Log().Errorf(ctx, "knowledge index failed: %v", err)
 		os.Exit(1)

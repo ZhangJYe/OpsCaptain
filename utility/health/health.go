@@ -2,7 +2,6 @@ package health
 
 import (
 	"SuperBizAgent/internal/ai/tools"
-	"SuperBizAgent/utility/client"
 	"SuperBizAgent/utility/common"
 	"context"
 	"errors"
@@ -13,13 +12,24 @@ import (
 
 	_ "github.com/gogf/gf/contrib/nosql/redis/v2"
 	"github.com/gogf/gf/v2/frame/g"
-	milvusclient "github.com/milvus-io/milvus-sdk-go/v2/client"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 const dependencyCheckTimeout = 3 * time.Second
 
 var errCheckSkipped = errors.New("check skipped")
+
+type MilvusCollectionReport struct {
+	Collection string
+	SchemaOK   bool
+	DocCount   int64
+}
+
+var (
+	CloseAllMilvusClientsFunc   func() error
+	InspectMilvusCollectionFunc func(ctx context.Context) (MilvusCollectionReport, error)
+	MilvusReadyCheckFunc        func(ctx context.Context) error
+)
 
 type CheckStatus struct {
 	Ready      bool   `json:"ready"`
@@ -36,11 +46,24 @@ type ReadinessReport struct {
 }
 
 var (
-	redisReadyCheck     = defaultRedisReadyCheck
-	milvusReadyCheck    = defaultMilvusReadyCheck
-	rabbitMQReadyCheck  = defaultRabbitMQReadyCheck
-	knowledgeReadyCheck = defaultKnowledgeReadyCheck
+	redisReadyCheck    = defaultRedisReadyCheck
+	milvusReadyCheck   = injectedMilvusReadyCheck
+	rabbitMQReadyCheck = defaultRabbitMQReadyCheck
 )
+
+var knowledgeReadyCheck = defaultKnowledgeReadyCheck
+
+func injectedMilvusReadyCheck(parent context.Context) error {
+	if _, ok := milvusAddress(parent); !ok {
+		return errCheckSkipped
+	}
+	if MilvusReadyCheckFunc == nil {
+		return errCheckSkipped
+	}
+	ctx, cancel := context.WithTimeout(parent, dependencyCheckTimeout)
+	defer cancel()
+	return MilvusReadyCheckFunc(ctx)
+}
 
 func BuildReadinessReport(ctx context.Context, shuttingDown bool) (ReadinessReport, int) {
 	checks := map[string]CheckStatus{
@@ -95,10 +118,14 @@ func defaultKnowledgeReadyCheck(parent context.Context) CheckStatus {
 	}
 	_ = addr
 
+	if InspectMilvusCollectionFunc == nil {
+		return CheckStatus{Ready: true, Skipped: true}
+	}
+
 	ctx, cancel := context.WithTimeout(parent, dependencyCheckTimeout)
 	defer cancel()
 
-	report, err := client.InspectMilvusCollection(ctx)
+	report, err := InspectMilvusCollectionFunc(ctx)
 	schemaOK := report.SchemaOK
 	docCount := report.DocCount
 	status := CheckStatus{
@@ -126,8 +153,10 @@ func CloseResources(ctx context.Context) error {
 			errs = append(errs, fmt.Sprintf("mysql close failed: %v", err))
 		}
 	}
-	if err := client.CloseAllMilvusClients(); err != nil {
-		errs = append(errs, err.Error())
+	if CloseAllMilvusClientsFunc != nil {
+		if err := CloseAllMilvusClientsFunc(); err != nil {
+			errs = append(errs, err.Error())
+		}
 	}
 
 	if len(errs) > 0 {
@@ -150,30 +179,6 @@ func defaultRedisReadyCheck(parent context.Context) error {
 	}
 	if !strings.EqualFold(result.String(), "PONG") {
 		return fmt.Errorf("unexpected ping response: %s", result.String())
-	}
-	return nil
-}
-
-func defaultMilvusReadyCheck(parent context.Context) error {
-	addr, ok := milvusAddress(parent)
-	if !ok {
-		return errCheckSkipped
-	}
-
-	ctx, cancel := context.WithTimeout(parent, dependencyCheckTimeout)
-	defer cancel()
-
-	cli, err := milvusclient.NewClient(ctx, milvusclient.Config{
-		Address: addr,
-		DBName:  "default",
-	})
-	if err != nil {
-		return fmt.Errorf("connect failed: %w", err)
-	}
-	defer cli.Close()
-
-	if _, err := cli.ListDatabases(ctx); err != nil {
-		return fmt.Errorf("list databases failed: %w", err)
 	}
 	return nil
 }

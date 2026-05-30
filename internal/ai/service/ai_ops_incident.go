@@ -12,10 +12,10 @@ import (
 	"sync"
 	"time"
 
+	"SuperBizAgent/internal/ai/memory"
 	"SuperBizAgent/internal/ai/protocol"
 	"SuperBizAgent/internal/ai/runtime"
 	"SuperBizAgent/internal/consts"
-	"SuperBizAgent/utility/mem"
 
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/google/uuid"
@@ -242,7 +242,7 @@ func CreateAIOpsIncident(ctx context.Context, query, engine string) (*IncidentSe
 		Status:     IncidentStatusRunning,
 		CreatedAt:  now,
 	}
-	sessionID := mem.GenerateSessionID()
+	sessionID := memory.GenerateSessionID()
 	if value, ok := ctx.Value(consts.CtxKeySessionID).(string); ok && strings.TrimSpace(value) != "" {
 		sessionID = strings.TrimSpace(value)
 	}

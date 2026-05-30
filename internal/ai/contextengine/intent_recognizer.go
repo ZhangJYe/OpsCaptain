@@ -23,8 +23,8 @@ const (
 )
 
 type IntentResult struct {
-	Type     IntentType
-	Degraded bool
+	Type      IntentType
+	Degraded  bool
 	LatencyMs int64
 }
 

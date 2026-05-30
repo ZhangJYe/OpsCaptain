@@ -1,7 +1,6 @@
-package client
+package milvus
 
 import (
-	"SuperBizAgent/utility/common"
 	"context"
 	"fmt"
 	"strconv"
@@ -14,16 +13,18 @@ import (
 )
 
 var (
-	milvusClientsMu sync.Mutex
-	milvusClients   []cli.Client
+	clientsMu sync.Mutex
+	clients   []cli.Client
 )
 
 func NewMilvusClient(ctx context.Context) (cli.Client, error) {
-	addr := common.GetMilvusAddr(ctx)
-	collectionName := common.GetMilvusCollectionName(ctx)
+	cfg := MilvusConfigFromContext(ctx)
+	return newMilvusClientWithConfig(ctx, cfg)
+}
 
+func newMilvusClientWithConfig(ctx context.Context, cfg MilvusConfig) (cli.Client, error) {
 	defaultClient, err := cli.NewClient(ctx, cli.Config{
-		Address: addr,
+		Address: cfg.Addr,
 		DBName:  "default",
 	})
 	if err != nil {
@@ -37,26 +38,26 @@ func NewMilvusClient(ctx context.Context) (cli.Client, error) {
 	}
 	agentDBExists := false
 	for _, db := range databases {
-		if db.Name == common.MilvusDBName {
+		if db.Name == cfg.DBName {
 			agentDBExists = true
 			break
 		}
 	}
 	if !agentDBExists {
-		err = defaultClient.CreateDatabase(ctx, common.MilvusDBName)
+		err = defaultClient.CreateDatabase(ctx, cfg.DBName)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create agent database: %w", err)
 		}
 	}
 
 	agentClient, err := cli.NewClient(ctx, cli.Config{
-		Address: addr,
-		DBName:  common.MilvusDBName,
+		Address: cfg.Addr,
+		DBName:  cfg.DBName,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to agent database: %w", err)
 	}
-	registerMilvusClient(agentClient)
+	registerClient(agentClient)
 
 	collections, err := agentClient.ListCollections(ctx)
 	if err != nil {
@@ -65,7 +66,7 @@ func NewMilvusClient(ctx context.Context) (cli.Client, error) {
 
 	bizCollectionExists := false
 	for _, collection := range collections {
-		if collection.Name == collectionName {
+		if collection.Name == cfg.CollectionName {
 			bizCollectionExists = true
 			break
 		}
@@ -73,9 +74,9 @@ func NewMilvusClient(ctx context.Context) (cli.Client, error) {
 
 	if !bizCollectionExists {
 		collSchema := &entity.Schema{
-			CollectionName: collectionName,
+			CollectionName: cfg.CollectionName,
 			Description:    "Business knowledge collection",
-			Fields:         BuildMilvusFields(ctx),
+			Fields:         BuildMilvusFields(cfg),
 		}
 
 		err = agentClient.CreateCollection(ctx, collSchema, entity.DefaultShardNumber)
@@ -83,17 +84,17 @@ func NewMilvusClient(ctx context.Context) (cli.Client, error) {
 			return nil, fmt.Errorf("failed to create biz collection: %w", err)
 		}
 
-		vectorIndex, err := buildMilvusVectorIndex(ctx)
+		vectorIndex, err := buildVectorIndex(cfg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create vector index: %w", err)
 		}
-		err = agentClient.CreateIndex(ctx, collectionName, "vector", vectorIndex, false)
+		err = agentClient.CreateIndex(ctx, cfg.CollectionName, "vector", vectorIndex, false)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create vector index: %w", err)
 		}
 	}
 
-	err = agentClient.LoadCollection(ctx, collectionName, false)
+	err = agentClient.LoadCollection(ctx, cfg.CollectionName, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load biz collection: %w", err)
 	}
@@ -101,18 +102,18 @@ func NewMilvusClient(ctx context.Context) (cli.Client, error) {
 	return agentClient, nil
 }
 
-func CloseAllMilvusClients() error {
-	milvusClientsMu.Lock()
-	clients := milvusClients
-	milvusClients = nil
-	milvusClientsMu.Unlock()
+func CloseAllClients() error {
+	clientsMu.Lock()
+	c := clients
+	clients = nil
+	clientsMu.Unlock()
 
 	var errs []string
-	for _, c := range clients {
-		if c == nil {
+	for _, cl := range c {
+		if cl == nil {
 			continue
 		}
-		if err := c.Close(); err != nil {
+		if err := cl.Close(); err != nil {
 			errs = append(errs, err.Error())
 		}
 	}
@@ -122,37 +123,52 @@ func CloseAllMilvusClients() error {
 	return nil
 }
 
-func registerMilvusClient(c cli.Client) {
+func PingMilvus(ctx context.Context) error {
+	cfg := MilvusConfigFromContext(ctx)
+	c, err := cli.NewClient(ctx, cli.Config{
+		Address: cfg.Addr,
+		DBName:  "default",
+	})
+	if err != nil {
+		return fmt.Errorf("connect failed: %w", err)
+	}
+	defer c.Close()
+
+	if _, err := c.ListDatabases(ctx); err != nil {
+		return fmt.Errorf("list databases failed: %w", err)
+	}
+	return nil
+}
+
+func registerClient(c cli.Client) {
 	if c == nil {
 		return
 	}
-	milvusClientsMu.Lock()
-	milvusClients = append(milvusClients, c)
-	milvusClientsMu.Unlock()
+	clientsMu.Lock()
+	clients = append(clients, c)
+	clientsMu.Unlock()
 }
 
-func buildMilvusVectorIndex(ctx context.Context) (entity.Index, error) {
-	metricType, err := resolveMilvusMetricType(ctx)
+func buildVectorIndex(cfg MilvusConfig) (entity.Index, error) {
+	metricType, err := resolveMetricType(cfg.MetricType)
 	if err != nil {
 		return nil, err
 	}
 
-	switch strings.ToUpper(strings.TrimSpace(common.GetMilvusIndexType(ctx))) {
+	switch strings.ToUpper(strings.TrimSpace(cfg.IndexType)) {
 	case "HNSW":
-		m := common.GetMilvusHNSWM(ctx)
-		efConstruction := common.GetMilvusHNSWEfConstruction(ctx)
-		g.Log().Infof(ctx, "creating Milvus HNSW index, metric=%s, m=%d, efConstruction=%d", string(metricType), m, efConstruction)
-		return entity.NewIndexHNSW(metricType, m, efConstruction)
+		g.Log().Infof(context.Background(), "creating Milvus HNSW index, metric=%s, m=%d, efConstruction=%d", string(metricType), cfg.HNSWM, cfg.HNSWEfConstruction)
+		return entity.NewIndexHNSW(metricType, cfg.HNSWM, cfg.HNSWEfConstruction)
 	case "AUTOINDEX", "AUTO":
-		g.Log().Infof(ctx, "creating Milvus AUTOINDEX, metric=%s", string(metricType))
+		g.Log().Infof(context.Background(), "creating Milvus AUTOINDEX, metric=%s", string(metricType))
 		return entity.NewIndexAUTOINDEX(metricType)
 	default:
-		return nil, fmt.Errorf("unsupported milvus.index_type: %s", common.GetMilvusIndexType(ctx))
+		return nil, fmt.Errorf("unsupported milvus.index_type: %s", cfg.IndexType)
 	}
 }
 
-func resolveMilvusMetricType(ctx context.Context) (entity.MetricType, error) {
-	switch strings.ToUpper(strings.TrimSpace(common.GetMilvusMetricType(ctx))) {
+func resolveMetricType(raw string) (entity.MetricType, error) {
+	switch strings.ToUpper(strings.TrimSpace(raw)) {
 	case "IP":
 		return entity.IP, nil
 	case "L2":
@@ -160,11 +176,11 @@ func resolveMilvusMetricType(ctx context.Context) (entity.MetricType, error) {
 	case "COSINE":
 		return entity.COSINE, nil
 	default:
-		return "", fmt.Errorf("unsupported milvus.metric_type: %s", common.GetMilvusMetricType(ctx))
+		return "", fmt.Errorf("unsupported milvus.metric_type: %s", raw)
 	}
 }
 
-func BuildMilvusFields(ctx context.Context) []*entity.Field {
+func BuildMilvusFields(cfg MilvusConfig) []*entity.Field {
 	return []*entity.Field{
 		{
 			Name:     "id",
@@ -178,7 +194,7 @@ func BuildMilvusFields(ctx context.Context) []*entity.Field {
 			Name:     "vector",
 			DataType: entity.FieldTypeFloatVector,
 			TypeParams: map[string]string{
-				"dim": strconv.Itoa(common.GetVectorDimension(ctx)),
+				"dim": strconv.Itoa(cfg.VectorDimension),
 			},
 		},
 		{
@@ -195,18 +211,18 @@ func BuildMilvusFields(ctx context.Context) []*entity.Field {
 	}
 }
 
-type MilvusCollectionReport struct {
+type CollectionReport struct {
 	Collection string
 	SchemaOK   bool
 	DocCount   int64
 }
 
-func InspectMilvusCollection(ctx context.Context) (MilvusCollectionReport, error) {
-	collectionName := common.GetMilvusCollectionName(ctx)
-	report := MilvusCollectionReport{Collection: collectionName}
+func InspectCollection(ctx context.Context) (CollectionReport, error) {
+	cfg := MilvusConfigFromContext(ctx)
+	report := CollectionReport{Collection: cfg.CollectionName}
 
 	defaultClient, err := cli.NewClient(ctx, cli.Config{
-		Address: common.GetMilvusAddr(ctx),
+		Address: cfg.Addr,
 		DBName:  "default",
 	})
 	if err != nil {
@@ -220,18 +236,18 @@ func InspectMilvusCollection(ctx context.Context) (MilvusCollectionReport, error
 	}
 	agentDBExists := false
 	for _, db := range databases {
-		if db.Name == common.MilvusDBName {
+		if db.Name == cfg.DBName {
 			agentDBExists = true
 			break
 		}
 	}
 	if !agentDBExists {
-		return report, fmt.Errorf("milvus database %s not found", common.MilvusDBName)
+		return report, fmt.Errorf("milvus database %s not found", cfg.DBName)
 	}
 
 	agentClient, err := cli.NewClient(ctx, cli.Config{
-		Address: common.GetMilvusAddr(ctx),
-		DBName:  common.MilvusDBName,
+		Address: cfg.Addr,
+		DBName:  cfg.DBName,
 	})
 	if err != nil {
 		return report, err
@@ -244,25 +260,25 @@ func InspectMilvusCollection(ctx context.Context) (MilvusCollectionReport, error
 	}
 	exists := false
 	for _, collection := range collections {
-		if collection.Name == collectionName {
+		if collection.Name == cfg.CollectionName {
 			exists = true
 			break
 		}
 	}
 	if !exists {
-		return report, fmt.Errorf("milvus collection %s not found", collectionName)
+		return report, fmt.Errorf("milvus collection %s not found", cfg.CollectionName)
 	}
 
-	collection, err := agentClient.DescribeCollection(ctx, collectionName)
+	collection, err := agentClient.DescribeCollection(ctx, cfg.CollectionName)
 	if err != nil {
 		return report, err
 	}
-	if err := ValidateMilvusCollectionSchema(ctx, collection); err != nil {
+	if err := ValidateCollectionSchema(cfg, collection); err != nil {
 		return report, err
 	}
 	report.SchemaOK = true
 
-	stats, err := agentClient.GetCollectionStatistics(ctx, collectionName)
+	stats, err := agentClient.GetCollectionStatistics(ctx, cfg.CollectionName)
 	if err != nil {
 		return report, err
 	}
@@ -275,7 +291,7 @@ func InspectMilvusCollection(ctx context.Context) (MilvusCollectionReport, error
 	return report, nil
 }
 
-func ValidateMilvusCollectionSchema(ctx context.Context, collection *entity.Collection) error {
+func ValidateCollectionSchema(cfg MilvusConfig, collection *entity.Collection) error {
 	if collection == nil || collection.Schema == nil {
 		return fmt.Errorf("collection schema is empty")
 	}
@@ -287,7 +303,7 @@ func ValidateMilvusCollectionSchema(ctx context.Context, collection *entity.Coll
 		}
 	}
 
-	expected := BuildMilvusFields(ctx)
+	expected := BuildMilvusFields(cfg)
 	for _, want := range expected {
 		got := fields[want.Name]
 		if got == nil {
