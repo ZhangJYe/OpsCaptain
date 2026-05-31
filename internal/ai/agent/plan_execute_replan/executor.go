@@ -23,6 +23,9 @@ func NewExecutor(ctx context.Context) (adk.Agent, error) {
 	if t := tools.NewPrometheusRangeQueryTool(); t != nil {
 		toolList = append(toolList, t)
 	}
+	if t := tools.NewPrometheusInstantQueryTool(); t != nil {
+		toolList = append(toolList, t)
+	}
 	// file
 	if t := tools.NewQueryInternalDocsTool(); t != nil {
 		toolList = append(toolList, t)

@@ -164,6 +164,14 @@ mysql:
 
 prometheus:
   address: "${PROMETHEUS_ADDRESS}"
+  instant_query_timeout_ms: 5000
+  instant_max_series: 20
+  range_query_timeout_ms: 5000
+  range_default_window_minutes: 30
+  range_max_window_minutes: 360
+  range_default_step_seconds: 60
+  range_max_series: 20
+  range_max_points: 1000
 
 rabbitmq:
   enabled: true

@@ -38,15 +38,16 @@ var registry = map[string]Contract{
 		Agent:      "metrics",
 		Version:    Version,
 		CacheScope: CacheScopeGlobal,
-		Role:       "指标 specialist，负责查询 Prometheus 告警、指标趋势和指标相关健康信号。",
+		Role:       "指标 specialist，负责查询 Prometheus 告警、当前指标值、指标趋势和指标相关健康信号。",
 		Responsibilities: []string{
 			"按任务选择指标技能，例如发布守卫、容量快照、告警分诊。",
-			"把 Prometheus 告警和区间指标返回内容整理为 EvidenceItem。",
+			"把 Prometheus 告警、即时指标和区间指标返回内容整理为 EvidenceItem。",
 			"失败时返回 degraded，而不是中断 supervisor 编排。",
 		},
 		Inputs: []string{
 			"specialist query",
 			"Prometheus alert query result",
+			"Prometheus instant query result",
 			"Prometheus range query result",
 			"skill focus",
 		},
@@ -57,7 +58,7 @@ var registry = map[string]Contract{
 		},
 		Must: []string{
 			"区分 no active alerts、query failed、payload unreadable。",
-			"保留 alert name、description、series labels、trend summary 和 mode/focus metadata。",
+			"保留 alert name、description、series labels、current value、trend summary 和 mode/focus metadata。",
 			"需要发布判断时提示对比发布时间窗和回滚条件。",
 		},
 		MustNot: []string{
@@ -66,7 +67,7 @@ var registry = map[string]Contract{
 			"不要吞掉查询失败或超时。",
 		},
 		EvidencePolicy: []string{
-			"Prometheus active alert 和 range query trend 是实时指标证据。",
+			"Prometheus active alert、instant query value 和 range query trend 是实时指标证据。",
 			"指标证据只能支持现象、范围和风险判断，根因需要结合 logs/knowledge。",
 		},
 	},
