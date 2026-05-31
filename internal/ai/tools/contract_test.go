@@ -18,6 +18,20 @@ func TestPrometheusAlertsQueryToolContract(t *testing.T) {
 	}
 }
 
+func TestPrometheusRangeQueryToolContract(t *testing.T) {
+	tool := NewPrometheusRangeQueryTool()
+	info, err := tool.Info(nil)
+	if err != nil {
+		t.Fatalf("get tool info: %v", err)
+	}
+	if info.Name != "query_prometheus_range" {
+		t.Fatalf("expected tool name 'query_prometheus_range', got %q", info.Name)
+	}
+	if info.Desc == "" {
+		t.Fatal("expected non-empty tool description")
+	}
+}
+
 func TestQueryInternalDocsToolContract(t *testing.T) {
 	tool := NewQueryInternalDocsTool()
 	info, err := tool.Info(nil)
@@ -107,6 +121,11 @@ func TestToolNamesMatchAgentContracts(t *testing.T) {
 	metricsInfo, _ := metricsTool.Info(nil)
 	if metricsInfo.Name != "query_prometheus_alerts" {
 		t.Fatalf("metrics agent expects 'query_prometheus_alerts', got %q", metricsInfo.Name)
+	}
+	rangeTool := NewPrometheusRangeQueryTool()
+	rangeInfo, _ := rangeTool.Info(nil)
+	if rangeInfo.Name != "query_prometheus_range" {
+		t.Fatalf("metrics agent expects 'query_prometheus_range', got %q", rangeInfo.Name)
 	}
 
 	docsTool := NewQueryInternalDocsTool()

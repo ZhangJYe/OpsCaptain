@@ -48,6 +48,14 @@ func BuildTieredTools() []skills.TieredTool {
 		})
 	}
 
+	if t := NewPrometheusRangeQueryTool(); t != nil {
+		tiered = append(tiered, skills.TieredTool{
+			Tool:    t,
+			Tier:    skills.TierSkillGate,
+			Domains: []string{"metrics"},
+		})
+	}
+
 	if MySQLToolEnabled() {
 		if t := NewMysqlCrudTool(); t != nil {
 			tiered = append(tiered, skills.TieredTool{
