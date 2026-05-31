@@ -46,6 +46,20 @@ func TestPrometheusInstantQueryToolContract(t *testing.T) {
 	}
 }
 
+func TestPrometheusMetricsDiscoveryToolContract(t *testing.T) {
+	tool := NewPrometheusMetricsDiscoveryTool()
+	info, err := tool.Info(nil)
+	if err != nil {
+		t.Fatalf("get tool info: %v", err)
+	}
+	if info.Name != "list_prometheus_metrics" {
+		t.Fatalf("expected tool name 'list_prometheus_metrics', got %q", info.Name)
+	}
+	if info.Desc == "" {
+		t.Fatal("expected non-empty tool description")
+	}
+}
+
 func TestQueryInternalDocsToolContract(t *testing.T) {
 	tool := NewQueryInternalDocsTool()
 	info, err := tool.Info(nil)
@@ -145,6 +159,11 @@ func TestToolNamesMatchAgentContracts(t *testing.T) {
 	instantInfo, _ := instantTool.Info(nil)
 	if instantInfo.Name != "query_prometheus_instant" {
 		t.Fatalf("metrics agent expects 'query_prometheus_instant', got %q", instantInfo.Name)
+	}
+	discoveryTool := NewPrometheusMetricsDiscoveryTool()
+	discoveryInfo, _ := discoveryTool.Info(nil)
+	if discoveryInfo.Name != "list_prometheus_metrics" {
+		t.Fatalf("metrics agent expects 'list_prometheus_metrics', got %q", discoveryInfo.Name)
 	}
 
 	docsTool := NewQueryInternalDocsTool()

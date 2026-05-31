@@ -164,6 +164,12 @@ mysql:
 
 prometheus:
   address: "${PROMETHEUS_ADDRESS}"
+  discovery_timeout_ms: 5000
+  discovery_default_window_minutes: 60
+  discovery_max_window_minutes: 360
+  discovery_max_metrics: 50
+  discovery_max_series: 50
+  discovery_max_label_values: 20
   instant_query_timeout_ms: 5000
   instant_max_series: 20
   range_query_timeout_ms: 5000

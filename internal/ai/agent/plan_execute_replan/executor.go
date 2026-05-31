@@ -20,6 +20,9 @@ func NewExecutor(ctx context.Context) (adk.Agent, error) {
 	if t := tools.NewPrometheusAlertsQueryTool(); t != nil {
 		toolList = append(toolList, t)
 	}
+	if t := tools.NewPrometheusMetricsDiscoveryTool(); t != nil {
+		toolList = append(toolList, t)
+	}
 	if t := tools.NewPrometheusRangeQueryTool(); t != nil {
 		toolList = append(toolList, t)
 	}
