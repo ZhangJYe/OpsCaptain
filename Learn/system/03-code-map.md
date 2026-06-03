@@ -3,7 +3,7 @@
 > 当前统一口径（2026-05）
 > - Chat 主链路：`ContextEngine / MemoryService -> Eino ReAct Agent -> Tools / RAG -> JSON / SSE`
 > - AIOps 主链路：`Approval / Degradation / Memory -> Runtime -> Plan-Execute-Replan`
-> - `supervisor / triage / reporter / skillspecialists / chat_multi_agent` 相关内容，如果仍出现在仓库其他文档里，应理解为历史实验或演进讨论，不再代表当前聊天主链路。
+> - 历史聊天多 Agent 路由和旧分层编排已清理，不再代表当前聊天主链路。
 
 本文档只列出**当前最值得读、且会直接影响线上行为**的代码入口，方便你快速建立阅读顺序。
 
@@ -161,16 +161,9 @@ manifest/config/                       → 配置文件
 
 ---
 
-## 9. 哪些目录属于历史/实验材料
+## 9. 历史/实验材料
 
-下面这些目录仍然有参考价值，但**不要再把它们当成当前聊天主链路**：
-
-- `internal/ai/agent/supervisor/`
-- `internal/ai/agent/triage/`
-- `internal/ai/agent/reporter/`
-- `internal/ai/agent/skillspecialists/`
-
-它们更适合用来理解：
+历史聊天多 Agent 路由和旧分层编排已经清理，归档资料只适合用来理解：
 
 - 你们曾经尝试过什么 Orchestrator / Multi-Agent 方案
 - 为什么后来把 Chat 收敛到 ReAct 单链路

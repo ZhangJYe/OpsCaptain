@@ -219,7 +219,7 @@ func registerAIOpsAgents(rt *runtime.Runtime) error {
 }
 
 func aiOpsRuntimeDataDir(ctx context.Context) string {
-	v, err := gCfgGet(ctx, "multi_agent.data_dir")
+	v, err := gCfgGet(ctx, "aiops.runtime.data_dir")
 	if err == nil && strings.TrimSpace(v) != "" {
 		return v
 	}

@@ -404,8 +404,8 @@ flowchart LR
 - `chat_simple`
 - `chat_knowledge_qa`
 - `aiops_analysis`
-- `multi_agent_specialist_metrics`
-- `multi_agent_specialist_logs`
+- `aiops_runtime_metrics`
+- `aiops_runtime_logs`
 
 输出：
 

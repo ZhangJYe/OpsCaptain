@@ -43,13 +43,13 @@ MCP 工具返回格式不固定，agent 会尝试从以下结构中提取日志�
 - 单个工具失败：记录错误，继续尝试其他工具
 - 所有工具失败：返回 degraded，附带工具错误列表
 - 仅获取 raw output：返回 degraded（confidence 0.42），建议检查 MCP 工具的结构化返回格式
-- 超时：默认 3s，配置项 `multi_agent.log_query_timeout_ms`
+- 超时：默认 3s，配置项 `aiops.tools.log_query_timeout_ms`
 
 ## 配置项
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
-| `multi_agent.log_query_timeout_ms` | 3000 | 单次查询超时（毫秒） |
-| `multi_agent.log_evidence_limit` | 3 | 最大证据条数 |
+| `aiops.tools.log_query_timeout_ms` | 3000 | 单次查询超时（毫秒） |
+| `aiops.tools.log_evidence_limit` | 3 | 最大证据条数 |
 
 MCP 日志工具通过 `tools.GetLogMcpTool` 动态发现。
 

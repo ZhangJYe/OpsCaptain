@@ -31,20 +31,20 @@ func (s *stubAIOpsMemory) PersistOutcome(_ context.Context, _ string, query, sum
 	s.persistedResult = summary
 }
 
-func enableMultiAgentForTest(t *testing.T) {
+func enableAIOpsRuntimeForTest(t *testing.T) {
 	t.Helper()
-	oldConfigBool := multiAgentConfigBool
-	multiAgentConfigBool = func(context.Context, string) (bool, bool) {
+	oldConfigBool := aiOpsRuntimeConfigBool
+	aiOpsRuntimeConfigBool = func(context.Context, string) (bool, bool) {
 		return true, true
 	}
 	t.Cleanup(func() {
-		multiAgentConfigBool = oldConfigBool
+		aiOpsRuntimeConfigBool = oldConfigBool
 	})
 }
 
-func TestRunAIOpsMultiAgentApprovalDenialReturnsReason(t *testing.T) {
-	enableMultiAgentForTest(t)
-	response, err := RunAIOpsMultiAgent(context.Background(), "delete production history")
+func TestRunAIOpsRuntimeApprovalDenialReturnsReason(t *testing.T) {
+	enableAIOpsRuntimeForTest(t)
+	response, err := RunAIOpsRuntime(context.Background(), "delete production history")
 	if err != nil {
 		t.Fatalf("run aiops: %v", err)
 	}
@@ -56,20 +56,20 @@ func TestRunAIOpsMultiAgentApprovalDenialReturnsReason(t *testing.T) {
 	}
 }
 
-func TestRunAIOpsMultiAgentDisabledByConfig(t *testing.T) {
-	oldConfigBool := multiAgentConfigBool
-	multiAgentConfigBool = func(context.Context, string) (bool, bool) {
+func TestRunAIOpsRuntimeDisabledByConfig(t *testing.T) {
+	oldConfigBool := aiOpsRuntimeConfigBool
+	aiOpsRuntimeConfigBool = func(context.Context, string) (bool, bool) {
 		return false, true
 	}
 	t.Cleanup(func() {
-		multiAgentConfigBool = oldConfigBool
+		aiOpsRuntimeConfigBool = oldConfigBool
 	})
 
-	response, err := RunAIOpsMultiAgent(context.Background(), "check alerts")
+	response, err := RunAIOpsRuntime(context.Background(), "check alerts")
 	if err != nil {
 		t.Fatalf("run aiops: %v", err)
 	}
-	if response.Status != protocol.ResultStatusDegraded || response.DegradationReason != "multi_agent_disabled" {
+	if response.Status != protocol.ResultStatusDegraded || response.DegradationReason != "aiops_runtime_disabled" {
 		t.Fatalf("expected disabled degraded response, got %+v", response)
 	}
 }
@@ -198,7 +198,7 @@ func TestResolveAIOpsAgentNameRejectsExplicitDisabledGOS(t *testing.T) {
 }
 
 func TestRunAIOpsAsyncGOSDisabledReturnsEngine(t *testing.T) {
-	enableMultiAgentForTest(t)
+	enableAIOpsRuntimeForTest(t)
 	oldString := aiOpsConfigString
 	oldBool := aiOpsConfigBool
 	aiOpsConfigString = func(_ context.Context, key string) (string, bool) {
@@ -234,7 +234,7 @@ func TestRunAIOpsAsyncGOSDisabledReturnsEngine(t *testing.T) {
 }
 
 func TestRunAIOpsCallsBuildPlanAgent(t *testing.T) {
-	enableMultiAgentForTest(t)
+	enableAIOpsRuntimeForTest(t)
 	oldBuild := buildPlanAgent
 	oldMemoryFactory := newMemoryService
 	oldCfgBool := degradationConfigBool
@@ -269,7 +269,7 @@ func TestRunAIOpsCallsBuildPlanAgent(t *testing.T) {
 	newMemoryService = func() aiOpsMemory { return memorySvc }
 
 	query := "analyze current alerts"
-	response, err := RunAIOpsMultiAgent(context.Background(), query)
+	response, err := RunAIOpsRuntime(context.Background(), query)
 	if err != nil {
 		t.Fatalf("run aiops: %v", err)
 	}
@@ -297,7 +297,7 @@ func TestRunAIOpsCallsBuildPlanAgent(t *testing.T) {
 }
 
 func TestRunAIOpsWithEmptyMemoryContext(t *testing.T) {
-	enableMultiAgentForTest(t)
+	enableAIOpsRuntimeForTest(t)
 	oldBuild := buildPlanAgent
 	oldMemoryFactory := newMemoryService
 	oldCfgBool := degradationConfigBool
@@ -328,7 +328,7 @@ func TestRunAIOpsWithEmptyMemoryContext(t *testing.T) {
 	}
 
 	query := "check alerts"
-	_, err := RunAIOpsMultiAgent(context.Background(), query)
+	_, err := RunAIOpsRuntime(context.Background(), query)
 	if err != nil {
 		t.Fatalf("run aiops: %v", err)
 	}
@@ -368,7 +368,7 @@ func (serviceTestGOSExpert) Run(context.Context, *belief.Frontier, *belief.Belie
 }
 
 func TestRunAIOpsUsesGOSWhenEnabled(t *testing.T) {
-	enableMultiAgentForTest(t)
+	enableAIOpsRuntimeForTest(t)
 	oldBuildGOS := buildAIOpsGoSEngine
 	oldMemoryFactory := newMemoryService
 	oldCfgBool := degradationConfigBool
@@ -419,7 +419,7 @@ func TestRunAIOpsUsesGOSWhenEnabled(t *testing.T) {
 		return engine
 	}
 
-	response, err := RunAIOpsMultiAgent(context.Background(), "check gos")
+	response, err := RunAIOpsRuntime(context.Background(), "check gos")
 	if err != nil {
 		t.Fatalf("run aiops: %v", err)
 	}
@@ -435,7 +435,7 @@ func TestRunAIOpsUsesGOSWhenEnabled(t *testing.T) {
 }
 
 func TestGetAIOpsTraceReturnsRuntimeEvents(t *testing.T) {
-	enableMultiAgentForTest(t)
+	enableAIOpsRuntimeForTest(t)
 	oldBuild := buildPlanAgent
 	oldMemoryFactory := newMemoryService
 	oldCfgBool := degradationConfigBool
@@ -462,7 +462,7 @@ func TestGetAIOpsTraceReturnsRuntimeEvents(t *testing.T) {
 		return "analysis complete", []string{"step1", "step2"}, nil
 	}
 
-	response, err := RunAIOpsMultiAgent(context.Background(), "check alerts")
+	response, err := RunAIOpsRuntime(context.Background(), "check alerts")
 	if err != nil {
 		t.Fatalf("run aiops: %v", err)
 	}
@@ -479,7 +479,7 @@ func TestGetAIOpsTraceReturnsRuntimeEvents(t *testing.T) {
 }
 
 func TestApproveQueuedAIOpsRequestRestoresOriginalUserID(t *testing.T) {
-	enableMultiAgentForTest(t)
+	enableAIOpsRuntimeForTest(t)
 	oldApprove := approveApprovalRequest
 	oldMarkExecuted := markApprovalRequestExecuted
 	oldBuild := buildPlanAgent

@@ -35,9 +35,9 @@
 这轮的定向测试可以这样跑：
 
 ```powershell
-go test ./internal/ai/agent/skillspecialists/knowledge
-go test ./internal/ai/agent/skillspecialists/metrics
-go test ./internal/ai/agent/skillspecialists/logs
+go test ./internal/ai/skills/domains/knowledge
+go test ./internal/ai/skills/domains/metrics
+go test ./internal/ai/skills/domains/logs
 ```
 
 如果你这台 Windows 机器继续报 Go 清理临时目录的权限问题，可以临时这样跑：
@@ -47,7 +47,7 @@ New-Item -ItemType Directory -Force '.gotmp-local' > $null
 New-Item -ItemType Directory -Force '.gocache-local' > $null
 $env:GOTMPDIR=(Resolve-Path '.gotmp-local').Path
 $env:GOCACHE=(Resolve-Path '.gocache-local').Path
-go test ./internal/ai/agent/skillspecialists/logs
+go test ./internal/ai/skills/domains/logs
 ```
 
 要注意：

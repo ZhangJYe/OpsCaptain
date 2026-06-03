@@ -18,7 +18,7 @@
 | 7 | 新增能力必须**可配置**（budget / top_k / timeout / feature flag） | 无法调参 |
 | 8 | 错误处理走 `ResultStatusDegraded`，**不直接 fatal** | 服务崩溃 |
 | 9 | **不要暴露或日志记录 secrets / keys** | 安全事故 |
-| 10 | **不要重新接回 `chat_multi_agent`** 路由 | 已废弃架构 |
+| 10 | **不要恢复已移除的历史聊天多 Agent 路由** | 已废弃架构 |
 | 11 | 修改 RAG / Agent / ContextEngine 后，**必须跑对应 package 测试** | 局部改动可能破坏上游 |
 | 12 | **每次 push 前必须先 pull 最新远端代码** | 避免推送失败 |
 
@@ -32,7 +32,7 @@
 - **`internal/ai/rag/` 不 import `internal/infra/milvus`、`milvus-sdk-go`、`utility/client`**。✅ 已有 import guard test 自动检查。
 - **`utility/` 不新增 `internal/` 依赖**。现有例外已登记，不允许新增同类违规。
 - **新增配置不得 hardcode**，必须进入 `manifest/config/config.yaml`。
-- **不允许恢复 `chat_multi_agent` 路由**和 `supervisor/triage/reporter/skillspecialists` 编排。
+- **不允许恢复已移除的历史聊天多 Agent 路由**和旧分层编排。
 
 ### 2.2 分层规则
 
@@ -98,7 +98,7 @@ utility/    → internal/                ❌
 - **当前有效主链路**：
   - Chat：`ContextEngine / MemoryService → Eino ReAct Agent → Tools / RAG → JSON / SSE`
   - AIOps：`Approval / Degradation / Memory → Runtime → Plan-Execute-Replan`
-- **`chat_multi_agent` 已废弃**，`supervisor/triage/reporter/skillspecialists` 不再作为当前架构依据
+- **历史聊天多 Agent 路由已废弃**，旧分层编排不再作为当前架构依据
 - **MemoryService** 封装 `internal/ai/memory`，不直接裸调底层
 - **设计口径**以本文件和 `Learn/system/` 下当前文档为准
 
@@ -123,7 +123,7 @@ utility/    → internal/                ❌
 
 完整列表见 [res/agent-coding-retrospective.md](./res/agent-coding-retrospective.md)。
 
-- **不恢复 `chat_multi_agent`** — 已废弃的架构，不要重新接回。
+- **不恢复历史聊天多 Agent 路由** — 已废弃的架构，不要重新接回。
 - **Memory 不参与 routing** — 只作为执行上下文，不替代原始 query。
 - **RAG 先看 baseline / holdout** — 不能拿全量数据自证效果。
 - **不暴露 secrets** — 不要日志记录 API keys、tokens、内部 IP。

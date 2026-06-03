@@ -32,7 +32,7 @@
 - `query_prometheus_alerts` 工具（`internal/ai/tools/query_metrics_alerts.go`）
 
 ## 降级策略
-当 Prometheus 查询超时（默认 5s，配置项 `multi_agent.metrics_query_timeout_ms`）或返回解析失败时，返回 degraded 结果（confidence 0.25-0.35），附带错误原因，不中断编排流程。
+当 Prometheus 查询超时（默认 5s，配置项 `aiops.tools.metrics_query_timeout_ms`）或返回解析失败时，返回 degraded 结果（confidence 0.25-0.35），附带错误原因，不中断编排流程。
 
 ## 相关代码
 - Contract: `internal/ai/agent/contracts/contracts.go`（registry key: "metrics"）

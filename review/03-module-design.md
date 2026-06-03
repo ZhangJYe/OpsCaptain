@@ -114,7 +114,7 @@ Service 层是核心业务编排层，协调 Plan-Execute-Replan、Memory、Appr
 ```
 internal/ai/service/
 ├── ai_ops_service.go      # RunAIOpsMultiAgent + Plan-Execute-Replan 调用 + 审批管理
-├── chat_multi_agent.go    # RunChatMultiAgent + ShouldUseMultiAgentForChat (保留，未连接)
+├── 历史聊天多 Agent 路由.go    # RunAIOpsRuntime + 历史聊天路由判断 (保留，未连接)
 ├── memory_service.go      # MemoryService (Context 组装 + 记忆持久化)
 ├── degradation.go         # DegradationDecision + Kill Switch (Config/Redis)
 ├── approval_gate.go       # StaticApprovalGate (高危操作拦截)
@@ -136,13 +136,13 @@ RunAIOpsMultiAgent(ctx, query)
   └── 返回 ExecutionResponse
 ```
 
-**Chat Multi-Agent Service** (chat_multi_agent.go):
+**历史聊天多 Agent 服务** (历史聊天多 Agent 路由.go):
 ```
 状态: 保留，未连接 Chat Controller
-内容: ShouldUseMultiAgentForChat() — 关键词路由
-      RunChatMultiAgent() — Runtime 分发
+内容: 历史聊天路由判断() — 关键词路由
+      RunAIOpsRuntime() — Runtime 分发
       getOrCreateChatRuntime() — 懒加载 Runtime
-      registerChatAgents() — 注册 6 个 Agent
+      历史 Agent 注册() — 注册 6 个 Agent
 ```
 
 **ExecutionResponse** — 统一执行结果:
@@ -323,8 +323,8 @@ type Agent interface {
 ```
 
 **连接状态**:
-- `chat_multi_agent.go` 保留了完整的 Runtime 创建和 Agent 注册逻辑
-- Controller 层已切断调用 (不再引用 `RunChatMultiAgent`)
+- `历史聊天多 Agent 路由.go` 保留了完整的 Runtime 创建和 Agent 注册逻辑
+- Controller 层已切断调用 (不再引用 `RunAIOpsRuntime`)
 - AIOps 已改用 Plan-Execute-Replan，不再使用 Runtime
 - Knowledge Index Agent 实现了 `runtime.Agent` 接口，可被 Runtime 调度
 
@@ -427,7 +427,7 @@ Runtime 框架下多个 Agent 之间需要统一的通信协议，定义 Task �
 
 **使用方**:
 - Multi-Agent Runtime (Dispatch) — 保留未连接
-- chat_multi_agent.go (RunChatMultiAgent) — 保留未连接
+- 历史聊天多 Agent 路由.go (RunAIOpsRuntime) — 保留未连接
 - ai_ops_service.go — 仅使用 ResultStatus 常量和 MemoryRef 类型
 - knowledge_index_pipeline/agent.go — Agent.Handle 的输入输出类型
 
@@ -459,7 +459,7 @@ internal/ai/agent/
 ├── triage/               # 意图分类 Agent (保留)
 │   └── triage.go         # 规则匹配: Intent + Domains + Priority
 │
-├── skillspecialists/      # 基于 Skill 的专家 Agent (保留)
+├── skills/domains/      # 基于 Skill 的专家 Agent (保留)
 │   ├── metrics/           # Prometheus 告警查询
 │   │   └── agent.go       # 4 Skills: release_guard / capacity / alert_triage / incident
 │   ├── logs/              # 日志证据提取
@@ -477,9 +477,9 @@ internal/ai/agent/
 ```
 
 **连接状态**:
-- `chat_multi_agent.go` 中的 `registerChatAgents()` 注册了全部 6 个 Agent
-- `ShouldUseMultiAgentForChat()` 关键词路由函数仍存在
-- `RunChatMultiAgent()` 完整的 Runtime 分发逻辑仍存在
+- `历史聊天多 Agent 路由.go` 中的 `历史 Agent 注册()` 注册了全部 6 个 Agent
+- `历史聊天路由判断()` 关键词路由函数仍存在
+- `RunAIOpsRuntime()` 完整的 Runtime 分发逻辑仍存在
 - **Controller 层不再调用任何 Multi-Agent 函数**
 
 ### Agent 交互矩阵 (保留逻辑)
@@ -500,7 +500,7 @@ internal/ai/agent/
 
 ### Test
 
-- [ ] registerChatAgents 注册 6 个 Agent 无错误
+- [ ] 历史 Agent 注册 注册 6 个 Agent 无错误
 - [ ] Supervisor 编排逻辑完整 (Triage → Specialists → Reporter)
 - [ ] 单个 Specialist 失败不影响其他 Specialist
 - [ ] Reporter 正确聚合多个 Specialist 结果
@@ -681,7 +681,7 @@ contextengine/
 Mode → Profile 映射:
 ├── "chat"              → 大 History Budget, 允许 Memory + Docs
 ├── "aiops"             → 无 History, 大 Memory + Docs Budget
-├── "chat_multi_agent"  → (保留) 均衡分配
+├── "历史聊天多 Agent 路由"  → (保留) 均衡分配
 ├── "reporter"          → 大 Tool Results Budget, 禁用 History
 └── default             → 均衡分配
 ```
@@ -912,12 +912,12 @@ AIOps 路径:
   │                       │  Skills   │ │
   │                       │ Registry  │ │
   │                       └───────────┘ │
-  │  chat_multi_agent.go 保留完整逻辑   │
+  │  历史聊天多 Agent 路由.go 保留完整逻辑   │
   └──────────────────────────────────────┘
 ```
 
 **活跃依赖方向**: Controller → Service → Agent → Tools → External
-**保留依赖方向**: chat_multi_agent.go → Runtime → Multi-Agent Agents → Skills → Tools
+**保留依赖方向**: 历史聊天多 Agent 路由.go → Runtime → Multi-Agent Agents → Skills → Tools
 **横切关注点**: Safety / Observability / Resilience / Memory 横切所有层
 
 ---
@@ -936,5 +936,5 @@ AIOps 路径:
 | **Middleware Chain** | utility/middleware | Tracing → Metrics → CORS → Auth → RateLimit → Response | 在用 |
 | **Agent Interface** | knowledge_index_pipeline/agent | ETL Pipeline 的 Agent 壳，可被 Runtime 调度 | 在用 |
 | **Supervisor Pattern** | supervisor agent | 顶层编排器协调子 Agent | 保留 |
-| **Skill Registry** | skillspecialists/* | 按关键词匹配分发到细粒度 Skill | 保留 |
+| **Skill Registry** | skills/domains/* | 按关键词匹配分发到细粒度 Skill | 保留 |
 | **Event Sourcing** | runtime/ledger | 所有状态变更以 Event 形式记录 | 保留 |

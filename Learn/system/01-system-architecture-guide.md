@@ -228,20 +228,15 @@ utility/    → internal/                ❌
 
 ## 5. 已不再作为当前架构依据的内容
 
-以下目录仍可能留在仓库中，但**不代表当前聊天主链路设计**：
+历史聊天多 Agent 路由和旧分层编排已经清理，不代表当前聊天主链路设计。
 
-- `internal/ai/agent/supervisor/`
-- `internal/ai/agent/triage/`
-- `internal/ai/agent/reporter/`
-- `internal/ai/agent/skillspecialists/`
-
-它们更适合作为：
+相关旧资料如果在归档文档中出现，更适合作为：
 
 - 历史实验代码
 - 评测 / 合约 / harness 研究材料
 - 架构演进复盘参考
 
-**当前聊天入口已经移除了 `chat_multi_agent` 条件路由。**
+**当前聊天入口已经移除了历史聊天多 Agent 条件路由。**
 
 ---
 
@@ -263,17 +258,17 @@ utility/    → internal/                ❌
 
 > 我们把聊天链路统一收敛到了 ReAct Agent，让模型按需调用 Prometheus、日志、知识库等工具；而复杂运维分析场景则通过 runtime 包装，执行核心收敛为 Plan-Execute-Replan，用规划、执行、复核三段式来完成多步排查。
 
-这比说”现在还在跑 supervisor/triage/reporter 聊天编排”更准确。
+这比说“现在还在跑旧分层聊天编排”更准确。
 
 ---
 
 ## 8. 关键设计决策记录
 
-- Chat 已收敛到 ReAct 单链路，不再做 `chat_multi_agent` 条件路由。
+- Chat 已收敛到 ReAct 单链路，不再做历史聊天多 Agent 条件路由。
 - AIOps 保留单体内 runtime，而执行核心收敛为 Plan-Execute-Replan。
 - Ledger 和 Artifact Store 先用文件存储，不增加额外部署依赖。（§17.1）
 - Memory Service 封装 `internal/ai/memory`，不直接重写底层。（§17.2）
-- 历史 `skillspecialists` / `supervisor` / `triage` / `reporter` 代码保留为实验或复盘材料，不再作为当前聊天架构依据。
+- 历史聊天多 Agent 路由和旧分层编排已清理，不再作为当前聊天架构依据。
 - 图谱设计以 Case Graph 为中心，不做百科式知识图谱。（`Learn/graph/00.md`）
 - 证据与结论分层：原始证据 / 归一化事实 / 历史标签 / 图谱 / Serving。
 - 上下文工程覆盖四类主来源：history / memory / docs / tool outputs。（§27-29）

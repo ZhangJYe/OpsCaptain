@@ -46,6 +46,5 @@ func sharedInitFailureTTL(ctx context.Context) time.Duration {
 		defaultSharedInitFailureTTL,
 		"chat.rag_init_failure_ttl_ms",
 		"context.docs_init_failure_ttl_ms",
-		"multi_agent.knowledge_init_failure_ttl_ms",
 	)
 }

@@ -215,7 +215,7 @@ flowchart LR
 修改文件：
 
 - `internal/ai/service/ai_ops_service.go`
-- `internal/ai/service/chat_multi_agent.go`
+- `internal/ai/service/历史聊天多 Agent 路由.go`
 
 改造前：
 
@@ -292,7 +292,7 @@ detail 是最轻的落地方式。
 - `internal/ai/contextengine/assembler_test.go`
 - `internal/ai/service/memory_service_test.go`
 - `internal/ai/service/ai_ops_service_test.go`
-- `internal/ai/service/chat_multi_agent_test.go`
+- `internal/ai/service/历史聊天多 Agent 路由_test.go`
 - `internal/controller/chat/chat_v1_chat_test.go`
 - `utility/mem/extraction_test.go`
 

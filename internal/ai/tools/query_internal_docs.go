@@ -69,5 +69,5 @@ func NewQueryInternalDocsTool() tool.InvokableTool {
 }
 
 func internalDocsQueryTimeout(ctx context.Context) time.Duration {
-	return rag.DurationFromConfig(ctx, defaultInternalDocsQueryTimeout, "multi_agent.knowledge_query_timeout_ms")
+	return rag.DurationFromConfig(ctx, defaultInternalDocsQueryTimeout, "aiops.tools.knowledge_query_timeout_ms")
 }

@@ -25,7 +25,7 @@ const defaultAIOpsQuery = `你是一个 AIOps 事故分析助手，请严格按�
 6. 报告使用 Markdown，包含这些章节：活跃告警、根因分析、缓解建议、结论。`
 
 type AIOpsApp struct {
-	runMultiAgent    func(ctx context.Context, query string) (aiservice.ExecutionResponse, error)
+	runAIOpsRuntime  func(ctx context.Context, query string) (aiservice.ExecutionResponse, error)
 	runAsync         func(ctx context.Context, query string) (*aiservice.AIOpsRunInfo, error)
 	getResult        func(ctx context.Context, traceID string) (*aiservice.ExecutionResponse, error)
 	getTrace         func(ctx context.Context, traceID string) ([]*protocol.TaskEvent, []string, error)
@@ -34,7 +34,7 @@ type AIOpsApp struct {
 
 func NewAIOpsApp() *AIOpsApp {
 	return &AIOpsApp{
-		runMultiAgent:    aiservice.RunAIOpsMultiAgent,
+		runAIOpsRuntime:  aiservice.RunAIOpsRuntime,
 		runAsync:         aiservice.RunAIOpsAsync,
 		getResult:        aiservice.GetAIOpsResult,
 		getTrace:         aiservice.GetAIOpsTrace,
@@ -42,8 +42,8 @@ func NewAIOpsApp() *AIOpsApp {
 	}
 }
 
-func (a *AIOpsApp) SetRunMultiAgent(fn func(ctx context.Context, query string) (aiservice.ExecutionResponse, error)) {
-	a.runMultiAgent = fn
+func (a *AIOpsApp) SetRunAIOpsRuntime(fn func(ctx context.Context, query string) (aiservice.ExecutionResponse, error)) {
+	a.runAIOpsRuntime = fn
 }
 
 func (a *AIOpsApp) SetDegradationCheck(fn func(ctx context.Context, entrypoint string) aiservice.DegradationDecision) {
@@ -162,7 +162,7 @@ func (a *AIOpsApp) HandleAIOps(ctx context.Context, input *AIOpsInput) (*AIOpsRe
 		query = defaultAIOpsQuery
 	}
 
-	response, err := a.runMultiAgent(ctx, query)
+	response, err := a.runAIOpsRuntime(ctx, query)
 	if err != nil {
 		if status, message := classifyError(err); status != 0 {
 			return &AIOpsResult{

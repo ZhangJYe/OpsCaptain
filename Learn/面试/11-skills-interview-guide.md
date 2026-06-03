@@ -69,7 +69,7 @@ skill 不应该只是代码里存在，还要能观察到。
 
 ### 第四，我用平行迁移降低了改造风险
 
-旧 specialist 我没有硬删，而是新增 `skillspecialists` 包，然后只改注册点。
+旧 specialist 我没有硬删，而是新增 `skills/domains` 包，然后只改注册点。
 
 这样做的好处是：
 
@@ -142,7 +142,7 @@ agent 是执行者。
 
 ```powershell
 go test ./internal/ai/skills
-go test ./internal/ai/agent/skillspecialists/...
+go test ./internal/ai/skills/domains/...
 go test ./internal/ai/agent/supervisor ./internal/ai/service
 ```
 
@@ -164,7 +164,7 @@ go test ./internal/ai/agent/supervisor ./internal/ai/service
 
 ### A
 
-我先抽了通用的 `Skill + Registry`，然后新增一套 `skillspecialists`，分别给 knowledge、metrics、logs 落了多个 skill。接着只修改 supervisor 和 runtime 注册点，把真实执行流量切到新的 skills specialist。最后补测试和 trace，把 skill 选择结果写进 detail。
+我先抽了通用的 `Skill + Registry`，然后新增一套 `skills/domains`，分别给 knowledge、metrics、logs 落了多个 skill。接着只修改 supervisor 和 runtime 注册点，把真实执行流量切到新的 skills specialist。最后补测试和 trace，把 skill 选择结果写进 detail。
 
 ### R
 

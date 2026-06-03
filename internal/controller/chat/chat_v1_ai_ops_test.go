@@ -11,10 +11,10 @@ import (
 	"SuperBizAgent/internal/app"
 )
 
-func newTestAIOpsApp(multiAgentFn func(ctx context.Context, query string) (aiService.ExecutionResponse, error), decisionFn func(ctx context.Context, entrypoint string) aiService.DegradationDecision) *app.AIOpsApp {
+func newTestAIOpsApp(aiOpsRuntimeFn func(ctx context.Context, query string) (aiService.ExecutionResponse, error), decisionFn func(ctx context.Context, entrypoint string) aiService.DegradationDecision) *app.AIOpsApp {
 	a := app.NewAIOpsApp()
-	if multiAgentFn != nil {
-		a.SetRunMultiAgent(multiAgentFn)
+	if aiOpsRuntimeFn != nil {
+		a.SetRunAIOpsRuntime(aiOpsRuntimeFn)
 	}
 	if decisionFn != nil {
 		a.SetDegradationCheck(decisionFn)

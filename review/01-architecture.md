@@ -175,9 +175,9 @@ OpsCaptain (模块名 `SuperBizAgent`) 是一个 **AI 驱动的智能运维 (AIO
 | Health | `utility/health/` | 就绪/存活探针 | 在用 |
 | Cache | `utility/cache/` | LLM 响应缓存 | 在用 |
 | Multi-Agent Runtime | `internal/ai/runtime/` | Agent 注册、Task 分发、Ledger 追踪 | **保留，未连接 Chat** |
-| Multi-Agent Chat Service | `internal/ai/service/chat_multi_agent.go` | Multi-Agent Chat 编排 | **保留，未连接 Chat** |
+| Multi-Agent Chat Service | `internal/ai/service/历史聊天多 Agent 路由.go` | Multi-Agent Chat 编排 | **保留，未连接 Chat** |
 | Supervisor / Triage | `internal/ai/agent/supervisor/`, `triage/` | 多智能体编排和意图分类 | **保留，未连接 Chat** |
-| Skill Specialists | `internal/ai/agent/skillspecialists/` | Metrics/Logs/Knowledge 专家 | **保留，未连接 Chat** |
+| Skill Specialists | `internal/ai/skills/domains/` | Metrics/Logs/Knowledge 专家 | **保留，未连接 Chat** |
 | Reporter | `internal/ai/agent/reporter/` | 结果聚合报告 | **保留，未连接 Chat** |
 | Skills | `internal/ai/skills/` | Skill 注册表和匹配框架 | **保留，未连接 Chat** |
 

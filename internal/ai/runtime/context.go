@@ -8,8 +8,8 @@ import (
 type contextKey string
 
 const (
-	runtimeContextKey contextKey = "multi_agent_runtime"
-	taskContextKey    contextKey = "multi_agent_task"
+	runtimeContextKey contextKey = "aiops_runtime"
+	taskContextKey    contextKey = "aiops_task"
 )
 
 func withRuntime(ctx context.Context, rt *Runtime) context.Context {

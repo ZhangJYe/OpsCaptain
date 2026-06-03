@@ -31,7 +31,7 @@
 
 文件：
 
-- `internal/ai/agent/skillspecialists/knowledge/agent.go`
+- `internal/ai/skills/domains/knowledge/agent.go`
 
 这次不是只加一个新的 skill name，而是让 `knowledgeSkill` 支持 `matcher`。  
 原因是错误码问题很适合“精确命中”：
@@ -55,7 +55,7 @@
 
 文件：
 
-- `internal/ai/agent/skillspecialists/logs/agent.go`
+- `internal/ai/skills/domains/logs/agent.go`
 
 这是本轮最重要的工程点。  
 如果只靠关键词，很容易发生误命中：
@@ -92,8 +92,8 @@
 
 本轮补了定向单测：
 
-- `internal/ai/agent/skillspecialists/knowledge/agent_test.go`
-- `internal/ai/agent/skillspecialists/logs/agent_test.go`
+- `internal/ai/skills/domains/knowledge/agent_test.go`
+- `internal/ai/skills/domains/logs/agent_test.go`
 
 验证点包括：
 
@@ -110,7 +110,7 @@ New-Item -ItemType Directory -Force '.gotmp-skill-promote-4' > $null
 New-Item -ItemType Directory -Force '.gocache-skill-promote-4' > $null
 $env:GOTMPDIR=(Resolve-Path '.gotmp-skill-promote-4').Path
 $env:GOCACHE=(Resolve-Path '.gocache-skill-promote-4').Path
-go test ./internal/ai/agent/skillspecialists/knowledge ./internal/ai/agent/skillspecialists/logs
+go test ./internal/ai/skills/domains/knowledge ./internal/ai/skills/domains/logs
 ```
 
 测试结果里两个包都打印了 `ok`。  
@@ -134,7 +134,7 @@ go test ./internal/ai/agent/skillspecialists/knowledge ./internal/ai/agent/skill
    原始知识库语料
 2. `skills/candidates/`
    候选 skill cards
-3. `internal/ai/agent/skillspecialists/...`
+3. `internal/ai/skills/domains/...`
    已经落地的运行时代码 skill
 
 这是一个比较成熟的演进路径，后面继续做 skill 会更顺。

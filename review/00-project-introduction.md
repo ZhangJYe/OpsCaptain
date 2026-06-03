@@ -227,7 +227,7 @@ OpsCaptain/
 │   │   │   ├── knowledge_index_pipeline/ # 知识索引 + Agent 壳
 │   │   │   ├── supervisor/          # (保留) 编排器
 │   │   │   ├── triage/              # (保留) 意图分类
-│   │   │   ├── skillspecialists/    # (保留) 三个专家 Agent
+│   │   │   ├── skills/domains/    # (保留) 三个专家 Agent
 │   │   │   └── reporter/           # (保留) 报告聚合
 │   │   ├── service/                 # Service 层 (业务编排)
 │   │   ├── contextengine/           # 上下文组装引擎

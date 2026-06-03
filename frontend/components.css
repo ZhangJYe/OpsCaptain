@@ -670,7 +670,7 @@
     color: var(--accent-strong);
 }
 
-.assistant-mode-multi_agent {
+.assistant-mode-aiops_runtime {
     background: rgba(47, 124, 87, 0.14);
     border-color: rgba(47, 124, 87, 0.2);
     color: var(--accent-green);

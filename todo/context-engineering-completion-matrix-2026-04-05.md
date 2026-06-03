@@ -147,7 +147,7 @@
 代码：
 
 - [ai_ops_service.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/service/ai_ops_service.go)
-- [chat_multi_agent.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/service/chat_multi_agent.go)
+- [历史聊天多 Agent 路由.go](/Users/agiuser/Agent/OpsCaptionAI/internal/ai/service/历史聊天多 Agent 路由.go)
 
 已完成内容：
 

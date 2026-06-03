@@ -33,11 +33,11 @@
 - RAG 链路: Milvus 向量检索
 
 ## 降级策略
-当知识库检索超时（默认 5s，配置项 `multi_agent.knowledge_query_timeout_ms`）或文档结果解析失败时，返回 degraded 结果（confidence 0.25-0.3），附带原始查询以便排查。
+当知识库检索超时（默认 5s，配置项 `aiops.tools.knowledge_query_timeout_ms`）或文档结果解析失败时，返回 degraded 结果（confidence 0.25-0.3），附带原始查询以便排查。
 
 配置项：
-- `multi_agent.knowledge_query_timeout_ms`：查询超时（默认 5s）
-- `multi_agent.knowledge_evidence_limit`：最大证据条数（默认跟随 `rag.RetrieverTopK`）
+- `aiops.tools.knowledge_query_timeout_ms`：查询超时（默认 5s）
+- `aiops.tools.knowledge_evidence_limit`：最大证据条数（默认跟随 `rag.RetrieverTopK`）
 
 ## 相关代码
 - Contract: `internal/ai/agent/contracts/contracts.go`（registry key: "knowledge"）

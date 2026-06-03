@@ -9,7 +9,7 @@ OpsCaptionAI 是一个面向 AIOps 场景的智能运维助手。它面向内部
 - Chat：`ContextEngine / MemoryService -> Eino ReAct Agent -> Tools / RAG -> JSON / SSE`
 - AIOps：`Approval / Degradation / Memory -> Runtime -> Plan-Execute-Replan -> Trace / Result`
 
-历史 `supervisor / triage / reporter / skillspecialists / chat_multi_agent` 相关内容仍可能作为实验或复盘材料存在，但不再代表当前聊天主入口。
+历史聊天多 Agent 路由和旧分层编排已从当前主链路清理，不再代表当前聊天主入口。
 
 ## 核心能力
 
@@ -275,7 +275,7 @@ docker compose --env-file .env.production -f docker-compose.prod.yml ps
 - push 前先 `git pull --rebase`，并确保 `go build ./...`、`go test ./...`、`npm run build` 通过。
 - 新增能力应走配置项，避免硬编码 budget、top_k、timeout、feature flag。
 - 错误处理优先走降级与可观测路径，不直接让服务 fatal。
-- 不要重新接回 `chat_multi_agent` 路由，也不要让当前 Chat 链路重新依赖旧 supervisor / triage / reporter 入口。
+- 不要重新接回已移除的历史聊天多 Agent 路由，也不要让当前 Chat 链路重新依赖旧分层编排入口。
 
 ## 当前状态
 

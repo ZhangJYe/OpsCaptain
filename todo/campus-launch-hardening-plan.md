@@ -169,7 +169,7 @@ Date: 2026-04-05
 
 以下内容建议默认关闭或弱化：
 
-1. **`multi_agent.chat_route_enabled`**
+1. **`historical_chat_route_enabled`**
    - 建议上线默认关闭
    - 需要演示时再打开
 
@@ -284,7 +284,7 @@ flowchart LR
 推荐在上线版中采用：
 
 ```yaml
-multi_agent:
+historical_chat_route:
   chat_route_enabled: false
 ```
 
@@ -385,7 +385,7 @@ multi_agent:
 
 ### P0
 
-1. 确认上线默认关闭 `multi_agent.chat_route_enabled`
+1. 确认上线默认关闭 `historical_chat_route_enabled`
 2. 补一份根 README
 3. 补最小部署文档
 4. 收敛前端默认展示，trace 进入调试入口

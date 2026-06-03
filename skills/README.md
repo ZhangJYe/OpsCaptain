@@ -4,7 +4,7 @@
 
 要区分两层：
 
-- 代码层 skills：`internal/ai/skills/` 和 `internal/ai/agent/skillspecialists/`
+- 代码层 skills：`internal/ai/skills/` 和 `internal/ai/skills/domains/`
 - 文档层 skills：这个 `skills/` 目录里的 Markdown
 
 文档层的作用不是给程序直接执行，而是给人看：
@@ -38,9 +38,9 @@
 ## 运行时实现位置
 
 - `internal/ai/skills/registry.go`
-- `internal/ai/agent/skillspecialists/knowledge/agent.go`
-- `internal/ai/agent/skillspecialists/metrics/agent.go`
-- `internal/ai/agent/skillspecialists/logs/agent.go`
+- `internal/ai/skills/domains/knowledge/agent.go`
+- `internal/ai/skills/domains/metrics/agent.go`
+- `internal/ai/skills/domains/logs/agent.go`
 
 ## docs 和 skills 的关系
 

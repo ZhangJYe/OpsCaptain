@@ -129,7 +129,7 @@ PersistOutcome
 说明：
 
 - 当前并不会把每一次 tool call 作为独立结构化事件推给前端
-- 如果以后要增强“过程可观测性”，应该在现有 SSE 协议之上扩展，而不是重新引入 `chat_multi_agent` 路由
+- 如果以后要增强“过程可观测性”，应该在现有 SSE 协议之上扩展，而不是重新引入历史聊天多 Agent 路由
 
 ---
 
@@ -138,14 +138,14 @@ PersistOutcome
 以下这条曾经存在，但现在已经不属于当前聊天实现：
 
 ```text
-ShouldUseMultiAgentForChat(query)
+历史聊天路由判断(query)
   ↓
-RunChatMultiAgent(...)
+RunAIOpsRuntime(...)
   ↓
-supervisor → triage → specialists → reporter
+旧分层编排
 ```
 
-这条 `chat_multi_agent` 路由已经从 controller 和 service 活代码里移除。
+这条历史聊天多 Agent 路由已经从 controller 和 service 活代码里移除。
 
 ---
 

@@ -23,7 +23,7 @@ const defaultMetricsQueryTimeout = 5 * time.Second
 var (
 	newPrometheusAlertsQueryTool = tools.NewPrometheusAlertsQueryTool
 	metricsQueryTimeout          = func(ctx context.Context) time.Duration {
-		v, err := g.Cfg().Get(ctx, "multi_agent.metrics_query_timeout_ms")
+		v, err := g.Cfg().Get(ctx, "aiops.tools.metrics_query_timeout_ms")
 		if err == nil && v.Int64() > 0 {
 			return time.Duration(v.Int64()) * time.Millisecond
 		}

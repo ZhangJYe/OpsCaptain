@@ -3,7 +3,7 @@
 > 当前统一口径（2026-05）
 > - Chat 主链路：`ContextEngine / MemoryService -> Eino ReAct Agent -> Tools / RAG -> JSON / SSE`
 > - AIOps 主链路：`Approval / Degradation / Memory -> Runtime -> Plan-Execute-Replan`
-> - 文中若出现 `skillspecialists / supervisor / triage / reporter / chat_multi_agent`，请按历史实验或演进材料理解，不再代表当前聊天主链路。
+> - 文中若出现 `skills/domains / supervisor / triage / reporter / 历史聊天多 Agent 路由`，请按历史实验或演进材料理解，不再代表当前聊天主链路。
 
 > **分析日期：** 2026-04-25  
 > **项目定位：** 面向 AIOps 场景的智能运维助手  
@@ -278,8 +278,8 @@ Rerank（LLM 打分 0-10 → 重排，5s 超时保护）
 ### 3.5 配置要点
 
 RAG 参数全走 config.yaml，不硬编码：
-- `multi_agent.knowledge_evidence_limit` — top_k
-- `multi_agent.candidate_top_k` — 候选池大小
+- `aiops.tools.knowledge_evidence_limit` — top_k
+- `rag.hybrid_candidate_top_k` — 候选池大小
 - Rerank 超时 / Rewrite 超时
 
 ---
@@ -805,7 +805,7 @@ OpsCaptain/
 │   │   │   ├── plan_execute_replan/ # ★ Plan-Execute-Replan (Eino ADK)
 │   │   │   ├── contracts/           # Agent Contract 定义
 │   │   │   ├── knowledge_index_pipeline/ # 知识入库流水线
-│   │   │   ├── skillspecialists/    # 历史 Skills 实验目录
+│   │   │   ├── skills/domains/    # 历史 Skills 实验目录
 │   │   │   ├── supervisor/          # 历史编排器实验目录
 │   │   │   ├── triage/              # 历史路由实验目录
 │   │   │   ├── reporter/            # 历史报告实验目录

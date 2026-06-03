@@ -23,7 +23,7 @@ type documentSelectionResult struct {
 }
 
 func contextDocsQueryTimeout(ctx context.Context) time.Duration {
-	return rag.DurationFromConfig(ctx, defaultContextDocsQueryTimeout, "context.docs_query_timeout_ms", "multi_agent.knowledge_query_timeout_ms")
+	return rag.DurationFromConfig(ctx, defaultContextDocsQueryTimeout, "context.docs_query_timeout_ms", "aiops.tools.knowledge_query_timeout_ms")
 }
 
 func selectDocuments(ctx context.Context, query string, profile ContextProfile) documentSelectionResult {

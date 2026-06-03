@@ -202,7 +202,7 @@
 改动文件：
 
 - `internal/ai/agent/chat_pipeline/orchestration.go`
-- `internal/ai/agent/skillspecialists/*/agent.go`
+- `internal/ai/skills/domains/*/agent.go`
 - `internal/ai/agent/reporter/reporter.go`
 - `internal/ai/agent/triage/triage.go`
 

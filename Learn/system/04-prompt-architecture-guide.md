@@ -2,7 +2,7 @@
 
 > 当前统一口径（2026-05）
 > - 当前线上主链路：Chat = `ReAct Agent`，AIOps = `Runtime + Plan-Execute-Replan`
-> - 本文中若出现 `supervisor / triage / reporter / skillspecialists`，主要用于说明历史 contract / prompt 设计思想，不再代表当前聊天主链路结构。
+> - 历史聊天多 Agent 路由和旧分层编排已清理，不再代表当前聊天主链路结构。
 
 本文面向 OpsCaption 当前代码结构，说明 prompt 分层、上下文注入、Agent Contract、以及未来 Anthropic Prompt Caching 的预留方式。它不是 Claude Code 的照搬版，而是把 Claude Code 的“静态规则 / 动态上下文 / 缓存边界”思想迁移到 AIOps 多 Agent 架构里。
 
@@ -32,13 +32,13 @@ Prompt、上下文和多 Agent 相关代码主要分布在：
 internal/ai/agent/
 ├── chat_pipeline/              # 普通 chat prompt、模板、ReAct agent
 ├── contracts/                  # P1 Agent Contract，稳定职责边界
-├── supervisor/                 # 主编排：triage -> specialists -> reporter
-├── triage/                     # 意图识别和路由
-├── skillspecialists/
-│   ├── metrics/                # Prometheus/指标 specialist
-│   ├── logs/                   # 日志 MCP specialist
-│   └── knowledge/              # RAG/知识库 specialist
-└── reporter/                   # 汇总 specialist 结果
+├── plan_execute_replan/        # AIOps 规划、执行、复核
+└── gos_engine/                 # GoS belief engine
+
+internal/ai/skills/domains/
+├── metrics/                    # Prometheus/指标 skill
+├── logs/                       # 日志 MCP skill
+└── knowledge/                  # RAG/知识库 skill
 
 internal/ai/contextengine/      # history / memory / docs / tool results 装配
 internal/ai/service/            # MemoryService、chat multi-agent、异步任务
@@ -315,7 +315,7 @@ GOTOOLCHAIN=go1.24.4 go build ./...
 
 后续可以按三步继续演进：
 
-1. 给 legacy `internal/ai/agent/specialists/*` 也补 contract metadata，直到完全迁移到 `skillspecialists`。
+1. 持续把 skill contract metadata 收敛到 `internal/ai/skills/domains/`。
 2. 如果 prompt 调优变频繁，再考虑把源码内 prompt 迁移到 `manifest/prompts/`。
 3. 如果接入 Claude provider，再把 `cacheScope=global` 映射成 Anthropic `cache_control` breakpoint。
 

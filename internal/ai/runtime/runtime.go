@@ -358,7 +358,7 @@ func agentDispatchTimeout(ctx context.Context, task *protocol.TaskEnvelope) time
 		}
 	}
 
-	v, err := g.Cfg().Get(ctx, "multi_agent.agent_timeout_ms")
+	v, err := g.Cfg().Get(ctx, "aiops.runtime.agent_timeout_ms")
 	if err == nil && v.Int64() > 0 {
 		return time.Duration(v.Int64()) * time.Millisecond
 	}

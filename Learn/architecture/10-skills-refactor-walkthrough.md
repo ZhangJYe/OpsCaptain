@@ -49,9 +49,9 @@
 
 第二层：skills 版 specialist
 
-- `internal/ai/agent/skillspecialists/knowledge/agent.go`
-- `internal/ai/agent/skillspecialists/metrics/agent.go`
-- `internal/ai/agent/skillspecialists/logs/agent.go`
+- `internal/ai/skills/domains/knowledge/agent.go`
+- `internal/ai/skills/domains/metrics/agent.go`
+- `internal/ai/skills/domains/logs/agent.go`
 
 这些 specialist 不再自己硬编码执行路径，而是都带一个 `skills.Registry`。
 
@@ -124,7 +124,7 @@ flowchart TD
 
 这次我没有强行重写旧的 `specialists/knowledge|metrics|logs`，而是新建了一套：
 
-- `internal/ai/agent/skillspecialists/...`
+- `internal/ai/skills/domains/...`
 
 然后只改两个注册点：
 
@@ -145,7 +145,7 @@ flowchart TD
 
 ```powershell
 go test ./internal/ai/skills
-go test ./internal/ai/agent/skillspecialists/...
+go test ./internal/ai/skills/domains/...
 go test ./internal/ai/agent/supervisor ./internal/ai/service
 ```
 

@@ -35,8 +35,8 @@
 当 MCP 日志工具初始化失败、所有工具调用失败、或仅获取到 raw output 时，返回 degraded 结果（confidence 0.28-0.42）。单个工具失败不终止整体排查，继续尝试其他工具。
 
 配置项：
-- `multi_agent.log_query_timeout_ms`：单次查询超时（默认 3s）
-- `multi_agent.log_evidence_limit`：最大证据条数（默认 3）
+- `aiops.tools.log_query_timeout_ms`：单次查询超时（默认 3s）
+- `aiops.tools.log_evidence_limit`：最大证据条数（默认 3）
 
 ## 相关代码
 - Contract: `internal/ai/agent/contracts/contracts.go`（registry key: "logs"）

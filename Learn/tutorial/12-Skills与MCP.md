@@ -2,7 +2,7 @@
 
 > 当前统一口径（2026-05）
 > - Chat 主链路已经收敛到 `ReAct Agent + ProgressiveDisclosure`
-> - 文中涉及 `Supervisor / skillspecialists / specialist 内 skill 化` 的部分，主要用于解释历史设计动机和演进路径，不再代表当前聊天主链路结构。
+> - 文中涉及 `Supervisor / skills/domains / specialist 内 skill 化` 的部分，主要用于解释历史设计动机和演进路径，不再代表当前聊天主链路结构。
 
 > **本章目标**：理解 OpsCaption 的 Skills 架构设计和 MCP 工具集成方案。能向面试官解释"skill 和 tool 的区别"、"Progressive Disclosure 的动机"、"MCP 协议的价值"。
 
@@ -404,16 +404,16 @@ func BuildTieredTools() []skills.TieredTool {
 
 ```
 旧方式（一把梭重写）：
-  删除 old/specialists → 新建 skillspecialists → 改所有引用 → 💥 炸了就全跪
+  删除 old/specialists → 新建 skills/domains → 改所有引用 → 💥 炸了就全跪
 
 OpsCaption 的方式（平行迁移）：
-  保留 old/specialists/ → 新建 skillspecialists/ → 只改注册点 → 渐进切流量
+  保留 old/specialists/ → 新建 skills/domains/ → 只改注册点 → 渐进切流量
 ```
 
 ```go
 // 平行迁移：只改 supervisor 和 service 的两个注册点
-// supervisor.go  → 切到 skillspecialists
-// ai_ops_service.go → 切到 skillspecialists
+// supervisor.go  → 切到 skills/domains
+// ai_ops_service.go → 切到 skills/domains
 
 // 出问题回滚：把注册点切回 old/specialists，不需要恢复任何文件
 ```
@@ -422,7 +422,7 @@ OpsCaption 的方式（平行迁移）：
 
 | 方面 | 代价 | 收益 |
 |------|------|------|
-| **代码量** | 多了一套 skillspecialists 包，结构更复杂 | 后续加 skill 不再膨胀 Handle() |
+| **代码量** | 多了一套 skills/domains 包，结构更复杂 | 后续加 skill 不再膨胀 Handle() |
 | **理解成本** | 新人需要先读懂 skill 接口 + registry | 读懂后面加 skill 很容易——实现 4 个方法就行 |
 | **运行期** | 多了一层 Resolve 调用 | 可观察性（能知道选了哪个 skill）、可扩展性、可测试性 |
 
@@ -462,7 +462,7 @@ OpsCaption 的方式（平行迁移）：
 
 ### Q4: "你的 Skills 改造是平行迁移——为什么不全量重写？"
 
-> 平行迁移是刻意的工程选择——先把旧的留着，新建一套 skillspecialists，只改注册点。三个好处：
+> 平行迁移是刻意的工程选择——先把旧的留着，新建一套 skills/domains，只改注册点。三个好处：
 >
 > 1. **风险可控**——出问题回滚只需要把注册点切回旧实现，不用恢复任何文件
 > 2. **可对照**——旧实现和新实现可以同时跑单测，验证行为一致性

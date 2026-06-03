@@ -1710,7 +1710,7 @@ class SuperBizAgentApp {
     assistantModeLabel(mode) {
         const labels = {
             aiops: 'AI Ops',
-            multi_agent: 'Multi-Agent',
+            aiops_runtime: 'AIOps Runtime',
             legacy: 'Legacy',
             cache: 'Cache',
             degraded: 'Degraded'

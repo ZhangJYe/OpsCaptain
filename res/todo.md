@@ -661,7 +661,7 @@
 实现内容：
 
 - 新增 `knowledgeEvidenceLimit()` 读取配置
-- 优先读取 `multi_agent.knowledge_evidence_limit`
+- 优先读取 `aiops.tools.knowledge_evidence_limit`
 - 否则退回 `retriever.top_k`
 - 最后才默认 3
 
@@ -946,8 +946,8 @@ env GOCACHE=/tmp/gocache GOTMPDIR=/tmp/go-tmp go build ./...
 
 实现内容：
 
-- 增加 `multi_agent.log_query_timeout_ms`
-- 增加 `multi_agent.log_evidence_limit`
+- 增加 `aiops.tools.log_query_timeout_ms`
+- 增加 `aiops.tools.log_evidence_limit`
 - `Log Agent` 不再只返回“发现了哪些 MCP 工具”
 - 会优先尝试调用可 invokable 的日志工具
 - 对 JSON / 文本输出做统一 evidence 提取
@@ -1308,7 +1308,7 @@ env GOCACHE=/tmp/gocache GOTMPDIR=/tmp/go-tmp go build ./...
 - 现在会按 Milvus 地址和 `top_k` 复用已有 retriever
 - 同时增加最近初始化失败的短 TTL 缓存
 - 新增配置：
-  - `multi_agent.knowledge_init_failure_ttl_ms`
+  - `context.docs_init_failure_ttl_ms`
 
 原因分析：
 
@@ -1364,8 +1364,8 @@ env GOCACHE=/tmp/gocache GOTMPDIR=/tmp/go-tmp go build ./...
 
 ### 25.2 修改文件
 
-- `internal/ai/service/chat_multi_agent.go`
-- `internal/ai/service/chat_multi_agent_test.go`
+- `internal/ai/service/历史聊天多 Agent 路由.go`
+- `internal/ai/service/历史聊天多 Agent 路由_test.go`
 - `internal/controller/chat/chat_v1_chat.go`
 - `internal/controller/chat/chat_v1_chat_stream.go`
 - `internal/controller/chat/chat_v1_chat_test.go`
@@ -1376,14 +1376,14 @@ env GOCACHE=/tmp/gocache GOTMPDIR=/tmp/go-tmp go build ./...
 
 ### 25.3 功能实现说明
 
-新增了 `ShouldUseMultiAgentForChat(...)`：
+新增了 `历史聊天路由判断(...)`：
 
 - 对 `告警 / prometheus / 日志 / log / 排查 / 故障 / 知识库 / SOP / runbook / mysql / sql / 数据库 / 指标 / 运维 / opscaption / 根因` 等关键词命中时，Chat 会路由到 Multi-Agent
 - 其余普通聊天继续走旧 `chat_pipeline`
 - 配置项：
-  - `multi_agent.chat_route_enabled: true`
+  - `historical_chat_route_enabled: true`
 
-新增了 `RunChatMultiAgent(...)`：
+新增了 `RunAIOpsRuntime(...)`：
 
 - 复用现有 AI Ops runtime、`supervisor`、specialist agents 与 trace / artifact 能力
 - 使用 Chat 的原始 `sessionID`
@@ -1395,7 +1395,7 @@ env GOCACHE=/tmp/gocache GOTMPDIR=/tmp/go-tmp go build ./...
 Controller 改造：
 
 - `/chat`
-  - 命中规则 -> 走 `RunChatMultiAgent`
+  - 命中规则 -> 走 `RunAIOpsRuntime`
   - 未命中 -> 保持旧 `BuildChatAgent` 流程
 - `/chat_stream`
   - 命中规则 -> 先跑 Multi-Agent，再按 chunk 发送到 SSE 客户端
@@ -1423,8 +1423,8 @@ Controller 改造：
 
 新增测试：
 
-- `TestShouldUseMultiAgentForChat`
-- `TestRunChatMultiAgentUsesChatMode`
+- `Test历史聊天路由判断`
+- `TestRunAIOpsRuntimeUsesChatMode`
 - `TestChatUsesMultiAgentRoute`
 - `TestChatFallsBackToLegacyRoute`
 
@@ -1499,7 +1499,7 @@ Controller 改造：
 关键结果：
 
 - `/api/chat` 运维类 query：
-  - `mode = multi_agent`
+  - `mode = aiops_runtime`
   - `trace_id` 已返回
   - `detail` 已返回
   - 响应约 `4.635557s`
@@ -1554,7 +1554,7 @@ Controller 改造：
 
 - `internal/ai/service/memory_service.go`
 - `internal/ai/service/ai_ops_service.go`
-- `internal/ai/service/chat_multi_agent.go`
+- `internal/ai/service/历史聊天多 Agent 路由.go`
 - `internal/controller/chat/chat_v1_chat.go`
 - `internal/controller/chat/chat_v1_chat_stream.go`
 - `utility/mem/extraction.go`

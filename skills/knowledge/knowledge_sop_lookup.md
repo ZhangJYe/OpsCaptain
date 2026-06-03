@@ -37,4 +37,4 @@
 
 ## 实现位置
 
-- `internal/ai/agent/skillspecialists/knowledge/agent.go`
+- `internal/ai/skills/domains/knowledge/agent.go`

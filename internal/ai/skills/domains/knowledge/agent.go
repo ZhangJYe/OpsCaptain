@@ -24,7 +24,7 @@ const defaultKnowledgeQueryTimeout = 5 * time.Second
 var (
 	newQueryInternalDocsTool = tools.NewQueryInternalDocsTool
 	knowledgeQueryTimeout    = func(ctx context.Context) time.Duration {
-		v, err := g.Cfg().Get(ctx, "multi_agent.knowledge_query_timeout_ms")
+		v, err := g.Cfg().Get(ctx, "aiops.tools.knowledge_query_timeout_ms")
 		if err == nil && v.Int64() > 0 {
 			return time.Duration(v.Int64()) * time.Millisecond
 		}
@@ -463,7 +463,7 @@ func min(a, b int) int {
 }
 
 func knowledgeEvidenceLimit() int {
-	v, err := g.Cfg().Get(context.Background(), "multi_agent.knowledge_evidence_limit")
+	v, err := g.Cfg().Get(context.Background(), "aiops.tools.knowledge_evidence_limit")
 	if err == nil && v.Int() > 0 {
 		return v.Int()
 	}

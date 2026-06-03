@@ -2,7 +2,7 @@
 
 > 当前统一口径（2026-05）
 > - 当前实现：Chat = `ContextEngine / MemoryService -> Eino ReAct Agent -> Tools / RAG`；AIOps = `Approval / Degradation / Memory -> Runtime -> Plan-Execute-Replan`
-> - 本文里如果提到 `supervisor / triage / reporter / skillspecialists / chat_multi_agent`，应理解为历史实验或演进背景。
+> - 本文里如果提到 `supervisor / triage / reporter / skills/domains / 历史聊天多 Agent 路由`，应理解为历史实验或演进背景。
 
 > 日期：2026-05-02
 > 状态：待 Review
@@ -119,7 +119,7 @@ type AgentEvent =
 - Chat：**eino ReAct Agent 路径**（`chat_pipeline`）
 - AIOps：**Plan-Execute-Replan 路径**（`plan_execute_replan` + runtime 包装）
 
-历史路径相关目录仍保留在代码库中（`internal/ai/agent/supervisor/`、`internal/ai/agent/triage/`、`internal/ai/agent/reporter/`、`internal/ai/agent/skillspecialists/`），但 `chat_multi_agent` 入口和聊天条件路由已经删除。
+历史路径相关目录仍保留在代码库中（`internal/ai/agent/supervisor/`、`internal/ai/agent/triage/`、`internal/ai/agent/reporter/`、`internal/ai/skills/domains/`），但 历史聊天多 Agent 路由 入口和聊天条件路由已经删除。
 
 ### 2.2 当前实际架构
 
@@ -393,7 +393,7 @@ sr, err := runner.Stream(ctx, userMessage, compose.WithCallbacks(
 
 - 不要一次性重写所有东西，先用 callback 包装验证事件流设计
 - 不要抛弃 eino 的模型适配和工具接口，复用它们
-- `chat_multi_agent` 入口和聊天条件路由已删除；保留 `supervisor/triage/reporter` 目录的唯一目的，是作为历史实验和复盘材料
+- 历史聊天多 Agent 路由 入口和聊天条件路由已删除；保留 `supervisor/triage/reporter` 目录的唯一目的，是作为历史实验和复盘材料
 
 ---
 
@@ -421,5 +421,5 @@ sr, err := runner.Stream(ctx, userMessage, compose.WithCallbacks(
 - `internal/ai/agent/supervisor/` — 废弃的 supervisor
 - `internal/ai/agent/triage/` — 废弃的 triage
 - `internal/ai/agent/reporter/` — 废弃的 reporter
-- `internal/ai/agent/skillspecialists/` — 废弃的 skillspecialists
-- `internal/ai/service/chat_multi_agent.go` — 已删除
+- `internal/ai/skills/domains/` — 废弃的 skills/domains
+- `internal/ai/service/历史聊天多 Agent 路由.go` — 已删除

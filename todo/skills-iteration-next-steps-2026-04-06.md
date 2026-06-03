@@ -3,9 +3,9 @@
 ## 已完成
 
 - 抽通用 `Skill` 接口和 `Registry`
-- 新增 `skillspecialists/knowledge`
-- 新增 `skillspecialists/metrics`
-- 新增 `skillspecialists/logs`
+- 新增 `skills/domains/knowledge`
+- 新增 `skills/domains/metrics`
+- 新增 `skills/domains/logs`
 - 把 `supervisor` 和 `ai_ops_service` 切到新 specialist
 - 补 skill 选择和回退相关测试
 

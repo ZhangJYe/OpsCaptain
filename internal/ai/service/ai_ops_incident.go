@@ -97,7 +97,7 @@ var (
 	newIncidentStore = func(dir string) (IncidentStore, error) {
 		return NewFileIncidentStore(dir)
 	}
-	runIncidentAIOps = RunAIOpsMultiAgent
+	runIncidentAIOps = RunAIOpsRuntime
 	startIncidentRun = func(run func()) {
 		go run()
 	}
@@ -550,7 +550,7 @@ func incidentStoreDir(ctx context.Context) string {
 	if dir, ok := incidentConfigString(ctx, "aiops.incident.store_dir"); ok {
 		return dir
 	}
-	if dir, ok := incidentConfigString(ctx, "multi_agent.data_dir"); ok {
+	if dir, ok := incidentConfigString(ctx, "aiops.runtime.data_dir"); ok {
 		return filepath.Join(dir, "incidents")
 	}
 	return filepath.Join(".", "var", "runtime", "incidents")

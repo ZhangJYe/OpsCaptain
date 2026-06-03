@@ -40,14 +40,14 @@ JSON 字符串，结构为 `PrometheusAlertsOutput`：
 
 ## 错误处理
 - 网络不可达：返回 `success=false`，agent 降级处理（confidence 0.25）
-- 超时：默认 5s，配置项 `multi_agent.metrics_query_timeout_ms`
+- 超时：默认 5s，配置项 `aiops.tools.metrics_query_timeout_ms`
 - 响应解析失败：返回 degraded，附带原始输出（confidence 0.35）
 - 无活跃告警：返回 `alerts=[]`，agent 输出"当前没有发现活跃告警"
 
 ## 配置项
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
-| `multi_agent.metrics_query_timeout_ms` | 5000 | 查询超时（毫秒） |
+| `aiops.tools.metrics_query_timeout_ms` | 5000 | 查询超时（毫秒） |
 
 Prometheus 地址通过环境变量或配置文件注入。
 

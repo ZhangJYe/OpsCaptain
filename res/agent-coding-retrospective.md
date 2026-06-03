@@ -22,7 +22,7 @@
 
 ## RAG 与检索
 
-- **知识库检索 `top_k`** 不要 hardcode 3，走 config 读取 `multi_agent.knowledge_evidence_limit`。（问题 8，§13）
+- **知识库检索 `top_k`** 不要 hardcode 3，走 config 读取 `aiops.tools.knowledge_evidence_limit`。（问题 8，§13）
 - **`query_internal_docs`** 不要每次新建 retriever，按 Milvus 地址和 top_k 复用，失败走短 TTL 缓存。（§24.3）
 - **RAG chunking** 不能只按 Markdown 标题切，要支持 JSONL case 级切分。当前 `transformer.go` 偏 Markdown 结构。
 - **build split 和 eval split** 必须严格分开，不能拿全量数据自证效果。

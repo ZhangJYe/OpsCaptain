@@ -10,11 +10,11 @@ import (
 )
 
 const (
-	defaultChatMaxHistoryMessages = 10
-	defaultChatMaxMemoryItems     = 5
-	defaultAIOpsMaxMemoryItems    = 5
-	defaultReporterMaxToolItems   = 8
-	defaultMinMemoryConfidence    = 0.50
+	defaultChatMaxHistoryMessages     = 10
+	defaultChatMaxMemoryItems         = 5
+	defaultAIOpsMaxMemoryItems        = 5
+	defaultAIOpsDiagnosisMaxToolItems = 8
+	defaultMinMemoryConfidence        = 0.50
 )
 
 type PolicyResolver struct{}
@@ -67,7 +67,7 @@ func (r *PolicyResolver) Resolve(ctx context.Context, req ContextRequest) Contex
 		base.Staged = true
 		base.MaxHistoryMessages = loadPositiveInt(ctx, "context.chat_max_history_messages", defaultChatMaxHistoryMessages)
 		base.MaxMemoryItems = loadPositiveInt(ctx, "context.aiops_max_memory_items", defaultAIOpsMaxMemoryItems)
-		base.MaxToolItems = loadPositiveInt(ctx, "context.reporter_max_tool_items", defaultReporterMaxToolItems)
+		base.MaxToolItems = loadPositiveInt(ctx, "context.aiops_diagnosis_max_tool_items", defaultAIOpsDiagnosisMaxToolItems)
 		base.Budget.ToolTokens = int(float64(budget.MaxTokens) * 0.15)
 	case "chat":
 	}

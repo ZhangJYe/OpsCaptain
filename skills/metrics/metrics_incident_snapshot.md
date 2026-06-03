@@ -23,4 +23,4 @@ metrics 域的默认回退 skill。
 
 ## 实现位置
 
-- `internal/ai/agent/skillspecialists/metrics/agent.go`
+- `internal/ai/skills/domains/metrics/agent.go`
