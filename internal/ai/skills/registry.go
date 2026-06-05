@@ -21,14 +21,26 @@ type Execution struct {
 }
 
 type Registry struct {
-	domain string
-	skills []Skill
+	domain      string
+	skills      []Skill
+	defaultName string
+}
+
+type RegistryOption func(*Registry)
+
+func WithDefault(name string) RegistryOption {
+	return func(r *Registry) {
+		r.defaultName = strings.TrimSpace(name)
+	}
 }
 
 type selectedSkillsContextKey struct{}
 
-func NewRegistry(domain string, skills ...Skill) (*Registry, error) {
+func NewRegistry(domain string, skills []Skill, opts ...RegistryOption) (*Registry, error) {
 	r := &Registry{domain: strings.TrimSpace(domain)}
+	for _, opt := range opts {
+		opt(r)
+	}
 	for _, skill := range skills {
 		if err := r.Register(skill); err != nil {
 			return nil, err
@@ -57,12 +69,34 @@ func (r *Registry) Register(skill Skill) error {
 	return nil
 }
 
+func (r *Registry) Unregister(name string) bool {
+	if r == nil || len(r.skills) == 0 {
+		return false
+	}
+	target := strings.TrimSpace(name)
+	if target == "" {
+		return false
+	}
+	for i, skill := range r.skills {
+		if strings.EqualFold(skill.Name(), target) {
+			r.skills = append(r.skills[:i], r.skills[i+1:]...)
+			return true
+		}
+	}
+	return false
+}
+
 func (r *Registry) Resolve(task *protocol.TaskEnvelope) (Skill, error) {
 	if r == nil || len(r.skills) == 0 {
 		return nil, fmt.Errorf("skills registry is empty")
 	}
 	if skill := r.Match(task); skill != nil {
 		return skill, nil
+	}
+	if r.defaultName != "" {
+		if s := r.SkillByName(r.defaultName); s != nil {
+			return s, nil
+		}
 	}
 	return r.skills[0], nil
 }
