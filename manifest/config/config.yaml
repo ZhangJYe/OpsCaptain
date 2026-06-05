@@ -236,6 +236,7 @@ rag:
   hybrid_candidate_top_k: 20
   hybrid_final_top_k: 5
   hybrid_metadata_boost_enabled: true
+  owner_scope_server_filter_enabled: true
 
 aiops:
   engine: "plan_execute_replan"
@@ -284,6 +285,15 @@ mcp:
   prefer_http_log_tool: true
   connect_timeout_ms: 10000
   tool_timeout_ms: 5000
+
+user_tools:
+  store_path: "var/runtime/user_tools/registry.json"
+  network_whitelist:
+    - "10.0.0.0/8"
+    - "172.16.0.0/12"
+    - "192.168.0.0/16"
+    - "127.0.0.0/8"
+  default_timeout_ms: 5000
 
 mysql:
   dsn: ""
