@@ -8,6 +8,7 @@ import (
 	v1 "SuperBizAgent/api/chat/v1"
 	"SuperBizAgent/internal/ai/skills"
 
+	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/google/uuid"
 )
@@ -125,7 +126,7 @@ func (c *ControllerV1) MCPToolUpdate(ctx context.Context, req *v1.MCPToolUpdateR
 		return &v1.MCPToolUpdateRes{Tool: data.Tools[i]}, nil
 	}
 
-	return nil, g.NewErrorf(g.CodeNotFound, "tool %q not found", req.ToolId)
+	return nil, gerror.Newf("tool %q not found", req.ToolId)
 }
 
 // MCPToolDelete deletes a tool by ID and unregisters it from the DynamicMCPRegistry.
@@ -145,7 +146,7 @@ func (c *ControllerV1) MCPToolDelete(ctx context.Context, req *v1.MCPToolDeleteR
 		filtered = append(filtered, t)
 	}
 	if !found {
-		return nil, g.NewErrorf(g.CodeNotFound, "tool %q not found", req.ToolId)
+		return nil, gerror.Newf("tool %q not found", req.ToolId)
 	}
 
 	data.Tools = filtered
@@ -174,7 +175,7 @@ func (c *ControllerV1) MCPToolTest(ctx context.Context, req *v1.MCPToolTestReq) 
 		}
 	}
 	if !found {
-		return nil, g.NewErrorf(g.CodeNotFound, "tool %q not found", req.ToolId)
+		return nil, gerror.Newf("tool %q not found", req.ToolId)
 	}
 
 	if regErr := c.dynamicMCPReg.Register(ctx, tool); regErr != nil {
@@ -217,7 +218,7 @@ func (c *ControllerV1) MCPToolApprove(ctx context.Context, req *v1.MCPToolApprov
 		return &v1.MCPToolApproveRes{Success: true}, nil
 	}
 
-	return nil, g.NewErrorf(g.CodeNotFound, "tool %q not found", req.ToolId)
+	return nil, gerror.Newf("tool %q not found", req.ToolId)
 }
 
 // MCPToolReject sets tool status to rejected.
@@ -238,5 +239,5 @@ func (c *ControllerV1) MCPToolReject(ctx context.Context, req *v1.MCPToolRejectR
 		return &v1.MCPToolRejectRes{Success: true}, nil
 	}
 
-	return nil, g.NewErrorf(g.CodeNotFound, "tool %q not found", req.ToolId)
+	return nil, gerror.Newf("tool %q not found", req.ToolId)
 }

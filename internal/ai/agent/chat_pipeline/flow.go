@@ -10,6 +10,7 @@ import (
 	"SuperBizAgent/internal/consts"
 	"context"
 	"io"
+	"sync"
 
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/flow/agent/react"
@@ -17,14 +18,35 @@ import (
 	"github.com/gogf/gf/v2/frame/g"
 )
 
-var chatDisclosure = skills.NewProgressiveDisclosure(
-	[]*skills.Registry{
-		logs.SkillRegistry(),
-		metrics.SkillRegistry(),
-		knowledge.SkillRegistry(),
-	},
-	tools.BuildTieredTools(),
+var (
+	chatDisclosureOnce sync.Once
+	chatDisclosureIns  *skills.ProgressiveDisclosure
+
+	// Lazy-initialized user tools dependencies; set via SetUserToolDeps before first chat.
+	userToolStoreDeps  skills.UserSkillStore
+	dynamicMCPRegDeps  *tools.DynamicMCPRegistry
 )
+
+// SetUserToolDeps configures user tool dependencies for progressive disclosure.
+// Call this before any chat request. Nil values are safe.
+func SetUserToolDeps(store skills.UserSkillStore, reg *tools.DynamicMCPRegistry) {
+	userToolStoreDeps = store
+	dynamicMCPRegDeps = reg
+}
+
+func getChatDisclosure() *skills.ProgressiveDisclosure {
+	chatDisclosureOnce.Do(func() {
+		chatDisclosureIns = skills.NewProgressiveDisclosure(
+			[]*skills.Registry{
+				logs.SkillRegistry(),
+				metrics.SkillRegistry(),
+				knowledge.SkillRegistry(),
+			},
+			tools.BuildTieredTools(context.Background(), userToolStoreDeps, dynamicMCPRegDeps),
+		)
+	})
+	return chatDisclosureIns
+}
 
 type chatToolEmitterContextKey struct{}
 
@@ -52,7 +74,7 @@ func chatToolEmitterFromContext(ctx context.Context) (events.Emitter, string, bo
 }
 
 func NormalizeSelectedSkillIDs(selectedSkillIDs []string) []string {
-	selectedSkills := chatDisclosure.ResolveSelectedSkills(selectedSkillIDs)
+	selectedSkills := getChatDisclosure().ResolveSelectedSkills(selectedSkillIDs)
 	if len(selectedSkills) == 0 {
 		return nil
 	}
@@ -101,19 +123,19 @@ func newReactAgentLambdaWithQuery(ctx context.Context, query string) (lba *compo
 	// Restrict tools when injection risk is elevated
 	riskLevel, _ := ctx.Value(consts.CtxKeyInjectionRiskLevel).(string)
 	if riskLevel == "suspicious" {
-		config.ToolsConfig.Tools = chatDisclosure.OnlyAlwaysOnTools()
+		config.ToolsConfig.Tools = getChatDisclosure().OnlyAlwaysOnTools()
 		g.Log().Infof(ctx, "[Chat] injection risk=suspicious, restricted to always-on tools only (%d tools)", len(config.ToolsConfig.Tools))
 	} else {
 		var disclosed skills.DisclosureResult
 		selectedSkillIDs := skills.SelectedSkillIDsFromContext(ctx)
 		if query != "" {
-			disclosed = chatDisclosure.Disclose(query, selectedSkillIDs)
+			disclosed = getChatDisclosure().Disclose(query, selectedSkillIDs)
 			config.ToolsConfig.Tools = disclosed.Tools
 			g.Log().Infof(ctx, "[Chat] progressive disclosure: query=%q selected=%v domains=%v tools=%d (L0=%d L1=%d)",
 				query, selectedSkillIDs, disclosed.MatchedDomains, len(disclosed.Tools), disclosed.DisclosedTier[skills.TierAlwaysOn],
 				disclosed.DisclosedTier[skills.TierSkillGate])
 		} else {
-			config.ToolsConfig.Tools = chatDisclosure.AllTools()
+			config.ToolsConfig.Tools = getChatDisclosure().AllTools()
 		}
 	}
 

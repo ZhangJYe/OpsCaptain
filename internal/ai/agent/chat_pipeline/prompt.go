@@ -92,7 +92,7 @@ func buildDynamicSystemPrompt(ctx context.Context) string {
 
 func buildSelectedSkillPromptSection(ctx context.Context) string {
 	selectedSkillIDs := skills.SelectedSkillIDsFromContext(ctx)
-	selectedSkills := chatDisclosure.ResolveSelectedSkills(selectedSkillIDs)
+	selectedSkills := getChatDisclosure().ResolveSelectedSkills(selectedSkillIDs)
 	if len(selectedSkills) == 0 {
 		return ""
 	}

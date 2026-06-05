@@ -8,8 +8,10 @@ import (
 	"github.com/gogf/gf/v2/frame/g"
 )
 
-func BuildTieredTools() []skills.TieredTool {
-	ctx := context.Background()
+func BuildTieredTools(ctx context.Context, userToolStore skills.UserSkillStore, dynamicMCPReg *DynamicMCPRegistry) []skills.TieredTool {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	var tiered []skills.TieredTool
 
 	if t := NewGetCurrentTimeTool(); t != nil {
@@ -82,6 +84,29 @@ func BuildTieredTools() []skills.TieredTool {
 		}
 	} else {
 		g.Log().Warningf(ctx, "progressive disclosure: mysql tool disabled because mysql.allowed_tables is empty")
+	}
+
+	// Append approved user-defined MCP tools
+	if userToolStore != nil {
+		if data, loadErr := userToolStore.Load(ctx); loadErr == nil {
+			for _, t := range data.Tools {
+				if t.Status != skills.StatusApproved {
+					continue
+				}
+				if dynamicMCPReg == nil {
+					continue
+				}
+				if tool, ok := dynamicMCPReg.Get(t.ID); ok {
+					tiered = append(tiered, skills.TieredTool{
+						Tool:    tool,
+						Tier:    skills.TierSkillGate,
+						Domains: []string{skills.DomainCustom},
+					})
+				}
+			}
+		} else {
+			g.Log().Warningf(ctx, "progressive disclosure: load user tools: %v", loadErr)
+		}
 	}
 
 	return tiered

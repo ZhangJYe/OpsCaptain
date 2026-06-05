@@ -6,6 +6,9 @@ import (
 	"SuperBizAgent/internal/ai/rag"
 	"SuperBizAgent/internal/ai/retriever"
 	aiservice "SuperBizAgent/internal/ai/service"
+	"SuperBizAgent/internal/ai/skills"
+	"SuperBizAgent/internal/ai/tools"
+	chat_pipeline "SuperBizAgent/internal/ai/agent/chat_pipeline"
 	"SuperBizAgent/internal/app"
 	"SuperBizAgent/internal/controller/chat"
 	infrafs "SuperBizAgent/internal/infra/filestore"
@@ -113,6 +116,36 @@ func main() {
 	aiopsApp := app.NewAIOpsApp()
 	app.RegisterChatTaskExecutor(chatApp)
 
+	// Initialize user tools system
+	userSkillStore := skills.NewFileUserSkillStore(g.Cfg().MustGet(ctx, "user_tools.store_path").String())
+	whitelistCfg, _ := g.Cfg().Get(ctx, "user_tools.network_whitelist")
+	var whitelist []string
+	if whitelistCfg != nil {
+		for _, v := range whitelistCfg.Strings() {
+			whitelist = append(whitelist, v)
+		}
+	}
+	defaultTimeout, _ := g.Cfg().Get(ctx, "user_tools.default_timeout_ms")
+	timeoutMs := defaultTimeout.Int()
+	if timeoutMs == 0 {
+		timeoutMs = 5000
+	}
+	dynamicMCPReg, err := tools.NewDynamicMCPRegistry(whitelist, timeoutMs)
+	if err != nil {
+		g.Log().Warningf(ctx, "init dynamic MCP registry: %v", err)
+		dynamicMCPReg, _ = tools.NewDynamicMCPRegistry(nil, timeoutMs)
+	}
+
+	// Create user skill loader; domain registries are managed by AIOps runtime, pass nil for now
+	customReg, _ := skills.NewRegistry("custom", nil)
+	userSkillLoader := skills.NewUserSkillLoader(userSkillStore, dynamicMCPReg, nil, nil, nil, customReg)
+	if reloadErr := userSkillLoader.Reload(ctx); reloadErr != nil {
+		g.Log().Warningf(ctx, "load user skills: %v", reloadErr)
+	}
+
+	// Wire user tool dependencies into chat pipeline for progressive disclosure
+	chat_pipeline.SetUserToolDeps(userSkillStore, dynamicMCPReg)
+
 	chatTaskPipelineShutdown := func(context.Context) error { return nil }
 	if shutdownFn, startErr := aiservice.StartChatTaskPipeline(ctx); startErr != nil {
 		g.Log().Warningf(ctx, "chat task pipeline init failed: %v", startErr)
@@ -148,7 +181,7 @@ func main() {
 		group.Middleware(middleware.AuthMiddleware)
 		group.Middleware(middleware.RateLimitMiddleware)
 		group.Middleware(middleware.ResponseMiddleware)
-		group.Bind(chat.NewV1(chatApp, knowledgeApp, aiopsApp))
+		group.Bind(chat.NewV1(chatApp, knowledgeApp, aiopsApp, userSkillStore, dynamicMCPReg, userSkillLoader))
 	})
 
 	if err := s.Start(); err != nil {

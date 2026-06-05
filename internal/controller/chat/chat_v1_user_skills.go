@@ -7,6 +7,7 @@ import (
 	v1 "SuperBizAgent/api/chat/v1"
 	"SuperBizAgent/internal/ai/skills"
 
+	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/google/uuid"
 )
@@ -21,7 +22,7 @@ func (c *ControllerV1) UserSkillCreate(ctx context.Context, req *v1.UserSkillCre
 	// Check name uniqueness.
 	for _, s := range data.Skills {
 		if s.Name == req.Name {
-			return nil, g.NewErrorf(g.CodeAlreadyExists, "skill name %q already exists", req.Name)
+			return nil, gerror.Newf("skill name %q already exists", req.Name)
 		}
 	}
 
@@ -76,7 +77,7 @@ func (c *ControllerV1) UserSkillUpdate(ctx context.Context, req *v1.UserSkillUpd
 			// Check name uniqueness against other skills.
 			for _, other := range data.Skills {
 				if other.ID != req.SkillId && other.Name == req.Name {
-					return nil, g.NewErrorf(g.CodeAlreadyExists, "skill name %q already exists", req.Name)
+					return nil, gerror.Newf("skill name %q already exists", req.Name)
 				}
 			}
 			data.Skills[i].Name = req.Name
@@ -96,7 +97,7 @@ func (c *ControllerV1) UserSkillUpdate(ctx context.Context, req *v1.UserSkillUpd
 		return &v1.UserSkillUpdateRes{Skill: data.Skills[i]}, nil
 	}
 
-	return nil, g.NewErrorf(g.CodeNotFound, "skill %q not found", req.SkillId)
+	return nil, gerror.Newf("skill %q not found", req.SkillId)
 }
 
 // UserSkillDelete deletes a skill by ID and triggers a hot reload of user skills.
@@ -116,7 +117,7 @@ func (c *ControllerV1) UserSkillDelete(ctx context.Context, req *v1.UserSkillDel
 		filtered = append(filtered, s)
 	}
 	if !found {
-		return nil, g.NewErrorf(g.CodeNotFound, "skill %q not found", req.SkillId)
+		return nil, gerror.Newf("skill %q not found", req.SkillId)
 	}
 
 	data.Skills = filtered
@@ -160,7 +161,7 @@ func (c *ControllerV1) UserSkillApprove(ctx context.Context, req *v1.UserSkillAp
 		return &v1.UserSkillApproveRes{Success: true}, nil
 	}
 
-	return nil, g.NewErrorf(g.CodeNotFound, "skill %q not found", req.SkillId)
+	return nil, gerror.Newf("skill %q not found", req.SkillId)
 }
 
 // UserSkillReject sets skill status to rejected.
@@ -181,5 +182,5 @@ func (c *ControllerV1) UserSkillReject(ctx context.Context, req *v1.UserSkillRej
 		return &v1.UserSkillRejectRes{Success: true}, nil
 	}
 
-	return nil, g.NewErrorf(g.CodeNotFound, "skill %q not found", req.SkillId)
+	return nil, gerror.Newf("skill %q not found", req.SkillId)
 }

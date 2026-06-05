@@ -6,22 +6,32 @@ package chat
 
 import (
 	"SuperBizAgent/api/chat"
+	"SuperBizAgent/internal/ai/skills"
+	"SuperBizAgent/internal/ai/tools"
 	"SuperBizAgent/internal/app"
 	"SuperBizAgent/internal/logic/sse"
 )
 
 type ControllerV1 struct {
-	service      *sse.Service
-	chatApp      *app.ChatApp
-	knowledgeApp *app.KnowledgeApp
-	aiopsApp     *app.AIOpsApp
+	service         *sse.Service
+	chatApp         *app.ChatApp
+	knowledgeApp    *app.KnowledgeApp
+	aiopsApp        *app.AIOpsApp
+	userSkillStore  skills.UserSkillStore
+	dynamicMCPReg   *tools.DynamicMCPRegistry
+	userSkillLoader *skills.UserSkillLoader
 }
 
-func NewV1(chatApp *app.ChatApp, knowledgeApp *app.KnowledgeApp, aiopsApp *app.AIOpsApp) chat.IChatV1 {
+func NewV1(chatApp *app.ChatApp, knowledgeApp *app.KnowledgeApp, aiopsApp *app.AIOpsApp,
+	userSkillStore skills.UserSkillStore, dynamicMCPReg *tools.DynamicMCPRegistry,
+	userSkillLoader *skills.UserSkillLoader) chat.IChatV1 {
 	return &ControllerV1{
-		service:      sse.New(),
-		chatApp:      chatApp,
-		knowledgeApp: knowledgeApp,
-		aiopsApp:     aiopsApp,
+		service:         sse.New(),
+		chatApp:         chatApp,
+		knowledgeApp:    knowledgeApp,
+		aiopsApp:        aiopsApp,
+		userSkillStore:  userSkillStore,
+		dynamicMCPReg:   dynamicMCPReg,
+		userSkillLoader: userSkillLoader,
 	}
 }
