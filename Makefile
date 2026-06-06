@@ -48,5 +48,10 @@ eval-runs-gos:
 	@$(GO) run cmd/gos_eval/main.go --mode=export-runs --gos-profile=eval \
 	  --output-dir=evals/runs
 
+eval-judge:
+	@echo "==> LLM Judge 评分"
+	@$(GO) run cmd/gos_eval/main.go --mode=judge \
+	  --input=evals/runs --output-dir=evals/reports
+
 ci: fmt vet test-race test-cover build eval-gate
 	@echo "==> CI pipeline complete"
