@@ -97,16 +97,17 @@
 ```
 
 **问题**：
-- Memory 只有 800 tokens ≈ 530 个中文字符
-- 每条记忆内容上限 500 字节（`len(content) > 500`），中文 UTF-8 每字约 3 字节 → 约 166 个汉字
-- `MaxMemoryItems=5` 的配置形同虚设
-- 记忆系统投入了大量工程（异步提取、冲突检测、衰减淘汰），但最终只能注入 1-2 条，ROI 极低
+- Memory 只有 800 tokens
+- 每条记忆内容上限 500 字节（`len(content) > 500`），中文 UTF-8 每字约 3 字节 → 约 166 个汉字 ≈ 249 tokens
+- 800 tokens 理论上能放约 3 条中文记忆，英文记忆可放更多
+- `MaxMemoryItems=5` 在中文长记忆场景下通常无法放满
+- 记忆系统投入了大量工程（异步提取、冲突检测、衰减淘汰），但中文长记忆场景下通常无法放满 5 条，ROI 打折
 
 **影响**：记忆系统实际可用性很低，大部分记忆永远不会被注入上下文。
 
 **建议**：
 - 方案 A：将 memory 预算从 10% 提升到 20%（1600 tokens，约 1000 字符，可放 3-4 条）
-- 方案 B：对长记忆做截断摘要（取前 200 字节 + "..."），而非整条丢弃
+- 方案 B：对长记忆做截断摘要（按 rune 或 token budget 截断，复用 `TrimToTokenBudget` 或新增 UTF-8 安全 helper），而非整条丢弃
 - 方案 C：A + B 组合
 
 ---
@@ -146,7 +147,7 @@ score := matchScore + relevance
 ```go
 // 持久化是可选的，只有配置了 store_path 才启用
 func loadLongTermMemoryStore() LongTermMemoryStore {
-    v, err := g.Cfg().Get(ctx, "memory.long_term_store_path")
+    v, err := g.Cfg().Get(context.Background(), "memory.long_term_store_path")
     if err != nil || strings.TrimSpace(v.String()) == "" {
         return nil  // 默认：纯内存，不持久化
     }
@@ -154,9 +155,9 @@ func loadLongTermMemoryStore() LongTermMemoryStore {
 }
 
 // 启用后，每次变更全量写入
-func (s *fileLongTermMemoryStore) Save(entries map[string]*MemoryEntry) error {
+func (s *fileLongTermMemoryStore) Save(ctx context.Context, entries []*MemoryEntry) error {
     data, _ := json.MarshalIndent(entries, "", "  ")
-    os.WriteFile(tmpPath, data, 0644)
+    os.WriteFile(tmpPath, data, 0o600)  // 0600 权限
     os.Rename(tmpPath, s.path)  // 原子替换
 }
 ```
@@ -392,8 +393,9 @@ RAG 系统用了最先进的混合检索（向量 + BM25 + RRF + 重排），而
 > **第二，检索没有语义能力**。目前是纯关键词匹配，"Redis 连接超时"
 > 搜不到 "Redis timeout"。计划复用 BM25 做分词检索，或者加轻量向量索引。
 >
-> **第三，文件持久化每次全量写入**。1000 条记忆每次写 100KB+。
-> 计划改为增量 JSONL + 定期 compaction，或者迁移到 SQLite。
+> **第三，启用文件持久化后每次全量写入**。默认是纯内存，配置了
+> `memory.long_term_store_path` 才启用文件持久化。启用后 1000 条记忆
+> 每次写 100KB+。计划改为增量 JSONL + 定期 compaction，或者迁移到 SQLite。
 
 ### Q: 记忆和 RAG 怎么配合？
 
