@@ -12,8 +12,8 @@
     "matched": 5,
     "accuracy": 1.0,
     "evidence_coverage": 1.0,
-    "avg_latency": 0,
-    "avg_llm_calls": 0,
+    "avg_latency": 5000000000,
+    "avg_llm_calls": 6,
     "degradation_rate": 0,
     "traceability": 1.0,
     "per_status": {
