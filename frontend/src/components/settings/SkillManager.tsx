@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Plus, Trash2, CheckCircle, XCircle, Puzzle } from 'lucide-react'
+import { Plus, Trash2, Puzzle } from 'lucide-react'
 import type { UserMCPTool, UserSkill } from '../../types/userTools'
 import { ApprovalBadge } from './ApprovalBadge'
 import { UserSkillForm } from './UserSkillForm'
@@ -9,11 +9,9 @@ interface Props {
   tools: UserMCPTool[]
   onCreate: (skill: Partial<UserSkill>) => Promise<void>
   onDelete: (id: string) => Promise<void>
-  onApprove: (id: string) => Promise<void>
-  onReject: (id: string) => Promise<void>
 }
 
-export function SkillManager({ skills, tools, onCreate, onDelete, onApprove, onReject }: Props) {
+export function SkillManager({ skills, tools, onCreate, onDelete }: Props) {
   const [showForm, setShowForm] = useState(false)
 
   const getToolName = (toolRefId: string) => {
@@ -89,24 +87,6 @@ export function SkillManager({ skills, tools, onCreate, onDelete, onApprove, onR
               </div>
 
               <div className="flex items-center gap-1.5 shrink-0">
-                {skill.status === 'pending' && (
-                  <>
-                    <button
-                      onClick={() => onApprove(skill.id)}
-                      title="审批"
-                      className="p-1.5 rounded-lg text-green-500 hover:bg-green-50 transition-colors"
-                    >
-                      <CheckCircle className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => onReject(skill.id)}
-                      title="拒绝"
-                      className="p-1.5 rounded-lg text-amber-500 hover:bg-amber-50 transition-colors"
-                    >
-                      <XCircle className="w-4 h-4" />
-                    </button>
-                  </>
-                )}
                 <button
                   onClick={() => onDelete(skill.id)}
                   title="删除"

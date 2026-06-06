@@ -12,7 +12,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// UserSkillCreate creates a new user skill with StatusPending.
+// UserSkillCreate creates a new user skill with StatusApproved (no approval flow).
 func (c *ControllerV1) UserSkillCreate(ctx context.Context, req *v1.UserSkillCreateReq) (res *v1.UserSkillCreateRes, err error) {
 	data, err := c.userSkillStore.Load(ctx)
 	if err != nil {
@@ -31,7 +31,7 @@ func (c *ControllerV1) UserSkillCreate(ctx context.Context, req *v1.UserSkillCre
 		Name:        req.Name,
 		Description: req.Description,
 		Domain:      req.Domain,
-		Status:      skills.StatusPending,
+		Status:      skills.StatusApproved,
 		CreatedAt:   time.Now(),
 		CreatedBy:   g.RequestFromCtx(ctx).GetClientIp(),
 	}

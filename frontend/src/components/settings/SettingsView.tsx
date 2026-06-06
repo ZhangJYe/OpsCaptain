@@ -86,8 +86,6 @@ export function SettingsView({ onBack }: Props) {
             onCreate={createTool}
             onDelete={deleteTool}
             onTest={testTool}
-            onApprove={approveTool}
-            onReject={rejectTool}
           />
         )}
 
@@ -97,8 +95,6 @@ export function SettingsView({ onBack }: Props) {
             tools={tools}
             onCreate={createSkill}
             onDelete={deleteSkill}
-            onApprove={approveSkill}
-            onReject={rejectSkill}
           />
         )}
       </div>

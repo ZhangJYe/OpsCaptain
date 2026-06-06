@@ -9,11 +9,9 @@ interface Props {
   onCreate: (tool: Partial<UserMCPTool>) => Promise<void>
   onDelete: (id: string) => Promise<void>
   onTest: (id: string) => Promise<{ ok: boolean; message: string }>
-  onApprove: (id: string) => Promise<void>
-  onReject: (id: string) => Promise<void>
 }
 
-export function ToolManager({ tools, onCreate, onDelete, onTest, onApprove, onReject }: Props) {
+export function ToolManager({ tools, onCreate, onDelete, onTest }: Props) {
   const [showForm, setShowForm] = useState(false)
   const [testingId, setTestingId] = useState<string | null>(null)
   const [testResults, setTestResults] = useState<Record<string, { ok: boolean; message: string }>>({})
@@ -93,24 +91,6 @@ export function ToolManager({ tools, onCreate, onDelete, onTest, onApprove, onRe
                       <TestTube2 className="w-4 h-4" />
                     )}
                   </button>
-                  {tool.status === 'pending' && (
-                    <>
-                      <button
-                        onClick={() => onApprove(tool.id)}
-                        title="审批"
-                        className="p-1.5 rounded-lg text-green-500 hover:bg-green-50 transition-colors"
-                      >
-                        <CheckCircle className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => onReject(tool.id)}
-                        title="拒绝"
-                        className="p-1.5 rounded-lg text-amber-500 hover:bg-amber-50 transition-colors"
-                      >
-                        <XCircle className="w-4 h-4" />
-                      </button>
-                    </>
-                  )}
                   <button
                     onClick={() => onDelete(tool.id)}
                     title="删除"
