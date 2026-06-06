@@ -38,6 +38,9 @@ jobs:
       - name: Run Go tests
         run: go test ./...
 
+      - name: Eval Gate
+        run: make eval-gate
+
       - name: Build backend image
         run: docker build -t opscaptain-backend:${{ github.sha }} .
 
