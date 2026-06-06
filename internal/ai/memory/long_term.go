@@ -83,8 +83,14 @@ type MemoryRetrievePolicy struct {
 }
 
 type LongTermMemoryStore interface {
-	Load(ctx context.Context) ([]*MemoryEntry, error)
-	Save(ctx context.Context, entries []*MemoryEntry) error
+	LoadAll(ctx context.Context) ([]*MemoryEntry, error)
+	SaveEntries(ctx context.Context, entries []*MemoryEntry) error
+	DeleteEntries(ctx context.Context, ids []string) error
+}
+
+type pendingChanges struct {
+	upserts []*MemoryEntry
+	deletes []string
 }
 
 const (
@@ -113,7 +119,7 @@ func NewLongTermMemoryWithStore(ctx context.Context, store LongTermMemoryStore) 
 	if store == nil {
 		return ltm
 	}
-	entries, err := store.Load(ctx)
+	entries, err := store.LoadAll(ctx)
 	if err != nil {
 		g.Log().Warningf(ctx, "[ltm] load memory store failed: %v", err)
 		return ltm
@@ -142,6 +148,7 @@ func (ltm *LongTermMemory) StoreWithOptions(ctx context.Context, sessionID strin
 	opts = normalizeMemoryStoreOptions(sessionID, memType, source, opts)
 	id := generateMemoryID(opts.Scope, opts.ScopeID, content)
 	now := time.Now()
+	var changes pendingChanges
 
 	if existing, ok := ltm.entries[id]; ok {
 		existing.AccessCnt++
@@ -159,8 +166,11 @@ func (ltm *LongTermMemory) StoreWithOptions(ctx context.Context, sessionID strin
 			existing.ExpiresAt = opts.ExpiresAt
 		}
 		existing.Relevance = computeRelevance(existing)
-		ltm.retireConflictingMemoriesLocked(id, memType, opts, now)
-		ltm.persistLocked(ctx)
+		retired := ltm.retireConflictingMemoriesLocked(id, memType, opts, now)
+		cloned := cloneMemoryEntry(existing, existing.Relevance)
+		changes.upserts = append(changes.upserts, &cloned)
+		changes.upserts = append(changes.upserts, retired...)
+		ltm.persistChangesLocked(ctx, changes)
 		g.Log().Debugf(ctx, "[ltm] Reinforced memory %s, access count: %d", id, existing.AccessCnt)
 		return id
 	}
@@ -185,11 +195,16 @@ func (ltm *LongTermMemory) StoreWithOptions(ctx context.Context, sessionID strin
 		LastUsed:      now,
 	}
 
-	ltm.evictIfNeededLocked(ctx, sessionID)
-	ltm.retireConflictingMemoriesLocked(id, memType, opts, now)
+	evicted := ltm.evictIfNeededLocked(ctx, sessionID)
+	retired := ltm.retireConflictingMemoriesLocked(id, memType, opts, now)
 	ltm.entries[id] = entry
 	ltm.index[sessionID] = append(ltm.index[sessionID], id)
-	ltm.persistLocked(ctx)
+
+	cloned := cloneMemoryEntry(entry, entry.Relevance)
+	changes.upserts = append(changes.upserts, &cloned)
+	changes.upserts = append(changes.upserts, retired...)
+	changes.deletes = append(changes.deletes, evicted...)
+	ltm.persistChangesLocked(ctx, changes)
 
 	g.Log().Debugf(ctx, "[ltm] Stored new %s memory %s for session %s", memType, id, sessionID)
 	return id
@@ -297,7 +312,16 @@ func (ltm *LongTermMemory) RetrieveScoped(ctx context.Context, query string, lim
 	}
 
 	if !policy.ReadOnly && len(result) > 0 {
-		ltm.persistLocked(ctx)
+		var upserts []*MemoryEntry
+		for _, e := range result {
+			if orig, ok := ltm.entries[e.ID]; ok {
+				cloned := cloneMemoryEntry(orig, orig.Relevance)
+				upserts = append(upserts, &cloned)
+			}
+		}
+		if len(upserts) > 0 {
+			ltm.persistChangesLocked(ctx, pendingChanges{upserts: upserts})
+		}
 	}
 	return result
 }
@@ -331,7 +355,7 @@ func (ltm *LongTermMemory) Forget(ctx context.Context, threshold float64) int {
 	}
 
 	if len(toRemove) > 0 {
-		ltm.persistLocked(ctx)
+		ltm.persistChangesLocked(ctx, pendingChanges{deletes: toRemove})
 		g.Log().Infof(ctx, "[ltm] Forgot %d memories below threshold %.2f", len(toRemove), threshold)
 	}
 	return len(toRemove)
@@ -402,7 +426,7 @@ func (ltm *LongTermMemory) Delete(ctx context.Context, id string) bool {
 		return false
 	}
 	ltm.removeEntryLocked(id)
-	ltm.persistLocked(ctx)
+	ltm.persistChangesLocked(ctx, pendingChanges{deletes: []string{id}})
 	return true
 }
 
@@ -417,7 +441,8 @@ func (ltm *LongTermMemory) Disable(ctx context.Context, id string) bool {
 	entry.SafetyLabel = "disabled"
 	entry.ExpiresAt = now.UnixMilli()
 	entry.UpdatedAt = now
-	ltm.persistLocked(ctx)
+	cloned := cloneMemoryEntry(entry, entry.Relevance)
+	ltm.persistChangesLocked(ctx, pendingChanges{upserts: []*MemoryEntry{&cloned}})
 	return true
 }
 
@@ -447,7 +472,8 @@ func (ltm *LongTermMemory) Promote(ctx context.Context, id string, scope MemoryS
 	entry.SafetyLabel = "internal"
 	entry.UpdatedAt = now
 	entry.LastUsed = now
-	ltm.persistLocked(ctx)
+	cloned := cloneMemoryEntry(entry, entry.Relevance)
+	ltm.persistChangesLocked(ctx, pendingChanges{upserts: []*MemoryEntry{&cloned}})
 	return true
 }
 
@@ -628,10 +654,11 @@ func (ltm *LongTermMemory) addLoadedEntryLocked(entry *MemoryEntry) {
 	}
 }
 
-func (ltm *LongTermMemory) retireConflictingMemoriesLocked(id string, memType MemoryType, opts MemoryStoreOptions, now time.Time) {
+func (ltm *LongTermMemory) retireConflictingMemoriesLocked(id string, memType MemoryType, opts MemoryStoreOptions, now time.Time) []*MemoryEntry {
 	if opts.ConflictGroup == "" {
-		return
+		return nil
 	}
+	var retired []*MemoryEntry
 	for existingID, entry := range ltm.entries {
 		if existingID == id || entry == nil {
 			continue
@@ -646,15 +673,25 @@ func (ltm *LongTermMemory) retireConflictingMemoriesLocked(id string, memType Me
 		entry.ExpiresAt = now.UnixMilli()
 		entry.Confidence = entry.Confidence * 0.5
 		entry.UpdatedAt = now
+		cloned := cloneMemoryEntry(entry, entry.Relevance)
+		retired = append(retired, &cloned)
 	}
+	return retired
 }
 
-func (ltm *LongTermMemory) persistLocked(ctx context.Context) {
+func (ltm *LongTermMemory) persistChangesLocked(ctx context.Context, changes pendingChanges) {
 	if ltm.store == nil {
 		return
 	}
-	if err := ltm.store.Save(ctx, ltm.snapshotLocked()); err != nil {
-		g.Log().Warningf(ctx, "[ltm] save memory store failed: %v", err)
+	if len(changes.upserts) > 0 {
+		if err := ltm.store.SaveEntries(ctx, changes.upserts); err != nil {
+			g.Log().Warningf(ctx, "[ltm] save entries failed: %v", err)
+		}
+	}
+	if len(changes.deletes) > 0 {
+		if err := ltm.store.DeleteEntries(ctx, changes.deletes); err != nil {
+			g.Log().Warningf(ctx, "[ltm] delete entries failed: %v", err)
+		}
 	}
 }
 
@@ -679,25 +716,31 @@ func containsString(items []string, target string) bool {
 	return false
 }
 
-func (ltm *LongTermMemory) evictIfNeededLocked(ctx context.Context, sessionID string) {
+func (ltm *LongTermMemory) evictIfNeededLocked(ctx context.Context, sessionID string) []string {
 	maxEntries := loadLongTermMaxEntries()
 	maxPerSession := loadLongTermMaxEntriesPerSession()
 
+	var evicted []string
 	for maxPerSession > 0 && len(ltm.index[sessionID]) >= maxPerSession {
-		ltm.evictOneLocked(ctx, ltm.index[sessionID])
+		if id := ltm.evictOneLocked(ctx, ltm.index[sessionID]); id != "" {
+			evicted = append(evicted, id)
+		}
 	}
 	for maxEntries > 0 && len(ltm.entries) >= maxEntries {
 		ids := make([]string, 0, len(ltm.entries))
 		for id := range ltm.entries {
 			ids = append(ids, id)
 		}
-		ltm.evictOneLocked(ctx, ids)
+		if id := ltm.evictOneLocked(ctx, ids); id != "" {
+			evicted = append(evicted, id)
+		}
 	}
+	return evicted
 }
 
-func (ltm *LongTermMemory) evictOneLocked(ctx context.Context, candidateIDs []string) {
+func (ltm *LongTermMemory) evictOneLocked(ctx context.Context, candidateIDs []string) string {
 	if len(candidateIDs) == 0 {
-		return
+		return ""
 	}
 	sort.Slice(candidateIDs, func(i, j int) bool {
 		left := ltm.entries[candidateIDs[i]]
@@ -715,8 +758,10 @@ func (ltm *LongTermMemory) evictOneLocked(ctx context.Context, candidateIDs []st
 		}
 		return leftScore < rightScore
 	})
-	ltm.removeEntryLocked(candidateIDs[0])
-	g.Log().Debugf(ctx, "[ltm] Evicted memory %s to enforce capacity", candidateIDs[0])
+	evictedID := candidateIDs[0]
+	ltm.removeEntryLocked(evictedID)
+	g.Log().Debugf(ctx, "[ltm] Evicted memory %s to enforce capacity", evictedID)
+	return evictedID
 }
 
 func (ltm *LongTermMemory) removeEntryLocked(id string) {
@@ -765,7 +810,7 @@ func NewFileLongTermMemoryStore(path string) LongTermMemoryStore {
 	return &fileLongTermMemoryStore{path: path}
 }
 
-func (s *fileLongTermMemoryStore) Load(ctx context.Context) ([]*MemoryEntry, error) {
+func (s *fileLongTermMemoryStore) LoadAll(ctx context.Context) ([]*MemoryEntry, error) {
 	body, err := os.ReadFile(s.path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -783,10 +828,44 @@ func (s *fileLongTermMemoryStore) Load(ctx context.Context) ([]*MemoryEntry, err
 	return entries, ctx.Err()
 }
 
-func (s *fileLongTermMemoryStore) Save(ctx context.Context, entries []*MemoryEntry) error {
+func (s *fileLongTermMemoryStore) SaveEntries(ctx context.Context, entries []*MemoryEntry) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	existing, _ := s.LoadAll(ctx)
+	byID := make(map[string]*MemoryEntry, len(existing)+len(entries))
+	for _, e := range existing {
+		byID[e.ID] = e
+	}
+	for _, e := range entries {
+		byID[e.ID] = e
+	}
+	merged := make([]*MemoryEntry, 0, len(byID))
+	for _, e := range byID {
+		merged = append(merged, e)
+	}
+	return s.writeAll(merged)
+}
+
+func (s *fileLongTermMemoryStore) DeleteEntries(ctx context.Context, ids []string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	existing, _ := s.LoadAll(ctx)
+	deleteSet := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		deleteSet[id] = struct{}{}
+	}
+	remaining := make([]*MemoryEntry, 0, len(existing))
+	for _, e := range existing {
+		if _, deleted := deleteSet[e.ID]; !deleted {
+			remaining = append(remaining, e)
+		}
+	}
+	return s.writeAll(remaining)
+}
+
+func (s *fileLongTermMemoryStore) writeAll(entries []*MemoryEntry) error {
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
 		return err
 	}
@@ -802,9 +881,19 @@ func (s *fileLongTermMemoryStore) Save(ctx context.Context, entries []*MemoryEnt
 }
 
 func loadLongTermMemoryStore() LongTermMemoryStore {
-	v, err := g.Cfg().Get(context.Background(), "memory.long_term_store_path")
-	if err != nil || strings.TrimSpace(v.String()) == "" {
+	backend, _ := g.Cfg().Get(context.Background(), "memory.store_backend")
+	switch strings.TrimSpace(backend.String()) {
+	case "redis":
+		return NewRedisMemoryStore(g.Redis())
+	case "file":
+		path, _ := g.Cfg().Get(context.Background(), "memory.long_term_store_path")
+		return NewFileLongTermMemoryStore(path.String())
+	default:
+		// 向后兼容：旧配置 long_term_store_path 有值则走 file
+		path, _ := g.Cfg().Get(context.Background(), "memory.long_term_store_path")
+		if p := strings.TrimSpace(path.String()); p != "" {
+			return NewFileLongTermMemoryStore(p)
+		}
 		return nil
 	}
-	return NewFileLongTermMemoryStore(v.String())
 }
