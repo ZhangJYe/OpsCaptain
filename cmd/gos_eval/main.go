@@ -13,7 +13,8 @@ import (
 
 	"SuperBizAgent/internal/ai/agent/experts"
 	"SuperBizAgent/internal/ai/agent/gos_engine"
-	"SuperBizAgent/internal/ai/agent/gos_engine/eval"
+	goseval "SuperBizAgent/internal/ai/agent/gos_engine/eval"
+	judgeeval "SuperBizAgent/internal/ai/agent/eval"
 	"SuperBizAgent/internal/ai/agent/plan_execute_replan"
 	"SuperBizAgent/internal/ai/belief"
 	"SuperBizAgent/internal/ai/models"
@@ -30,8 +31,8 @@ type BaselineArtifact struct {
 	ToolConfig  string            `json:"tool_config"`
 	HoldoutPath string            `json:"holdout_path"`
 	Timestamp   string            `json:"timestamp"`
-	Metrics     *eval.EvalMetrics `json:"metrics"`
-	Results     []eval.EvalResult `json:"results"`
+	Metrics     *goseval.EvalMetrics `json:"metrics"`
+	Results     []goseval.EvalResult `json:"results"`
 }
 
 type testLogger struct{}
@@ -215,7 +216,7 @@ func newSmokeBaselineRunner() *smokeBaselineRunner {
 	}
 }
 
-func (b *smokeBaselineRunner) runCase(ctx context.Context, c eval.EvalCase) *eval.EvalResult {
+func (b *smokeBaselineRunner) runCase(ctx context.Context, c goseval.EvalCase) *goseval.EvalResult {
 	start := time.Now()
 	llmCalls := 0
 	evidenceCount := 0
@@ -239,7 +240,7 @@ func (b *smokeBaselineRunner) runCase(ctx context.Context, c eval.EvalCase) *eva
 
 	prediction := b.analyzeSymptom(c.Symptom)
 
-	return &eval.EvalResult{
+	return &goseval.EvalResult{
 		CaseID:        c.ID,
 		Symptom:       c.Symptom,
 		GroundTruth:   c.GroundTruth,
@@ -248,7 +249,7 @@ func (b *smokeBaselineRunner) runCase(ctx context.Context, c eval.EvalCase) *eva
 		Latency:       time.Since(start),
 		LLMCalls:      llmCalls,
 		EvidenceCount: evidenceCount,
-		Matched:       eval.MatchPrediction(prediction, c.GroundTruth, c.ExpectedKeywords),
+		Matched:       goseval.MatchPrediction(prediction, c.GroundTruth, c.ExpectedKeywords),
 		TraceComplete: true,
 	}
 }
@@ -292,7 +293,7 @@ func gitCommit() string {
 	return strings.TrimSpace(string(out))
 }
 
-func printMetrics(label string, m *eval.EvalMetrics) {
+func printMetrics(label string, m *goseval.EvalMetrics) {
 	fmt.Printf("\n--- %s ---\n", label)
 	fmt.Printf("  总用例: %d\n", m.TotalCases)
 	fmt.Printf("  成功: %d | 降级: %d | 失败: %d\n", m.Succeeded, m.Degraded, m.Failed)
@@ -304,7 +305,7 @@ func printMetrics(label string, m *eval.EvalMetrics) {
 	fmt.Printf("  可追溯性: %.2f%%\n", m.Traceability*100)
 }
 
-func printDetails(results []eval.EvalResult) {
+func printDetails(results []goseval.EvalResult) {
 	fmt.Println("\n  详细结果:")
 	for _, r := range results {
 		match := "✓"
@@ -400,12 +401,13 @@ func logToolUnavailableReason(err error) string {
 }
 
 func main() {
-	mode := flag.String("mode", "gos", "运行模式: gos|baseline|compare|smoke|gate|export-runs")
+	mode := flag.String("mode", "gos", "运行模式: gos|baseline|compare|smoke|gate|export-runs|judge")
 	baselineFile := flag.String("baseline", "baseline_result.json", "baseline artifact 文件路径")
 	holdoutPath := flag.String("holdout", "internal/ai/agent/gos_engine/eval/testdata/holdout.json", "holdout 数据集路径")
 	outputFile := flag.String("output", "eval_result.json", "输出文件路径")
 	gosProfile := flag.String("gos-profile", "real", "GoS 配置: real|eval (real=生产行为, eval=fake deps)")
 	outputDir := flag.String("output-dir", "evals/runs", "export-runs 模式的输出目录")
+	inputDir := flag.String("input", "evals/runs", "judge 输入目录（diag JSONL 文件）")
 	flag.Parse()
 
 	if err := common.LoadPreferredEnvFile(); err != nil {
@@ -426,9 +428,11 @@ func main() {
 		runGate(*holdoutPath, *baselineFile, *outputFile)
 	case "export-runs":
 		runExportRuns(*holdoutPath, *outputDir, *gosProfile)
+	case "judge":
+		runJudge(*inputDir, *outputDir)
 	default:
 		fmt.Printf("未知模式: %s\n", *mode)
-		fmt.Println("可用模式: gos, baseline, compare, smoke, gate, export-runs")
+		fmt.Println("可用模式: gos, baseline, compare, smoke, gate, export-runs, judge")
 		os.Exit(1)
 	}
 }
@@ -443,7 +447,7 @@ func runGoSOnly(holdoutPath, outputFile, gosProfile string) {
 	fmt.Printf("配置: SessionMaxSteps=%d, GapDelta=%.2f, MinSupport=%d, MinConfidence=%.2f\n",
 		cfg.SessionMaxSteps, cfg.FSM.GapDelta, cfg.FSM.MinSupport, cfg.FSM.MinConfidence)
 
-	runner := eval.NewRunner(engine)
+	runner := goseval.NewRunner(engine)
 	start := time.Now()
 	metrics, results, err := runner.RunFromFile(context.Background(), holdoutPath)
 	if err != nil {
@@ -476,14 +480,14 @@ func runBaseline(holdoutPath, outputFile string) {
 	fmt.Println("=== Baseline 采集 (baseline 模式) ===")
 	fmt.Println("使用真实 Plan-Execute-Replan (BuildPlanAgent)")
 
-	cases, err := eval.LoadCases(holdoutPath)
+	cases, err := goseval.LoadCases(holdoutPath)
 	if err != nil {
 		fmt.Printf("ERROR: 加载 holdout 失败: %v\n", err)
 		os.Exit(1)
 	}
 
-	metrics := eval.NewEvalMetrics()
-	var results []eval.EvalResult
+	metrics := goseval.NewEvalMetrics()
+	var results []goseval.EvalResult
 
 	for i, c := range cases {
 		fmt.Printf("  [%d/%d] %s: %s\n", i+1, len(cases), c.ID, truncateSymptom(c.Symptom, 50))
@@ -498,9 +502,9 @@ func runBaseline(holdoutPath, outputFile string) {
 			prediction = fmt.Sprintf("[ERROR] %v", err)
 		}
 
-		matched := eval.MatchPrediction(prediction, c.GroundTruth, c.ExpectedKeywords)
+		matched := goseval.MatchPrediction(prediction, c.GroundTruth, c.ExpectedKeywords)
 
-		r := &eval.EvalResult{
+		r := &goseval.EvalResult{
 			CaseID:        c.ID,
 			Symptom:       c.Symptom,
 			GroundTruth:   c.GroundTruth,
@@ -584,7 +588,7 @@ func runCompare(holdoutPath, baselineFile, outputFile, gosProfile string) {
 		fmt.Println("ERROR: baseline artifact results 为空")
 		os.Exit(1)
 	}
-	cases, err := eval.LoadCases(holdoutPath)
+	cases, err := goseval.LoadCases(holdoutPath)
 	if err != nil {
 		fmt.Printf("ERROR: 无法加载 holdout: %v\n", err)
 		os.Exit(1)
@@ -627,7 +631,7 @@ func runCompare(holdoutPath, baselineFile, outputFile, gosProfile string) {
 	fmt.Printf("GoS 配置: SessionMaxSteps=%d, GapDelta=%.2f, MinSupport=%d, MinConfidence=%.2f\n",
 		cfg.SessionMaxSteps, cfg.FSM.GapDelta, cfg.FSM.MinSupport, cfg.FSM.MinConfidence)
 
-	runner := eval.NewRunner(engine)
+	runner := goseval.NewRunner(engine)
 	start := time.Now()
 	gosMetrics, gosResults, err := runner.RunFromFile(context.Background(), holdoutPath)
 	if err != nil {
@@ -642,7 +646,7 @@ func runCompare(holdoutPath, baselineFile, outputFile, gosProfile string) {
 	printMetrics("Baseline", artifact.Metrics)
 	printDetails(artifact.Results)
 
-	gateReport := eval.CheckGate(gosMetrics, artifact.Metrics)
+	gateReport := goseval.CheckGate(gosMetrics, artifact.Metrics)
 
 	fmt.Println("\n=== Gate 检查 (GoS vs Baseline) ===")
 	for _, g := range gateReport.Gates {
@@ -694,7 +698,7 @@ func runSmoke(holdoutPath, outputFile string) {
 	fmt.Println("注意: baseline 是确定性模拟，仅用于开发回归，不能作为 Phase 3 gate")
 
 	engine, _ := buildGoSEngine(true)
-	runner := eval.NewRunner(engine)
+	runner := goseval.NewRunner(engine)
 	start := time.Now()
 	gosMetrics, gosResults, err := runner.RunFromFile(context.Background(), holdoutPath)
 	if err != nil {
@@ -707,14 +711,14 @@ func runSmoke(holdoutPath, outputFile string) {
 	printDetails(gosResults)
 
 	smoke := newSmokeBaselineRunner()
-	cases, err := eval.LoadCases(holdoutPath)
+	cases, err := goseval.LoadCases(holdoutPath)
 	if err != nil {
 		fmt.Printf("加载 holdout 失败: %v\n", err)
 		os.Exit(1)
 	}
 
-	smokeMetrics := eval.NewEvalMetrics()
-	var smokeResults []eval.EvalResult
+	smokeMetrics := goseval.NewEvalMetrics()
+	var smokeResults []goseval.EvalResult
 	for _, c := range cases {
 		r := smoke.runCase(context.Background(), c)
 		smokeMetrics.AddResult(r)
@@ -725,7 +729,7 @@ func runSmoke(holdoutPath, outputFile string) {
 	printMetrics("Smoke Baseline (确定性模拟)", smokeMetrics)
 	printDetails(smokeResults)
 
-	gateReport := eval.CheckGate(gosMetrics, smokeMetrics)
+	gateReport := goseval.CheckGate(gosMetrics, smokeMetrics)
 
 	fmt.Println("\n=== Gate 检查 (仅开发参考) ===")
 	for _, g := range gateReport.Gates {
@@ -779,7 +783,7 @@ func runGate(holdoutPath, baselineFile, outputFile string) {
 
 	// 2. Run GoS with eval profile (deterministic, no LLM)
 	engine, _ := buildGoSEngine(true)
-	runner := eval.NewRunner(engine)
+	runner := goseval.NewRunner(engine)
 	start := time.Now()
 	gosMetrics, gosResults, err := runner.RunFromFile(context.Background(), holdoutPath)
 	if err != nil {
@@ -789,7 +793,7 @@ func runGate(holdoutPath, baselineFile, outputFile string) {
 	elapsed := time.Since(start)
 
 	// 3. Check gate
-	gateReport := eval.CheckGate(gosMetrics, artifact.Metrics)
+	gateReport := goseval.CheckGate(gosMetrics, artifact.Metrics)
 
 	// 4. Print results
 	printMetrics("GoS", gosMetrics)
@@ -831,7 +835,7 @@ func runExportRuns(holdoutPath, outputDir, gosProfile string) {
 
 	evalProfile := gosProfile == "eval"
 	engine, _ := buildGoSEngine(evalProfile)
-	runner := eval.NewRunner(engine)
+	runner := goseval.NewRunner(engine)
 
 	metrics, results, err := runner.RunFromFile(context.Background(), holdoutPath)
 	if err != nil {
@@ -889,5 +893,99 @@ func runExportRuns(holdoutPath, outputDir, gosProfile string) {
 		fmt.Printf("WARNING: 写入 diag runs 失败: %v\n", err)
 	} else {
 		fmt.Printf("Diag runs: %s\n", diagFile)
+	}
+}
+
+func runJudge(inputDir, outputDir string) {
+	fmt.Println("=== LLM Judge 评分 ===")
+
+	judge, err := judgeeval.NewJudgeRunner(context.Background())
+	if err != nil {
+		fmt.Printf("ERROR: 创建 JudgeRunner 失败: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Find diag JSONL files
+	files, err := filepath.Glob(filepath.Join(inputDir, "diag_*.jsonl"))
+	if err != nil || len(files) == 0 {
+		fmt.Printf("ERROR: 未找到 diag_*.jsonl 文件在 %s\n", inputDir)
+		os.Exit(1)
+	}
+
+	type judgeEntry struct {
+		CaseID string             `json:"case_id"`
+		Query  string             `json:"query"`
+		Scores judgeeval.DiagScores `json:"scores"`
+		Error  string             `json:"error,omitempty"`
+	}
+
+	var allResults []judgeEntry
+	totalScored := 0
+	totalErrors := 0
+
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			fmt.Printf("WARNING: 读取 %s 失败: %v\n", f, err)
+			continue
+		}
+
+		lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+
+			var run struct {
+				CaseID          string   `json:"case_id"`
+				Query           string   `json:"query"`
+				ActualOutput    string   `json:"actual_output"`
+				EvidenceContext []string `json:"evidence_context"`
+			}
+			if err := json.Unmarshal([]byte(line), &run); err != nil {
+				fmt.Printf("WARNING: 解析 JSONL 行失败: %v\n", err)
+				continue
+			}
+
+			fmt.Printf("  评分: %s ... ", run.CaseID)
+			scores, err := judge.Score(context.Background(), run.Query, run.ActualOutput, run.EvidenceContext)
+			if err != nil {
+				fmt.Printf("ERROR: %v\n", err)
+				allResults = append(allResults, judgeEntry{CaseID: run.CaseID, Query: run.Query, Error: err.Error()})
+				totalErrors++
+			} else {
+				fmt.Printf("C=%d Co=%d Ch=%d A=%d O=%d\n", scores.Correctness, scores.Completeness, scores.Coherence, scores.Actionability, scores.Overall)
+				allResults = append(allResults, judgeEntry{CaseID: run.CaseID, Query: run.Query, Scores: *scores})
+				totalScored++
+			}
+		}
+	}
+
+	fmt.Printf("\n评分完成: %d 成功, %d 失败\n", totalScored, totalErrors)
+
+	// Write output
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+		fmt.Printf("ERROR: 创建输出目录失败: %v\n", err)
+		os.Exit(1)
+	}
+
+	ts := time.Now().Format("20060102150405")
+	output := map[string]interface{}{
+		"mode":      "judge",
+		"commit":    gitCommit(),
+		"input_dir": inputDir,
+		"timestamp": time.Now().Format(time.RFC3339),
+		"total":     len(allResults),
+		"scored":    totalScored,
+		"errors":    totalErrors,
+		"results":   allResults,
+	}
+	outData, _ := json.MarshalIndent(output, "", "  ")
+	outFile := filepath.Join(outputDir, fmt.Sprintf("judge_%s.json", ts))
+	if err := os.WriteFile(outFile, outData, 0o644); err != nil {
+		fmt.Printf("WARNING: 写入输出文件失败: %v\n", err)
+	} else {
+		fmt.Printf("结果: %s\n", outFile)
 	}
 }
