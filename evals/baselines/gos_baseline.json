@@ -1,0 +1,23 @@
+{
+  "commit": "initial",
+  "model": "smoke_deterministic",
+  "tool_config": "gos_smoke",
+  "holdout_path": "internal/ai/agent/gos_engine/eval/testdata/holdout.json",
+  "timestamp": "2026-06-06T00:00:00Z",
+  "metrics": {
+    "total_cases": 5,
+    "succeeded": 5,
+    "failed": 0,
+    "degraded": 0,
+    "matched": 5,
+    "accuracy": 1.0,
+    "evidence_coverage": 1.0,
+    "avg_latency": 0,
+    "avg_llm_calls": 0,
+    "degradation_rate": 0,
+    "traceability": 1.0,
+    "per_status": {
+      "success": 5
+    }
+  }
+}
