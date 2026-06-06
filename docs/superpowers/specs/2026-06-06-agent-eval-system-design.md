@@ -1,225 +1,274 @@
 # Agent Eval 系统设计
 
 > 日期：2026-06-06
-> 方案：混合方案（Go 原生 CI + Python deepeval 离线）
+> 方案：三阶段渐进式（Go 确定性 gate → Go LLM Judge → deepeval）
 
 ---
 
 ## 一、背景
 
-项目已有完整的 Go 原生评估体系（RAG 召回率/MRR、Agent 准确率/证据覆盖率、Gate 回归检查、LLM 遗漏/准确性验证），但缺少：
-- LLM-as-Judge 多维度评分器（`DiagScores` 类型已定义，runner 未实现）
-- 语义相似度评估（当前只有关键词匹配）
+项目已有完整的 Go 原生评估体系（RAG 召回率/MRR、Agent 准确率/证据覆盖率、Gate 回归检查），但缺少：
+- LLM-as-Judge 多维度评分（`DiagScores` 类型已定义，runner 未实现）
 - 端到端答案质量评估（Faithfulness、Answer Relevancy）
-- CI 自动化集成
+- 评估结果持久化和趋势追踪
 
-## 二、技术选型
+## 二、核心设计原则
 
-### 方案对比
+1. **CI 只跑确定性 gate**，不依赖 LLM API（无 secrets）
+2. **eval_cases 和 eval_runs 分离**：cases 是输入+期望，runs 是实际执行结果
+3. **GoS/RAG 各自保留原有格式**，不硬合一个 schema
+4. **三阶段渐进**：每阶段独立可用，不依赖后续阶段
 
-| 维度 | A: Go 原生 | B: deepeval | C: 混合（选择） |
-|------|-----------|------------|----------------|
-| 额外依赖 | 无 | Python + pip + deepeval | Python 仅离线用 |
-| 维护成本 | 低 | 高（双语言栈） | 中 |
-| 指标丰富度 | 中（自实现） | 高（开箱即用） | 高 |
-| CI 速度 | 快（秒级） | 慢（分钟级） | 快（Go 部分） |
-| 架构侵入 | 无 | 需桥接层 | 最小 |
-| 工作量 | 3-5 天 | 5-7 天 | 5-7 天 |
+## 三、Artifact 体系
 
-### 选择方案 C：混合方案
+### eval_cases（输入 + 期望）
 
-- **Go 原生**：日常 CI 回归（快速、轻量、单语言）
-- **deepeval**：深度离线评估（指标丰富、社区生态）
-
-## 三、整体架构
+评估用例，描述"应该怎样"。由人工编写或从现有数据迁移。
 
 ```
-eval_cases.jsonl（共享数据集）
-├── GoS holdout cases (5)
-├── RAG cases (18)
-└── Agent DiagCases (新增)
-        │
-        ├──→ Go JudgeRunner (CI, 秒级)
-        │    ├── Correctness (1-5)
-        │    ├── Completeness (1-5)
-        │    ├── Coherence (1-5)
-        │    ├── Actionability (1-5)
-        │    └── Overall (1-5)
-        │
-        └──→ Python deepeval (离线, 分钟级)
-             ├── Faithfulness
-             ├── Answer Relevancy
-             └── Contextual Precision/Recall
+evals/cases/
+├── gos_holdout.json          # GoS 格式：{symptom, ground_truth, expected_keywords}
+├── rag_cases.jsonl           # RAG 格式：{query, relevant_ids}
+└── diag_cases.jsonl          # 通用格式：{query, expected_intent, must_mention, severity}
 ```
 
-## 四、Go 原生 JudgeRunner
+三个文件各自保持原有 schema，不做统一。
 
-### 接口
+### eval_runs（实际执行结果）
+
+Agent/RAG 的真实运行输出。由运行命令生成。
+
+```
+evals/runs/
+├── gos_{timestamp}.json      # GoS 运行结果：{case_id, prediction, matched, latency, ...}
+├── rag_{timestamp}.jsonl     # RAG 运行结果：{query, retrieved_ids, recall, mrr, ...}
+└── diag_{timestamp}.jsonl    # Agent 运行结果：{query, actual_output, tools_called, ...}
+```
+
+### eval_reports（评估报告）
+
+评分和指标汇总。
+
+```
+evals/reports/
+├── gate_{timestamp}.json     # 确定性 gate 结果（pass/fail）
+├── judge_{timestamp}.json    # LLM Judge 评分结果
+└── deepeval_{timestamp}.json # deepeval 评估结果
+```
+
+## 四、第一阶段：Go 确定性 Gate（CI 自动）
+
+### 目标
+
+CI 跑确定性回归检查，不依赖 LLM API，PR 阻断。
+
+### 改动
+
+1. `cmd/gos_eval` 新增 `--mode=export-runs`：运行 GoS/RAG，输出 `evals/runs/` artifact
+2. `cmd/gos_eval` 新增 `--mode=gate`：从 `evals/runs/` 读取结果，跑 CheckGate
+3. Makefile 新增：
+
+```makefile
+# CI 自动（确定性，无 LLM 依赖）
+eval-gate:
+	go run cmd/gos_eval/main.go --mode=compare --gos-profile=eval
+
+# 生成 run artifact（需要 LLM API，手动）
+eval-runs:
+	go run cmd/gos_eval/main.go --mode=export-runs --gos-profile=eval \
+	  --output=evals/runs/
+```
+
+4. CI 配置（`.github/workflows/ci.yml`）新增：
+
+```yaml
+- name: Eval Gate
+  run: make eval-gate
+```
+
+### 不改
+
+- 现有 GoS eval 框架不变
+- 现有 RAG eval 框架不变
+- 不引入 LLM Judge
+
+## 五、第二阶段：Go LLM Judge（手动/Nightly）
+
+### 目标
+
+对 Agent 输出做多维度质量评分，手动或 nightly 运行。
+
+### 改动
+
+1. `internal/ai/agent/eval/judge_runner.go`：实现 JudgeRunner
 
 ```go
-// 复用 agent/eval/types.go 已有定义
-type DiagScores struct {
-    Correctness   float64 `json:"correctness"`    // 1-5
-    Completeness  float64 `json:"completeness"`   // 1-5
-    Coherence     float64 `json:"coherence"`      // 1-5
-    Actionability float64 `json:"actionability"`  // 1-5
-    Overall       float64 `json:"overall"`        // 1-5
-    Reasoning     string  `json:"reasoning"`
-}
-
+// 复用现有 DiagScores 定义（types.go），不改字段
 type JudgeRunner struct {
     model   model.ChatModel
     timeout time.Duration
 }
 
-func NewJudgeRunner() *JudgeRunner
 func (j *JudgeRunner) Score(ctx, query, answer string, toolData []string) (*DiagScores, error)
-func (j *JudgeRunner) ScoreBatch(ctx, cases []DiagCase) ([]*DiagScores, error)
 ```
 
-### 评分 Prompt
+2. 评分 Prompt（中文，4 维度，与现有 DiagScores 对齐）：
+   - Correctness（正确性）：诊断结论是否基于工具数据
+   - Completeness（完整性）：是否覆盖关键发现
+   - Coherence（连贯性）：逻辑是否清晰
+   - Actionability（可操作性）：是否给出可执行建议
 
-中文，5 维度，输出 JSON。复用 `models.OpenAIForGLMFast` 模型。
+3. `cmd/gos_eval` 新增 `--mode=judge`：从 `evals/runs/` 读取结果，调用 JudgeRunner 评分，输出 `evals/reports/judge_*.json`
 
-### 集成点
+4. Makefile 新增：
 
-`cmd/gos_eval` 新增 `--mode=judge` 模式：
-1. 加载 eval cases
-2. 运行 Agent 获取输出
-3. 调用 JudgeRunner 评分
-4. 输出评分报告（JSON）
+```makefile
+# LLM Judge（需要 API key，手动/nightly）
+eval-judge:
+	go run cmd/gos_eval/main.go --mode=judge \
+	  --input=evals/runs/ \
+	  --output=evals/reports/
+```
 
-## 五、deepeval 离线评估
+### 不改
 
-### 目录结构
+- CI 不跑 judge（需要 LLM secrets）
+- 现有 DiagScores 类型不变（int + Comments，不改为 float64）
+
+## 六、第三阶段：deepeval 离线评估（手动）
+
+### 目标
+
+用 deepeval 的 Faithfulness/Answer Relevancy 做深度离线评估。
+
+### 前置条件
+
+- 第二阶段的 `eval_runs` artifact 已存在
+- Python 环境已配置
+
+### 改动
 
 ```
 evals/deepeval/
-├── requirements.txt          # deepeval + openai
-├── runner.py                 # 主入口
+├── requirements.txt
+├── runner.py
 ├── metrics/
-│   ├── __init__.py
-│   └── ops_metrics.py        # 自定义运维指标
-├── datasets/
-│   └── shared_cases.jsonl    # 共享数据集
-└── reports/
-    └── .gitkeep
+│   └── ops_metrics.py
+└── datasets/
+    └── .gitkeep              # 由 eval-runs 生成
 ```
 
-### 核心指标
+### runner.py 输入格式
 
-- **FaithfulnessMetric**：答案是否基于检索到的上下文（防幻觉）
-- **AnswerRelevancyMetric**：答案是否回答了用户问题
-- **ContextualPrecision/Recall**：检索上下文的质量
-
-### runner.py 用法
+读取 `evals/runs/diag_*.jsonl`，不直接读 cases：
 
 ```python
-from deepeval import evaluate
-from deepeval.metrics import FaithfulnessMetric, AnswerRelevancyMetric
-from deepeval.test_case import LLMTestCase
+# 输入：eval_runs（Agent 实际输出）
+{"case_id": "DIAG-001", "query": "...", "actual_output": "...", "tools_called": [...]}
 
-cases = load_jsonl("datasets/shared_cases.jsonl")
-test_cases = [
-    LLMTestCase(
-        input=case["query"],
-        actual_output=case["answer"],
-        retrieval_context=case["tool_data"]
-    )
-    for case in cases
-]
-
-evaluate(
-    test_cases,
-    metrics=[
-        FaithfulnessMetric(threshold=0.7),
-        AnswerRelevancyMetric(threshold=0.7),
-    ]
+# 转换为 deepeval test case
+LLMTestCase(
+    input=run["query"],
+    actual_output=run["actual_output"],
+    retrieval_context=run["tools_called"]  # 工具数据作为检索上下文
 )
 ```
 
-### LLM 配置
+### deepeval 环境配置
 
-deepeval 通过环境变量配置 LLM：
 ```bash
 export OPENAI_API_KEY="${ARK_API_KEY}"
-export OPENAI_API_BASE="https://ark.cn-beijing.volces.com/api/v3"
-export OPENAI_MODEL="deepseek-v4"
+export OPENAI_MODEL_NAME="deepseek-v4"
+# 如需自定义 base URL，通过 LiteLLM 或 deepeval 自定义模型适配
 ```
 
-## 六、共享数据集格式
+### Makefile 新增
 
-### shared_cases.jsonl
+```makefile
+# 导出 runs 给 deepeval 用
+eval-export-deep:
+	go run cmd/gos_eval/main.go --mode=export-runs \
+	  --output=evals/deepeval/datasets/
 
-```json
-{
-  "id": "DIAG-001",
-  "query": "payment-service 响应延迟升高，排查一下",
-  "answer": "诊断结果全文...",
-  "tool_data": [
-    "prometheus: p99=500ms, error_rate=5%",
-    "log: connection timeout to mysql-001"
-  ],
-  "expected_keywords": ["超时", "数据库", "连接池"],
-  "expected_intent": "diagnose",
-  "severity": "high",
-  "source": "gos_holdout"
+# deepeval 深度评估（需要 Python + API key）
+eval-deep:
+	cd evals/deepeval && python runner.py
+```
+
+## 七、DiagScores 兼容
+
+严格复用现有 `agent/eval/types.go` 定义，不改字段：
+
+```go
+// 现有定义（types.go:21-28），不改
+type DiagScores struct {
+    Correctness   int    `json:"correctness"`
+    Completeness  int    `json:"completeness"`
+    Coherence     int    `json:"coherence"`
+    Actionability int    `json:"actionability"`
+    Overall       int    `json:"overall"`
+    Comments      string `json:"comments,omitempty"`
 }
 ```
 
-### 导出
+JudgeRunner 输出对齐此格式（int 1-5 分）。
 
-`cmd/gos_eval --mode=export` 从现有 eval cases 生成 `shared_cases.jsonl`。
-
-## 七、CI 集成
-
-### Makefile
+## 八、Makefile 汇总
 
 ```makefile
-# Go 原生评估（CI 自动，~30s）
-eval-go:
+# 第一阶段：CI 自动（确定性）
+eval-gate:
 	go run cmd/gos_eval/main.go --mode=compare --gos-profile=eval
-	go run cmd/gos_eval/main.go --mode=judge
 
-# deepeval 深度评估（手动触发，~5min）
+# 第一阶段：生成 run artifact（需要 LLM，手动）
+eval-runs:
+	go run cmd/gos_eval/main.go --mode=export-runs --gos-profile=eval \
+	  --output=evals/runs/
+
+# 第二阶段：LLM Judge（需要 API key，手动/nightly）
+eval-judge:
+	go run cmd/gos_eval/main.go --mode=judge \
+	  --input=evals/runs/ --output=evals/reports/
+
+# 第三阶段：deepeval（需要 Python + API key）
+eval-export-deep:
+	go run cmd/gos_eval/main.go --mode=export-runs \
+	  --output=evals/deepeval/datasets/
+
 eval-deep:
 	cd evals/deepeval && python runner.py
-
-# 导出共享数据集
-eval-export:
-	go run cmd/gos_eval/main.go --mode=export \
-	  --output=evals/deepeval/datasets/shared_cases.jsonl
 ```
 
-### CI 流程
+## 九、改动文件清单
 
-```
-PR 提交 → make eval-go（Go 快速回归）
-        → 失败则阻断合并
-        → 通过则合并
-
-定期手动 → make eval-export && make eval-deep
-        → 生成深度评估报告
-```
-
-## 八、改动文件清单
-
+### 第一阶段
 | 文件 | 改动 |
 |------|------|
-| `internal/ai/agent/eval/judge_runner.go` | 新文件，Go LLM-as-Judge 评分器 |
-| `internal/ai/agent/eval/judge_runner_test.go` | 新文件，测试 |
-| `cmd/gos_eval/main.go` | 新增 `--mode=judge` 和 `--mode=export` |
+| `cmd/gos_eval/main.go` | 新增 `--mode=export-runs` 和 `--mode=gate` |
+| `Makefile` | 新增 eval-gate / eval-runs |
+| `.github/workflows/ci.yml` | 新增 eval-gate 步骤 |
+
+### 第二阶段
+| 文件 | 改动 |
+|------|------|
+| `internal/ai/agent/eval/judge_runner.go` | 新文件，Go LLM-as-Judge |
+| `internal/ai/agent/eval/judge_runner_test.go` | 新文件 |
+| `cmd/gos_eval/main.go` | 新增 `--mode=judge` |
+| `Makefile` | 新增 eval-judge |
+
+### 第三阶段
+| 文件 | 改动 |
+|------|------|
 | `evals/deepeval/requirements.txt` | 新文件 |
 | `evals/deepeval/runner.py` | 新文件 |
 | `evals/deepeval/metrics/ops_metrics.py` | 新文件 |
-| `evals/deepeval/datasets/shared_cases.jsonl` | 新文件（由 export 生成） |
-| `Makefile` | 新增 eval-go / eval-deep / eval-export |
+| `Makefile` | 新增 eval-export-deep / eval-deep |
 
-## 九、不改的部分
+## 十、不改的部分
 
+- 现有 GoS eval 框架（types.go, runner.go）不变
 - 现有 RAG eval 框架不变
-- 现有 GoS eval 框架不变
-- 现有 LLM Validator（events/llm_validator.go）不变
-- 现有 HealthCollector 不变
-- 现有 Contract/SchemaGate 不变
-- 不引入 deepeval 到 Go 依赖（Python 独立运行）
+- 现有 DiagScores 类型定义不变
+- 现有 LLM Validator / HealthCollector / Contract 不变
+- 不引入 deepeval 到 Go 依赖
+- CI 不引入 LLM API 依赖
