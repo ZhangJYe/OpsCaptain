@@ -99,7 +99,7 @@ func TestBM25Index_EmptyIndex(t *testing.T) {
 func TestBM25Tokenize_Consistency(t *testing.T) {
 	t.Parallel()
 
-	tokens := bm25Tokenize("CheckoutService RRT_timeout CPU.usage /api/v1/pay")
+	tokens := BM25Tokenize("CheckoutService RRT_timeout CPU.usage /api/v1/pay")
 	expected := map[string]bool{
 		"checkoutservice": true,
 		"rrt_timeout":     true,
@@ -120,7 +120,7 @@ func TestBM25Tokenize_Consistency(t *testing.T) {
 func TestBM25Tokenize_Chinese(t *testing.T) {
 	t.Parallel()
 
-	tokens := bm25Tokenize("checkoutservice 超时 支付失败")
+	tokens := BM25Tokenize("checkoutservice 超时 支付失败")
 	got := make(map[string]bool)
 	for _, tok := range tokens {
 		got[tok] = true

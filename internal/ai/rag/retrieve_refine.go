@@ -8,7 +8,7 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-var retrievalStopwords = map[string]struct{}{
+var RetrievalStopwords = map[string]struct{}{
 	"a": {}, "an": {}, "and": {}, "are": {}, "as": {}, "at": {}, "be": {}, "by": {},
 	"for": {}, "from": {}, "in": {}, "into": {}, "is": {}, "of": {}, "on": {}, "or": {},
 	"the": {}, "to": {}, "with": {}, "without": {}, "service": {}, "instance": {}, "type": {},
@@ -188,7 +188,7 @@ func tokenizeToSet(value string) map[string]struct{} {
 		if len(token) < 2 {
 			return
 		}
-		if _, stop := retrievalStopwords[token]; stop {
+		if _, stop := RetrievalStopwords[token]; stop {
 			return
 		}
 		out[token] = struct{}{}

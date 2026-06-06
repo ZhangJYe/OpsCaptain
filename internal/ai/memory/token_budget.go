@@ -38,7 +38,7 @@ func GetTokenBudget() *TokenBudget {
 		globalBudget = &TokenBudget{
 			MaxTokens:       maxTokens,
 			SystemReserve:   int(float64(maxTokens) * 0.20),
-			MemoryReserve:   int(float64(maxTokens) * 0.10),
+			MemoryReserve:   int(float64(maxTokens) * 0.20),
 			HistoryReserve:  int(float64(maxTokens) * 0.40),
 			DocumentReserve: int(float64(maxTokens) * 0.15),
 		}

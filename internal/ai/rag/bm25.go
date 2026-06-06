@@ -41,10 +41,10 @@ func NewBM25Index() *BM25Index {
 }
 
 func (idx *BM25Index) AddDocument(id string, content string, meta map[string]string) {
-	tokens := bm25Tokenize(content)
+	tokens := BM25Tokenize(content)
 	if meta != nil {
 		for _, v := range meta {
-			tokens = append(tokens, bm25Tokenize(v)...)
+			tokens = append(tokens, BM25Tokenize(v)...)
 		}
 	}
 	doc := bm25Doc{
@@ -74,7 +74,7 @@ func (idx *BM25Index) AddDocument(id string, content string, meta map[string]str
 }
 
 func (idx *BM25Index) Search(query string, topK int) []BM25Hit {
-	queryTokens := bm25Tokenize(query)
+	queryTokens := BM25Tokenize(query)
 	if len(queryTokens) == 0 || topK <= 0 {
 		return nil
 	}
@@ -171,11 +171,11 @@ func (idx *BM25Index) rebuildStatsLocked() {
 	idx.avgDL = float64(totalLen) / float64(idx.totalDoc)
 }
 
-func isCJK(r rune) bool {
+func IsCJK(r rune) bool {
 	return (r >= 0x4e00 && r <= 0x9fff) || (r >= 0x3400 && r <= 0x4dbf)
 }
 
-func bm25Tokenize(text string) []string {
+func BM25Tokenize(text string) []string {
 	lower := strings.ToLower(text)
 	var tokens []string
 	var buf strings.Builder
@@ -189,14 +189,14 @@ func bm25Tokenize(text string) []string {
 		if len(t) < 2 {
 			return
 		}
-		if _, stop := retrievalStopwords[t]; stop {
+		if _, stop := RetrievalStopwords[t]; stop {
 			return
 		}
 		tokens = append(tokens, t)
 		prevCJK = 0
 	}
 	for _, r := range lower {
-		if isCJK(r) {
+		if IsCJK(r) {
 			flush()
 			tokens = append(tokens, string(r))
 			if prevCJK != 0 {

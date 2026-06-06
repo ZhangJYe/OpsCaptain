@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"SuperBizAgent/internal/ai/rag"
 	"github.com/gogf/gf/v2/frame/g"
 )
 
@@ -222,7 +223,7 @@ func (ltm *LongTermMemory) RetrieveScoped(ctx context.Context, query string, lim
 		return nil
 	}
 
-	queryLower := strings.ToLower(query)
+	queryTokens := rag.BM25Tokenize(query)
 	now := time.Now()
 	type scored struct {
 		id    string
@@ -242,16 +243,19 @@ func (ltm *LongTermMemory) RetrieveScoped(ctx context.Context, query string, lim
 			continue
 		}
 		score := relevance
-		contentLower := strings.ToLower(entry.Content)
-		words := strings.Fields(queryLower)
-		matchCount := 0
-		for _, w := range words {
-			if len(w) > 1 && strings.Contains(contentLower, w) {
-				matchCount++
+		if len(queryTokens) > 0 {
+			contentTokens := rag.BM25Tokenize(entry.Content)
+			contentSet := make(map[string]struct{}, len(contentTokens))
+			for _, t := range contentTokens {
+				contentSet[t] = struct{}{}
 			}
-		}
-		if len(words) > 0 {
-			score += float64(matchCount) / float64(len(words)) * 2.0
+			matchCount := 0
+			for _, qt := range queryTokens {
+				if _, ok := contentSet[qt]; ok {
+					matchCount++
+				}
+			}
+			score += float64(matchCount) / float64(len(queryTokens)) * 2.0
 		}
 		candidates = append(candidates, scored{
 			id:    id,
