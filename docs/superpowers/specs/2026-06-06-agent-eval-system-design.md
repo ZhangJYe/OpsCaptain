@@ -51,8 +51,8 @@ Agent/RAG 的真实运行输出。由运行命令生成，`.gitignore` 排除。
 ```
 evals/runs/
 ├── gos_{timestamp}.json      # GoS 运行结果
-├── rag_{timestamp}.jsonl     # RAG 运行结果
-└── diag_{timestamp}.jsonl    # Agent 运行结果
+├── rag_{timestamp}.json      # RAG online eval 运行结果
+└── diag_{timestamp}.jsonl    # Agent 诊断运行结果，供 judge/deepeval 使用
 ```
 
 ### eval_reports（评估报告，不入库）
@@ -84,7 +84,7 @@ CI 跑确定性回归检查，不依赖 LLM API，PR 阻断。
 
 1. `cmd/gos_eval` 新增 `--mode=gate`：读取仓库内 `evals/baselines/gos_baseline.json`，与 smoke 运行结果对比，跑 CheckGate。不复用 compare 模式（compare 需要 real profile 且要求 baseline 文件存在）。
 
-2. `cmd/gos_eval` 新增 `--mode=export-runs`：运行 GoS，输出 `evals/runs/gos_*.json`。RAG 由现有 `rag_online_eval_cmd` 独立导出。
+2. `cmd/gos_eval` 新增 `--mode=export-runs`：运行 GoS，输出 `evals/runs/gos_*.json`；同时导出 `evals/runs/diag_*.jsonl`，供 JudgeRunner/deepeval 使用。RAG 由现有 `rag_online_eval_cmd` 独立导出。
 
 3. Makefile 新增：
 
@@ -94,7 +94,7 @@ eval-gate:
 	go run cmd/gos_eval/main.go --mode=gate --gos-profile=eval \
 	  --baseline=evals/baselines/gos_baseline.json
 
-# 生成 GoS run artifact（需要 LLM API，手动）
+# 生成 GoS/Diag run artifact（需要 LLM API，手动）
 eval-runs-gos:
 	go run cmd/gos_eval/main.go --mode=export-runs --gos-profile=eval \
 	  --output=evals/runs/
@@ -102,7 +102,7 @@ eval-runs-gos:
 # 生成 RAG run artifact（独立命令，手动）
 eval-runs-rag:
 	go run internal/ai/cmd/rag_online_eval_cmd/main.go \
-	  --output=evals/runs/
+	  --out=evals/runs/rag_$$(date +%Y%m%d%H%M%S).json
 ```
 
 4. CI 配置（`.github/workflows/ci.yml`）新增：
@@ -244,7 +244,7 @@ eval-gate:
 	go run cmd/gos_eval/main.go --mode=gate --gos-profile=eval \
 	  --baseline=evals/baselines/gos_baseline.json
 
-# 第一阶段：生成 GoS run artifact（需要 LLM，手动）
+# 第一阶段：生成 GoS/Diag run artifact（需要 LLM，手动）
 eval-runs-gos:
 	go run cmd/gos_eval/main.go --mode=export-runs --gos-profile=eval \
 	  --output=evals/runs/
@@ -252,7 +252,7 @@ eval-runs-gos:
 # 第一阶段：生成 RAG run artifact（独立命令，手动）
 eval-runs-rag:
 	go run internal/ai/cmd/rag_online_eval_cmd/main.go \
-	  --output=evals/runs/
+	  --out=evals/runs/rag_$$(date +%Y%m%d%H%M%S).json
 
 # 第二阶段：LLM Judge（需要 API key，手动/nightly）
 eval-judge:
@@ -269,9 +269,9 @@ eval-deep:
 ### 第一阶段
 | 文件 | 改动 |
 |------|------|
-| `cmd/gos_eval/main.go` | 新增 `--mode=gate`（读 baseline，跑 smoke，对比 CheckGate）和 `--mode=export-runs` |
+| `cmd/gos_eval/main.go` | 新增 `--mode=gate`（读 baseline，跑 smoke，对比 CheckGate）和 `--mode=export-runs`（导出 gos/diag runs） |
 | `evals/baselines/gos_baseline.json` | 新文件，GoS 基准值（入库） |
-| `.gitignore` | 排除 evals/runs/、evals/reports/ |
+| `.gitignore` | 排除 evals/runs/、evals/reports/、evals/deepeval/datasets/ |
 | `Makefile` | 新增 eval-gate / eval-runs-gos / eval-runs-rag |
 | `.github/workflows/ci.yml` | 新增 eval-gate 步骤 |
 
