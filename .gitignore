@@ -79,3 +79,8 @@ Learn/design/*.progress.md
 /package.json
 /package-lock.json
 .superpowers/
+
+# Eval 运行产物（不入库）
+evals/runs/
+evals/reports/
+evals/deepeval/datasets/

@@ -35,5 +35,18 @@ build:
 clean:
 	@rm -rf bin/ coverage.out
 
-ci: fmt vet test-race test-cover build
+# === Eval ===
+
+eval-gate:
+	@echo "==> Eval Gate (确定性回归检查)"
+	@$(GO) run cmd/gos_eval/main.go --mode=gate --gos-profile=eval \
+	  --baseline=evals/baselines/gos_baseline.json \
+	  --output=evals/reports/gate_$$(date +%Y%m%d%H%M%S).json
+
+eval-runs-gos:
+	@echo "==> Export GoS/Diag runs"
+	@$(GO) run cmd/gos_eval/main.go --mode=export-runs --gos-profile=eval \
+	  --output-dir=evals/runs
+
+ci: fmt vet test-race test-cover build eval-gate
 	@echo "==> CI pipeline complete"
