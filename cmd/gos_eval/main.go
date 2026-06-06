@@ -400,11 +400,12 @@ func logToolUnavailableReason(err error) string {
 }
 
 func main() {
-	mode := flag.String("mode", "gos", "运行模式: gos|baseline|compare|smoke")
+	mode := flag.String("mode", "gos", "运行模式: gos|baseline|compare|smoke|gate|export-runs")
 	baselineFile := flag.String("baseline", "baseline_result.json", "baseline artifact 文件路径")
 	holdoutPath := flag.String("holdout", "internal/ai/agent/gos_engine/eval/testdata/holdout.json", "holdout 数据集路径")
 	outputFile := flag.String("output", "eval_result.json", "输出文件路径")
 	gosProfile := flag.String("gos-profile", "real", "GoS 配置: real|eval (real=生产行为, eval=fake deps)")
+	outputDir := flag.String("output-dir", "evals/runs", "export-runs 模式的输出目录")
 	flag.Parse()
 
 	if err := common.LoadPreferredEnvFile(); err != nil {
@@ -421,9 +422,13 @@ func main() {
 		runCompare(*holdoutPath, *baselineFile, *outputFile, *gosProfile)
 	case "smoke":
 		runSmoke(*holdoutPath, *outputFile)
+	case "gate":
+		runGate(*holdoutPath, *baselineFile, *outputFile)
+	case "export-runs":
+		runExportRuns(*holdoutPath, *outputDir, *gosProfile)
 	default:
 		fmt.Printf("未知模式: %s\n", *mode)
-		fmt.Println("可用模式: gos, baseline, compare, smoke")
+		fmt.Println("可用模式: gos, baseline, compare, smoke, gate, export-runs")
 		os.Exit(1)
 	}
 }
@@ -751,4 +756,138 @@ func runSmoke(holdoutPath, outputFile string) {
 		os.Exit(1)
 	}
 	fmt.Printf("\n结果已保存到 %s\n", outputFile)
+}
+
+func runGate(holdoutPath, baselineFile, outputFile string) {
+	fmt.Println("=== Eval Gate (确定性回归检查) ===")
+
+	// 1. Read baseline artifact
+	data, err := os.ReadFile(baselineFile)
+	if err != nil {
+		fmt.Printf("ERROR: 读取 baseline 失败: %v\n", err)
+		os.Exit(1)
+	}
+	var artifact BaselineArtifact
+	if err := json.Unmarshal(data, &artifact); err != nil {
+		fmt.Printf("ERROR: 解析 baseline 失败: %v\n", err)
+		os.Exit(1)
+	}
+	if artifact.Metrics == nil {
+		fmt.Println("ERROR: baseline 缺少 metrics")
+		os.Exit(1)
+	}
+
+	// 2. Run GoS with eval profile (deterministic, no LLM)
+	engine, _ := buildGoSEngine(true)
+	runner := eval.NewRunner(engine)
+	start := time.Now()
+	gosMetrics, gosResults, err := runner.RunFromFile(context.Background(), holdoutPath)
+	if err != nil {
+		fmt.Printf("ERROR: GoS 运行失败: %v\n", err)
+		os.Exit(1)
+	}
+	elapsed := time.Since(start)
+
+	// 3. Check gate
+	gateReport := eval.CheckGate(gosMetrics, artifact.Metrics)
+
+	// 4. Print results
+	printMetrics("GoS", gosMetrics)
+	fmt.Printf("\n--- Gate 结果 ---\n")
+	for _, g := range gateReport.Gates {
+		status := "PASS"
+		if !g.Passed {
+			status = "FAIL"
+		}
+		fmt.Printf("  [%s] %s: expected=%s, actual=%s\n", status, g.Name, g.Expected, g.Actual)
+	}
+	fmt.Printf("\n总耗时: %v\n", elapsed)
+
+	// 5. Write output
+	output := map[string]interface{}{
+		"mode":          "gate",
+		"commit":        gitCommit(),
+		"baseline_file": baselineFile,
+		"gos_metrics":   gosMetrics,
+		"gos_results":   gosResults,
+		"baseline":      artifact.Metrics,
+		"gate":          gateReport,
+		"elapsed_ms":    elapsed.Milliseconds(),
+	}
+	outData, _ := json.MarshalIndent(output, "", "  ")
+	if err := os.WriteFile(outputFile, outData, 0o644); err != nil {
+		fmt.Printf("WARNING: 写入输出文件失败: %v\n", err)
+	}
+
+	if !gateReport.AllPassed {
+		fmt.Println("\n❌ Gate 未通过")
+		os.Exit(1)
+	}
+	fmt.Println("\n✅ Gate 通过")
+}
+
+func runExportRuns(holdoutPath, outputDir, gosProfile string) {
+	fmt.Println("=== Export Runs ===")
+
+	evalProfile := gosProfile == "eval"
+	engine, _ := buildGoSEngine(evalProfile)
+	runner := eval.NewRunner(engine)
+
+	metrics, results, err := runner.RunFromFile(context.Background(), holdoutPath)
+	if err != nil {
+		fmt.Printf("ERROR: GoS 运行失败: %v\n", err)
+		os.Exit(1)
+	}
+
+	printMetrics("GoS", metrics)
+
+	// Ensure output directory exists
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+		fmt.Printf("ERROR: 创建输出目录失败: %v\n", err)
+		os.Exit(1)
+	}
+
+	ts := time.Now().Format("20060102150405")
+
+	// Write GoS results
+	gosOutput := map[string]interface{}{
+		"mode":      "export-runs",
+		"commit":    gitCommit(),
+		"profile":   gosProfile,
+		"holdout":   holdoutPath,
+		"timestamp": time.Now().Format(time.RFC3339),
+		"metrics":   metrics,
+		"results":   results,
+	}
+	gosData, _ := json.MarshalIndent(gosOutput, "", "  ")
+	gosFile := filepath.Join(outputDir, fmt.Sprintf("gos_%s.json", ts))
+	if err := os.WriteFile(gosFile, gosData, 0o644); err != nil {
+		fmt.Printf("WARNING: 写入 GoS 结果失败: %v\n", err)
+	} else {
+		fmt.Printf("GoS 结果: %s\n", gosFile)
+	}
+
+	// Write diag runs (JSONL, one case per line)
+	diagFile := filepath.Join(outputDir, fmt.Sprintf("diag_%s.jsonl", ts))
+	var diagLines []string
+	for _, r := range results {
+		line := map[string]interface{}{
+			"case_id":          r.CaseID,
+			"query":            r.Symptom,
+			"actual_output":    r.Prediction,
+			"tools_called":     []string{},
+			"evidence_context": []string{},
+			"latency_ms":       r.Latency.Milliseconds(),
+			"llm_calls":        r.LLMCalls,
+			"matched":          r.Matched,
+			"status":           r.Status,
+		}
+		lineData, _ := json.Marshal(line)
+		diagLines = append(diagLines, string(lineData))
+	}
+	if err := os.WriteFile(diagFile, []byte(strings.Join(diagLines, "\n")+"\n"), 0o644); err != nil {
+		fmt.Printf("WARNING: 写入 diag runs 失败: %v\n", err)
+	} else {
+		fmt.Printf("Diag runs: %s\n", diagFile)
+	}
 }
