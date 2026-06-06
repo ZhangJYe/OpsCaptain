@@ -299,4 +299,3 @@ func (c *SimpleMemory) Reset() {
 	c.Summary = ""
 	c.turnCount = 0
 }
-

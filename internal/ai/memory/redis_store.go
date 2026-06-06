@@ -4,14 +4,37 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/gogf/gf/v2/database/gredis"
 	"github.com/gogf/gf/v2/frame/g"
 )
 
+const redisSaveEntriesScript = `
+local n = tonumber(ARGV[1])
+for i = 1, n do
+  redis.call("SET", KEYS[i], ARGV[i + 1])
+end
+for i = 1, n do
+  redis.call("SADD", KEYS[n + 1], ARGV[n + 1 + i])
+end
+return n
+`
+
+const redisDeleteEntriesScript = `
+local n = tonumber(ARGV[1])
+for i = 1, n do
+  redis.call("DEL", KEYS[i])
+end
+for i = 1, n do
+  redis.call("SREM", KEYS[n + 1], ARGV[i + 1])
+end
+return n
+`
+
 type redisMemoryStore struct {
-	redis *gredis.Redis
+	redis  *gredis.Redis
 	prefix string
 }
 
@@ -75,23 +98,27 @@ func (s *redisMemoryStore) SaveEntries(ctx context.Context, entries []*MemoryEnt
 		return nil
 	}
 
-	ids := make([]interface{}, 0, len(entries))
+	keys := make([]interface{}, 0, len(entries)+1)
+	args := make([]interface{}, 0, len(entries)*2+1)
+	args = append(args, strconv.Itoa(len(entries)))
 	for _, entry := range entries {
 		body, err := json.Marshal(entry)
 		if err != nil {
 			return fmt.Errorf("marshal entry %s: %w", entry.ID, err)
 		}
-		if _, err := s.redis.Do(ctx, "SET", s.entryKey(entry.ID), body); err != nil {
-			return fmt.Errorf("set entry %s: %w", entry.ID, err)
-		}
-		ids = append(ids, entry.ID)
+		keys = append(keys, s.entryKey(entry.ID))
+		args = append(args, string(body))
 	}
-
-	saddArgs := make([]interface{}, 0, len(ids)+1)
-	saddArgs = append(saddArgs, s.idsKey())
-	saddArgs = append(saddArgs, ids...)
-	if _, err := s.redis.Do(ctx, "SADD", saddArgs...); err != nil {
-		return fmt.Errorf("sadd ids: %w", err)
+	keys = append(keys, s.idsKey())
+	for _, entry := range entries {
+		args = append(args, entry.ID)
+	}
+	cmdArgs := make([]interface{}, 0, len(keys)+len(args)+2)
+	cmdArgs = append(cmdArgs, redisSaveEntriesScript, len(keys))
+	cmdArgs = append(cmdArgs, keys...)
+	cmdArgs = append(cmdArgs, args...)
+	if _, err := s.redis.Do(ctx, "EVAL", cmdArgs...); err != nil {
+		return fmt.Errorf("save entries transaction failed: %w", err)
 	}
 
 	return nil
@@ -102,21 +129,20 @@ func (s *redisMemoryStore) DeleteEntries(ctx context.Context, ids []string) erro
 		return nil
 	}
 
-	delArgs := make([]interface{}, 0, len(ids))
+	keys := make([]interface{}, 0, len(ids)+1)
+	args := make([]interface{}, 0, len(ids)+1)
+	args = append(args, strconv.Itoa(len(ids)))
 	for _, id := range ids {
-		delArgs = append(delArgs, s.entryKey(id))
+		keys = append(keys, s.entryKey(id))
+		args = append(args, id)
 	}
-	if _, err := s.redis.Do(ctx, "DEL", delArgs...); err != nil {
-		return fmt.Errorf("del entries: %w", err)
-	}
-
-	sremArgs := make([]interface{}, 0, len(ids)+1)
-	sremArgs = append(sremArgs, s.idsKey())
-	for _, id := range ids {
-		sremArgs = append(sremArgs, id)
-	}
-	if _, err := s.redis.Do(ctx, "SREM", sremArgs...); err != nil {
-		return fmt.Errorf("srem ids: %w", err)
+	keys = append(keys, s.idsKey())
+	cmdArgs := make([]interface{}, 0, len(keys)+len(args)+2)
+	cmdArgs = append(cmdArgs, redisDeleteEntriesScript, len(keys))
+	cmdArgs = append(cmdArgs, keys...)
+	cmdArgs = append(cmdArgs, args...)
+	if _, err := s.redis.Do(ctx, "EVAL", cmdArgs...); err != nil {
+		return fmt.Errorf("delete entries transaction failed: %w", err)
 	}
 
 	return nil

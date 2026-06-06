@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -117,6 +118,23 @@ func TestLongTermMemory_FileStorePersistsEntries(t *testing.T) {
 	results := reloaded.Retrieve(ctx, "sess-file", "payment-service", 10)
 	if len(results) != 1 {
 		t.Fatalf("expected persisted memory after reload, got %d", len(results))
+	}
+}
+
+func TestFileLongTermMemoryStore_ReturnsLoadErrorBeforeWriting(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "memory.json")
+	if err := os.WriteFile(path, []byte("{bad json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store := NewFileLongTermMemoryStore(path)
+
+	entry := &MemoryEntry{ID: "mem-1", SessionID: "sess-file", Type: MemoryTypeFact, Content: "test"}
+	if err := store.SaveEntries(ctx, []*MemoryEntry{entry}); err == nil {
+		t.Fatal("expected SaveEntries to return load error")
+	}
+	if err := store.DeleteEntries(ctx, []string{"mem-1"}); err == nil {
+		t.Fatal("expected DeleteEntries to return load error")
 	}
 }
 

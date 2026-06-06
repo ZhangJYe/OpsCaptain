@@ -832,7 +832,10 @@ func (s *fileLongTermMemoryStore) SaveEntries(ctx context.Context, entries []*Me
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	existing, _ := s.LoadAll(ctx)
+	existing, err := s.LoadAll(ctx)
+	if err != nil {
+		return fmt.Errorf("load existing memory store before save: %w", err)
+	}
 	byID := make(map[string]*MemoryEntry, len(existing)+len(entries))
 	for _, e := range existing {
 		byID[e.ID] = e
@@ -851,7 +854,10 @@ func (s *fileLongTermMemoryStore) DeleteEntries(ctx context.Context, ids []strin
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	existing, _ := s.LoadAll(ctx)
+	existing, err := s.LoadAll(ctx)
+	if err != nil {
+		return fmt.Errorf("load existing memory store before delete: %w", err)
+	}
 	deleteSet := make(map[string]struct{}, len(ids))
 	for _, id := range ids {
 		deleteSet[id] = struct{}{}
@@ -887,7 +893,11 @@ func loadLongTermMemoryStore() LongTermMemoryStore {
 		return NewRedisMemoryStore(g.Redis())
 	case "file":
 		path, _ := g.Cfg().Get(context.Background(), "memory.long_term_store_path")
-		return NewFileLongTermMemoryStore(path.String())
+		if p := strings.TrimSpace(path.String()); p != "" {
+			return NewFileLongTermMemoryStore(p)
+		}
+		g.Log().Warning(context.Background(), "[ltm] memory.store_backend=file requires memory.long_term_store_path")
+		return nil
 	default:
 		// 向后兼容：旧配置 long_term_store_path 有值则走 file
 		path, _ := g.Cfg().Get(context.Background(), "memory.long_term_store_path")

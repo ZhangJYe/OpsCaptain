@@ -187,6 +187,7 @@ memory:
   max_context_tokens: 4096
   agent_mode: "llm"
   project_id: "opscaption"
+  store_backend: ""
   long_term_store_path: ""
   extract_timeout_ms: 1500
   extract_max_concurrency: 8

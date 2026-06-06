@@ -109,7 +109,6 @@ func ValidateMemoryCandidate(candidate MemoryCandidate) (bool, string) {
 	return true, ""
 }
 
-
 func extractFacts(userMsg string, assistantMsg string) []string {
 	var facts []string
 
@@ -190,7 +189,6 @@ func splitSentences(text string) []string {
 	}
 	return result
 }
-
 func dedup(items []string) []string {
 	seen := make(map[string]bool)
 	var result []string
@@ -202,5 +200,3 @@ func dedup(items []string) []string {
 	}
 	return result
 }
-
-
