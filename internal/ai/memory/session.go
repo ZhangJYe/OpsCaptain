@@ -146,7 +146,6 @@ func GetSessionStats() map[string]SessionStats {
 			SummaryLen:   len(m.Summary),
 			CreatedAt:    m.createdAt,
 			LastAccess:   entry.lastAccess,
-			TopicCount:   len(m.topics),
 		}
 		m.mu.Unlock()
 	}
@@ -160,15 +159,6 @@ type SessionStats struct {
 	SummaryLen   int       `json:"summary_len"`
 	CreatedAt    time.Time `json:"created_at"`
 	LastAccess   time.Time `json:"last_access"`
-	TopicCount   int       `json:"topic_count"`
-}
-
-type TopicSegment struct {
-	Topic     string    `json:"topic"`
-	Summary   string    `json:"summary"`
-	StartTurn int       `json:"start_turn"`
-	EndTurn   int       `json:"end_turn"`
-	CreatedAt time.Time `json:"created_at"`
 }
 
 type SimpleMemory struct {
@@ -178,7 +168,6 @@ type SimpleMemory struct {
 	MaxWindowSize int
 	turnCount     int
 	createdAt     time.Time
-	topics        []TopicSegment
 	mu            sync.Mutex
 }
 
@@ -222,15 +211,35 @@ func (c *SimpleMemory) trimWindow() {
 					c.Summary = c.Summary + "\n" + newSummary
 				}
 				if len(c.Summary) > maxSummaryLen {
-					c.Summary = c.Summary[len(c.Summary)-maxSummaryLen:]
-					if idx := strings.Index(c.Summary, "\n"); idx >= 0 && idx < len(c.Summary)-1 {
-						c.Summary = c.Summary[idx+1:]
-					}
+					c.Summary = truncateSummary(c.Summary, maxSummaryLen)
 				}
 			}
 			c.Messages = c.Messages[excess:]
 		}
 	}
+}
+
+func truncateSummary(summary string, maxLen int) string {
+	runes := []rune(summary)
+	if len(runes) <= maxLen {
+		return summary
+	}
+	// 保留开头 60% 和结尾 30%，中间用省略标记连接
+	headLen := int(float64(maxLen) * 0.6)
+	tailLen := int(float64(maxLen) * 0.3)
+	if headLen+tailLen > len(runes) {
+		return summary
+	}
+	head := string(runes[:headLen])
+	// 对齐到换行处
+	if idx := strings.LastIndex(head, "\n"); idx > headLen/2 {
+		head = head[:idx]
+	}
+	tail := string(runes[len(runes)-tailLen:])
+	if idx := strings.Index(tail, "\n"); idx >= 0 && idx < len(tail)-1 {
+		tail = tail[idx+1:]
+	}
+	return head + "\n[...省略...]\n" + tail
 }
 
 func (c *SimpleMemory) summarizeMessages(msgs []*schema.Message) string {
@@ -289,26 +298,5 @@ func (c *SimpleMemory) Reset() {
 	c.Messages = []*schema.Message{}
 	c.Summary = ""
 	c.turnCount = 0
-	c.topics = nil
 }
 
-func (c *SimpleMemory) AddTopic(topic string, summary string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	seg := TopicSegment{
-		Topic:     topic,
-		Summary:   summary,
-		StartTurn: c.turnCount,
-		EndTurn:   c.turnCount,
-		CreatedAt: time.Now(),
-	}
-	c.topics = append(c.topics, seg)
-}
-
-func (c *SimpleMemory) GetTopics() []TopicSegment {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	copied := make([]TopicSegment, len(c.topics))
-	copy(copied, c.topics)
-	return copied
-}

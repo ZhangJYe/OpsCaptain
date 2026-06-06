@@ -311,7 +311,7 @@ func (c *rabbitMQMemoryClient) handleDelivery(delivery amqp.Delivery) {
 		return
 	}
 	if strings.TrimSpace(event.EventID) == "" {
-		event.EventID = buildMemoryExtractionEventID(event.SessionID, event.Query, event.Summary, event.RequestedAt)
+		event.EventID = buildMemoryExtractionEventID(event.SessionID, event.Query, event.Summary)
 	}
 	if c.completed.Has(event.EventID) {
 		metrics.ObserveMemoryExtraction("rabbitmq", "deduped")
@@ -452,7 +452,7 @@ func newMemoryExtractionEvent(ctx context.Context, sessionID, query, summary str
 		traceID = strings.TrimSpace(value)
 	}
 	return memoryExtractionEvent{
-		EventID:     buildMemoryExtractionEventID(sessionID, query, summary, requestedAt),
+		EventID:     buildMemoryExtractionEventID(sessionID, query, summary),
 		SessionID:   sessionID,
 		UserID:      memoryUserID(ctx),
 		ProjectID:   memoryProjectID(ctx),
@@ -464,15 +464,13 @@ func newMemoryExtractionEvent(ctx context.Context, sessionID, query, summary str
 	}
 }
 
-func buildMemoryExtractionEventID(sessionID, query, summary string, requestedAt int64) string {
+func buildMemoryExtractionEventID(sessionID, query, summary string) string {
 	hasher := sha256.New()
 	_, _ = hasher.Write([]byte(sessionID))
 	_, _ = hasher.Write([]byte{0})
 	_, _ = hasher.Write([]byte(query))
 	_, _ = hasher.Write([]byte{0})
 	_, _ = hasher.Write([]byte(summary))
-	_, _ = hasher.Write([]byte{0})
-	_, _ = hasher.Write([]byte(fmt.Sprintf("%d", requestedAt)))
 	return hex.EncodeToString(hasher.Sum(nil))
 }
 

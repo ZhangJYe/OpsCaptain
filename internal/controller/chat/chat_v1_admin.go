@@ -167,7 +167,6 @@ func toMemoryItem(item service.MemoryItemView) v1.MemoryItem {
 		Confidence:    item.Confidence,
 		SafetyLabel:   item.SafetyLabel,
 		Provenance:    item.Provenance,
-		UpdatePolicy:  item.UpdatePolicy,
 		ConflictGroup: item.ConflictGroup,
 		ExpiresAt:     item.ExpiresAt,
 		CreatedAt:     item.CreatedAt,

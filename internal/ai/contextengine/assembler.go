@@ -416,7 +416,6 @@ func newMemoryItem(entry *memory.MemoryEntry) ContextItem {
 		Timestamp:      entry.UpdatedAt.UnixMilli(),
 		FreshnessScore: freshness,
 		SafetyLabel:    entry.SafetyLabel,
-		UpdatePolicy:   entry.UpdatePolicy,
 		Scope:          string(entry.Scope),
 		Confidence:     entry.Confidence,
 		Provenance:     entry.Provenance,

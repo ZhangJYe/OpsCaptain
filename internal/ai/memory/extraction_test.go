@@ -99,48 +99,6 @@ func TestExtractMemoryCandidatesDoesNotCreateEpisodeByDefault(t *testing.T) {
 	}
 }
 
-func TestBuildEnrichedContext_NoMemories(t *testing.T) {
-	resetLTM()
-	ctx := context.Background()
-	shortTerm := []*schema.Message{
-		schema.UserMessage("hello"),
-		schema.AssistantMessage("hi", nil),
-	}
-
-	result := BuildEnrichedContext(ctx, "empty-session", "test query", shortTerm)
-	if len(result) != 2 {
-		t.Fatalf("with no long-term memories, should return short-term only, got %d", len(result))
-	}
-}
-
-func TestBuildEnrichedContext_WithMemories(t *testing.T) {
-	resetLTM()
-	ltm := GetLongTermMemory()
-	ctx := context.Background()
-
-	ltm.Store(ctx, "sess-enrich", MemoryTypeFact, "服务名是payment-service", "test")
-	ltm.Store(ctx, "sess-enrich", MemoryTypePreference, "用户偏好详细回答", "test")
-
-	shortTerm := []*schema.Message{
-		schema.UserMessage("hello"),
-	}
-
-	result := BuildEnrichedContext(ctx, "sess-enrich", "服务信息", shortTerm)
-	if len(result) <= len(shortTerm) {
-		t.Fatalf("expected enriched context to be longer than short-term, got %d", len(result))
-	}
-
-	hasMemoryMarker := false
-	for _, msg := range result {
-		if strings.Contains(msg.Content, "[关键记忆]") {
-			hasMemoryMarker = true
-		}
-	}
-	if !hasMemoryMarker {
-		t.Fatal("expected [关键记忆] marker in enriched context")
-	}
-}
-
 func TestExtractMemories_Integration(t *testing.T) {
 	resetLTM()
 	ctx := context.Background()
@@ -435,20 +393,5 @@ func TestDedup(t *testing.T) {
 	result := dedup(items)
 	if len(result) != 3 {
 		t.Fatalf("expected 3 unique items, got %d", len(result))
-	}
-}
-
-func TestTruncate(t *testing.T) {
-	short := truncate("hi", 10)
-	if short != "hi" {
-		t.Fatalf("expected 'hi', got '%s'", short)
-	}
-
-	long := truncate("this is a very long string", 10)
-	if !strings.HasSuffix(long, "...") {
-		t.Fatal("expected truncated string to end with ...")
-	}
-	if len(long) != 13 {
-		t.Fatalf("expected length 13 (10+3), got %d", len(long))
 	}
 }

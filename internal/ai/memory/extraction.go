@@ -2,11 +2,7 @@ package memory
 
 import (
 	"context"
-	"fmt"
 	"strings"
-
-	"github.com/cloudwego/eino/schema"
-	"github.com/gogf/gf/v2/frame/g"
 )
 
 type MemoryCandidate struct {
@@ -113,29 +109,6 @@ func ValidateMemoryCandidate(candidate MemoryCandidate) (bool, string) {
 	return true, ""
 }
 
-func BuildEnrichedContext(ctx context.Context, sessionID string, query string, shortTermMsgs []*schema.Message) []*schema.Message {
-	ltm := GetLongTermMemory()
-	memories := ltm.Retrieve(ctx, sessionID, query, 5)
-
-	var result []*schema.Message
-
-	if len(memories) > 0 {
-		var memParts []string
-		for _, m := range memories {
-			memParts = append(memParts, fmt.Sprintf("- [%s] %s", m.Type, m.Content))
-		}
-		memoryContext := strings.Join(memParts, "\n")
-		result = append(result, &schema.Message{
-			Role:    schema.User,
-			Content: fmt.Sprintf("[关键记忆]\n%s", memoryContext),
-		})
-		result = append(result, schema.AssistantMessage("好的，我已了解这些背景信息。", nil))
-		g.Log().Debugf(ctx, "[memory] Injected %d long-term memories for session %s", len(memories), sessionID)
-	}
-
-	result = append(result, shortTermMsgs...)
-	return result
-}
 
 func extractFacts(userMsg string, assistantMsg string) []string {
 	var facts []string
@@ -230,9 +203,4 @@ func dedup(items []string) []string {
 	return result
 }
 
-func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
-}
+

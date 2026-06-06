@@ -14,9 +14,9 @@ import (
 )
 
 func TestBuildMemoryExtractionEventIDDeterministic(t *testing.T) {
-	id1 := buildMemoryExtractionEventID("s", "q", "a", 12345)
-	id2 := buildMemoryExtractionEventID("s", "q", "a", 12345)
-	id3 := buildMemoryExtractionEventID("s", "q", "a", 12346)
+	id1 := buildMemoryExtractionEventID("s", "q", "a")
+	id2 := buildMemoryExtractionEventID("s", "q", "a")
+	id3 := buildMemoryExtractionEventID("s", "q", "b")
 
 	if id1 == "" {
 		t.Fatal("expected non-empty event id")
@@ -25,7 +25,7 @@ func TestBuildMemoryExtractionEventIDDeterministic(t *testing.T) {
 		t.Fatalf("expected same input to produce same id, got %q and %q", id1, id2)
 	}
 	if id1 == id3 {
-		t.Fatalf("expected different requested_at to produce different id, got %q", id1)
+		t.Fatalf("expected different summary to produce different id, got %q", id1)
 	}
 }
 

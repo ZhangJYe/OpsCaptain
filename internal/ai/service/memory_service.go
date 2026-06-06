@@ -48,7 +48,6 @@ type MemoryItemView struct {
 	Confidence    float64
 	SafetyLabel   string
 	Provenance    string
-	UpdatePolicy  string
 	ConflictGroup string
 	ExpiresAt     int64
 	CreatedAt     int64
@@ -154,7 +153,6 @@ func (s *MemoryService) ListMemories(ctx context.Context, opts MemoryListOptions
 			Confidence:    e.Confidence,
 			SafetyLabel:   e.SafetyLabel,
 			Provenance:    e.Provenance,
-			UpdatePolicy:  e.UpdatePolicy,
 			ConflictGroup: e.ConflictGroup,
 			ExpiresAt:     e.ExpiresAt,
 			CreatedAt:     e.CreatedAt.UnixMilli(),

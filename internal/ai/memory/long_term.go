@@ -45,16 +45,13 @@ type MemoryEntry struct {
 	Confidence    float64     `json:"confidence"`
 	SafetyLabel   string      `json:"safety_label"`
 	Provenance    string      `json:"provenance,omitempty"`
-	UpdatePolicy  string      `json:"update_policy,omitempty"`
 	ConflictGroup string      `json:"conflict_group,omitempty"`
 	ExpiresAt     int64       `json:"expires_at,omitempty"`
-	AllowTriage   bool        `json:"allow_triage"`
 	Relevance     float64     `json:"relevance"`
 	AccessCnt     int         `json:"access_count"`
 	CreatedAt     time.Time   `json:"created_at"`
 	UpdatedAt     time.Time   `json:"updated_at"`
 	LastUsed      time.Time   `json:"last_used"`
-	Decay         float64     `json:"decay"`
 }
 
 type LongTermMemory struct {
@@ -70,10 +67,8 @@ type MemoryStoreOptions struct {
 	Confidence    float64
 	SafetyLabel   string
 	Provenance    string
-	UpdatePolicy  string
 	ConflictGroup string
 	ExpiresAt     int64
-	AllowTriage   bool
 }
 
 type MemoryScopeRef struct {
@@ -159,12 +154,10 @@ func (ltm *LongTermMemory) StoreWithOptions(ctx context.Context, sessionID strin
 		}
 		existing.SafetyLabel = opts.SafetyLabel
 		existing.Provenance = opts.Provenance
-		existing.UpdatePolicy = opts.UpdatePolicy
 		existing.ConflictGroup = opts.ConflictGroup
 		if opts.ExpiresAt > 0 {
 			existing.ExpiresAt = opts.ExpiresAt
 		}
-		existing.AllowTriage = existing.AllowTriage || opts.AllowTriage
 		existing.Relevance = computeRelevance(existing)
 		ltm.retireConflictingMemoriesLocked(id, memType, opts, now)
 		ltm.persistLocked(ctx)
@@ -183,16 +176,13 @@ func (ltm *LongTermMemory) StoreWithOptions(ctx context.Context, sessionID strin
 		Confidence:    opts.Confidence,
 		SafetyLabel:   opts.SafetyLabel,
 		Provenance:    opts.Provenance,
-		UpdatePolicy:  opts.UpdatePolicy,
 		ConflictGroup: opts.ConflictGroup,
 		ExpiresAt:     opts.ExpiresAt,
-		AllowTriage:   opts.AllowTriage,
 		Relevance:     1.0,
 		AccessCnt:     1,
 		CreatedAt:     now,
 		UpdatedAt:     now,
 		LastUsed:      now,
-		Decay:         1.0,
 	}
 
 	ltm.evictIfNeededLocked(ctx, sessionID)
@@ -265,13 +255,9 @@ func (ltm *LongTermMemory) RetrieveScoped(ctx context.Context, query string, lim
 	}
 	ltm.mu.RUnlock()
 
-	for i := 0; i < len(candidates)-1; i++ {
-		for j := i + 1; j < len(candidates); j++ {
-			if candidates[j].score > candidates[i].score {
-				candidates[i], candidates[j] = candidates[j], candidates[i]
-			}
-		}
-	}
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].score > candidates[j].score
+	})
 
 	if limit > len(candidates) {
 		limit = len(candidates)
@@ -416,7 +402,6 @@ func (ltm *LongTermMemory) Disable(ctx context.Context, id string) bool {
 	}
 	now := time.Now()
 	entry.SafetyLabel = "disabled"
-	entry.UpdatePolicy = "disabled"
 	entry.ExpiresAt = now.UnixMilli()
 	entry.UpdatedAt = now
 	ltm.persistLocked(ctx)
@@ -486,9 +471,6 @@ func normalizeMemoryStoreOptions(sessionID string, memType MemoryType, source st
 	if opts.Provenance == "" {
 		opts.Provenance = source
 	}
-	if opts.UpdatePolicy == "" {
-		opts.UpdatePolicy = "reinforce"
-	}
 	opts.ConflictGroup = strings.TrimSpace(opts.ConflictGroup)
 	return opts
 }
@@ -525,10 +507,6 @@ func cloneMemoryEntry(entry *MemoryEntry, relevance float64) MemoryEntry {
 	if provenance == "" {
 		provenance = entry.Source
 	}
-	updatePolicy := entry.UpdatePolicy
-	if updatePolicy == "" {
-		updatePolicy = "reinforce"
-	}
 	scopeID := strings.TrimSpace(entry.ScopeID)
 	if scopeID == "" {
 		if scope == MemoryScopeGlobal {
@@ -548,16 +526,13 @@ func cloneMemoryEntry(entry *MemoryEntry, relevance float64) MemoryEntry {
 		Confidence:    confidence,
 		SafetyLabel:   safetyLabel,
 		Provenance:    provenance,
-		UpdatePolicy:  updatePolicy,
 		ConflictGroup: entry.ConflictGroup,
 		ExpiresAt:     entry.ExpiresAt,
-		AllowTriage:   entry.AllowTriage,
 		Relevance:     relevance,
 		AccessCnt:     entry.AccessCnt,
 		CreatedAt:     entry.CreatedAt,
 		UpdatedAt:     entry.UpdatedAt,
 		LastUsed:      entry.LastUsed,
-		Decay:         entry.Decay,
 	}
 }
 
@@ -633,7 +608,6 @@ func (ltm *LongTermMemory) retireConflictingMemoriesLocked(id string, memType Me
 			continue
 		}
 		entry.SafetyLabel = "superseded"
-		entry.UpdatePolicy = "superseded"
 		entry.ExpiresAt = now.UnixMilli()
 		entry.Confidence = entry.Confidence * 0.5
 		entry.UpdatedAt = now

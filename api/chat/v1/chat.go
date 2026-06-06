@@ -339,7 +339,6 @@ type MemoryItem struct {
 	Confidence    float64 `json:"confidence,omitempty"`
 	SafetyLabel   string  `json:"safety_label,omitempty"`
 	Provenance    string  `json:"provenance,omitempty"`
-	UpdatePolicy  string  `json:"update_policy,omitempty"`
 	ConflictGroup string  `json:"conflict_group,omitempty"`
 	ExpiresAt     int64   `json:"expires_at,omitempty"`
 	CreatedAt     int64   `json:"created_at,omitempty"`
