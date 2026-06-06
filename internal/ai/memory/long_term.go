@@ -207,9 +207,10 @@ func (ltm *LongTermMemory) RetrieveWithPolicy(ctx context.Context, sessionID str
 }
 
 func (ltm *LongTermMemory) RetrieveScoped(ctx context.Context, query string, limit int, policy MemoryRetrievePolicy) []*MemoryEntry {
-	ltm.mu.RLock()
+	ltm.mu.Lock()
+	defer ltm.mu.Unlock()
+
 	if len(ltm.entries) == 0 {
-		ltm.mu.RUnlock()
 		return nil
 	}
 
@@ -253,38 +254,50 @@ func (ltm *LongTermMemory) RetrieveScoped(ctx context.Context, query string, lim
 			score: score,
 		})
 	}
-	ltm.mu.RUnlock()
 
 	sort.Slice(candidates, func(i, j int) bool {
 		return candidates[i].score > candidates[j].score
 	})
 
-	if limit > len(candidates) {
-		limit = len(candidates)
-	}
-
 	result := make([]*MemoryEntry, 0, limit)
-	selectedIDs := make([]string, 0, limit)
-	for i := 0; i < limit; i++ {
-		e := candidates[i].entry
-		e.AccessCnt++
-		e.LastUsed = time.Now()
-		result = append(result, &e)
-		selectedIDs = append(selectedIDs, candidates[i].id)
-	}
+	selectedTokenSets := make([]map[string]struct{}, 0, limit)
+	for i := 0; i < len(candidates) && len(result) < limit; i++ {
+		cand := candidates[i]
 
-	if len(selectedIDs) > 0 && !policy.ReadOnly {
-		ltm.mu.Lock()
-		now := time.Now()
-		for _, id := range selectedIDs {
-			if entry, ok := ltm.entries[id]; ok {
-				entry.AccessCnt++
-				entry.LastUsed = now
-				entry.Relevance = computeRelevance(entry)
+		// 去重：与已选记忆的 token 重叠率 > 0.8 则跳过
+		candTokens := rag.BM25Tokenize(cand.entry.Content)
+		candSet := make(map[string]struct{}, len(candTokens))
+		for _, t := range candTokens {
+			candSet[t] = struct{}{}
+		}
+		duplicate := false
+		for _, existing := range selectedTokenSets {
+			if tokenOverlap(candSet, existing) > 0.8 {
+				duplicate = true
+				break
 			}
 		}
+		if duplicate {
+			continue
+		}
+		selectedTokenSets = append(selectedTokenSets, candSet)
+
+		e := cand.entry
+		e.AccessCnt++
+		e.LastUsed = now
+		result = append(result, &e)
+
+		if !policy.ReadOnly {
+			if orig, ok := ltm.entries[cand.id]; ok {
+				orig.AccessCnt++
+				orig.LastUsed = now
+				orig.Relevance = computeRelevance(orig)
+			}
+		}
+	}
+
+	if !policy.ReadOnly && len(result) > 0 {
 		ltm.persistLocked(ctx)
-		ltm.mu.Unlock()
 	}
 	return result
 }
@@ -538,6 +551,28 @@ func cloneMemoryEntry(entry *MemoryEntry, relevance float64) MemoryEntry {
 
 func memoryExpired(entry *MemoryEntry, now time.Time) bool {
 	return entry != nil && entry.ExpiresAt > 0 && entry.ExpiresAt <= now.UnixMilli()
+}
+
+// tokenOverlap 计算两个 token 集合的 Jaccard 相似度
+func tokenOverlap(a, b map[string]struct{}) float64 {
+	if len(a) == 0 || len(b) == 0 {
+		return 0
+	}
+	smaller, larger := a, b
+	if len(a) > len(b) {
+		smaller, larger = b, a
+	}
+	intersection := 0
+	for t := range smaller {
+		if _, ok := larger[t]; ok {
+			intersection++
+		}
+	}
+	union := len(a) + len(b) - intersection
+	if union == 0 {
+		return 0
+	}
+	return float64(intersection) / float64(union)
 }
 
 func memoryInScope(entry *MemoryEntry, refs []MemoryScopeRef) bool {
