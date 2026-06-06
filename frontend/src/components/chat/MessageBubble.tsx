@@ -1,6 +1,6 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import remarkFixHeadings from '../../lib/remarkFixHeadings'
+import remarkFixHeadings, { normalizeLooseMarkdown } from '../../lib/remarkFixHeadings'
 import type { ChatMessage } from '../../types/chat'
 import type { DetailItem } from '../workbench/DetailPanel'
 import { ThinkingCollapse } from '../agent/ThinkingCollapse'
@@ -73,7 +73,7 @@ export function MessageBubble({ message, onOpenDetail }: Props) {
               )}
               <div className="prose-chat">
                 <ReactMarkdown remarkPlugins={[remarkGfm, remarkFixHeadings]}>
-                  {message.content}
+                  {normalizeLooseMarkdown(message.content)}
                 </ReactMarkdown>
               </div>
             </>

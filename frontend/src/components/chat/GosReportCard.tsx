@@ -1,6 +1,6 @@
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import remarkFixHeadings from '../../lib/remarkFixHeadings'
+import remarkFixHeadings, { normalizeLooseMarkdown } from '../../lib/remarkFixHeadings'
 import { ThinkingCollapse } from '../agent/ThinkingCollapse'
 import type { ThinkingStep } from '../agent/ThinkingCollapse'
 import type { ChatMessage } from '../../types/chat'
@@ -76,13 +76,9 @@ export function GosReportCard({ message, steps, content, isStreaming }: Props) {
 
         {body && (
           <div className="prose-chat">
-            {isStreaming && !message ? (
-              <span>{body}</span>
-            ) : (
-              <ReactMarkdown remarkPlugins={[remarkGfm, remarkFixHeadings]}>
-                {body}
-              </ReactMarkdown>
-            )}
+            <ReactMarkdown remarkPlugins={[remarkGfm, remarkFixHeadings]}>
+              {normalizeLooseMarkdown(body)}
+            </ReactMarkdown>
           </div>
         )}
       </div>

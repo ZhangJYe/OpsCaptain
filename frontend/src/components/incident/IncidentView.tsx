@@ -13,7 +13,7 @@ import {
   Send,
   ShieldAlert,
 } from 'lucide-react'
-import remarkFixHeadings from '../../lib/remarkFixHeadings'
+import remarkFixHeadings, { normalizeLooseMarkdown } from '../../lib/remarkFixHeadings'
 import type { AIOpsEngine, IncidentEvent, IncidentSession, IncidentStatus, IncidentTurn } from '../../types/chat'
 
 interface Props {
@@ -808,7 +808,9 @@ export function IncidentView({ incident, isLoading, error, engine, onCreate, onA
             {conclusion ? (
               <div className="border border-zinc-200/80 bg-white/90 px-4 py-4 shadow-sm shadow-zinc-900/[0.03] dark:border-zinc-800/70 dark:bg-zinc-900/55">
                 <div className="prose-chat">
-                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkFixHeadings]}>{conclusion}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkFixHeadings]}>
+                    {normalizeLooseMarkdown(conclusion)}
+                  </ReactMarkdown>
                 </div>
               </div>
             ) : (
