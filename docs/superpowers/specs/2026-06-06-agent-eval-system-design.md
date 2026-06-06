@@ -34,26 +34,44 @@ evals/cases/
 
 三个文件各自保持原有 schema，不做统一。
 
-### eval_runs（实际执行结果）
+### eval_baselines（Golden artifact，入库）
 
-Agent/RAG 的真实运行输出。由运行命令生成。
+CI gate 对比的基准值。仓库内固定文件，手工更新。
+
+```
+evals/baselines/
+├── gos_baseline.json         # GoS 基准：accuracy, evidence_coverage, latency, ...
+└── rag_baseline.json         # RAG 基准：recall@10, mrr, ...
+```
+
+### eval_runs（运行产物，不入库）
+
+Agent/RAG 的真实运行输出。由运行命令生成，`.gitignore` 排除。
 
 ```
 evals/runs/
-├── gos_{timestamp}.json      # GoS 运行结果：{case_id, prediction, matched, latency, ...}
-├── rag_{timestamp}.jsonl     # RAG 运行结果：{query, retrieved_ids, recall, mrr, ...}
-└── diag_{timestamp}.jsonl    # Agent 运行结果：{query, actual_output, tools_called, ...}
+├── gos_{timestamp}.json      # GoS 运行结果
+├── rag_{timestamp}.jsonl     # RAG 运行结果
+└── diag_{timestamp}.jsonl    # Agent 运行结果
 ```
 
-### eval_reports（评估报告）
+### eval_reports（评估报告，不入库）
 
-评分和指标汇总。
+评分和指标汇总。`.gitignore` 排除。
 
 ```
 evals/reports/
 ├── gate_{timestamp}.json     # 确定性 gate 结果（pass/fail）
 ├── judge_{timestamp}.json    # LLM Judge 评分结果
 └── deepeval_{timestamp}.json # deepeval 评估结果
+```
+
+### .gitignore
+
+```
+evals/runs/
+evals/reports/
+evals/deepeval/datasets/
 ```
 
 ## 四、第一阶段：Go 确定性 Gate（CI 自动）
@@ -64,18 +82,26 @@ CI 跑确定性回归检查，不依赖 LLM API，PR 阻断。
 
 ### 改动
 
-1. `cmd/gos_eval` 新增 `--mode=export-runs`：运行 GoS/RAG，输出 `evals/runs/` artifact
-2. `cmd/gos_eval` 新增 `--mode=gate`：从 `evals/runs/` 读取结果，跑 CheckGate
+1. `cmd/gos_eval` 新增 `--mode=gate`：读取仓库内 `evals/baselines/gos_baseline.json`，与 smoke 运行结果对比，跑 CheckGate。不复用 compare 模式（compare 需要 real profile 且要求 baseline 文件存在）。
+
+2. `cmd/gos_eval` 新增 `--mode=export-runs`：运行 GoS，输出 `evals/runs/gos_*.json`。RAG 由现有 `rag_online_eval_cmd` 独立导出。
+
 3. Makefile 新增：
 
 ```makefile
-# CI 自动（确定性，无 LLM 依赖）
+# CI 自动（确定性 smoke，无 LLM 依赖）
 eval-gate:
-	go run cmd/gos_eval/main.go --mode=compare --gos-profile=eval
+	go run cmd/gos_eval/main.go --mode=gate --gos-profile=eval \
+	  --baseline=evals/baselines/gos_baseline.json
 
-# 生成 run artifact（需要 LLM API，手动）
-eval-runs:
+# 生成 GoS run artifact（需要 LLM API，手动）
+eval-runs-gos:
 	go run cmd/gos_eval/main.go --mode=export-runs --gos-profile=eval \
+	  --output=evals/runs/
+
+# 生成 RAG run artifact（独立命令，手动）
+eval-runs-rag:
+	go run internal/ai/cmd/rag_online_eval_cmd/main.go \
 	  --output=evals/runs/
 ```
 
@@ -164,15 +190,20 @@ evals/deepeval/
 
 ```python
 # 输入：eval_runs（Agent 实际输出）
-{"case_id": "DIAG-001", "query": "...", "actual_output": "...", "tools_called": [...]}
+{"case_id": "DIAG-001", "query": "...", "actual_output": "...",
+ "tools_called": ["query_log", "prometheus_range"],
+ "evidence_context": ["log: connection timeout to mysql-001", "prometheus: p99=500ms"]}
 
 # 转换为 deepeval test case
 LLMTestCase(
     input=run["query"],
     actual_output=run["actual_output"],
-    retrieval_context=run["tools_called"]  # 工具数据作为检索上下文
+    retrieval_context=run["evidence_context"]  # 真实证据内容，非工具名
 )
 ```
+
+`evidence_context` 是工具返回的实际数据摘要（如日志片段、指标值），不是工具名列表。
+Faithfulness 用它判断答案是否基于真实证据。
 
 ### deepeval 环境配置
 
@@ -182,18 +213,10 @@ export OPENAI_MODEL_NAME="deepseek-v4"
 # 如需自定义 base URL，通过 LiteLLM 或 deepeval 自定义模型适配
 ```
 
-### Makefile 新增
+### 数据集来源
 
-```makefile
-# 导出 runs 给 deepeval 用
-eval-export-deep:
-	go run cmd/gos_eval/main.go --mode=export-runs \
-	  --output=evals/deepeval/datasets/
-
-# deepeval 深度评估（需要 Python + API key）
-eval-deep:
-	cd evals/deepeval && python runner.py
-```
+deepeval 不直接读 cases，读 `evals/runs/diag_*.jsonl`（由 `eval-runs-gos` 生成）。
+无需额外 export 命令。
 
 ## 七、DiagScores 兼容
 
@@ -216,13 +239,19 @@ JudgeRunner 输出对齐此格式（int 1-5 分）。
 ## 八、Makefile 汇总
 
 ```makefile
-# 第一阶段：CI 自动（确定性）
+# 第一阶段：CI 自动（确定性 smoke gate，无 LLM 依赖）
 eval-gate:
-	go run cmd/gos_eval/main.go --mode=compare --gos-profile=eval
+	go run cmd/gos_eval/main.go --mode=gate --gos-profile=eval \
+	  --baseline=evals/baselines/gos_baseline.json
 
-# 第一阶段：生成 run artifact（需要 LLM，手动）
-eval-runs:
+# 第一阶段：生成 GoS run artifact（需要 LLM，手动）
+eval-runs-gos:
 	go run cmd/gos_eval/main.go --mode=export-runs --gos-profile=eval \
+	  --output=evals/runs/
+
+# 第一阶段：生成 RAG run artifact（独立命令，手动）
+eval-runs-rag:
+	go run internal/ai/cmd/rag_online_eval_cmd/main.go \
 	  --output=evals/runs/
 
 # 第二阶段：LLM Judge（需要 API key，手动/nightly）
@@ -231,10 +260,6 @@ eval-judge:
 	  --input=evals/runs/ --output=evals/reports/
 
 # 第三阶段：deepeval（需要 Python + API key）
-eval-export-deep:
-	go run cmd/gos_eval/main.go --mode=export-runs \
-	  --output=evals/deepeval/datasets/
-
 eval-deep:
 	cd evals/deepeval && python runner.py
 ```
@@ -244,8 +269,10 @@ eval-deep:
 ### 第一阶段
 | 文件 | 改动 |
 |------|------|
-| `cmd/gos_eval/main.go` | 新增 `--mode=export-runs` 和 `--mode=gate` |
-| `Makefile` | 新增 eval-gate / eval-runs |
+| `cmd/gos_eval/main.go` | 新增 `--mode=gate`（读 baseline，跑 smoke，对比 CheckGate）和 `--mode=export-runs` |
+| `evals/baselines/gos_baseline.json` | 新文件，GoS 基准值（入库） |
+| `.gitignore` | 排除 evals/runs/、evals/reports/ |
+| `Makefile` | 新增 eval-gate / eval-runs-gos / eval-runs-rag |
 | `.github/workflows/ci.yml` | 新增 eval-gate 步骤 |
 
 ### 第二阶段
@@ -262,7 +289,7 @@ eval-deep:
 | `evals/deepeval/requirements.txt` | 新文件 |
 | `evals/deepeval/runner.py` | 新文件 |
 | `evals/deepeval/metrics/ops_metrics.py` | 新文件 |
-| `Makefile` | 新增 eval-export-deep / eval-deep |
+| `Makefile` | 新增 eval-deep |
 
 ## 十、不改的部分
 
