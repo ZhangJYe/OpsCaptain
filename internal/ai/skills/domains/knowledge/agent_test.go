@@ -6,8 +6,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"SuperBizAgent/internal/ai/protocol"
+	"SuperBizAgent/internal/ai/rag"
 	"SuperBizAgent/internal/ai/runtime"
 	"SuperBizAgent/internal/ai/tools"
 
@@ -81,7 +83,7 @@ func TestKnowledgeAgentEmitsSelectedSkillIntoRuntimeTrace(t *testing.T) {
 		newQueryInternalDocsTool = oldFactory
 	}()
 
-	tool := &fakeKnowledgeTool{output: "[]"}
+	tool := &fakeKnowledgeTool{output: emptyStructuredKnowledgeOutput(t)}
 	newQueryInternalDocsTool = func() toolapi.InvokableTool { return tool }
 
 	rt := runtime.New()
@@ -121,7 +123,7 @@ func TestKnowledgeAgentUsesReleaseSOPSkillAndRewritesQuery(t *testing.T) {
 		newQueryInternalDocsTool = oldFactory
 	}()
 
-	tool := &fakeKnowledgeTool{output: "[]"}
+	tool := &fakeKnowledgeTool{output: emptyStructuredKnowledgeOutput(t)}
 	newQueryInternalDocsTool = func() toolapi.InvokableTool { return tool }
 
 	agent := New()
@@ -144,7 +146,7 @@ func TestKnowledgeAgentUsesRollbackSkillAndRewritesQuery(t *testing.T) {
 		newQueryInternalDocsTool = oldFactory
 	}()
 
-	tool := &fakeKnowledgeTool{output: "[]"}
+	tool := &fakeKnowledgeTool{output: emptyStructuredKnowledgeOutput(t)}
 	newQueryInternalDocsTool = func() toolapi.InvokableTool { return tool }
 
 	agent := New()
@@ -167,7 +169,7 @@ func TestKnowledgeAgentUsesServiceErrorCodeLookupSkill(t *testing.T) {
 		newQueryInternalDocsTool = oldFactory
 	}()
 
-	tool := &fakeKnowledgeTool{output: "[]"}
+	tool := &fakeKnowledgeTool{output: emptyStructuredKnowledgeOutput(t)}
 	newQueryInternalDocsTool = func() toolapi.InvokableTool { return tool }
 
 	agent := New()
@@ -189,4 +191,183 @@ func TestKnowledgeAgentUsesServiceErrorCodeLookupSkill(t *testing.T) {
 	if len(result.NextActions) == 0 {
 		t.Fatalf("expected next actions for error code lookup, got %#v", result.NextActions)
 	}
+}
+
+func TestKnowledgeAgentConsumesStructuredKnowledgeOutput(t *testing.T) {
+	oldFactory := newQueryInternalDocsTool
+	defer func() {
+		newQueryInternalDocsTool = oldFactory
+	}()
+
+	output := structuredKnowledgeOutput(t, rag.KnowledgeSearchOutput{
+		Success: true,
+		Citations: []rag.Citation{
+			{
+				ID:      "kb-doc-1",
+				Source:  "docs/payment-sop.md",
+				Title:   "Payment SOP",
+				Score:   0.91,
+				Snippet: "fallback snippet",
+			},
+		},
+		Evidence: []rag.Evidence{
+			{
+				CitationID: "kb-doc-1",
+				Text:       "restart payment-service after checking metrics",
+			},
+		},
+	})
+	tool := &fakeKnowledgeTool{output: output}
+	newQueryInternalDocsTool = func() toolapi.InvokableTool { return tool }
+
+	agent := New()
+	task := protocol.NewRootTask("session-test", "请查询知识库里的 SOP 文档", agent.Name())
+	result, err := agent.Handle(context.Background(), task)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Status != protocol.ResultStatusSucceeded {
+		t.Fatalf("expected succeeded status, got %s", result.Status)
+	}
+	if len(result.Evidence) != 1 {
+		t.Fatalf("expected one evidence item, got %#v", result.Evidence)
+	}
+	ev := result.Evidence[0]
+	if ev.SourceID != "kb-doc-1" || ev.Title != "Payment SOP" || ev.URI != "docs/payment-sop.md" {
+		t.Fatalf("unexpected evidence source fields: %#v", ev)
+	}
+	if !strings.Contains(ev.Snippet, "restart payment-service") {
+		t.Fatalf("expected structured evidence text, got %q", ev.Snippet)
+	}
+	if ev.Score != 0.91 {
+		t.Fatalf("expected citation score 0.91, got %f", ev.Score)
+	}
+	if result.Metadata["document_count"] != 1 {
+		t.Fatalf("expected document_count=1, got %#v", result.Metadata)
+	}
+	if _, ok := result.Metadata["raw_output"]; ok {
+		t.Fatalf("raw_output should not be stored in metadata: %#v", result.Metadata)
+	}
+}
+
+func TestKnowledgeAgentKeepsCitationIDWhenCitationMissing(t *testing.T) {
+	oldFactory := newQueryInternalDocsTool
+	defer func() {
+		newQueryInternalDocsTool = oldFactory
+	}()
+
+	output := structuredKnowledgeOutput(t, rag.KnowledgeSearchOutput{
+		Success: true,
+		Evidence: []rag.Evidence{
+			{
+				CitationID: "kb-doc-missing",
+				Text:       "fallback evidence without citation metadata",
+			},
+		},
+	})
+	tool := &fakeKnowledgeTool{output: output}
+	newQueryInternalDocsTool = func() toolapi.InvokableTool { return tool }
+
+	agent := New()
+	task := protocol.NewRootTask("session-test", "请查询知识库里的 SOP 文档", agent.Name())
+	result, err := agent.Handle(context.Background(), task)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Status != protocol.ResultStatusSucceeded {
+		t.Fatalf("expected succeeded status, got %s", result.Status)
+	}
+	if len(result.Evidence) != 1 {
+		t.Fatalf("expected one evidence item, got %#v", result.Evidence)
+	}
+	if result.Evidence[0].SourceID != "kb-doc-missing" {
+		t.Fatalf("expected citation id fallback, got %#v", result.Evidence[0])
+	}
+}
+
+func TestKnowledgeAgentDegradesOnStructuredKnowledgeOutput(t *testing.T) {
+	oldFactory := newQueryInternalDocsTool
+	defer func() {
+		newQueryInternalDocsTool = oldFactory
+	}()
+
+	output := structuredKnowledgeOutput(t, rag.KnowledgeSearchOutput{
+		Success:  false,
+		Degraded: true,
+		Message:  "内部知识库检索暂时不可用",
+	})
+	tool := &fakeKnowledgeTool{output: output}
+	newQueryInternalDocsTool = func() toolapi.InvokableTool { return tool }
+
+	agent := New()
+	task := protocol.NewRootTask("session-test", "请查询知识库里的 SOP 文档", agent.Name())
+	result, err := agent.Handle(context.Background(), task)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Status != protocol.ResultStatusDegraded {
+		t.Fatalf("expected degraded status, got %s", result.Status)
+	}
+	if !strings.Contains(result.Summary, "暂时不可用") {
+		t.Fatalf("expected degraded summary from tool message, got %q", result.Summary)
+	}
+	if result.Metadata["tool_degraded"] != true {
+		t.Fatalf("expected tool_degraded metadata, got %#v", result.Metadata)
+	}
+	if _, ok := result.Metadata["raw_output"]; ok {
+		t.Fatalf("raw_output should not be stored in metadata: %#v", result.Metadata)
+	}
+}
+
+func TestKnowledgeAgentKeepsLegacyArrayFallback(t *testing.T) {
+	oldFactory := newQueryInternalDocsTool
+	defer func() {
+		newQueryInternalDocsTool = oldFactory
+	}()
+
+	tool := &fakeKnowledgeTool{output: `[{"id":"legacy-doc","content":"legacy content"}]`}
+	newQueryInternalDocsTool = func() toolapi.InvokableTool { return tool }
+
+	agent := New()
+	task := protocol.NewRootTask("session-test", "请查询知识库里的 SOP 文档", agent.Name())
+	result, err := agent.Handle(context.Background(), task)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Status != protocol.ResultStatusSucceeded {
+		t.Fatalf("expected succeeded status, got %s", result.Status)
+	}
+	if len(result.Evidence) != 1 {
+		t.Fatalf("expected legacy evidence item, got %#v", result.Evidence)
+	}
+	if result.Evidence[0].SourceID != "legacy-doc" || result.Evidence[0].Snippet != "legacy content" {
+		t.Fatalf("unexpected legacy evidence: %#v", result.Evidence[0])
+	}
+}
+
+func TestKnowledgeAgentShortenKeepsUTF8(t *testing.T) {
+	content := strings.Repeat("支付服务延迟升高", 40)
+	snippet := shorten(content, 160)
+	if !utf8.ValidString(snippet) {
+		t.Fatalf("expected valid utf8 snippet, got %q", snippet)
+	}
+	if !strings.HasSuffix(snippet, "...") {
+		t.Fatal("expected ... suffix")
+	}
+	if utf8.RuneCountInString(strings.TrimSuffix(snippet, "...")) != 160 {
+		t.Fatalf("expected 160 runes before suffix, got %d", utf8.RuneCountInString(strings.TrimSuffix(snippet, "...")))
+	}
+}
+
+func emptyStructuredKnowledgeOutput(t *testing.T) string {
+	return structuredKnowledgeOutput(t, rag.KnowledgeSearchOutput{Success: true})
+}
+
+func structuredKnowledgeOutput(t *testing.T, output rag.KnowledgeSearchOutput) string {
+	t.Helper()
+	raw, err := json.Marshal(output)
+	if err != nil {
+		t.Fatalf("marshal structured knowledge output: %v", err)
+	}
+	return string(raw)
 }

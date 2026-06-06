@@ -1,7 +1,10 @@
 package rag
 
 import (
+	"SuperBizAgent/internal/consts"
+	"SuperBizAgent/utility/common"
 	"context"
+	"strings"
 	"testing"
 
 	retrieverapi "github.com/cloudwego/eino/components/retriever"
@@ -93,6 +96,70 @@ func TestBuildBM25IndexFromDocs(t *testing.T) {
 	}
 	if hits[0].DocID != "case-001" {
 		t.Fatalf("expected case-001 to rank first, got %s", hits[0].DocID)
+	}
+}
+
+func TestBuildBM25IndexFromDocs_PreservesChunksWithSameSource(t *testing.T) {
+	t.Parallel()
+
+	docs := []*schema.Document{
+		{
+			ID:      "chunk-1",
+			Content: "redis failover requires checking sentinel quorum",
+			MetaData: map[string]any{
+				"_source": "upload://runbook.md",
+				"title":   "Runbook",
+			},
+		},
+		{
+			ID:      "chunk-2",
+			Content: "postgres checkpoint latency requires storage investigation",
+			MetaData: map[string]any{
+				"_source": "upload://runbook.md",
+				"title":   "Runbook",
+			},
+		},
+	}
+
+	idx := BuildBM25IndexFromDocs(docs)
+	if idx.Size() != 2 {
+		t.Fatalf("expected 2 chunks indexed, got %d", idx.Size())
+	}
+	redisHits := idx.Search("redis sentinel", 5)
+	if len(redisHits) == 0 || redisHits[0].DocID != "chunk-1" {
+		t.Fatalf("expected chunk-1 for redis query, got %+v", redisHits)
+	}
+	if redisHits[0].Meta["_source"] != "upload://runbook.md" || redisHits[0].Meta["title"] != "Runbook" {
+		t.Fatalf("expected source and title metadata preserved, got %+v", redisHits[0].Meta)
+	}
+	postgresHits := idx.Search("postgres checkpoint", 5)
+	if len(postgresHits) == 0 || postgresHits[0].DocID != "chunk-2" {
+		t.Fatalf("expected chunk-2 for postgres query, got %+v", postgresHits)
+	}
+}
+
+func TestRRFFusion_PreservesChunksWithSameSource(t *testing.T) {
+	t.Parallel()
+
+	denseDocs := []*schema.Document{
+		{ID: "chunk-1", Content: "redis failover", MetaData: map[string]any{"_source": "upload://runbook.md"}},
+		{ID: "chunk-2", Content: "postgres checkpoint", MetaData: map[string]any{"_source": "upload://runbook.md"}},
+	}
+	lexHits := []BM25Hit{
+		{DocID: "chunk-1", Content: "redis failover", Meta: map[string]string{"_source": "upload://runbook.md"}},
+		{DocID: "chunk-2", Content: "postgres checkpoint", Meta: map[string]string{"_source": "upload://runbook.md"}},
+	}
+
+	fused := rrfFusion(denseDocs, lexHits, 60)
+	if len(fused) != 2 {
+		t.Fatalf("expected 2 fused chunks, got %d", len(fused))
+	}
+	ids := map[string]bool{}
+	for _, item := range fused {
+		ids[item.doc.ID] = true
+	}
+	if !ids["chunk-1"] || !ids["chunk-2"] {
+		t.Fatalf("expected both chunk IDs, got %+v", ids)
 	}
 }
 
@@ -190,6 +257,56 @@ func TestHybridRetrieve_CandidateTopKReturnsMoreThanFinalTopK(t *testing.T) {
 	}
 	if len(docs) < 2 {
 		t.Fatalf("expected at least 2 docs, got %d", len(docs))
+	}
+}
+
+func TestHybridRetrieve_FiltersOtherUserScopedSources(t *testing.T) {
+	t.Parallel()
+
+	alicePrefix := common.KnowledgeSourcePrefixForUser("alice@example.com")
+	bobPrefix := common.KnowledgeSourcePrefixForUser("bob@example.com")
+	denseResults := []*schema.Document{
+		{ID: "alice-dense", Content: "redis sentinel failover", MetaData: map[string]any{"_source": alicePrefix + "runbook.md"}},
+		{ID: "bob-dense", Content: "redis sentinel failover", MetaData: map[string]any{"_source": bobPrefix + "runbook.md"}},
+		{ID: "shared-dense", Content: "redis sentinel shared guide", MetaData: map[string]any{"_source": "upload://shared-runbook.md"}},
+	}
+	fr := &fakeHybridRetriever{docs: denseResults}
+	pool := NewRetrieverPool(
+		func(ctx context.Context) (retrieverapi.Retriever, error) { return fr, nil },
+		func(ctx context.Context) string { return "test-user-scope" },
+		nil,
+	)
+
+	lexIdx := NewBM25Index()
+	lexIdx.AddDocument("alice-lex", "redis sentinel quorum", map[string]string{"_source": alicePrefix + "lex.md"})
+	lexIdx.AddDocument("bob-lex", "redis sentinel quorum", map[string]string{"_source": bobPrefix + "lex.md"})
+	lexIdx.AddDocument("shared-lex", "redis sentinel quorum", map[string]string{"_source": "upload://shared-lex.md"})
+
+	ctx := context.WithValue(context.Background(), consts.CtxKeyUserID, "alice@example.com")
+	docs, trace, err := HybridRetrieve(ctx, pool, lexIdx, "redis sentinel", HybridConfig{
+		DenseTopK:     10,
+		LexicalTopK:   10,
+		FusionK:       60,
+		CandidateTopK: 10,
+		FinalTopK:     10,
+	})
+	if err != nil {
+		t.Fatalf("HybridRetrieve returned error: %v", err)
+	}
+	if trace.DenseCount != 2 {
+		t.Fatalf("expected dense count after scope filter to be 2, got %d", trace.DenseCount)
+	}
+	if trace.LexicalCount != 2 {
+		t.Fatalf("expected lexical count after scope filter to be 2, got %d", trace.LexicalCount)
+	}
+	for _, doc := range docs {
+		if doc == nil {
+			continue
+		}
+		source := metadataString(doc.MetaData, "_source")
+		if strings.HasPrefix(source, bobPrefix) {
+			t.Fatalf("unexpected other user source returned: %s", source)
+		}
 	}
 }
 

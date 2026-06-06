@@ -3,6 +3,7 @@ package rag
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/cloudwego/eino/schema"
 )
@@ -81,6 +82,21 @@ func TestCitationFromDocument_SnippetTruncation(t *testing.T) {
 	}
 	if !strings.HasSuffix(c.Snippet, "...") {
 		t.Fatal("expected ... suffix")
+	}
+}
+
+func TestCitationFromDocument_SnippetTruncationKeepsUTF8(t *testing.T) {
+	content := strings.Repeat("支付服务延迟升高", 80)
+	doc := &schema.Document{ID: "d1", Content: content}
+	c := CitationFromDocument(doc, "ctx-doc-1")
+	if !utf8.ValidString(c.Snippet) {
+		t.Fatalf("expected valid utf8 snippet, got %q", c.Snippet)
+	}
+	if !strings.HasSuffix(c.Snippet, "...") {
+		t.Fatal("expected ... suffix")
+	}
+	if utf8.RuneCountInString(strings.TrimSuffix(c.Snippet, "...")) != maxSnippetLen {
+		t.Fatalf("expected %d runes before suffix, got %d", maxSnippetLen, utf8.RuneCountInString(strings.TrimSuffix(c.Snippet, "...")))
 	}
 }
 

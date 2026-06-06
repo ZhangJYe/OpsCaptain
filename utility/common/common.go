@@ -2,6 +2,8 @@ package common
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"regexp"
 	"strings"
@@ -12,6 +14,7 @@ import (
 const (
 	MilvusDBName         = "agent"
 	MilvusCollectionName = "opscaption_knowledge_v2"
+	KnowledgeSourceBase  = "upload://"
 )
 
 var (
@@ -58,6 +61,15 @@ func GetMilvusCollectionName(ctx context.Context) string {
 		return env
 	}
 	return MilvusCollectionName
+}
+
+func KnowledgeSourcePrefixForUser(userID string) string {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return KnowledgeSourceBase
+	}
+	sum := sha256.Sum256([]byte(userID))
+	return KnowledgeSourceBase + "users/" + hex.EncodeToString(sum[:8]) + "/"
 }
 
 func normalizeMilvusAddr(raw string) string {

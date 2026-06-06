@@ -2,6 +2,7 @@ package app
 
 import (
 	"SuperBizAgent/internal/ai/rag"
+	"SuperBizAgent/internal/consts"
 	"SuperBizAgent/internal/infra/filestore"
 	"SuperBizAgent/utility/common"
 	"context"
@@ -16,7 +17,7 @@ import (
 const (
 	defaultMaxUploadSize = 20 * 1024 * 1024
 	uploadSourceKind     = "chat_upload"
-	uploadSourcePrefix   = "upload://"
+	uploadSourcePrefix   = common.KnowledgeSourceBase
 )
 
 var (
@@ -92,7 +93,7 @@ func (k *KnowledgeApp) HandleUpload(ctx context.Context, input *UploadInput) (*U
 		Size:         input.Size,
 		Content:      input.Content,
 		SourceKind:   uploadSourceKind,
-		SourcePrefix: uploadSourcePrefix,
+		SourcePrefix: uploadSourcePrefixForContext(ctx),
 	})
 	if err != nil {
 		return nil, err
@@ -177,6 +178,15 @@ func allowedExtensionList() []string {
 		list = append(list, ext)
 	}
 	return list
+}
+
+func uploadSourcePrefixForContext(ctx context.Context) string {
+	userID, _ := ctx.Value(consts.CtxKeyUserID).(string)
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return uploadSourcePrefix
+	}
+	return common.KnowledgeSourcePrefixForUser(userID)
 }
 
 func buildIntoIndex(ctx context.Context, path string) error {

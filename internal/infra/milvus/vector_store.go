@@ -27,6 +27,10 @@ func NewMilvusVectorStore(clientFactory func(ctx context.Context) (cli.Client, e
 }
 
 func (s *MilvusVectorStore) DeleteBySource(ctx context.Context, collection string, sourceValue string) (int, error) {
+	return s.DeleteBySourceExcept(ctx, collection, sourceValue, nil)
+}
+
+func (s *MilvusVectorStore) DeleteBySourceExcept(ctx context.Context, collection string, sourceValue string, keepIDs []string) (int, error) {
 	c, err := s.newClient(ctx)
 	if err != nil {
 		return 0, err
@@ -39,6 +43,13 @@ func (s *MilvusVectorStore) DeleteBySource(ctx context.Context, collection strin
 	}
 
 	var idsToDelete []string
+	keep := make(map[string]struct{}, len(keepIDs))
+	for _, id := range keepIDs {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			keep[id] = struct{}{}
+		}
+	}
 	for _, column := range queryResult {
 		if column.Name() != "id" {
 			continue
@@ -46,6 +57,9 @@ func (s *MilvusVectorStore) DeleteBySource(ctx context.Context, collection strin
 		for i := 0; i < column.Len(); i++ {
 			id, getErr := column.GetAsString(i)
 			if getErr == nil && id != "" {
+				if _, ok := keep[id]; ok {
+					continue
+				}
 				idsToDelete = append(idsToDelete, id)
 			}
 		}
@@ -62,7 +76,7 @@ func (s *MilvusVectorStore) DeleteBySource(ctx context.Context, collection strin
 	if err := c.Delete(ctx, collection, "", deleteExpr); err != nil {
 		return 0, fmt.Errorf("delete existing records failed: %w", err)
 	}
-	g.Log().Infof(ctx, "deleted %d existing records with _source: %s", len(idsToDelete), sourceValue)
+	g.Log().Infof(ctx, "deleted %d existing records with _source: %s, keep=%d", len(idsToDelete), sourceValue, len(keep))
 	return len(idsToDelete), nil
 }
 

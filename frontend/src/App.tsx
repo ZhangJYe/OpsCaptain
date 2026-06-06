@@ -5,6 +5,7 @@ import { useIncidents } from './hooks/useIncidents'
 import { MainLayout } from './components/layout/MainLayout'
 import { AgentWorkbenchView } from './components/workbench/AgentWorkbenchView'
 import { IncidentView } from './components/incident/IncidentView'
+import { SettingsView } from './components/settings/SettingsView'
 import { saveSession } from './lib/storage'
 import type { AIOpsEngine, ChatSession, WorkbenchMode } from './types/chat'
 
@@ -172,7 +173,9 @@ export default function App() {
       onSelectedSkillIdsChange={setSelectedSkillIds}
       isLoading={chat.isLoading || incidents.isLoading}
     >
-      {workbenchMode === 'aiops' ? (
+      {workbenchMode === 'settings' ? (
+        <SettingsView onBack={() => setWorkbenchMode('chat')} />
+      ) : workbenchMode === 'aiops' ? (
         <IncidentView
           incident={incidents.incident}
           isLoading={incidents.isLoading}

@@ -1,6 +1,8 @@
 package rag
 
 import (
+	"SuperBizAgent/internal/consts"
+	"SuperBizAgent/utility/common"
 	"context"
 	"sort"
 	"strings"
@@ -70,6 +72,11 @@ type fusedDoc struct {
 	lexRank   int
 }
 
+type sourceScope struct {
+	enabled bool
+	prefix  string
+}
+
 func HybridRetrieve(
 	ctx context.Context,
 	pool *RetrieverPool,
@@ -130,6 +137,10 @@ func HybridRetrieveWithRetriever(
 	if dr.err != nil {
 		return nil, trace, dr.err
 	}
+
+	scope := sourceScopeFromContext(ctx)
+	dr.docs = filterDocsBySourceScope(dr.docs, scope)
+	lr.hits = filterBM25HitsBySourceScope(lr.hits, scope)
 
 	trace.DenseCount = len(dr.docs)
 	trace.LexicalCount = len(lr.hits)
@@ -265,14 +276,17 @@ func rrfFusion(denseDocs []*schema.Document, lexHits []BM25Hit, k int) []fusedDo
 
 func docFusionKey(doc *schema.Document) string {
 	if doc == nil || doc.MetaData == nil {
+		if doc != nil {
+			return strings.TrimSpace(doc.ID)
+		}
 		return ""
 	}
-	for _, key := range []string{"case_id", "caseid", "doc_id", "_source"} {
+	for _, key := range []string{"case_id", "caseid", "doc_id"} {
 		if v, ok := doc.MetaData[key].(string); ok && strings.TrimSpace(v) != "" {
 			return strings.TrimSpace(v)
 		}
 	}
-	return ""
+	return strings.TrimSpace(doc.ID)
 }
 
 func lexHitToDoc(hit BM25Hit) *schema.Document {
@@ -333,7 +347,11 @@ func extractBM25Meta(doc *schema.Document) map[string]string {
 	}
 	m := doc.MetaData
 	out := make(map[string]string)
-	for _, key := range []string{"service", "instance_type", "source", "destination"} {
+	for _, key := range []string{
+		"case_id", "caseid", "doc_id", "_source", "source", "source_uri",
+		"file_path", "file_name", "filename", "title",
+		"service", "instance_type", "destination",
+	} {
 		if v, ok := m[key].(string); ok && strings.TrimSpace(v) != "" {
 			out[key] = v
 		}
@@ -358,4 +376,64 @@ func extractBM25Meta(doc *schema.Document) map[string]string {
 		}
 	}
 	return out
+}
+
+func sourceScopeFromContext(ctx context.Context) sourceScope {
+	userID, _ := ctx.Value(consts.CtxKeyUserID).(string)
+	prefix := common.KnowledgeSourcePrefixForUser(userID)
+	if prefix == common.KnowledgeSourceBase {
+		return sourceScope{}
+	}
+	return sourceScope{enabled: true, prefix: prefix}
+}
+
+func filterDocsBySourceScope(docs []*schema.Document, scope sourceScope) []*schema.Document {
+	if !scope.enabled || len(docs) == 0 {
+		return docs
+	}
+	out := make([]*schema.Document, 0, len(docs))
+	for _, doc := range docs {
+		if doc == nil || sourceAllowedByScope(metadataString(doc.MetaData, "_source"), scope) {
+			out = append(out, doc)
+		}
+	}
+	return out
+}
+
+func filterBM25HitsBySourceScope(hits []BM25Hit, scope sourceScope) []BM25Hit {
+	if !scope.enabled || len(hits) == 0 {
+		return hits
+	}
+	out := make([]BM25Hit, 0, len(hits))
+	for _, hit := range hits {
+		if sourceAllowedByScope(strings.TrimSpace(hit.Meta["_source"]), scope) {
+			out = append(out, hit)
+		}
+	}
+	return out
+}
+
+func sourceAllowedByScope(source string, scope sourceScope) bool {
+	if !scope.enabled {
+		return true
+	}
+	source = strings.TrimSpace(source)
+	if source == "" {
+		return true
+	}
+	if strings.HasPrefix(source, scope.prefix) {
+		return true
+	}
+	if strings.HasPrefix(source, common.KnowledgeSourceBase+"users/") {
+		return false
+	}
+	return true
+}
+
+func metadataString(meta map[string]any, key string) string {
+	if meta == nil {
+		return ""
+	}
+	value, _ := meta[key].(string)
+	return strings.TrimSpace(value)
 }

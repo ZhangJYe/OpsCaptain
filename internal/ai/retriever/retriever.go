@@ -2,13 +2,14 @@ package retriever
 
 import (
 	"SuperBizAgent/internal/ai/embedder"
+	"SuperBizAgent/internal/consts"
 	inframv "SuperBizAgent/internal/infra/milvus"
 	"SuperBizAgent/utility/common"
 	"context"
 	"fmt"
 	"strings"
 
-	"github.com/cloudwego/eino-ext/components/retriever/milvus"
+	milvusretriever "github.com/cloudwego/eino-ext/components/retriever/milvus"
 	"github.com/cloudwego/eino/components/retriever"
 	"github.com/cloudwego/eino/schema"
 	"github.com/gogf/gf/v2/frame/g"
@@ -20,7 +21,16 @@ type safeRetriever struct {
 }
 
 func (s *safeRetriever) Retrieve(ctx context.Context, query string, opts ...retriever.Option) ([]*schema.Document, error) {
-	docs, err := s.inner.Retrieve(ctx, query, opts...)
+	filter := ownerScopeFilterFromContext(ctx)
+	scopedOpts := opts
+	if filter != "" {
+		scopedOpts = append(append([]retriever.Option{}, opts...), milvusretriever.WithFilter(filter))
+	}
+	docs, err := s.inner.Retrieve(ctx, query, scopedOpts...)
+	if err != nil && filter != "" && shouldRetryWithoutOwnerScopeFilter(err) {
+		g.Log().Warningf(ctx, "milvus owner scope filter failed, retrying without server filter: %v", err)
+		docs, err = s.inner.Retrieve(ctx, query, opts...)
+	}
 	if err != nil && strings.Contains(err.Error(), "extra output fields") && strings.Contains(err.Error(), "does not dynamic field") {
 		g.Log().Warningf(ctx, "milvus retriever schema mismatch: %v", err)
 		return nil, fmt.Errorf("milvus collection schema mismatch: %w", err)
@@ -46,7 +56,7 @@ func NewMilvusRetriever(ctx context.Context) (rtr retriever.Retriever, err error
 	if err != nil {
 		return nil, err
 	}
-	r, err := milvus.NewRetriever(ctx, &milvus.RetrieverConfig{
+	r, err := milvusretriever.NewRetriever(ctx, &milvusretriever.RetrieverConfig{
 		Client:      cli,
 		Collection:  common.GetMilvusCollectionName(ctx),
 		VectorField: "vector",
@@ -111,4 +121,48 @@ func resolveMilvusSearchParam(ctx context.Context, topK int) (entity.SearchParam
 	default:
 		return nil, fmt.Errorf("unsupported milvus.index_type: %s", common.GetMilvusIndexType(ctx))
 	}
+}
+
+func ownerScopeFilterFromContext(ctx context.Context) string {
+	if !ownerScopeServerFilterEnabled(ctx) {
+		return ""
+	}
+	userID, _ := ctx.Value(consts.CtxKeyUserID).(string)
+	prefix := common.KnowledgeSourcePrefixForUser(userID)
+	if prefix == common.KnowledgeSourceBase {
+		return ""
+	}
+	current := escapeMilvusStringLiteral(prefix + "%")
+	userScoped := escapeMilvusStringLiteral(common.KnowledgeSourceBase + "users/%")
+	return fmt.Sprintf(`(metadata["_source"] like "%s" or not metadata["_source"] like "%s")`, current, userScoped)
+}
+
+func ownerScopeServerFilterEnabled(ctx context.Context) bool {
+	v, err := g.Cfg().Get(ctx, "rag.owner_scope_server_filter_enabled")
+	if err != nil {
+		return true
+	}
+	return v.Bool()
+}
+
+func shouldRetryWithoutOwnerScopeFilter(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "extra output fields") && strings.Contains(msg, "does not dynamic field") {
+		return false
+	}
+	for _, marker := range []string{"filter", "expr", "expression", "query plan", "parse"} {
+		if strings.Contains(msg, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func escapeMilvusStringLiteral(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	return s
 }

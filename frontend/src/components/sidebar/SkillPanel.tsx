@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { BarChart3, FileSearch, BookOpen } from 'lucide-react'
 import type { SkillDomain } from '../../types/chat'
 import { SKILL_GROUPS, cn } from '../../lib/utils'
+import { useUserTools } from '../../hooks/useUserTools'
 
 interface Props {
   selectedSkillIds: string[]
@@ -17,6 +18,8 @@ const domainMeta: Record<SkillDomain, { icon: typeof BarChart3; label: string; c
 
 export function SkillPanel({ selectedSkillIds, onChange }: Props) {
   const [activeDomain, setActiveDomain] = useState<SkillDomain>('metrics')
+  const { skills: userSkills } = useUserTools()
+  const approvedUserSkills = userSkills.filter(s => s.status === 'approved')
 
   const activeGroup = useMemo(
     () => SKILL_GROUPS.find((g) => g.id === activeDomain) ?? SKILL_GROUPS[0],
@@ -142,6 +145,33 @@ export function SkillPanel({ selectedSkillIds, onChange }: Props) {
                 </button>
               )
             })}
+            {approvedUserSkills
+              .filter(s => s.domain === activeDomain)
+              .map(skill => {
+                const skillKey = `user-skill:${skill.name}`
+                const enabled = selectedSet.has(skillKey)
+                return (
+                  <div
+                    key={skill.id}
+                    className="flex items-center justify-between px-3 py-2 rounded-lg border border-dashed border-sky-200 bg-sky-50/30"
+                  >
+                    <span className="text-sm flex items-center gap-1.5">🧩 {skill.name}</span>
+                    <button
+                      onClick={() => toggleSkill(skillKey)}
+                      className={cn(
+                        'relative h-4 w-8 shrink-0 rounded-full transition-colors duration-200',
+                        enabled ? 'bg-accent' : 'bg-zinc-200 dark:bg-zinc-700'
+                      )}
+                    >
+                      <motion.div
+                        className="absolute top-0.5 h-3 w-3 rounded-full bg-white shadow-sm"
+                        animate={{ left: enabled ? 18 : 2 }}
+                        transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                      />
+                    </button>
+                  </div>
+                )
+              })}
           </motion.div>
         </AnimatePresence>
       </div>

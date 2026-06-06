@@ -157,10 +157,11 @@ func QueryForEval(ctx context.Context, pool *RetrieverPool, query string, wantRe
 	retrieveStart := time.Now()
 	docs, err := rr.Retrieve(ctx, rewritten, retrieverapi.WithTopK(candidateTopK))
 	trace.RetrieveLatencyMs = time.Since(retrieveStart).Milliseconds()
-	trace.RawResultCount = len(docs)
 	if err != nil {
 		return nil, trace, err
 	}
+	docs = filterDocsBySourceScope(docs, sourceScopeFromContext(ctx))
+	trace.RawResultCount = len(docs)
 	docs = refineRetrievedDocs(query, docs)
 
 	if !wantRerank {

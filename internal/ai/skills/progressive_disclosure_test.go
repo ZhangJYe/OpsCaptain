@@ -42,13 +42,13 @@ func (t *fakeDisclosureTool) Info(context.Context) (*schema.ToolInfo, error) {
 
 func TestProgressiveDisclosureHonorsExplicitSkillSelection(t *testing.T) {
 	logsRegistry, err := NewRegistry("logs",
-		&fakeDisclosureSkill{name: "logs_evidence_extract", description: "Inspect log evidence", match: false},
+		[]Skill{&fakeDisclosureSkill{name: "logs_evidence_extract", description: "Inspect log evidence", match: false}},
 	)
 	if err != nil {
 		t.Fatalf("new registry: %v", err)
 	}
 	knowledgeRegistry, err := NewRegistry("knowledge",
-		&fakeDisclosureSkill{name: "knowledge_sop_lookup", description: "Inspect SOPs", match: false},
+		[]Skill{&fakeDisclosureSkill{name: "knowledge_sop_lookup", description: "Inspect SOPs", match: false}},
 	)
 	if err != nil {
 		t.Fatalf("new registry: %v", err)
@@ -78,7 +78,7 @@ func TestProgressiveDisclosureHonorsExplicitSkillSelection(t *testing.T) {
 
 func TestProgressiveDisclosureIgnoresUnknownSkillSelection(t *testing.T) {
 	logsRegistry, err := NewRegistry("logs",
-		&fakeDisclosureSkill{name: "logs_evidence_extract", description: "Inspect log evidence", match: false},
+		[]Skill{&fakeDisclosureSkill{name: "logs_evidence_extract", description: "Inspect log evidence", match: false}},
 	)
 	if err != nil {
 		t.Fatalf("new registry: %v", err)
@@ -98,6 +98,32 @@ func TestProgressiveDisclosureIgnoresUnknownSkillSelection(t *testing.T) {
 	}
 	if containsToolNamed(result.Tools, "logs_tool") {
 		t.Fatalf("expected unknown skills to avoid unlocking gated tools")
+	}
+}
+
+func TestProgressiveDisclosureDoesNotUnlockConfiguredDefaultFallback(t *testing.T) {
+	logsRegistry, err := NewRegistry("logs",
+		[]Skill{
+			&fakeDisclosureSkill{name: "logs_specific", description: "Inspect log evidence", match: false},
+			&fakeDisclosureSkill{name: "logs_raw_review", description: "Review logs broadly", match: false},
+		},
+		WithDefault("logs_raw_review"),
+	)
+	if err != nil {
+		t.Fatalf("new registry: %v", err)
+	}
+
+	pd := NewProgressiveDisclosure(
+		[]*Registry{logsRegistry},
+		[]TieredTool{
+			{Tool: &fakeDisclosureTool{name: "always_on"}, Tier: TierAlwaysOn},
+			{Tool: &fakeDisclosureTool{name: "logs_tool"}, Tier: TierSkillGate, Domains: []string{"logs"}},
+		},
+	)
+
+	result := pd.Disclose("先帮我看一下", nil)
+	if containsToolNamed(result.Tools, "logs_tool") {
+		t.Fatalf("expected configured fallback to avoid unlocking gated tools")
 	}
 }
 

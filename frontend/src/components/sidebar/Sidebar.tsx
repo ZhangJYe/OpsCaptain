@@ -92,6 +92,15 @@ export function Sidebar({
         />
       </div>
 
+      <div className="mt-auto pt-3 border-t border-white/20 px-3">
+        <button
+          onClick={() => onWorkbenchModeChange?.('settings')}
+          className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-gray-500 hover:text-gray-700 hover:bg-white/30 transition-colors"
+        >
+          ⚙️ 工具 & Skill 管理
+        </button>
+      </div>
+
       <div className="border-t border-zinc-200/80 p-3 dark:border-zinc-800/60">
         <button
           onClick={onNewChat}

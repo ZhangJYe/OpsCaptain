@@ -141,6 +141,35 @@ func TestLogAgentUsesGenericEvidenceSkill(t *testing.T) {
 	}
 }
 
+func TestLogAgentUsesGenericEvidenceSkillForChineseErrorQuery(t *testing.T) {
+	oldDiscover := discoverLogTools
+	defer func() {
+		discoverLogTools = oldDiscover
+	}()
+
+	tool := &fakeLogTool{
+		name:   "query_logs",
+		desc:   "query service logs",
+		output: `[{"timestamp":"2026-04-04T10:00:00Z","level":"ERROR","service":"inventory","message":"database error"}]`,
+	}
+	discoverLogTools = func() ([]toolapi.BaseTool, error) {
+		return []toolapi.BaseTool{tool}, nil
+	}
+
+	agent := New()
+	task := protocol.NewRootTask("session-test", "排查库存服务报错日志", agent.Name())
+	result, err := agent.Handle(context.Background(), task)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Metadata["skill_name"] != "logs_evidence_extract" {
+		t.Fatalf("expected logs_evidence_extract, got %#v", result.Metadata)
+	}
+	if got := tool.LastPayload(t)["query"].(string); !strings.Contains(got, "stack trace signals") {
+		t.Fatalf("expected generic evidence focus in query, got %q", got)
+	}
+}
+
 func TestLogAgentFallsBackToRawReviewSkillWithoutSpecificKeywords(t *testing.T) {
 	oldDiscover := discoverLogTools
 	defer func() {

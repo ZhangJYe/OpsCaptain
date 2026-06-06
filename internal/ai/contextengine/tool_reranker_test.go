@@ -1,7 +1,9 @@
 package contextengine
 
 import (
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -96,6 +98,18 @@ func TestSanitizeSnippets_Truncate(t *testing.T) {
 	assert.LessOrEqual(t, len(result[0].Content), snippetTruncateLen+3)
 }
 
+func TestSanitizeSnippets_TruncateKeepsUTF8(t *testing.T) {
+	content := strings.Repeat("知识库证据", 80)
+	items := []ContextItem{
+		{Content: content},
+	}
+
+	result := sanitizeSnippets(items)
+	assert.True(t, utf8.ValidString(result[0].Content))
+	assert.LessOrEqual(t, utf8.RuneCountInString(result[0].Content), snippetTruncateLen+3)
+	assert.Contains(t, result[0].Content, "...")
+}
+
 func TestSanitizeSnippets_NoChange(t *testing.T) {
 	items := []ContextItem{
 		{Content: "normal log entry without sensitive data"},
@@ -126,6 +140,16 @@ func TestBuildRerankPrompt(t *testing.T) {
 	assert.Contains(t, prompt, "[1]")
 	assert.Contains(t, prompt, "connection timeout")
 	assert.Contains(t, prompt, "JSON")
+}
+
+func TestBuildRerankPrompt_TruncateKeepsUTF8(t *testing.T) {
+	items := []ContextItem{
+		{Title: "doc-1", SourceType: "doc", Content: strings.Repeat("中文证据", 80)},
+	}
+
+	prompt := buildRerankPrompt("查询", items)
+	assert.True(t, utf8.ValidString(prompt))
+	assert.Contains(t, prompt, "...")
 }
 
 func TestNewToolReranker_Defaults(t *testing.T) {

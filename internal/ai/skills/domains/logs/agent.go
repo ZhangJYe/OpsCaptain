@@ -24,6 +24,12 @@ const (
 	defaultLogEvidenceLimit = 3
 )
 
+const (
+	confidenceLogsEvidence      = 0.74
+	confidenceLogsDegraded      = 0.42
+	confidenceLogsFullyDegraded = 0.28
+)
+
 var discoverLogTools = tools.GetLogMcpTool
 
 type Agent struct {
@@ -85,7 +91,7 @@ func (s *logSkill) Match(task *protocol.TaskEnvelope) bool {
 		return s.matcher(task)
 	}
 	if len(s.keywords) == 0 {
-		return true
+		return false
 	}
 	return skills.ContainsAny(task.Goal, s.keywords...)
 }
@@ -101,62 +107,65 @@ func (s *logSkill) Focus() string {
 func buildLogSkillRegistry() *skills.Registry {
 	registry, err := skills.NewRegistry(
 		AgentName,
-		&logSkill{
-			name:        "logs_service_offline_panic_trace",
-			description: "Trace service offline, pod restart, crashloop, and panic evidence from logs.",
-			mode:        "service_offline_panic_trace",
-			focus:       "Focus on panic, stack trace, nil pointer, restart reason, crashloop, oom, pod restart count, and the latest release.",
-			matcher:     matchesServiceOfflinePanicTask,
-			keywords: []string{
-				"service offline", "service down", "pod restart", "crashloop", "panic", "stack trace", "nil pointer", "oom", "restart",
+		[]skills.Skill{
+			&logSkill{
+				name:        "logs_service_offline_panic_trace",
+				description: "Trace service offline, pod restart, crashloop, and panic evidence from logs.",
+				mode:        "service_offline_panic_trace",
+				focus:       "Focus on panic, stack trace, nil pointer, restart reason, crashloop, oom, pod restart count, and the latest release.",
+				matcher:     matchesServiceOfflinePanicTask,
+				keywords: []string{
+					"service offline", "service down", "pod restart", "crashloop", "panic", "stack trace", "nil pointer", "oom", "restart",
+				},
+			},
+			&logSkill{
+				name:        "logs_api_failure_rate_investigation",
+				description: "Trace API failure rate spikes, 5xx responses, and upstream or downstream failures from logs.",
+				mode:        "api_failure_rate_investigation",
+				focus:       "Focus on api name, route, status code, response payload, 4xx, 5xx, upstream, downstream, timeout, and dependency failures.",
+				keywords: []string{
+					"api failure rate", "failure rate", "5xx", "4xx", "response error", "error rate", "endpoint", "route", "upstream", "downstream",
+				},
+			},
+			&logSkill{
+				name:        "logs_payment_timeout_trace",
+				description: "Trace payment, order, and checkout timeout evidence from logs.",
+				mode:        "payment_timeout_trace",
+				focus:       "Focus on payment, order, checkout, gateway timeout, retry, db timeout, and downstream latency.",
+				matcher:     matchesPaymentTimeoutTask,
+				keywords: []string{
+					"payment timeout", "checkout timeout", "order timeout", "支付超时", "订单超时",
+					"payment", "checkout", "order", "timeout", "504", "gateway timeout",
+				},
+			},
+			&logSkill{
+				name:        "logs_auth_failure_trace",
+				description: "Trace login, token, and authorization failures from logs.",
+				mode:        "auth_failure_trace",
+				focus:       "Focus on login, token, jwt, forbidden, unauthorized, permission denied, and auth middleware.",
+				keywords: []string{
+					"login", "auth", "authentication", "authorization", "token", "jwt", "unauthorized", "forbidden",
+					"登录", "鉴权", "令牌", "权限", "未授权",
+				},
+			},
+			&logSkill{
+				name:        "logs_evidence_extract",
+				description: "Extract structured log evidence for error, timeout, and exception focused queries.",
+				mode:        "evidence_extract",
+				focus:       "Focus on error, timeout, exception, panic, and stack trace signals.",
+				keywords: []string{
+					"error", "errors", "exception", "timeout", "fail", "failed", "panic", "stack",
+					"报错", "异常", "错误", "超时", "失败", "堆栈", "日志证据",
+				},
+			},
+			&logSkill{
+				name:        "logs_raw_review",
+				description: "Fallback log review skill that still returns raw snippets when structured evidence is unavailable.",
+				mode:        "raw_review",
+				focus:       "Focus on broad log review and retain raw output when structure is unavailable.",
 			},
 		},
-		&logSkill{
-			name:        "logs_api_failure_rate_investigation",
-			description: "Trace API failure rate spikes, 5xx responses, and upstream or downstream failures from logs.",
-			mode:        "api_failure_rate_investigation",
-			focus:       "Focus on api name, route, status code, response payload, 4xx, 5xx, upstream, downstream, timeout, and dependency failures.",
-			keywords: []string{
-				"api failure rate", "failure rate", "5xx", "4xx", "response error", "error rate", "endpoint", "route", "upstream", "downstream",
-			},
-		},
-		&logSkill{
-			name:        "logs_payment_timeout_trace",
-			description: "Trace payment, order, and checkout timeout evidence from logs.",
-			mode:        "payment_timeout_trace",
-			focus:       "Focus on payment, order, checkout, gateway timeout, retry, db timeout, and downstream latency.",
-			matcher:     matchesPaymentTimeoutTask,
-			keywords: []string{
-				"payment timeout", "checkout timeout", "order timeout", "支付超时", "订单超时",
-				"payment", "checkout", "order", "timeout", "504", "gateway timeout",
-			},
-		},
-		&logSkill{
-			name:        "logs_auth_failure_trace",
-			description: "Trace login, token, and authorization failures from logs.",
-			mode:        "auth_failure_trace",
-			focus:       "Focus on login, token, jwt, forbidden, unauthorized, permission denied, and auth middleware.",
-			keywords: []string{
-				"login", "auth", "authentication", "authorization", "token", "jwt", "unauthorized", "forbidden",
-				"登录", "鉴权", "令牌", "权限", "未授权",
-			},
-		},
-		&logSkill{
-			name:        "logs_evidence_extract",
-			description: "Extract structured log evidence for error, timeout, and exception focused queries.",
-			mode:        "evidence_extract",
-			focus:       "Focus on error, timeout, exception, panic, and stack trace signals.",
-			keywords: []string{
-				"error", "errors", "exception", "timeout", "fail", "failed", "panic", "stack",
-				"鎶ラ敊", "寮傚父", "閿欒", "瓒呮椂", "澶辫触", "鍫嗘爤", "鏃ュ織璇佹嵁",
-			},
-		},
-		&logSkill{
-			name:        "logs_raw_review",
-			description: "Fallback log review skill that still returns raw snippets when structured evidence is unavailable.",
-			mode:        "raw_review",
-			focus:       "Focus on broad log review and retain raw output when structure is unavailable.",
-		},
+		skills.WithDefault("logs_raw_review"),
 	)
 	if err != nil {
 		panic(fmt.Sprintf("failed to build log skills registry: %v", err))
@@ -204,7 +213,7 @@ func runLogSkillWithFocus(ctx context.Context, task *protocol.TaskEnvelope, mode
 				Agent:       AgentName,
 				Status:      protocol.ResultStatusSucceeded,
 				Summary:     summary,
-				Confidence:  0.74,
+				Confidence:  confidenceLogsEvidence,
 				Evidence:    evidence,
 				NextActions: buildLogNextActions(mode),
 				Metadata: map[string]any{
@@ -229,7 +238,7 @@ func runLogSkillWithFocus(ctx context.Context, task *protocol.TaskEnvelope, mode
 			Agent:      AgentName,
 			Status:     protocol.ResultStatusDegraded,
 			Summary:    "log tools ran, but only raw outputs were available",
-			Confidence: 0.42,
+			Confidence: confidenceLogsDegraded,
 			Evidence: []protocol.EvidenceItem{
 				{
 					SourceType: "log-raw",
@@ -341,125 +350,13 @@ func buildLogNextActions(mode string) []string {
 	}
 }
 
-func mustNewSkillRegistry() *skills.Registry {
-	registry, err := skills.NewRegistry(
-		AgentName,
-		&logSkill{
-			name:        "logs_evidence_extract",
-			description: "Extract structured log evidence for error, timeout, and exception focused queries.",
-			mode:        "evidence_extract",
-			keywords: []string{
-				"error", "errors", "exception", "timeout", "fail", "failed", "panic", "stack",
-				"报错", "异常", "错误", "超时", "失败", "堆栈", "日志证据",
-			},
-		},
-		&logSkill{
-			name:        "logs_raw_review",
-			description: "Fallback log review skill that still returns raw snippets when structured evidence is unavailable.",
-			mode:        "raw_review",
-		},
-	)
-	if err != nil {
-		panic(fmt.Sprintf("failed to build log skills registry: %v", err))
-	}
-	return registry
-}
-
-func runLogSkill(ctx context.Context, task *protocol.TaskEnvelope, mode string) (*protocol.TaskResult, error) {
-	toolList, err := discoverLogTools()
-	if err != nil {
-		return degradedLogResult(task, AgentName, fmt.Sprintf("log MCP bootstrap failed: %v", err), nil, []string{err.Error()}, mode, ""), nil
-	}
-	if len(toolList) == 0 {
-		return degradedLogResult(task, AgentName, "log query capability is not configured", nil, nil, mode, ""), nil
-	}
-
-	limit := logEvidenceLimit(ctx)
-	toolNames := make([]string, 0, len(toolList))
-	toolErrors := make([]string, 0)
-	rawOutputs := make([]string, 0)
-
-	for _, baseTool := range toolList {
-		name, desc := describeTool(ctx, baseTool)
-		toolNames = append(toolNames, name)
-
-		invokable, ok := baseTool.(toolapi.InvokableTool)
-		if !ok {
-			continue
-		}
-
-		output, invokeErr := invokeLogTool(ctx, invokable, task.Goal, limit)
-		if invokeErr != nil {
-			toolErrors = append(toolErrors, fmt.Sprintf("%s: %v", name, invokeErr))
-			continue
-		}
-
-		evidence := buildLogEvidence(name, output, limit)
-		if len(evidence) > 0 {
-			summary := fmt.Sprintf("log skill %s extracted %d evidence items with %s", mode, len(evidence), name)
-			if len(toolErrors) > 0 {
-				summary += "; other tools degraded automatically"
-			}
-			return &protocol.TaskResult{
-				TaskID:     task.TaskID,
-				Agent:      AgentName,
-				Status:     protocol.ResultStatusSucceeded,
-				Summary:    summary,
-				Confidence: 0.74,
-				Evidence:   evidence,
-				Metadata: map[string]any{
-					"tool_names":       toolNames,
-					"tool_errors":      toolErrors,
-					"successful_tool":  name,
-					"tool_description": desc,
-					"log_mode":         mode,
-				},
-			}, nil
-		}
-
-		if snippet := fallbackSnippet(output, desc); snippet != "" {
-			rawOutputs = append(rawOutputs, fmt.Sprintf("%s: %s", name, snippet))
-		}
-	}
-
-	if len(rawOutputs) > 0 {
-		return &protocol.TaskResult{
-			TaskID:     task.TaskID,
-			Agent:      AgentName,
-			Status:     protocol.ResultStatusDegraded,
-			Summary:    "log tools ran, but only raw outputs were available",
-			Confidence: 0.42,
-			Evidence: []protocol.EvidenceItem{
-				{
-					SourceType: "log-raw",
-					SourceID:   "raw-output",
-					Title:      "raw log output",
-					Snippet:    shorten(strings.Join(rawOutputs, " | "), 240),
-					Score:      0.44,
-				},
-			},
-			Metadata: map[string]any{
-				"tool_names":  toolNames,
-				"tool_errors": toolErrors,
-				"log_mode":    mode,
-			},
-		}, nil
-	}
-
-	summary := fmt.Sprintf("found %d log MCP tools but no reusable log evidence", len(toolNames))
-	if len(toolErrors) > 0 {
-		summary += "; tool errors: " + strings.Join(toolErrors, " ; ")
-	}
-	return degradedLogResult(task, AgentName, summary, toolNames, toolErrors, mode, ""), nil
-}
-
 func degradedLogResult(task *protocol.TaskEnvelope, agentName, summary string, toolNames []string, toolErrors []string, mode string, focus string) *protocol.TaskResult {
 	return &protocol.TaskResult{
 		TaskID:      task.TaskID,
 		Agent:       agentName,
 		Status:      protocol.ResultStatusDegraded,
 		Summary:     summary,
-		Confidence:  0.28,
+		Confidence:  confidenceLogsFullyDegraded,
 		NextActions: buildLogNextActions(mode),
 		Metadata: map[string]any{
 			"tool_names":  toolNames,
@@ -476,23 +373,6 @@ func describeTool(ctx context.Context, baseTool toolapi.BaseTool) (string, strin
 		return "unknown-log-tool", ""
 	}
 	return fallback(info.Name, "unknown-log-tool"), strings.TrimSpace(info.Desc)
-}
-
-func invokeLogTool(ctx context.Context, tool toolapi.InvokableTool, query string, limit int) (string, error) {
-	queryCtx, cancel := context.WithTimeout(ctx, logQueryTimeout(ctx))
-	defer cancel()
-	return tool.InvokableRun(queryCtx, buildLogQueryPayload(query, limit))
-}
-
-func buildLogQueryPayload(query string, limit int) string {
-	payload, err := json.Marshal(map[string]any{
-		"query": query,
-		"limit": limit,
-	})
-	if err != nil {
-		return fmt.Sprintf(`{"query":%q,"limit":%d}`, query, limit)
-	}
-	return string(payload)
 }
 
 func buildLogEvidence(sourceName, output string, limit int) []protocol.EvidenceItem {

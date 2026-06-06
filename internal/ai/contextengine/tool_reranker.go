@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/schema"
@@ -182,9 +183,7 @@ func buildRerankPrompt(query string, items []ContextItem) string {
 	sb.WriteString("工具结果（已脱敏和裁剪）：\n")
 	for i, item := range items {
 		text := item.Content
-		if len(text) > snippetTruncateLen {
-			text = text[:snippetTruncateLen] + "..."
-		}
+		text = truncateSnippetText(text, snippetTruncateLen)
 		sb.WriteString(fmt.Sprintf("[%d] source=%s title=%s content=%s\n", i+1, item.SourceType, item.Title, text))
 	}
 	sb.WriteString("\n严格按以下 JSON 格式输出，不要添加任何其他文字：\n")
@@ -236,9 +235,13 @@ func parseRerankScoresRegex(resp string, expectedCount int) ([]float64, bool) {
 }
 
 var (
-	ipPattern    = regexp.MustCompile(`\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b`)
-	tokenPattern = regexp.MustCompile(`(?i)(token|key|secret|password|credential)[=:]\s*\S+`)
-	uuidPattern  = regexp.MustCompile(`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
+	ipPattern      = regexp.MustCompile(`\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b`)
+	tokenPattern   = regexp.MustCompile(`(?i)(token|key|secret|password|credential)[=:]\s*\S+`)
+	uuidPattern    = regexp.MustCompile(`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
+	macPattern     = regexp.MustCompile(`(?i)\b[0-9a-f]{2}(:[0-9a-f]{2}){5}\b`)
+	emailPattern   = regexp.MustCompile(`\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b`)
+	phonePattern   = regexp.MustCompile(`\b1[3-9]\d{9}\b`)
+	hostKeyPattern = regexp.MustCompile(`(?i)\b(?:host|hostname|server)[=:]\s*\S+`)
 )
 
 func sanitizeSnippets(items []ContextItem) []ContextItem {
@@ -249,10 +252,20 @@ func sanitizeSnippets(items []ContextItem) []ContextItem {
 		content = ipPattern.ReplaceAllString(content, "[private-ip]")
 		content = tokenPattern.ReplaceAllString(content, "[redacted]")
 		content = uuidPattern.ReplaceAllString(content, "[uuid]")
-		if len(content) > snippetTruncateLen {
-			content = content[:snippetTruncateLen] + "..."
-		}
+		content = macPattern.ReplaceAllString(content, "[mac]")
+		content = emailPattern.ReplaceAllString(content, "[email]")
+		content = phonePattern.ReplaceAllString(content, "[phone]")
+		content = hostKeyPattern.ReplaceAllString(content, "[host-redacted]")
+		content = truncateSnippetText(content, snippetTruncateLen)
 		result[i].Content = content
 	}
 	return result
+}
+
+func truncateSnippetText(content string, limit int) string {
+	if limit <= 0 || utf8.RuneCountInString(content) <= limit {
+		return content
+	}
+	runes := []rune(content)
+	return string(runes[:limit]) + "..."
 }

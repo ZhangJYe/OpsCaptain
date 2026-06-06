@@ -78,3 +78,4 @@ Learn/design/*.progress.md
 # Accidental root npm manifests
 /package.json
 /package-lock.json
+.superpowers/

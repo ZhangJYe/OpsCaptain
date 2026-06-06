@@ -82,14 +82,14 @@ func (s *IndexingService) IndexSource(ctx context.Context, path string) (IndexBu
 	}
 
 	sourceValue := resolveDocumentSource(path, docs[0])
-	deleted, err := s.deleteExistingSource(ctx, sourceValue)
-	if err != nil {
-		return IndexBuildSummary{}, err
-	}
-
 	ids, err := graph.Invoke(ctx, document.Source{URI: path}, compose.WithCallbacks(log_call_back.LogCallback(nil)))
 	if err != nil {
 		return IndexBuildSummary{}, fmt.Errorf("invoke index graph failed: %w", err)
+	}
+
+	deleted, err := s.deleteExistingSourceExcept(ctx, sourceValue, ids)
+	if err != nil {
+		return IndexBuildSummary{}, err
 	}
 
 	s.SyncBM25Index(ctx)
@@ -134,11 +134,11 @@ func (s *IndexingService) SyncBM25Index(ctx context.Context) {
 	g.Log().Infof(ctx, "rebuilt BM25 index from %d files, docs=%d, total=%d", len(paths), totalDocs, idx.Size())
 }
 
-func (s *IndexingService) deleteExistingSource(ctx context.Context, sourceValue string) (int, error) {
+func (s *IndexingService) deleteExistingSourceExcept(ctx context.Context, sourceValue string, keepIDs []string) (int, error) {
 	if s.vectorStore == nil {
 		return 0, fmt.Errorf("vector store not configured")
 	}
-	return s.vectorStore.DeleteBySource(ctx, common.GetMilvusCollectionName(ctx), sourceValue)
+	return s.vectorStore.DeleteBySourceExcept(ctx, common.GetMilvusCollectionName(ctx), sourceValue, keepIDs)
 }
 
 func resolveDocumentSource(path string, doc *schema.Document) string {

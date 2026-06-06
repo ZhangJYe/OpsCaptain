@@ -7,9 +7,11 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	agentcontracts "SuperBizAgent/internal/ai/agent/contracts"
 	"SuperBizAgent/internal/ai/protocol"
+	"SuperBizAgent/internal/ai/rag"
 	"SuperBizAgent/internal/ai/runtime"
 	"SuperBizAgent/internal/ai/skills"
 	"SuperBizAgent/internal/ai/tools"
@@ -20,6 +22,13 @@ import (
 const AgentName = "knowledge"
 
 const defaultKnowledgeQueryTimeout = 5 * time.Second
+
+const (
+	confidenceKnowledgeSucceeded = 0.78
+	confidenceKnowledgeEvidence  = 0.74
+	confidenceDocumentUnreadable = 0.30
+	confidenceLookupFailed       = 0.25
+)
 
 var (
 	newQueryInternalDocsTool = tools.NewQueryInternalDocsTool
@@ -91,7 +100,7 @@ func (s *knowledgeSkill) Match(task *protocol.TaskEnvelope) bool {
 		return s.matcher(task)
 	}
 	if len(s.keywords) == 0 {
-		return true
+		return false
 	}
 	return skills.ContainsAny(task.Goal, s.keywords...)
 }
@@ -107,48 +116,51 @@ func (s *knowledgeSkill) Focus() string {
 func buildKnowledgeSkillRegistry() *skills.Registry {
 	registry, err := skills.NewRegistry(
 		AgentName,
-		&knowledgeSkill{
-			name:        "knowledge_rollback_runbook",
-			description: "Retrieve rollback, recovery, and mitigation runbooks for bad releases and incidents.",
-			mode:        "rollback_runbook",
-			focus:       "Focus on rollback triggers, mitigation actions, recovery steps, and validation checklist.",
-			keywords: []string{
-				"rollback", "revert", "recover", "recovery", "restore", "回滚", "恢复", "止损", "回退",
+		[]skills.Skill{
+			&knowledgeSkill{
+				name:        "knowledge_rollback_runbook",
+				description: "Retrieve rollback, recovery, and mitigation runbooks for bad releases and incidents.",
+				mode:        "rollback_runbook",
+				focus:       "Focus on rollback triggers, mitigation actions, recovery steps, and validation checklist.",
+				keywords: []string{
+					"rollback", "revert", "recover", "recovery", "restore", "回滚", "恢复", "止损", "回退",
+				},
+			},
+			&knowledgeSkill{
+				name:        "knowledge_release_sop",
+				description: "Retrieve release, deployment, and rollout SOPs with pre-check and rollback guidance.",
+				mode:        "release_sop",
+				focus:       "Focus on release, deployment, pre-check, post-check, verification, and rollback steps.",
+				keywords: []string{
+					"release", "deploy", "deployment", "rollout", "publish", "launch", "上线", "发版", "发布", "部署", "灰度",
+				},
+			},
+			&knowledgeSkill{
+				name:        "knowledge_service_error_code_lookup",
+				description: "Retrieve service error code explanations, common causes, and operator checks.",
+				mode:        "service_error_code_lookup",
+				focus:       "Focus on exact error code meaning, common causes, affected dependency, and first troubleshooting checks.",
+				keywords:    []string{"error code", "errno", "status code", "code meaning"},
+				matcher:     matchesServiceErrorCodeTask,
+			},
+			&knowledgeSkill{
+				name:        "knowledge_sop_lookup",
+				description: "Retrieve SOP, runbook, and internal documentation matches for explicit procedure questions.",
+				mode:        "sop_lookup",
+				focus:       "Focus on SOP, runbook, checklist, and operator step-by-step actions.",
+				keywords: []string{
+					"sop", "runbook", "playbook", "doc", "docs", "knowledge base",
+					"文档", "知识库", "手册", "排障手册", "处理流程", "操作步骤", "SOP",
+				},
+			},
+			&knowledgeSkill{
+				name:        "knowledge_incident_guidance",
+				description: "Fallback knowledge retrieval for broader incident analysis and troubleshooting guidance.",
+				mode:        "incident_guidance",
+				focus:       "Focus on troubleshooting guidance, mitigation steps, and related incident runbooks.",
 			},
 		},
-		&knowledgeSkill{
-			name:        "knowledge_release_sop",
-			description: "Retrieve release, deployment, and rollout SOPs with pre-check and rollback guidance.",
-			mode:        "release_sop",
-			focus:       "Focus on release, deployment, pre-check, post-check, verification, and rollback steps.",
-			keywords: []string{
-				"release", "deploy", "deployment", "rollout", "publish", "launch", "上线", "发版", "发布", "部署", "灰度",
-			},
-		},
-		&knowledgeSkill{
-			name:        "knowledge_service_error_code_lookup",
-			description: "Retrieve service error code explanations, common causes, and operator checks.",
-			mode:        "service_error_code_lookup",
-			focus:       "Focus on exact error code meaning, common causes, affected dependency, and first troubleshooting checks.",
-			keywords:    []string{"error code", "errno", "status code", "code meaning"},
-			matcher:     matchesServiceErrorCodeTask,
-		},
-		&knowledgeSkill{
-			name:        "knowledge_sop_lookup",
-			description: "Retrieve SOP, runbook, and internal documentation matches for explicit procedure questions.",
-			mode:        "sop_lookup",
-			focus:       "Focus on SOP, runbook, checklist, and operator step-by-step actions.",
-			keywords: []string{
-				"sop", "runbook", "playbook", "doc", "docs", "knowledge base",
-				"文档", "知识库", "手册", "排障手册", "处理流程", "操作步骤", "SOP",
-			},
-		},
-		&knowledgeSkill{
-			name:        "knowledge_incident_guidance",
-			description: "Fallback knowledge retrieval for broader incident analysis and troubleshooting guidance.",
-			mode:        "incident_guidance",
-			focus:       "Focus on troubleshooting guidance, mitigation steps, and related incident runbooks.",
-		},
+		skills.WithDefault("knowledge_incident_guidance"),
 	)
 	if err != nil {
 		panic(fmt.Sprintf("failed to build knowledge skills registry: %v", err))
@@ -183,7 +195,7 @@ func runKnowledgeLookupWithFocus(ctx context.Context, task *protocol.TaskEnvelop
 			Agent:      AgentName,
 			Status:     protocol.ResultStatusDegraded,
 			Summary:    summary,
-			Confidence: 0.25,
+			Confidence: confidenceLookupFailed,
 			Metadata: map[string]any{
 				"error":           err.Error(),
 				"knowledge_mode":  mode,
@@ -192,67 +204,7 @@ func runKnowledgeLookupWithFocus(ctx context.Context, task *protocol.TaskEnvelop
 		}, nil
 	}
 
-	var docs []map[string]any
-	if err := json.Unmarshal([]byte(output), &docs); err != nil {
-		return &protocol.TaskResult{
-			TaskID:     task.TaskID,
-			Agent:      AgentName,
-			Status:     protocol.ResultStatusDegraded,
-			Summary:    "knowledge lookup returned an unreadable document payload",
-			Confidence: 0.3,
-			Metadata: map[string]any{
-				"raw_output":      output,
-				"knowledge_mode":  mode,
-				"knowledge_query": retrievalQuery,
-				"decode_failed":   true,
-				"document_count":  0,
-			},
-		}, nil
-	}
-
-	limit := knowledgeEvidenceLimit()
-	evidence := make([]protocol.EvidenceItem, 0, min(limit, len(docs)))
-	highlights := make([]string, 0, min(limit, len(docs)))
-	for idx, doc := range docs {
-		if idx >= limit {
-			break
-		}
-		content := firstNonEmptyString(doc, "content", "page_content", "text")
-		title := firstNonEmptyString(doc, "id", "title", "source")
-		if title == "" {
-			title = fmt.Sprintf("doc-%d", idx+1)
-		}
-		snippet := shorten(content, 160)
-		if snippet != "" {
-			highlights = append(highlights, snippet)
-		}
-		evidence = append(evidence, protocol.EvidenceItem{
-			SourceType: "knowledge",
-			SourceID:   title,
-			Title:      title,
-			Snippet:    snippet,
-			Score:      0.74 - float64(idx)*0.08,
-		})
-	}
-
-	summary := "knowledge lookup returned no reusable documents"
-	if len(evidence) > 0 {
-		summary = fmt.Sprintf("knowledge lookup found %d relevant documents", len(docs))
-		if len(highlights) > 0 {
-			summary += ": " + strings.Join(highlights, " | ")
-		}
-	}
-
-	return &protocol.TaskResult{
-		TaskID:      task.TaskID,
-		Agent:       AgentName,
-		Status:      protocol.ResultStatusSucceeded,
-		Summary:     summary,
-		Confidence:  0.78,
-		Evidence:    evidence,
-		NextActions: buildKnowledgeNextActions(mode),
-		Metadata:    buildKnowledgeMetadata(task, mode, retrievalQuery, len(docs)),
-	}, nil
+	return buildKnowledgeLookupResult(task, mode, retrievalQuery, output, buildKnowledgeNextActions(mode)), nil
 }
 
 func buildKnowledgeQuery(goal string, focus string) string {
@@ -293,102 +245,117 @@ func buildKnowledgeNextActions(mode string) []string {
 	}
 }
 
-var serviceErrorCodePattern = regexp.MustCompile(`\b\d{6,}\b`)
-
-func matchesServiceErrorCodeTask(task *protocol.TaskEnvelope) bool {
-	if task == nil {
-		return false
-	}
-	goal := strings.TrimSpace(task.Goal)
-	if goal == "" {
-		return false
-	}
-	if len(extractErrorCodes(goal)) == 0 {
-		return false
-	}
-	return skills.ContainsAny(goal, "error code", "errno", "status code", "错误码", "错误代码", "返回码", "code")
-}
-
-func extractErrorCodes(goal string) []string {
-	return serviceErrorCodePattern.FindAllString(goal, -1)
-}
-
-func mustNewSkillRegistry() *skills.Registry {
-	registry, err := skills.NewRegistry(
-		AgentName,
-		&knowledgeSkill{
-			name:        "knowledge_sop_lookup",
-			description: "Retrieve SOP, runbook, and internal documentation matches for explicit procedure questions.",
-			mode:        "sop_lookup",
-			keywords: []string{
-				"sop", "runbook", "playbook", "doc", "docs", "knowledge base",
-				"文档", "知识库", "手册", "排障手册", "处理流程", "操作步骤", "SOP",
-			},
-		},
-		&knowledgeSkill{
-			name:        "knowledge_incident_guidance",
-			description: "Fallback knowledge retrieval for broader incident analysis and troubleshooting guidance.",
-			mode:        "incident_guidance",
-		},
-	)
+func buildKnowledgeLookupResult(task *protocol.TaskEnvelope, mode string, retrievalQuery string, output string, nextActions []string) *protocol.TaskResult {
+	parsed, err := parseKnowledgeLookupOutput(output)
 	if err != nil {
-		panic(fmt.Sprintf("failed to build knowledge skills registry: %v", err))
-	}
-	return registry
-}
-
-func runKnowledgeLookup(ctx context.Context, task *protocol.TaskEnvelope, mode string) (*protocol.TaskResult, error) {
-	t := newQueryInternalDocsTool()
-	if t == nil {
-		return &protocol.TaskResult{
-			TaskID:            task.TaskID,
-			Agent:             AgentName,
-			Status:            protocol.ResultStatusDegraded,
-			Summary:           "知识库检索工具不可用",
-			DegradationReason: "query_internal_docs tool init failed",
-		}, nil
-	}
-	args, _ := json.Marshal(&tools.QueryInternalDocsInput{Query: task.Goal})
-	queryCtx, cancel := context.WithTimeout(ctx, knowledgeQueryTimeout(ctx))
-	defer cancel()
-
-	output, err := t.InvokableRun(queryCtx, string(args))
-	if err != nil {
-		summary := fmt.Sprintf("knowledge lookup failed: %v", err)
-		if queryCtx.Err() == context.DeadlineExceeded {
-			summary = "knowledge lookup timed out; skipped"
-		}
-		return &protocol.TaskResult{
-			TaskID:     task.TaskID,
-			Agent:      AgentName,
-			Status:     protocol.ResultStatusDegraded,
-			Summary:    summary,
-			Confidence: 0.25,
-			Metadata: map[string]any{
-				"error":          err.Error(),
-				"knowledge_mode": mode,
-			},
-		}, nil
-	}
-
-	var docs []map[string]any
-	if err := json.Unmarshal([]byte(output), &docs); err != nil {
 		return &protocol.TaskResult{
 			TaskID:     task.TaskID,
 			Agent:      AgentName,
 			Status:     protocol.ResultStatusDegraded,
 			Summary:    "knowledge lookup returned an unreadable document payload",
-			Confidence: 0.3,
+			Confidence: confidenceDocumentUnreadable,
 			Metadata: map[string]any{
-				"raw_output":      output,
 				"knowledge_mode":  mode,
+				"knowledge_query": retrievalQuery,
 				"decode_failed":   true,
+				"decode_error":    err.Error(),
 				"document_count":  0,
-				"decoded_payload": "invalid_json",
 			},
-		}, nil
+		}
 	}
 
+	if parsed.degraded {
+		summary := parsed.message
+		if summary == "" {
+			summary = "knowledge lookup degraded"
+		}
+		return &protocol.TaskResult{
+			TaskID:            task.TaskID,
+			Agent:             AgentName,
+			Status:            protocol.ResultStatusDegraded,
+			Summary:           summary,
+			Confidence:        confidenceLookupFailed,
+			DegradationReason: summary,
+			Metadata: map[string]any{
+				"knowledge_mode":  mode,
+				"knowledge_query": retrievalQuery,
+				"document_count":  parsed.documentCount,
+				"tool_degraded":   true,
+			},
+		}
+	}
+
+	summary := "knowledge lookup returned no reusable documents"
+	if len(parsed.evidence) > 0 {
+		summary = fmt.Sprintf("knowledge lookup found %d relevant documents", parsed.documentCount)
+		if len(parsed.highlights) > 0 {
+			summary += ": " + strings.Join(parsed.highlights, " | ")
+		}
+	}
+
+	return &protocol.TaskResult{
+		TaskID:      task.TaskID,
+		Agent:       AgentName,
+		Status:      protocol.ResultStatusSucceeded,
+		Summary:     summary,
+		Confidence:  confidenceKnowledgeSucceeded,
+		Evidence:    parsed.evidence,
+		NextActions: nextActions,
+		Metadata:    buildKnowledgeMetadata(task, mode, retrievalQuery, parsed.documentCount),
+	}
+}
+
+type parsedKnowledgeOutput struct {
+	evidence      []protocol.EvidenceItem
+	highlights    []string
+	documentCount int
+	degraded      bool
+	message       string
+}
+
+func parseKnowledgeLookupOutput(output string) (parsedKnowledgeOutput, error) {
+	trimmed := strings.TrimSpace(output)
+	if trimmed == "" {
+		return parsedKnowledgeOutput{}, fmt.Errorf("empty payload")
+	}
+	if strings.HasPrefix(trimmed, "[") {
+		return parseLegacyKnowledgeDocs(trimmed)
+	}
+	if strings.HasPrefix(trimmed, "{") {
+		return parseStructuredKnowledgeOutput(trimmed)
+	}
+	return parsedKnowledgeOutput{}, fmt.Errorf("unsupported payload shape")
+}
+
+func parseStructuredKnowledgeOutput(output string) (parsedKnowledgeOutput, error) {
+	var payload rag.KnowledgeSearchOutput
+	if err := json.Unmarshal([]byte(output), &payload); err != nil {
+		return parsedKnowledgeOutput{}, err
+	}
+	documentCount := len(payload.Citations)
+	if documentCount == 0 {
+		documentCount = len(payload.Evidence)
+	}
+	if !payload.Success || payload.Degraded {
+		return parsedKnowledgeOutput{
+			documentCount: documentCount,
+			degraded:      true,
+			message:       firstNonEmpty(payload.Message, payload.Error, payload.Answer),
+		}, nil
+	}
+	evidence, highlights := evidenceFromKnowledgeSearchOutput(payload, knowledgeEvidenceLimit())
+	return parsedKnowledgeOutput{
+		evidence:      evidence,
+		highlights:    highlights,
+		documentCount: documentCount,
+	}, nil
+}
+
+func parseLegacyKnowledgeDocs(output string) (parsedKnowledgeOutput, error) {
+	var docs []map[string]any
+	if err := json.Unmarshal([]byte(output), &docs); err != nil {
+		return parsedKnowledgeOutput{}, err
+	}
 	limit := knowledgeEvidenceLimit()
 	evidence := make([]protocol.EvidenceItem, 0, min(limit, len(docs)))
 	highlights := make([]string, 0, min(limit, len(docs)))
@@ -410,30 +377,101 @@ func runKnowledgeLookup(ctx context.Context, task *protocol.TaskEnvelope, mode s
 			SourceID:   title,
 			Title:      title,
 			Snippet:    snippet,
-			Score:      0.74 - float64(idx)*0.08,
+			Score:      confidenceKnowledgeEvidence - float64(idx)*0.08,
 		})
 	}
+	return parsedKnowledgeOutput{
+		evidence:      evidence,
+		highlights:    highlights,
+		documentCount: len(docs),
+	}, nil
+}
 
-	summary := "knowledge lookup returned no reusable documents"
-	if len(evidence) > 0 {
-		summary = fmt.Sprintf("knowledge lookup found %d relevant documents", len(docs))
-		if len(highlights) > 0 {
-			summary += ": " + strings.Join(highlights, " | ")
+func evidenceFromKnowledgeSearchOutput(payload rag.KnowledgeSearchOutput, limit int) ([]protocol.EvidenceItem, []string) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	citations := make(map[string]rag.Citation, len(payload.Citations))
+	for _, citation := range payload.Citations {
+		citations[citation.ID] = citation
+	}
+	evidence := make([]protocol.EvidenceItem, 0, min(limit, max(len(payload.Evidence), len(payload.Citations))))
+	highlights := make([]string, 0, limit)
+	if len(payload.Evidence) > 0 {
+		for idx, item := range payload.Evidence {
+			if idx >= limit {
+				break
+			}
+			citation := citations[item.CitationID]
+			if citation.ID == "" {
+				citation.ID = item.CitationID
+			}
+			ev := evidenceItemFromCitation(citation, item.Text, idx)
+			evidence = append(evidence, ev)
+			if ev.Snippet != "" {
+				highlights = append(highlights, ev.Snippet)
+			}
+		}
+		return evidence, highlights
+	}
+	for idx, citation := range payload.Citations {
+		if idx >= limit {
+			break
+		}
+		ev := evidenceItemFromCitation(citation, citation.Snippet, idx)
+		evidence = append(evidence, ev)
+		if ev.Snippet != "" {
+			highlights = append(highlights, ev.Snippet)
 		}
 	}
+	return evidence, highlights
+}
 
-	return &protocol.TaskResult{
-		TaskID:     task.TaskID,
-		Agent:      AgentName,
-		Status:     protocol.ResultStatusSucceeded,
-		Summary:    summary,
-		Confidence: 0.78,
-		Evidence:   evidence,
-		Metadata: map[string]any{
-			"document_count": len(docs),
-			"knowledge_mode": mode,
-		},
-	}, nil
+func evidenceItemFromCitation(citation rag.Citation, text string, idx int) protocol.EvidenceItem {
+	sourceID := firstNonEmpty(citation.ID, citation.Source, fmt.Sprintf("doc-%d", idx+1))
+	title := firstNonEmpty(citation.Title, citation.ID, sourceID)
+	snippet := shorten(firstNonEmpty(text, citation.Snippet), 160)
+	score := citation.Score
+	if score == 0 {
+		score = confidenceKnowledgeEvidence - float64(idx)*0.08
+	}
+	return protocol.EvidenceItem{
+		SourceType: "knowledge",
+		SourceID:   sourceID,
+		Title:      title,
+		Snippet:    snippet,
+		Score:      score,
+		URI:        citation.Source,
+	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+var serviceErrorCodePattern = regexp.MustCompile(`\b\d{6,}\b`)
+
+func matchesServiceErrorCodeTask(task *protocol.TaskEnvelope) bool {
+	if task == nil {
+		return false
+	}
+	goal := strings.TrimSpace(task.Goal)
+	if goal == "" {
+		return false
+	}
+	if len(extractErrorCodes(goal)) == 0 {
+		return false
+	}
+	return skills.ContainsAny(goal, "error code", "errno", "status code", "错误码", "错误代码", "返回码", "code")
+}
+
+func extractErrorCodes(goal string) []string {
+	return serviceErrorCodePattern.FindAllString(goal, -1)
 }
 
 func firstNonEmptyString(values map[string]any, keys ...string) string {
@@ -449,10 +487,11 @@ func firstNonEmptyString(values map[string]any, keys ...string) string {
 
 func shorten(input string, max int) string {
 	input = strings.TrimSpace(strings.ReplaceAll(input, "\n", " "))
-	if len(input) <= max {
+	if utf8.RuneCountInString(input) <= max {
 		return input
 	}
-	return input[:max] + "..."
+	runes := []rune(input)
+	return string(runes[:max]) + "..."
 }
 
 func min(a, b int) int {

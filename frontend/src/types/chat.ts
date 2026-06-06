@@ -36,7 +36,7 @@ export interface ChatSession {
 export type ChatMode = 'quick' | 'stream'
 export type WorkMode = 'react' | 'aiops'
 
-export type WorkbenchMode = 'chat' | 'aiops'
+export type WorkbenchMode = 'chat' | 'aiops' | 'settings'
 
 export type AIOpsEngine = 'plan_execute_replan' | 'gos_engine'
 

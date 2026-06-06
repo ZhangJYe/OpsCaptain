@@ -3,6 +3,7 @@ package rag
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/cloudwego/eino/schema"
 )
@@ -124,10 +125,11 @@ func extractMetaField(doc *schema.Document, keys []string) string {
 
 func truncateSnippet(content string) string {
 	content = strings.TrimSpace(content)
-	if len(content) <= maxSnippetLen {
+	if utf8.RuneCountInString(content) <= maxSnippetLen {
 		return content
 	}
-	return content[:maxSnippetLen] + "..."
+	runes := []rune(content)
+	return string(runes[:maxSnippetLen]) + "..."
 }
 
 func citationTraceFromMeta(meta map[string]any) *CitationTrace {

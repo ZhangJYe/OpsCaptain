@@ -98,6 +98,51 @@ func TestDeleteBySource_EscapesIDsWithQuotes(t *testing.T) {
 	}
 }
 
+func TestDeleteBySourceExcept_SkipsKeptIDs(t *testing.T) {
+	mock := &mockQueryDeleter{
+		queryResult: cli.ResultSet{
+			entity.NewColumnVarChar("id", []string{"old-1", "new-1", "old-2"}),
+		},
+	}
+	store := &MilvusVectorStore{
+		newClient: func(_ context.Context) (milvusQueryDeleter, error) { return mock, nil },
+	}
+
+	n, err := store.DeleteBySourceExcept(context.Background(), "test", "source", []string{"new-1"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n != 2 {
+		t.Fatalf("expected 2 deleted, got %d", n)
+	}
+	wantExpr := `id in ["old-1","old-2"]`
+	if mock.deletedExpr != wantExpr {
+		t.Fatalf("deleted expr = %q, want %q", mock.deletedExpr, wantExpr)
+	}
+}
+
+func TestDeleteBySourceExcept_ReturnsZeroWhenAllIDsKept(t *testing.T) {
+	mock := &mockQueryDeleter{
+		queryResult: cli.ResultSet{
+			entity.NewColumnVarChar("id", []string{"new-1"}),
+		},
+	}
+	store := &MilvusVectorStore{
+		newClient: func(_ context.Context) (milvusQueryDeleter, error) { return mock, nil },
+	}
+
+	n, err := store.DeleteBySourceExcept(context.Background(), "test", "source", []string{"new-1"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("expected 0 deleted, got %d", n)
+	}
+	if mock.deletedExpr != "" {
+		t.Fatalf("delete should not be called, got %q", mock.deletedExpr)
+	}
+}
+
 func TestDeleteBySource_PropagatesDeleteError(t *testing.T) {
 	mock := &mockQueryDeleter{
 		queryResult: cli.ResultSet{

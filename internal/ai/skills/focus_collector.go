@@ -40,8 +40,8 @@ func (c *FocusCollector) Collect(query string) []FocusHint {
 		if registry == nil {
 			continue
 		}
-		skill, err := registry.Resolve(task)
-		if err != nil || skill == nil {
+		skill := registry.Match(task)
+		if skill == nil {
 			continue
 		}
 

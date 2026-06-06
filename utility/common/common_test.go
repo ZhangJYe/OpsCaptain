@@ -2,6 +2,7 @@ package common
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -55,5 +56,24 @@ func TestGetMilvusAddrFallsBackWhenPlaceholderIsUnresolved(t *testing.T) {
 	t.Setenv("MILVUS_ADDRESS", "")
 	if got := normalizeMilvusAddr("${MILVUS_ADDRESS}"); got != "localhost:19530" {
 		t.Fatalf("expected unresolved placeholder to fall back, got %q", got)
+	}
+}
+
+func TestKnowledgeSourcePrefixForUser(t *testing.T) {
+	anonymous := KnowledgeSourcePrefixForUser("")
+	if anonymous != KnowledgeSourceBase {
+		t.Fatalf("expected anonymous source base, got %s", anonymous)
+	}
+
+	alice := KnowledgeSourcePrefixForUser("alice@example.com")
+	bob := KnowledgeSourcePrefixForUser("bob@example.com")
+	if alice == bob {
+		t.Fatal("expected different users to have different prefixes")
+	}
+	if !strings.HasPrefix(alice, "upload://users/") || !strings.HasSuffix(alice, "/") {
+		t.Fatalf("unexpected scoped prefix: %s", alice)
+	}
+	if strings.Contains(alice, "alice@example.com") {
+		t.Fatalf("prefix should not expose raw user id: %s", alice)
 	}
 }
