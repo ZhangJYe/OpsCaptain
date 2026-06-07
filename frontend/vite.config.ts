@@ -13,5 +13,14 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('/node_modules/gsap/') || id.includes('/node_modules/@gsap/react/')) {
+            return 'gsap'
+          }
+        },
+      },
+    },
   },
 })

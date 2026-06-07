@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import { Database, MessageSquareText, Search, ShieldCheck } from 'lucide-react'
+import { AIOpsPanel } from '../welcome/AIOpsPanel'
 import type { AIOpsEngine } from '../../types/chat'
 
 interface Props {
@@ -39,7 +40,7 @@ const contextSteps = [
   '输出可复核的结论与后续追问建议',
 ]
 
-export function WorkbenchEmptyState({ onSend }: Props) {
+export function WorkbenchEmptyState({ onSend, onStartAIOps }: Props) {
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col px-4 py-5 sm:py-6">
       <motion.div
@@ -74,6 +75,10 @@ export function WorkbenchEmptyState({ onSend }: Props) {
           </div>
         </div>
       </motion.div>
+
+      <div className="mt-6">
+        <AIOpsPanel onStartDiagnosis={onStartAIOps} />
+      </div>
 
       <motion.div
         initial={{ opacity: 0, y: 10 }}

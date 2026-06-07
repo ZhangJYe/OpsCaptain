@@ -1,8 +1,11 @@
-import { motion } from 'framer-motion'
+import { useRef } from 'react'
+import { useGSAP } from '@gsap/react'
+import gsap from 'gsap'
 import {
   AlertTriangle, Activity, Shield, ArrowRight,
   BarChart3, FileSearch, BookOpen, Zap,
 } from 'lucide-react'
+import { PetCharacter } from '../pet/PetCharacter'
 
 interface Props {
   onStartDiagnosis: (query: string) => void
@@ -36,37 +39,111 @@ const diagnosisQuery = `请对 paymentservice 进行一次完整的 AIOps 诊断
 不要先建议重启。优先判断 timeout 和重试是否同时抬升。`
 
 export function AIOpsPanel({ onStartDiagnosis }: Props) {
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  useGSAP(() => {
+    if (!panelRef.current) return
+    const select = gsap.utils.selector(panelRef)
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+    if (prefersReducedMotion) {
+      gsap.set([
+        panelRef.current,
+        ...select('.metric-card'),
+        ...select('.evidence-card'),
+        ...select('.step-item'),
+        ...select('.panel-pet'),
+      ], {
+        opacity: 1,
+        x: 0,
+        y: 0,
+        scale: 1,
+      })
+      return
+    }
+
+    gsap.from(panelRef.current, {
+      opacity: 0,
+      y: 30,
+      duration: 0.6,
+      ease: 'power3.out',
+    })
+
+    gsap.from(select('.panel-pet'), {
+      opacity: 0,
+      y: 12,
+      scale: 0.9,
+      duration: 0.45,
+      ease: 'back.out(1.8)',
+      delay: 0.15,
+    })
+
+    gsap.from(select('.metric-card'), {
+      opacity: 0,
+      y: 20,
+      scale: 0.95,
+      duration: 0.5,
+      stagger: 0.1,
+      ease: 'back.out(1.7)',
+      delay: 0.3,
+    })
+
+    gsap.from(select('.evidence-card'), {
+      opacity: 0,
+      x: -30,
+      duration: 0.5,
+      stagger: 0.15,
+      ease: 'power3.out',
+      delay: 0.5,
+    })
+
+    gsap.from(select('.step-item'), {
+      opacity: 0,
+      x: 30,
+      duration: 0.5,
+      stagger: 0.12,
+      ease: 'power3.out',
+      delay: 0.6,
+    })
+  }, { scope: panelRef })
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: 0.15 }}
-      className="w-full"
-    >
+    <div ref={panelRef} className="w-full">
       <div className="overflow-hidden rounded-2xl border border-zinc-200/80 bg-white/90 shadow-sm backdrop-blur dark:border-zinc-800/60 dark:bg-zinc-900/70">
         {/* Header — incident summary */}
         <div className="border-b border-zinc-100 bg-zinc-50/80 px-5 py-4 dark:border-zinc-800 dark:bg-zinc-950/50">
-          <div className="flex flex-wrap items-center gap-3 text-xs">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-2.5 py-1 font-semibold text-red-400">
-              <span className="h-2 w-2 rounded-full bg-red-400" />
-              SEV-2
-            </span>
-            <span className="font-medium text-zinc-600 dark:text-zinc-400">prod / paymentservice</span>
-            <span className="text-zinc-400 dark:text-zinc-600">林澈值班</span>
-            <span className="ml-auto text-zinc-400 dark:text-zinc-600">analysis window 10min</span>
+          <div className="flex items-start gap-4">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-3 text-xs">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-2.5 py-1 font-semibold text-red-400">
+                  <span className="h-2 w-2 rounded-full bg-red-400" />
+                  SEV-2
+                </span>
+                <span className="font-medium text-zinc-600 dark:text-zinc-400">prod / paymentservice</span>
+                <span className="text-zinc-400 dark:text-zinc-600">林澈值班</span>
+                <span className="text-zinc-400 dark:text-zinc-600 sm:ml-auto">analysis window 10min</span>
+              </div>
+              <h2 className="mt-3 text-xl font-bold tracking-tight text-zinc-900 dark:text-white">
+                Paymentservice 延迟异常
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+                p95 在近 10 分钟窗口内抬升。先确认影响面，再对齐 metrics、error logs、最近变更与历史相似案例，最后整理回滚和验证步骤。
+              </p>
+            </div>
+            <div className="panel-pet hidden shrink-0 items-center gap-3 rounded-2xl border border-white/70 bg-white/70 px-3 py-2 shadow-sm shadow-zinc-900/[0.03] backdrop-blur dark:border-white/10 dark:bg-zinc-900/60 sm:flex">
+              <PetCharacter mood="idle" size={52} />
+              <div className="max-w-[132px]">
+                <div className="text-[11px] font-semibold text-zinc-700 dark:text-zinc-200">OpsCaptain 待命</div>
+                <div className="mt-0.5 text-[10px] leading-4 text-zinc-400 dark:text-zinc-500">准备拉取三路证据</div>
+              </div>
+            </div>
           </div>
-          <h2 className="mt-3 text-xl font-bold tracking-tight text-zinc-900 dark:text-white">
-            Paymentservice 延迟异常
-          </h2>
-          <p className="mt-1 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-            p95 在近 10 分钟窗口内抬升。先确认影响面，再对齐 metrics、error logs、最近变更与历史相似案例，最后整理回滚和验证步骤。
-          </p>
         </div>
 
         {/* Metric tiles */}
         <div className="grid grid-cols-2 gap-px border-b border-zinc-100 bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-800 sm:grid-cols-4">
           {metrics.map((m) => (
-            <div key={m.label} className="bg-white/90 px-4 py-3.5 dark:bg-zinc-900/70">
+            <div key={m.label} className="metric-card bg-white/90 px-4 py-3.5 dark:bg-zinc-900/70">
               <div className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-600">
                 {m.label}
               </div>
@@ -92,7 +169,7 @@ export function AIOpsPanel({ onStartDiagnosis }: Props) {
             </div>
             <div className="mt-3 space-y-2.5">
               {evidence.map((e) => (
-                <div key={e.label} className="flex items-start gap-3 rounded-lg p-2.5 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
+                <div key={e.label} className="evidence-card flex items-start gap-3 rounded-lg p-2.5 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
                   <div className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${e.bg}`}>
                     <e.icon size={14} className={e.color} />
                   </div>
@@ -118,7 +195,7 @@ export function AIOpsPanel({ onStartDiagnosis }: Props) {
             </div>
             <ol className="mt-3 space-y-2.5">
               {steps.map((step, i) => (
-                <li key={i} className="flex items-start gap-2.5 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+                <li key={i} className="step-item flex items-start gap-2.5 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
                   <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/10 text-[11px] font-semibold text-accent">
                     {i + 1}
                   </span>
@@ -152,6 +229,6 @@ export function AIOpsPanel({ onStartDiagnosis }: Props) {
           </button>
         </div>
       </div>
-    </motion.div>
+    </div>
   )
 }
