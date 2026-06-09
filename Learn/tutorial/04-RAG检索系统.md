@@ -22,11 +22,11 @@
 
 想象你要写一篇关于"Redis 连接超时如何排查"的报告：
 
-| | **没有 RAG 的 LLM** | **有 RAG 的 LLM** |
-|---|---|---|
-| 能力 | 🧠 只能靠训练时"记住"的知识回答 | 🧠 + 📚 先去图书馆查资料，再基于资料回答 |
+|      | **没有 RAG 的 LLM**                          | **有 RAG 的 LLM**                                                                                              |
+| ---- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| 能力   | 🧠 只能靠训练时"记住"的知识回答                        | 🧠 + 📚 先去图书馆查资料，再基于资料回答                                                                                     |
 | 回答质量 | "Redis 连接超时可能是因为网络问题或资源不足，建议检查..." （泛泛而谈） | "根据内部 SOP-2024-003，Redis 连接超时排查步骤：1) 检查 `redis.maxconn` 配置 2) 查看 `slowlog` 是否有慢查询 3) 确认网络策略未拦截..." （具体、有据可循） |
-| 内部知识 | ❌ 完全不知道公司内部文档 | ✅ 能检索到公司内部的 Runbook、SOP、历史故障复盘 |
+| 内部知识 | ❌ 完全不知道公司内部文档                             | ✅ 能检索到公司内部的 Runbook、SOP、历史故障复盘                                                                               |
 
 **没有 RAG 的 LLM 像个没去过图书馆的学生**，只能凭记忆回答。**有 RAG 的 LLM 像个图书馆管理员**，先帮你找到相关资料，再根据资料回答——回答有来源、有依据、可追溯。
 
@@ -78,7 +78,7 @@ RAG 回答 = LLM（用户问题 + 检索到的相关文档） → 基于证据�
 |---|---|---|
 | **不知道内部文档** | 训练数据是公开互联网，不包含公司内部 SOP、Runbook | 用户问"checkoutservice CPU 告警怎么办"，LLM 只能泛泛而谈 |
 | **不知道历史故障** | 不知道"上个月 Redis 挂了是因为 maxconn 太小" | 无法复用历史经验，每次都从零开始排查 |
-| **知识有截止日期** | DeepSeek V3 训练数据停在一定时间点 | 不知道最近变更的配置和架构 |
+| **知识有截止日期** | 任何离线训练模型的数据都有截止日期 | 不知道最近变更的配置和架构 |
 | **幻觉问题** | LLM 在没有信息时会"编造"答案 | 可能给出看起来很对但实际错误的排查步骤 |
 
 ### 2.2 RAG 如何解决
@@ -194,7 +194,7 @@ graph TD
 ```go
 // 使用 Doubao Embedding 模型
 eb, _ := embedder.DoubaoEmbedding(ctx)
-// → 生成 1024 维向量，写入 Milvus 向量库
+// → 按 embedding_model.dimension 配置生成向量；当前配置为 2048 维，写入 Milvus 向量库
 ```
 
 **选型原因**：
@@ -521,10 +521,10 @@ func RetrieverCandidateTopK(ctx context.Context) int {
 **检索流程**：
 
 ```
-Rewrite 后的 query
+原始 query / 可选改写后的 query
     │
     ▼
-Doubao Embedding 模型 → 生成 1024 维向量
+Doubao Embedding 模型 → 生成 2048 维向量（以 config.yaml 的 embedding_model.dimension 为准）
     │
     ▼
 Milvus ANN 索引 → 返回 candidateTopK 篇候选文档
@@ -915,7 +915,10 @@ TierAlwaysOn（始终暴露）:
   └── PrometheusAlertsQuery (domain: metrics) — Prometheus 告警查询
 
 TierSkillGate（域匹配才暴露）:
-  └── （当前为空，MCP 和 Prometheus 已提升至 TierAlwaysOn）
+  ├── PrometheusMetricsDiscovery (domain: metrics) — 指标发现
+  ├── PrometheusRangeQuery (domain: metrics)       — 范围查询
+  ├── PrometheusInstantQuery (domain: metrics)     — 即时查询
+  └── 用户 MCP 工具 (domain: custom)               — 用户自定义工具
 
 TierOnDemand（手动扩展）:
   └── MySQLCrudTool (domains: logs/metrics/knowledge) — 数据库操作（需配置白名单）
@@ -942,9 +945,10 @@ func (pd *ProgressiveDisclosure) Disclose(query string) DisclosureResult {
 ```
 
 **效果**：
-- MCP 日志工具和 Prometheus 告警查询已提升至 TierAlwaysOn，始终对 LLM 可见
-- TierSkillGate 当前仅用于可能新增的域特定工具
-- Token 节省：TierAlwaysOn 工具控制在合理数量内，TierOnDemand 工具需要配置白名单才暴露
+- MCP 日志工具和 Prometheus 告警查询是高频操作，放在 TierAlwaysOn 始终可用
+- Prometheus 指标发现/范围查询/即时查询放在 TierSkillGate，匹配到 metrics 域才暴露
+- MySQL CRUD 是高风险操作，放在 TierOnDemand，需要配置白名单才暴露
+- 注入风险时只暴露 AlwaysOn 工具，防止恶意调用
 
 ### 4.10.4 FocusCollector：给 LLM 注入领域聚焦指令
 
@@ -1192,7 +1196,7 @@ var retrievalStopwords = map[string]struct{}{
 
 ---
 
-## 5.6. RAG 评测：Recall@10 = 78%
+## 5.6. RAG 评测：历史样例 Recall@10 = 78%
 
 > 一个没有评测的系统是信仰驱动的。RAG 的评测回答一个核心问题：**检索回来的文档，是不是用户真正需要的那几篇？**
 
@@ -1204,7 +1208,7 @@ Recall@K = (前 K 篇结果中命中 ground_truth 的数量) / (该案例所有 
 
 例如：一个故障案例标注了 3 篇相关文档 `{A, B, C}`，检索返回 Top-10 里命中了 A 和 C → Recall@10 = 2/3 = 0.67。
 
-当前针对 **AIOps Challenge 2025 的 50+ 个真实故障案例**评测，**Top-10 Recall = 78%**。
+历史样例评测曾以 **AIOps Challenge 2025 的 50+ 个故障案例**作为集合，得到过 **Top-10 Recall = 78%** 的口径。正式汇报时不要只背这个数字，应指向 `Learn/eval/08-rag-eval-runbook.md`、`Learn/eval/15-aiopschallenge-rag-cloud-baseline-runbook.md` 或最新复跑报告，说明数据集、build/holdout 划分和运行命令。
 
 ### 5.6.2 评测集划分：build/holdout 严格分离
 
@@ -1383,7 +1387,7 @@ def query_logs(arguments):
 | **硬编码 API 调用** | 每接一个新的外部系统就要写一套 Go 代码——Prometheus API、日志 API、数据库 API……每种协议都不一样 |
 | **MCP 协议** | 统一 JSON-RPC 2.0 + SSE 传输 → 任何实现 MCP 的工具都能被自动发现和调用。新增一个外部工具只需写一个 Python MCP Server，Go 端零改动 |
 
-**当前状态**：MCP 日志工具已部署为 systemd 服务（`opscaptain-log-mcp.service`），监听 `172.17.0.1:18088`，随 K3s 启动后自动拉起。
+**当前状态**：MCP 日志工具可部署为 systemd 服务（`opscaptain-log-mcp.service`），监听地址通过 `config.yaml` 的 `mcp.log_url` 配置，例如 `${MCP_LOG_URL}`。教程中不固定写内部 IP，避免部署信息外泄。
 
 ---
 
@@ -1445,23 +1449,52 @@ func QueryForEval(ctx context.Context, pool *RetrieverPool, query string,
 
 ---
 
-## 7. 面试问答
+## 7. STAR 法则面试讲解
+
+### RAG 系统 STAR 讲法
+
+**Situation：**
+
+运维知识库包含大量文档（部署指南、排障手册、配置文档等），用户的问题可能是口语化的（"payment-service 挂了怎么办"），也可能是精确的（"查询 CPU 使用率的 PromQL"）。单一检索方式难以覆盖所有场景。
+
+**Task：**
+
+设计一个混合检索系统，结合向量语义检索和 BM25 词法检索的优势，通过 RRF 融合提升召回率。
+
+**Action：**
+
+1. **两阶段分块**：先按 Markdown Header 切分保留语义边界，再对过长 chunk 做语义切分
+2. **Hybrid Retrieval**：Milvus 向量检索（DenseTopK=50）+ BM25 词法检索（LexicalTopK=50）并行执行
+3. **RRF 融合**：`score(d) = 1/(k + rank_dense) + 1/(k + rank_lex)`，k=60，双路命中自动加分
+4. **RetrieverPool**：连接池复用，失败短 TTL 缓存防雪崩
+5. **渐进式工具披露**：AlwaysOn/SkillGate/OnDemand 三级，按需暴露工具
+
+**Result：**
+
+- 历史样例评测口径：Recall@10 = 78%（正式汇报以最新 eval runbook 复跑结果为准）
+- RRF 融合自动奖励双路命中，无需调权重
+- BM25 弥补向量检索的精确匹配短板（Pod 名、error code、IP 地址）
+- RetrieverPool 避免 Milvus 重复初始化
+
+---
+
+## 8. 面试问答
 
 ### Q1: "你的 RAG 是怎么做的？能讲一下完整链路吗？"
 
 > 我们的 RAG 链路分**离线索引构建**和**在线检索**两大阶段。
 >
-> **离线阶段**，文档经过 Loader 统一加载后，走两阶段分块——先用 Markdown 标题切分保持文档结构，对大块（>800 字符）再按语义相似度补切。分块后用 Doubao Embedding 生成 1024 维向量写入 Milvus，同时构建 BM25 关键词倒排索引。同一文件重复索引时，会先做 _source 去重——删掉旧的 chunk 再写入新的。
+> **离线阶段**，文档经过 Loader 统一加载后，走两阶段分块——先用 Markdown 标题切分保持文档结构，对大块（>800 字符）再按语义相似度补切。分块后用 Doubao Embedding 生成向量写入 Milvus，当前配置维度为 2048，同时构建 BM25 关键词倒排索引。同一文件重复索引时，会先做 _source 去重——删掉旧的 chunk 再写入新的。
 >
 > **在线检索**主链路走四步。第一步 RetrieverPool 获取连接——按 Milvus 地址缓存连接，失败走 15 秒短 TTL 防雪崩。第二步 Dense + Sparse 并行召回——Milvus ANN 向量检索负责语义相似，BM25 负责精确关键词。第三步 RRF 融合和 RetrieveRefine——把两路结果合并，再基于 query token 与文档元数据做轻量重排。第四步返回 Top-K 文档 + QueryTrace。
 >
-> **Hybrid 模式**额外增加 BM25 并行检索——向量 + BM25 两路用 RRF 公式融合（score = Σ 1/(60+rank)），让两边都命中的文档排最前面。当前在 AIOps Challenge 2025 案例集上评测，**Recall@10 = 78%**。
+> **Hybrid 模式**额外增加 BM25 并行检索——向量 + BM25 两路用 RRF 公式融合（score = Σ 1/(60+rank)），让两边都命中的文档排最前面。历史样例评测口径可讲 **Recall@10 = 78%**，但面试或汇报时必须带上最新 eval runbook / report 作为证据。
 
 ### Q2: "做了哪些优化？"
 
 > 主要有五个优化点：
 >
-> **第一，两阶段分块策略。** 先用 Markdown 标题保持结构边界，对大块（>800 字符）再用语义相似度补切——从 50% 提到 78% Recall。这是性价比最高的优化。
+> **第一，两阶段分块策略。** 先用 Markdown 标题保持结构边界，对大块（>800 字符）再用语义相似度补切。历史样例里这个方向带来了明显 Recall 提升；正式表达时说清楚基线、样本集和复跑结果，不只背"从 50% 到 78%"。
 >
 > **第二，连接池 + 雪崩防护。** RetrieverPool 按缓存 key 复用连接，失败时缓存错误 15 秒，避免 Milvus 不可用时每个请求都超时等待。这本质上是 Circuit Breaker 的简化实现。
 >
@@ -1479,15 +1512,15 @@ func QueryForEval(ctx context.Context, pool *RetrieverPool, query string,
 >
 > 再比如 `error code: 503`、`IP: 10.0.1.25`、`trace_id: abc123`，这些都是运维场景中高价值的精确标识符。向量检索可能匹配到"类似"的 500 错误文档，而 BM25 能精确命中 503 的文档。
 >
-> 所以我们的设计是 **两者互补**：向量检索覆盖语义（"服务挂了"→"pod failure"），BM25 覆盖精确匹配（pod name、error code、IP）。BM25 的核心是 IDF × TF_norm——稀有词权重高，出现次数有饱和度上限，长文档有长度惩罚。然后用 RRF 算法做分数融合：两边都命中的文档排最前面——这就是为什么融合后排第一的文档往往是两个方向交叉验证过的。当前 Hybrid 模式在 AIOps Challenge 2025 案例集上 **Recall@10 = 78%**。
+> 所以我们的设计是 **两者互补**：向量检索覆盖语义（"服务挂了"→"pod failure"），BM25 覆盖精确匹配（pod name、error code、IP）。BM25 的核心是 IDF × TF_norm——稀有词权重高，出现次数有饱和度上限，长文档有长度惩罚。然后用 RRF 算法做分数融合：两边都命中的文档排最前面——这就是为什么融合后排第一的文档往往是两个方向交叉验证过的。历史样例评测可讲 **Recall@10 = 78%**，正式汇报以最新复跑结果为准。
 
 ### Q4: "你的 Agent 怎么知道该调用哪些工具？工具多了不会让 LLM 选错吗？"
 
 > 这正是我们 **ProgressiveDisclosure（渐进暴露）** 解决的问题。
 >
-> 我们把工具分成三层：**TierAlwaysOn**（始终暴露——包括时间查询、文档检索、MCP 日志工具、Prometheus 告警查询）、**TierSkillGate**（按场景暴露——当前为预留层，用于未来新增的域特定工具）、**TierOnDemand**（手动扩展——如 MySQL CRUD，需要配置白名单才暴露）。
+> 我们把工具分成三层：**TierAlwaysOn**（始终暴露——时间查询、文档检索、MCP 日志工具、Prometheus 告警查询）、**TierSkillGate**（域匹配暴露——Prometheus 指标发现/范围查询/即时查询、用户 MCP 工具）、**TierOnDemand**（手动扩展——MySQL CRUD，需配置白名单）。
 >
-> MCP 日志工具和 Prometheus 告警查询已从 TierSkillGate 提升至 TierAlwaysOn，因为运维场景中日志和指标查询是高频操作，始终可用能显著提升响应效率。TierSkillGate 保留作为扩展点，未来新增域特定工具时使用。TierOnDemand 工具（如 MySQL CRUD）需要配置白名单才暴露，控制高风险操作的访问。
+> 日志查询和告警查询是高频操作，放在 AlwaysOn 始终可用。Prometheus 指标发现/范围查询/即时查询放在 SkillGate，匹配到 metrics 域才暴露，减少 LLM 工具选择负担。MySQL CRUD 是高风险操作，放在 OnDemand 需要配置白名单。注入风险时只暴露 AlwaysOn 工具，防止恶意调用。
 >
 > 另外我们还有 **FocusCollector**——匹配到 Skill 后会提取该 Skill 的 Focus 指令（如 "重点看支付、订单、网关超时、下游延迟相关日志"），注入到 LLM 的上下文中。相当于给 LLM 提前画好重点——不需要它从头推理该查什么。
 
@@ -1499,7 +1532,7 @@ func QueryForEval(ctx context.Context, pool *RetrieverPool, query string,
 >
 > 选 MCP 的核心原因：**标准化**。如果有新的外部系统要接入（比如一个新的监控平台），只需写一个实现 MCP 协议的 Server——可以是 Python、Node、Rust 任何语言。Go 端的 Agent 代码完全不用改，`e_mcp.GetTools()` 会自动发现新工具。如果不用 MCP 而是硬编码 API，每接一个外部系统就要写一套 HTTP client + 参数映射 + 错误处理——工作量是 MCP 的 3-5 倍。
 >
-> 当前 MCP 日志工具已部署为 systemd 服务，随 K3s 启动后自动拉起，监听 `172.17.0.1:18088`。通过 config.yaml 的 `mcp.log_url` 配置地址，可以随时切换本地/远程 MCP Server。
+> MCP 日志工具可以部署为 systemd 服务，随 K3s 启动后自动拉起。监听地址通过 config.yaml 的 `mcp.log_url` 配置，例如 `${MCP_LOG_URL}`，可以随时切换本地/远程 MCP Server。
 
 ---
 

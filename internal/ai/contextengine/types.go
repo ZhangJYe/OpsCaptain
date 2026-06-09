@@ -1,6 +1,10 @@
 package contextengine
 
-import "github.com/cloudwego/eino/schema"
+import (
+	"SuperBizAgent/internal/ai/contextcompression"
+
+	"github.com/cloudwego/eino/schema"
+)
 
 type ContextRequest struct {
 	SessionID string
@@ -102,18 +106,19 @@ type RetrievalStageMetrics struct {
 }
 
 type ContextAssemblyTrace struct {
-	Profile           string
-	Stages            []StageTrace
-	SourcesConsidered int
-	SourcesSelected   int
-	DroppedItems      []ContextItem
-	BudgetBefore      BudgetSnapshot
-	BudgetAfter       BudgetSnapshot
-	LatencyMs         int64
-	HistoryRecall     *HistoryRecallResult
-	ToolRecall        *ToolRecallResult
-	ToolRerank        *RerankOutcome
-	Intent            *IntentResult
+	Profile            string
+	Stages             []StageTrace
+	SourcesConsidered  int
+	SourcesSelected    int
+	DroppedItems       []ContextItem
+	BudgetBefore       BudgetSnapshot
+	BudgetAfter        BudgetSnapshot
+	LatencyMs          int64
+	HistoryRecall      *HistoryRecallResult
+	ToolRecall         *ToolRecallResult
+	ToolRerank         *RerankOutcome
+	Intent             *IntentResult
+	CompressionReports []contextcompression.Report `json:"compression_reports,omitempty"`
 }
 
 type ContextPackage struct {

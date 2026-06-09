@@ -1,0 +1,152 @@
+[
+  {
+    "id": 5,
+    "query": "什么是裸金属",
+    "has_citation": true,
+    "doc_selected": 2
+  },
+  {
+    "id": 7,
+    "query": "Director中的VDC是什么概念？",
+    "has_citation": true,
+    "doc_selected": 4
+  },
+  {
+    "id": 10,
+    "query": "Director部署过程中有个网卡固化操作，那是在什么场景下做？",
+    "has_citation": true,
+    "doc_selected": 4
+  },
+  {
+    "id": 11,
+    "query": "发布虚机时最多可以为虚机分配几块网卡？",
+    "has_citation": false,
+    "doc_selected": 0
+  },
+  {
+    "id": 12,
+    "query": "虚拟资源包括哪些种类",
+    "has_citation": false,
+    "doc_selected": 0
+  },
+  {
+    "id": 13,
+    "query": "物理机通用场景纳管1500台主机需要哪种部署规模、几个节点？",
+    "has_citation": true,
+    "doc_selected": 0
+  },
+  {
+    "id": 15,
+    "query": "发布虚机前有哪些准备工作？",
+    "has_citation": true,
+    "doc_selected": 5
+  },
+  {
+    "id": 16,
+    "query": "发布镜像时，镜像源支持哪几种方式？",
+    "has_citation": false,
+    "doc_selected": 0
+  },
+  {
+    "id": 17,
+    "query": "Director告警南向设置是在哪个界面上",
+    "has_citation": true,
+    "doc_selected": 5
+  },
+  {
+    "id": 20,
+    "query": "Director接收南向告警的snmp端口号是多少",
+    "has_citation": true,
+    "doc_selected": 5
+  },
+  {
+    "id": 25,
+    "query": "Director性能数据最长可以保存多久？",
+    "has_citation": true,
+    "doc_selected": 5
+  },
+  {
+    "id": 27,
+    "query": "硬件资源包括哪些种类",
+    "has_citation": false,
+    "doc_selected": 0
+  },
+  {
+    "id": 29,
+    "query": "Director支持在华为云虚机上部署吗？",
+    "has_citation": false,
+    "doc_selected": 0
+  },
+  {
+    "id": 30,
+    "query": "Daisyseed安装软件从哪里获取",
+    "has_citation": true,
+    "doc_selected": 5
+  },
+  {
+    "id": 31,
+    "query": "Director中的组织是什么概念？",
+    "has_citation": true,
+    "doc_selected": 1
+  },
+  {
+    "id": 33,
+    "query": "物理机加非容灾部署场景下，什么时候需要用到Sto-Mgt网络？",
+    "has_citation": true,
+    "doc_selected": 0
+  },
+  {
+    "id": 34,
+    "query": "如何登录Director的容灾管理界面？",
+    "has_citation": false,
+    "doc_selected": 0
+  },
+  {
+    "id": 36,
+    "query": "外部系统想要采集Director的性能数据，可以怎么解决？",
+    "has_citation": true,
+    "doc_selected": 1
+  },
+  {
+    "id": 39,
+    "query": "SSH登录Director节点之前需要准备些什么",
+    "has_citation": true,
+    "doc_selected": 5
+  },
+  {
+    "id": 40,
+    "query": "模板中内部网络的VIP和地址池填写是要注意什么",
+    "has_citation": true,
+    "doc_selected": 1
+  },
+  {
+    "id": 41,
+    "query": "命令行部署方式，daisyseed日志在哪个路径下？",
+    "has_citation": false,
+    "doc_selected": 0
+  },
+  {
+    "id": 43,
+    "query": "Director的部署工具是什么",
+    "has_citation": false,
+    "doc_selected": 0
+  },
+  {
+    "id": 44,
+    "query": "如果虚机规格已发布到云上，修改本地规格会同步修改云上的规格吗？",
+    "has_citation": true,
+    "doc_selected": 5
+  },
+  {
+    "id": 46,
+    "query": "命令行部署失败后，如果要断点续装，执行什么命令？",
+    "has_citation": true,
+    "doc_selected": 5
+  },
+  {
+    "id": 48,
+    "query": "什么角色可以创建子组织？",
+    "has_citation": true,
+    "doc_selected": 4
+  }
+]

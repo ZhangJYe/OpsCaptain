@@ -271,8 +271,78 @@ func waitForShutdown(...) {
 >
 > **第二阶段：校验配置。** 对已加载的配置做合法性检查，包括密钥是否缺失、记忆提取管线和对话任务管线的配置是否完整、鉴权配置是否合法。这相当于"启动前安全检查"，把问题暴露在营业之前。
 >
-> **第三阶段：启动后台服务。** 启动记忆提取管线和对话任务管线。这两个是后台常驻服务，不需要等 HTTP 请求。启动失败只打 Warning 不 panic——它们是增强功能，不应阻塞主流程。
->
+> **第三阶段：启动后台服务。** 启动**记忆提取管线和对话任务管线**。这两个是后台常驻服务，不需要等 HTTP 请求。启动失败只打 Warning 不 panic——它们是增强功能，不应阻塞主流程。
+
+这是两条独立的 RabbitMQ 异步队列，解决不同的问题：
+
+1. **记忆提取管线（Memory Extraction Pipeline）**
+
+问题： 用户每次对话结束后，需要从对话中提取关键信息（事实、偏好、排障经验）存入长期记忆。但这个过程需要调用 LLM，耗时 500ms-2s，不能阻塞用户等待回复。
+
+解决方案：
+
+用户对话结束
+    ↓
+① 同步写入短期记忆（立即返回）
+② 异步发送消息到 RabbitMQ（不阻塞）
+    ↓
+Worker 消费消息
+    ↓
+调用 LLM 提取关键信息
+    ↓
+写入长期记忆（Redis/File）
+
+```关键代码：
+// memory_queue.go
+func enqueueMemoryExtractionDefault(ctx, sessionID, query, summary) {
+    // 发布到 RabbitMQ，不阻塞主流程
+    client.publishEvent(ctx, event, routingKe
+}
+```
+
+2. **对话任务管线（Chat Task Pipeline）**
+
+问题： AIOps 诊断可能跑几分钟（调用多个工具、RAG 检索、LLM 推理），HTTP 请求不能一直等着。
+
+解决方案：
+
+用户提交 AIOps 请求
+    ↓
+① 立即返回 task_id（HTTP 202）
+② 任务存入 Redis（状态：queued）
+③ 消息发送到 RabbitMQ
+    ↓
+Worker 消费消息
+    ↓
+执行 AIOps 诊断（可能几分钟）
+    ↓
+更新 Redis 状态（succeeded/failed）
+    ↓
+前端轮询 task_id 获取结果
+
+关键代码：
+```// chat_task_queue.go
+func SubmitChatTask(ctx, sessionID, query) (*ChatTaskRecord, error) {
+    record := &ChatTaskRecord{
+        ID:     uuid.NewString(),
+        Status: ChatTaskStatusQueued,
+    }
+    saveChatTaskRecord(ctx, cfg, record)  // 存 Redis
+    client.publishEvent(ctx, event, routingKey)  // 发 RabbitMQ
+    return record, nil  // 立即返回 task_id
+}
+
+```
+
+为什么需要两条独立管线？
+
+1. 职责不同：记忆提取是"附属任务"，对话任务是"核心业务"
+2. 优先级不同：对话任务优先级更高
+3. 失败影响不同：记忆提取失败只影响记忆，对话任务失败影响用户体验
+4. 可以独立配置：prefetch、重试策略、超时时间各不相同
+
+
+
 > **第四阶段：注册路由与中间件。** 创建 HTTP Server，绑定全局中间件（Tracing + Metrics），注册 `/healthz`、`/readyz`、`/metrics` 三个运维端点，然后在 `/api` 路由组上绑定业务中间件链（CORS → Auth → RateLimit → Response）和 Chat 控制器。
 >
 > **第五阶段：启动 HTTP Server。** 调用 `s.Start()` 开始监听端口，接受请求。

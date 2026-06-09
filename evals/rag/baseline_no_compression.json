@@ -1,0 +1,82 @@
+[
+  {
+    "id": 5,
+    "query": "什么是裸金属",
+    "has_citation": true,
+    "doc_selected": 2,
+    "doc_tokens": 722,
+    "answer_length": 250
+  },
+  {
+    "id": 7,
+    "query": "Director中的VDC是什么概念？",
+    "has_citation": true,
+    "doc_selected": 4,
+    "doc_tokens": 616,
+    "answer_length": 350
+  },
+  {
+    "id": 10,
+    "query": "Director部署过程中有个网卡固化操作，那是在什么场景下做？",
+    "has_citation": true,
+    "doc_selected": 4,
+    "doc_tokens": 677,
+    "answer_length": 382
+  },
+  {
+    "id": 11,
+    "query": "发布虚机时最多可以为虚机分配几块网卡？",
+    "has_citation": true,
+    "doc_selected": 4,
+    "doc_tokens": 640,
+    "answer_length": 481
+  },
+  {
+    "id": 12,
+    "query": "虚拟资源包括哪些种类",
+    "has_citation": false,
+    "doc_selected": 0,
+    "doc_tokens": 0,
+    "answer_length": 176
+  },
+  {
+    "id": 13,
+    "query": "物理机通用场景纳管1500台主机需要哪种部署规模、几个节点？",
+    "has_citation": true,
+    "doc_selected": 0,
+    "doc_tokens": 0,
+    "answer_length": 479
+  },
+  {
+    "id": 15,
+    "query": "发布虚机前有哪些准备工作？",
+    "has_citation": true,
+    "doc_selected": 5,
+    "doc_tokens": 312,
+    "answer_length": 597
+  },
+  {
+    "id": 16,
+    "query": "发布镜像时，镜像源支持哪几种方式？",
+    "has_citation": true,
+    "doc_selected": 4,
+    "doc_tokens": 686,
+    "answer_length": 569
+  },
+  {
+    "id": 17,
+    "query": "Director告警南向设置是在哪个界面上",
+    "has_citation": false,
+    "doc_selected": 0,
+    "doc_tokens": 0,
+    "answer_length": 394
+  },
+  {
+    "id": 20,
+    "query": "Director接收南向告警的snmp端口号是多少",
+    "has_citation": true,
+    "doc_selected": 5,
+    "doc_tokens": 663,
+    "answer_length": 561
+  }
+]

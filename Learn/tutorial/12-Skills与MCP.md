@@ -14,30 +14,24 @@
 
 **Skills 改造 = 把 agent 的"路由逻辑"和"执行逻辑"拆开。** Agent 负责选 skill，Skill 负责执行套路，Tool 只保留原子能力。
 
-### 1.2 一张图看懂三层
+### 1.2 一张图看懂当前主链路
 
 ```mermaid
 flowchart TD
     User["用户输入: \"告警触发：checkoutservice CPU > 90%\""]
 
-    subgraph Supervisor
-        S1["orchestrate(task)"]
+    subgraph Agent["Chat ReAct Agent / AIOps Runtime"]
+        A1["理解用户目标"]
+        A2["ProgressiveDisclosure<br/>按场景选择可见工具"]
     end
 
-    subgraph Triage
-        T1["识别任务类型 → 路由到对应 Specialist"]
-    end
-
-    subgraph Specialist["Metrics Specialist (Agent)"]
+    subgraph SkillLayer["Skill / Domain 策略层"]
         direction TB
-        D1["职责：接任务 → 选 Skill → 打 Trace"]
         subgraph SkillRegistry["Skill Registry"]
             direction TB
             Skill1["metrics_alert_triage\nMatch: 含\"告警/severity\"\nRun: 调Prometheus+组装"]
             Skill2["metrics_incident_snapshot\n默认 skill（兜底）"]
         end
-        Skill1 -- 命中 --> D1
-        Skill2 -- 回退 --> D1
     end
 
     subgraph Tools["Tools (原子能力)"]
@@ -48,10 +42,10 @@ flowchart TD
         Tool4["MySQL CRUD (OnDemand)"]
     end
 
-    User --> Supervisor
-    Supervisor --> Triage
-    Triage --> Specialist
-    Specialist --> Tools
+    User --> Agent
+    Agent --> SkillRegistry
+    SkillRegistry --> A2
+    A2 --> Tools
 ```
 
 ### 1.3 三层关系速记
@@ -185,8 +179,8 @@ func AttachMetadata(result *protocol.TaskResult, domain string, skill Skill) *pr
 type ToolTier int
 
 const (
-    TierAlwaysOn  ToolTier = 0  // 始终暴露：时间、知识库
-    TierSkillGate ToolTier = 1  // Skill 通过后才暴露：Prometheus、MCP 日志
+    TierAlwaysOn  ToolTier = 0  // 始终暴露：时间、知识库、MCP 日志、Prometheus 告警
+    TierSkillGate ToolTier = 1  // 域匹配才暴露：Prometheus 指标发现/范围/即时查询
     TierOnDemand  ToolTier = 2  // 按需扩展：MySQL CRUD
 )
 
@@ -199,8 +193,8 @@ type TieredTool struct {
 
 | Tier | 工具 | 暴露条件 | 理由 |
 |------|------|---------|------|
-| **AlwaysOn** | 时间、知识库查询 | 始终可用 | 这些工具无风险、高频使用、不需要领域判断 |
-| **SkillGate** | Prometheus 指标、MCP 日志 | 对应 skill 命中时 | 需要 skill 判定"当前任务真的需要查指标/日志"才暴露 |
+| **AlwaysOn** | 时间、知识库、MCP 日志、Prometheus 告警 | 始终可用 | 高频操作，运维场景中日志和告警查询是基础能力 |
+| **SkillGate** | Prometheus 指标发现/范围/即时查询、用户 MCP 工具 | 域匹配才暴露 | 减少 LLM 工具选择负担，匹配到 metrics 域才暴露 |
 | **OnDemand** | MySQL CRUD | 配置启用 + 领域匹配 | 最高风险——SQL 注入风险，只有在 `allowed_tables` 非空时才注册 |
 
 ### 4.3 工作流程
@@ -298,7 +292,7 @@ func GetLogMcpTool() ([]tool.BaseTool, error) {
     mcpURL, _ := g.Cfg().Get(ctx, "mcp.log_url")  // 从 config 读取 MCP 服务地址
     cli, _ := client.NewSSEMCPClient(mcpURL)       // 建立 SSE 连接
     cli.Start(ctx)                                   // 握手初始化
-    
+
     initRequest := mcp.InitializeRequest{}
     initRequest.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
     initRequest.Params.ClientInfo = mcp.Implementation{
@@ -359,20 +353,27 @@ sequenceDiagram
 ```go
 // tools/tiered_tools.go
 func BuildTieredTools() []skills.TieredTool {
-    // MCP 日志工具 → TierSkillGate，只暴露给 logs 域
+    // MCP 日志工具 → TierAlwaysOn，运维高频操作
     mcpTools, err := GetLogMcpTool()
     for _, mt := range mcpTools {
         tiered = append(tiered, skills.TieredTool{
             Tool:    mt,
-            Tier:    skills.TierSkillGate,     // ← 需要 logs skill 命中才暴露
-            Domains: []string{"logs"},          // ← 只在 logs 域生效
+            Tier:    skills.TierAlwaysOn,      // ← 始终可用
+            Domains: []string{"logs"},
         })
     }
     
-    // Prometheus 指标 → TierSkillGate，只暴露给 metrics 域
+    // Prometheus 告警 → TierAlwaysOn，运维高频操作
     tiered = append(tiered, skills.TieredTool{
         Tool:    NewPrometheusAlertsQueryTool(),
-        Tier:    skills.TierSkillGate,
+        Tier:    skills.TierAlwaysOn,          // ← 始终可用
+        Domains: []string{"metrics"},
+    })
+
+    // Prometheus 指标发现/范围/即时查询 → TierSkillGate，域匹配才暴露
+    tiered = append(tiered, skills.TieredTool{
+        Tool:    NewPrometheusMetricsDiscoveryTool(),
+        Tier:    skills.TierSkillGate,         // ← 匹配到 metrics 域才暴露
         Domains: []string{"metrics"},
     })
     
@@ -398,7 +399,9 @@ func BuildTieredTools() []skills.TieredTool {
 
 ---
 
-## 6. Skills 改造的工程策略：平行迁移
+## 6. 历史 Skills 改造策略：平行迁移
+
+> 本节是历史演进复盘，用来解释为什么当时没有"一把梭重写"。当前聊天主链路不要再恢复 supervisor / skillspecialists pipeline。
 
 ### 6.1 为什么不全量重写
 
@@ -411,7 +414,7 @@ OpsCaption 的方式（平行迁移）：
 ```
 
 ```go
-// 平行迁移：只改 supervisor 和 service 的两个注册点
+// 历史平行迁移：只改 supervisor 和 service 的两个注册点
 // supervisor.go  → 切到 skillspecialists
 // ai_ops_service.go → 切到 skillspecialists
 
@@ -428,7 +431,36 @@ OpsCaption 的方式（平行迁移）：
 
 ---
 
-## 7. 面试问答
+## 7. STAR 法则面试讲解
+
+### Skill 系统 STAR 讲法
+
+**Situation：**
+
+OpsCaptain 支持多种运维场景：指标查询、日志分析、知识库检索。不同场景需要不同的工具和推理策略。如果一次性把所有工具都暴露给 LLM，会导致工具选择困难、token 浪费、甚至误用工具。
+
+**Task：**
+
+设计一个 Skill 系统，通过关键词匹配自动识别用户意图，按需暴露相关工具，并支持用户自定义扩展。
+
+**Action：**
+
+1. **三层架构**：Skill 层（语义层）→ Tool 层（执行层）→ Disclosure 层（编排层）
+2. **三个 Domain**：Metrics（4 个 skill）、Logs（6 个 skill）、Knowledge（5 个 skill）
+3. **Progressive Disclosure**：AlwaysOn 始终可用，SkillGate 域匹配开放，OnDemand 按需展开
+4. **双通道注入**：AIOps 路径用 Focus hint 注入 prompt，Chat 路径用 Disclosure 控制工具暴露
+5. **用户扩展**：GenericSkill + MCPInvoker，JSON 配置即注册新 skill
+
+**Result：**
+
+- 关键词匹配零延迟，比 LLM 分类更快更可靠
+- 渐进披露减少 LLM 工具选择负担
+- 安全分层防止恶意调用
+- 用户可自定义扩展，无需改代码
+
+---
+
+## 8. 面试问答
 
 ### Q1: "你的项目里 skill 和 tool 有什么区别？"
 
@@ -450,7 +482,7 @@ OpsCaption 的方式（平行迁移）：
 >
 > **第二，LLM 选错工具。** 给 LLM 20 个工具，总有一个被误选。限定到当前场景真正需要的 3-5 个，准确率高得多。
 >
-> **第三，安全面最小化。** MySQL CRUD 是 TierOnDemand——不启用时根本不给 LLM 看到，即使启用也只暴露给特定 domain。MCP 日志工具是 TierSkillGate——只有 logs skill 命中时才暴露，平时 Agent 看不见。
+> **第三，安全面最小化。** MySQL CRUD 是 TierOnDemand——不启用时根本不给 LLM 看到，即使启用也只暴露给特定 domain。MCP 日志工具和 Prometheus 告警是 TierAlwaysOn——运维高频操作始终可用。Prometheus 指标发现/范围/即时查询是 TierSkillGate——匹配到 metrics 域才暴露，减少 LLM 工具选择负担。
 
 ### Q3: "MCP 和直接调 API 的区别是什么？"
 
@@ -462,7 +494,7 @@ OpsCaption 的方式（平行迁移）：
 
 ### Q4: "你的 Skills 改造是平行迁移——为什么不全量重写？"
 
-> 平行迁移是刻意的工程选择——先把旧的留着，新建一套 skillspecialists，只改注册点。三个好处：
+> 这是历史迁移阶段的工程选择——先把旧的留着，新建一套 skillspecialists，只改注册点。现在这部分只能作为演进复盘，不能作为当前主链路去恢复。它当时有三个好处：
 >
 > 1. **风险可控**——出问题回滚只需要把注册点切回旧实现，不用恢复任何文件
 > 2. **可对照**——旧实现和新实现可以同时跑单测，验证行为一致性

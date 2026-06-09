@@ -258,6 +258,19 @@ func TestSummaryAfterToolCall(t *testing.T) {
 	}
 }
 
+func TestCompressAfterToolCall_DisabledFallsBackToSummary(t *testing.T) {
+	after := CompressAfterToolCall(func() string { return "payment timeout" }, 10)
+	long := "this is a very long result that should be truncated"
+
+	got, err := after(context.Background(), "query_logs", "{}", long, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) > 15 {
+		t.Fatalf("expected disabled compression to preserve summary fallback, got %q", got)
+	}
+}
+
 func TestToolWrapper_AfterHookError(t *testing.T) {
 	mock := &mockTool{name: "query_metrics", result: "cpu: 80%"}
 	emitter := &mockEmitter{}

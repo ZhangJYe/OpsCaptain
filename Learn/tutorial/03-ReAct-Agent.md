@@ -269,7 +269,7 @@ func newReactAgentLambdaWithQuery(ctx context.Context, query string) (lba *compo
 | `StreamToolCallChecker` | `fullStreamToolCallChecker` | 自定义流式 tool call 检测，读取完整流而非仅首个 chunk |
 | **渐进式披露** | `chatDisclosure.Disclose(query, selectedSkillIDs)` | 根据用户问题只暴露相关工具。问日志问题时不暴露 Metrics 工具，节省 Token、减少幻觉 |
 
-**为什么需要自定义 `StreamToolCallChecker`？** Eino 默认的 `firstChunkStreamToolCallChecker` 只检查流式响应的第一个 chunk。如果模型先输出文本再输出 tool call（如 DeepSeek V3），第一个 chunk 是普通文本，checker 判断为"没有 tool call"，导致 Agent 无法触发工具调用。自定义的 `fullStreamToolCallChecker` 读取完整流，只在 EOF 时才返回 false，确保不会因文本先输出而遗漏 tool call。
+**为什么需要自定义 `StreamToolCallChecker`？** Eino 默认的 `firstChunkStreamToolCallChecker` 只检查流式响应的第一个 chunk。如果模型先输出文本再输出 tool call，第一个 chunk 是普通文本，checker 判断为"没有 tool call"，导致 Agent 无法触发工具调用。自定义的 `fullStreamToolCallChecker` 读取完整流，只在 EOF 时才返回 false，确保不会因文本先输出而遗漏 tool call。
 
 **Progressive Disclosure（渐进式披露）**的注册：
 
@@ -456,7 +456,8 @@ func SummaryAfterToolCall(maxLen int) AfterToolCallFunc {
 }
 ```
 
-> **面试要点**：工具失败时返回格式化字符串（`[工具调用失败]`）而非 Go error，是因为 Go error 会触发 eino 框架的重试机制，导致 Agent 死循环。格式化字符串让 LLM 明确知道失败，并自行决定如何处理——这是防幻觉"工具调用闭环"的核心。
+> **面试要点**：
+>  **工具失败时返回格式化字符串（`[工具调用失败]`）而非 Go error，是因为 Go error 会触发 eino 框架的重试机制，导致 Agent 死循环。格式化字符串让 LLM 明确知道失败，并自行决定如何处理——这是防幻觉"工具调用闭环"的核心。**
 
 ### 3.8 完整请求流程总结
 

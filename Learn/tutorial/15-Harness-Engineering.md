@@ -149,14 +149,14 @@ type Contract struct {
 
 ### 2.3 上下文层 (Context)
 
-**一句话**：控制每个 Agent 能看到什么信息。
+**一句话**：控制每条执行链路能看到什么信息。
 
-这就是第 5 章 ContextEngine 的内容。Harness 的上下文层强调的是**按 Agent 角色差异化装配**：
+这就是第 5 章 ContextEngine 的内容。Harness 的上下文层强调的是**按执行场景差异化装配**：
 
 ```
-Metrics Agent → 需要看 Prometheus 工具结果，不需要看日志
-Logs Agent    → 需要看日志工具结果，不需要看指标
-Reporter      → 需要看所有 Specialist 的结果，不需要看原始工具输出
+Chat ReAct        → 需要 History / Memory / Docs，工具结果由 ReAct 循环动态获得
+AIOps Plan        → 执行前只带必要 Memory，指标/日志/知识库由计划步骤动态调用
+aiops_diagnosis   → 需要 History / Memory / Docs / ToolResults，用于综合诊断和 replay
 ```
 
 ### 2.4 验证层 (Verification)
@@ -277,7 +277,7 @@ Agent 犯错
 | 层 | 状态 | 已完成 | 未完成 |
 |---|---|---|---|
 | **协议层** | ✅ 已完成 | TaskEnvelope/TaskResult/TaskEvent/ArtifactRef 结构完整 | — |
-| **边界层** | ✅ 已完成 | 5 个 Agent 有 Contract（triage/metrics/logs/knowledge/reporter） | Contract 是文档性质，无运行时 enforce |
+| **边界层** | ✅ 历史样本已完成 | 早期 triage/metrics/logs/knowledge/reporter 有 Contract；当前主链路需迁移到 Chat ReAct / AIOps Plan / GoS 输出 | Contract 不能停留在文档性质，关键输出要逐步接入运行时校验 |
 | **上下文层** | ✅ 已完成 | ContextEngine 7 文件，Budget/Profile/Trace 完整 | — |
 | **验证层** | ⚠️ 部分完成 | Schema Gate（14 测试）+ Contract Enforce（13 测试） | 工具契约测试缺失、Replay 用例不足 |
 | **观测层** | ✅ 已完成 | 31 处 trace_id 引用，覆盖全部链路 | — |
@@ -380,11 +380,11 @@ harness:
 
 > **正交且互补**。
 >
-> Multi-Agent 解决的是"怎么分工"——Supervisor、Triage、Specialists 各司其职。
-> Harness 解决的是"怎么控场"——分工之后，怎么保证每个 Agent 不越界、不出错、可追溯。
+> Multi-Agent 解决的是"怎么分工"；在 OpsCaption 的早期实验里体现为 Supervisor、Triage、Specialists 各司其职。当前主链路不再依赖这条 pipeline，而是 Chat ReAct、AIOps Plan-Execute-Replan 和 GoS。
 >
-> 没有 Harness 的 Multi-Agent = 一群没有交通规则的司机。
-> 只有 Harness 没有 Agent 拆分 = 空有交通规则但没车在跑。
+> Harness 解决的是"怎么控场"——无论是单 Agent、Plan 链路还是 GoS 图状态驱动，都要保证边界清晰、输出可校验、过程可追溯。
+>
+> 所以面试时不要说"OpsCaption 当前是 Supervisor 多 Agent"；更准确的说法是：Harness 是工程约束层，历史 Multi-Agent 只是它的一种应用样本。
 
 ---
 

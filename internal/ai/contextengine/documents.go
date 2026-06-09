@@ -1,6 +1,7 @@
 package contextengine
 
 import (
+	"SuperBizAgent/internal/ai/contextcompression"
 	"SuperBizAgent/internal/ai/rag"
 	"context"
 	"fmt"
@@ -15,11 +16,12 @@ import (
 const defaultContextDocsQueryTimeout = 5 * time.Second
 
 type documentSelectionResult struct {
-	selected []ContextItem
-	dropped  []ContextItem
-	used     int
-	notes    []string
-	metrics  *RetrievalStageMetrics
+	selected           []ContextItem
+	dropped            []ContextItem
+	used               int
+	notes              []string
+	metrics            *RetrievalStageMetrics
+	compressionReports []contextcompression.Report
 }
 
 func contextDocsQueryTimeout(ctx context.Context) time.Duration {
@@ -53,8 +55,33 @@ func selectDocuments(ctx context.Context, query string, profile ContextProfile) 
 	selected := make([]ContextItem, 0, len(docs))
 	dropped := make([]ContextItem, 0)
 	used := 0
+
+	// 加载压缩配置
+	compCfg := contextcompression.LoadConfig(ctx)
+	var compressionReports []contextcompression.Report
+
 	for idx, doc := range docs {
 		item := newDocumentItem(doc, idx)
+		if compCfg.Enabled && compCfg.Mode != contextcompression.ModeOff {
+			compResult := contextcompression.Compress(ctx, contextcompression.Request{
+				SourceType: contextcompression.SourceRAG,
+				SourceID:   item.SourceID,
+				Query:      query,
+				Content:    item.Content,
+			}, compCfg)
+			if shouldRecordCompressionReport(compResult.Report) {
+				compressionReports = append(compressionReports, compResult.Report)
+			}
+			if compCfg.Mode == contextcompression.ModeOptimize &&
+				!compResult.Report.Degraded &&
+				compResult.Report.CompressionRatio < 1.0 {
+				item.Content = compResult.Content
+				item.TokenEstimate = memory.EstimateTokens(item.Content)
+				item.CompressionLevel = "compressed"
+			} else if compCfg.Mode == contextcompression.ModeAudit && shouldRecordCompressionReport(compResult.Report) {
+				item.CompressionLevel = "audit"
+			}
+		}
 		if item.TokenEstimate > remaining {
 			trimmed := memory.TrimToTokenBudget(item.Content, remaining)
 			if strings.TrimSpace(trimmed) == "" {
@@ -64,7 +91,9 @@ func selectDocuments(ctx context.Context, query string, profile ContextProfile) 
 			}
 			item.Content = trimmed
 			item.TokenEstimate = memory.EstimateTokens(trimmed)
-			item.CompressionLevel = "trimmed"
+			if item.CompressionLevel == "" || item.CompressionLevel == "audit" {
+				item.CompressionLevel = "trimmed"
+			}
 		}
 		item.Selected = true
 		selected = append(selected, item)
@@ -86,7 +115,8 @@ func selectDocuments(ctx context.Context, query string, profile ContextProfile) 
 			fmt.Sprintf("tokens=%d/%d", used, profile.Budget.DocumentTokens),
 			formatRetrievalTraceNote(metrics),
 		},
-		metrics: metrics,
+		metrics:            metrics,
+		compressionReports: compressionReports,
 	}
 }
 

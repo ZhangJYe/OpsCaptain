@@ -84,3 +84,7 @@ Learn/design/*.progress.md
 evals/runs/
 evals/reports/
 evals/deepeval/datasets/
+
+# 外部数据集（太大，不入库）
+datasets/
+integrations/

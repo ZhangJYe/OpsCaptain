@@ -97,7 +97,7 @@ func BuildPlanAgent(ctx context.Context, query string) (string, []string, error)
 ```go
 // planner.go（19 行）
 func NewPlanner(ctx context.Context) (adk.Agent, error) {
-    planModel, _ := models.OpenAIForGLM(ctx)  // ← 用 Think 模型（需要推理能力）
+    planModel, _ := models.OpenAIForGLM(ctx)  // ← 历史函数名；实际读取 chat_model（Think 模型）
     return planexecute.NewPlanner(ctx, &planexecute.PlannerConfig{
         ToolCallingChatModel: planModel,
     })
@@ -129,7 +129,7 @@ func NewExecutor(ctx context.Context) (adk.Agent, error) {
     toolList = append(toolList, tools.NewQueryInternalDocsTool())     // ③ 知识库检索
     toolList = append(toolList, tools.NewGetCurrentTimeTool())        // ④ 当前时间
 
-    execModel, _ := models.OpenAIForGLMFast(ctx)  // ← 用 Fast 模型（执行不需要深度推理）
+    execModel, _ := models.OpenAIForGLMFast(ctx)  // ← 历史函数名；实际读取 chat_model_fast（Fast 模型）
 
     return planexecute.NewExecutor(ctx, &planexecute.ExecutorConfig{
         Model: execModel,
@@ -150,7 +150,7 @@ func NewExecutor(ctx context.Context) (adk.Agent, error) {
 ```go
 // replan.go（19 行）
 func NewRePlanAgent(ctx context.Context) (adk.Agent, error) {
-    model, _ := models.OpenAIForGLM(ctx)  // ← 用 Think 模型（需要评估判断）
+    model, _ := models.OpenAIForGLM(ctx)  // ← 历史函数名；实际读取 chat_model（Think 模型）
     return planexecute.NewReplanner(ctx, &planexecute.ReplannerConfig{
         ChatModel: model,
     })
@@ -173,9 +173,9 @@ RePlanner 做的事：检查 Executor 的执行结果，判断：
 
 | Agent | 模型 | 原因 |
 |-------|------|------|
-| **Planner** | `OpenAIForGLM`（Think） | 需要深度推理制定计划 |
-| **Executor** | `OpenAIForGLMFast`（Fast） | 只需按计划执行，快速响应 |
-| **RePlanner** | `OpenAIForGLM`（Think） | 需要评估质量、判断是否调整 |
+| **Planner** | `chat_model`（代码工厂名仍为 `OpenAIForGLM`） | 需要深度推理制定计划 |
+| **Executor** | `chat_model_fast`（代码工厂名仍为 `OpenAIForGLMFast`） | 只需按计划执行，快速响应 |
+| **RePlanner** | `chat_model`（代码工厂名仍为 `OpenAIForGLM`） | 需要评估质量、判断是否调整 |
 
 **面试时可以说：** "Plan-Execute-Replan 的三个角色用了两个不同的模型——规划和复盘用 Think 模型（需要深度推理），执行用 Fast 模型（需要快速工具调用）。这是成本和质量之间的务实平衡。"
 
@@ -230,17 +230,17 @@ graph TB
 **实际落地策略：**
 
 ```go
-// 配置示例（hack/config.yaml）
-glm_chat_model:           # Planner & RePlanner 用
-  model: "deepseek-v3-1-terminus"   // 强推理模型
-  base_url: "https://ark.cn-beijing.volces.com/api/v3"
+// 配置示例（manifest/config/config.yaml）
+chat_model:               # Planner & RePlanner 用
+  model: "deepseek-v4-pro"     // 强推理模型
+  base_url: "https://api.deepseek.com"
 
-glm_chat_model_fast:      # Executor 用
-  model: "deepseek-v3-1-terminus"   // 快模型（开发环境同一模型，生产换 Flash）
-  base_url: "https://ark.cn-beijing.volces.com/api/v3"
+chat_model_fast:          # Executor 用
+  model: "deepseek-v4-flash"   // 快模型
+  base_url: "https://api.deepseek.com"
 ```
 
-> 生产环境建议：Planner/RePlanner 用 DeepSeek-V3 或 GLM-4.5，Executor 用 DeepSeek-V3-Flash 或 GLM-4-Flash。Think vs Fast 的本质是**推理深度**和**响应速度**的 trade-off。
+> 当前配置口径：Planner/RePlanner 读取 `chat_model`，Executor 读取 `chat_model_fast`；模型提供商只要兼容 OpenAI Chat Completions 协议即可。Think vs Fast 的本质是**推理深度**和**响应速度**的 trade-off。
 
 ---
 
@@ -404,9 +404,9 @@ func convergenceCheck(oldPlan, newPlan *Plan) (bool, float64) {
 
 ### Q6："你们用的 Think 模型和 Fast 模型具体是什么？"
 
-> 开发环境两者都指向同一个模型（deepseek-v3-1-terminus）方便调试。生产环境会差异化：Planner/RePlanner 用 DeepSeek-V3 或 GLM-4.5（强推理），Executor 用 DeepSeek-V3-Flash 或 GLM-4-Flash（快响应）。
+> 当前配置把 Planner/RePlanner 指向 `chat_model`，Executor 指向 `chat_model_fast`。本仓库默认示例是 DeepSeek V4 Pro/Flash；如果换成 GLM、Qwen 或私有化模型，只要保持 OpenAI-compatible 协议，代码侧不需要改编排逻辑。
 >
-> 配置上通过两个独立的 model config（`glm_chat_model` 和 `glm_chat_model_fast`）解耦，切换模型不需要改代码，只改配置。Think vs Fast 的本质是**推理深度**和**响应速度**的 trade-off，不是简单的"好模型 vs 差模型"。
+> 配置上通过两个独立的 model config（`chat_model` 和 `chat_model_fast`）解耦，切换模型不需要改代码，只改配置。Think vs Fast 的本质是**推理深度**和**响应速度**的 trade-off，不是简单的"好模型 vs 差模型"。
 
 ---
 
@@ -444,9 +444,9 @@ func convergenceCheck(oldPlan, newPlan *Plan) (bool, float64) {
 <details>
 <summary>1. Plan-Execute-Replan 的三个角色分别做什么？各用什么模型？</summary>
 
-- **Planner**（GLM Think）：把复杂问题拆成执行步骤
-- **Executor**（GLM Fast）：按计划调用工具（日志/告警/知识库/时间）
-- **RePlanner**（GLM Think）：评估结果，决定继续还是调整
+- **Planner**（`chat_model` / Think）：把复杂问题拆成执行步骤
+- **Executor**（`chat_model_fast` / Fast）：按计划调用工具（日志/告警/知识库/时间）
+- **RePlanner**（`chat_model` / Think）：评估结果，决定继续还是调整
 </details>
 
 <details>

@@ -7,8 +7,11 @@ import (
 	"strings"
 	"time"
 
+	"SuperBizAgent/internal/ai/contextcompression"
+
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/schema"
+	"github.com/gogf/gf/v2/frame/g"
 )
 
 // BeforeToolCallFunc 工具调用前的拦截函数
@@ -196,5 +199,46 @@ func SummaryAfterToolCall(maxLen int) AfterToolCallFunc {
 			return result[:maxLen] + "...", nil
 		}
 		return result, nil
+	}
+}
+
+// CompressAfterToolCall 语义感知压缩 afterToolCall
+// 替代 SummaryAfterToolCall 的暴力截断，保留错误行和关键证据
+// audit 模式: 返回原文，仅记录压缩报告（通过 logger）
+// optimize 模式: 返回压缩后的内容
+func CompressAfterToolCall(queryFunc func() string, fallbackMaxLen int) AfterToolCallFunc {
+	fallback := SummaryAfterToolCall(fallbackMaxLen)
+	return func(ctx context.Context, toolName string, args string, result string, err error) (string, error) {
+		if err != nil {
+			return result, err
+		}
+
+		cfg := contextcompression.LoadConfig(ctx)
+		if !cfg.Enabled || cfg.Mode == contextcompression.ModeOff {
+			return fallback(ctx, toolName, args, result, err)
+		}
+
+		query := ""
+		if queryFunc != nil {
+			query = queryFunc()
+		}
+
+		compressResult := contextcompression.Compress(ctx, contextcompression.Request{
+			SourceType: contextcompression.SourceTool,
+			SourceID:   toolName,
+			Query:      query,
+			Content:    result,
+		}, cfg)
+
+		// 记录压缩报告（audit 模式下的分析数据）
+		if compressResult.Report.Strategy != "" && compressResult.Report.Strategy != "disabled" &&
+			compressResult.Report.Strategy != "source_type_excluded" && compressResult.Report.Strategy != "below_min_tokens" {
+			g.Log().Debugf(ctx, "[context-compression] tool=%s strategy=%s before=%d after=%d ratio=%.2f degraded=%t",
+				toolName, compressResult.Report.Strategy,
+				compressResult.Report.TokensBefore, compressResult.Report.TokensAfter,
+				compressResult.Report.CompressionRatio, compressResult.Report.Degraded)
+		}
+
+		return compressResult.Content, nil
 	}
 }

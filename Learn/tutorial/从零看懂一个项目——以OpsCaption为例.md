@@ -48,7 +48,7 @@ OpsCaptain/
 ├── api/                    ← 📝 定义 API 接口（请求/响应格式）
 ├── internal/               ← 💻 核心代码（Go 的约定：不对外暴露）
 │   ├── ai/                 ←   AI 相关全部逻辑
-│   │   ├── agent/          ←    各种 Agent（ReAct、Triage、Supervisor...）
+│   │   ├── agent/          ←    Agent 执行层（ReAct、Plan-Execute-Replan、GoS；历史实验代码单独标注）
 │   │   ├── rag/            ←    RAG 检索（查询改写、召回、重排序）
 │   │   ├── contextengine/  ←    上下文装配引擎
 │   │   ├── service/        ←    服务层（记忆管理、异步任务...）
@@ -201,29 +201,38 @@ func BuildChatAgent(ctx context.Context) {
 }
 ```
 
-**③ 路由 — Triage 如何决定走哪个路径（真实代码）：**
+**③ 路由 — Skill 系统如何决定暴露哪些工具（真实代码）：**
 
 ```go
-// 文件: internal/ai/agent/triage/triage.go
-var triageRules = []rule{
-    // 如果用户消息包含"告警"关键词 →
-    // 路由到 metrics + logs + knowledge 三个模块
-    {intent: "alert_analysis", domains: []string{"metrics", "logs", "knowledge"},
-     keywords: []string{"告警", "alert", "prometheus"}},
-
-    // 如果用户消息包含"文档"关键词 →
-    // 只路由到 knowledge 模块
-    {intent: "kb_qa", domains: []string{"knowledge"},
-     keywords: []string{"文档", "知识库", "runbook", "sop"}},
-
-    // ...更多规则
+// 文件: internal/ai/skills/registry.go
+type Skill interface {
+    Name() string
+    Description() string
+    Match(task *protocol.TaskEnvelope) bool
+    Run(ctx context.Context, task *protocol.TaskEnvelope) (*protocol.TaskResult, error)
 }
 
-func (a *Agent) Handle(task) {
-    // 遍历规则表，匹配关键词
-    for _, rule := range triageRules {
-        if matchesRule(query, rule.keywords) {
-            return rule  // 找到匹配的规则
+// 文件: internal/ai/skills/domains/metrics/agent.go
+// Metrics 域有 4 个 skill，通过关键词匹配
+var metricsSkills = []Skill{
+    {name: "metrics_release_guard", keywords: []string{"release", "deploy", "发布", "灰度"}},
+    {name: "metrics_capacity_snapshot", keywords: []string{"cpu", "memory", "latency", "吞吐"}},
+    {name: "metrics_alert_triage", keywords: []string{"alert", "prometheus", "告警"}},
+    {name: "metrics_incident_snapshot", keywords: []string{}},  // 兜底
+}
+
+// 文件: internal/ai/skills/progressive_disclosure.go
+// 渐进披露：AlwaysOn 始终可用，SkillGate 域匹配才暴露
+func (pd *ProgressiveDisclosure) Disclose(query string) DisclosureResult {
+    matchedDomains := pd.matchDomains(query)
+    for _, tt := range pd.tools {
+        switch tt.Tier {
+        case TierAlwaysOn:
+            result.Tools = append(result.Tools, tt.Tool)
+        case TierSkillGate:
+            if domainOverlap(matchedDomains, tt.Domains) {
+                result.Tools = append(result.Tools, tt.Tool)
+            }
         }
     }
 }
@@ -247,9 +256,9 @@ func (a *Agent) Handle(task) {
 | **输出是什么？** | 看返回值 `(res, err)` |
 | **做了什么转换？** | 看函数体——输入怎么变成输出的 |
 
-### 4.2 实战：逐行解析 Triage Agent
+### 4.2 实战：逐行解析历史 Intent Routing 样本
 
-我们来逐行读 `triage.go`，用黄金三问：
+下面这段来自早期 `triage.go` 思路，用来训练"读懂一个路由函数"的方法。它不代表当前主链路；当前口径应理解为 IntentRecognizer / routing，把请求分到 Chat ReAct、AIOps Plan 或 GoS。
 
 ```go
 // ① 输入：task *protocol.TaskEnvelope
@@ -283,7 +292,7 @@ func (a *Agent) Handle(_ context.Context, task *protocol.TaskEnvelope) (*protoco
     // ⑥ 输出：返回分类结果
     return &protocol.TaskResult{
         TaskID:     task.TaskID,       // 任务ID原样返回
-        Agent:      a.Name(),          // 告诉上级："我是 triage"
+        Agent:      a.Name(),          // 告诉上级："我是这个 routing 组件"
         Status:     "succeeded",       // 状态：成功
         Summary:    selected.summary,  // 分类摘要
         Metadata: map[string]any{      // 附加信息
@@ -387,18 +396,19 @@ func BuildChatAgentWithQuery(ctx context.Context, query string) (
 
 **为什么这样设计？** 因为 Eino 框架把一个 AI 任务的执行流程建模成一张**有向图**：数据从 START 流入，经过几个处理节点，最终从 END 流出。`orchestration.go` 就是这张图的"施工图"。
 
-### 5.3 triage.go —— 意图分类（108 行）
+### 5.3 Skill 系统 —— 意图识别与工具披露
 
-这是 Multi-Agent 系统的"调度员"。上面已经逐行解读过，这里复习核心思路：
+这是系统的"调度员"。通过关键词匹配识别用户意图，按需暴露相关工具：
 
 ```
-Triage Agent 的工作：
-  用户输入 → 关键词匹配 → 选规则 → 返回 (意图 + 领域 + 优先级)
+Skill 系统的工作：
+  用户输入 → 关键词匹配 → 识别域(metrics/logs/knowledge) → 渐进披露工具
 
 设计亮点：
-  1. 规则表驱动（不用 if-else 大嵌套）
-  2. 有默认规则（兜底）
-  3. 优先级可动态调整
+  1. 三个 Domain 各有独立 Registry，互不干扰
+  2. Progressive Disclosure 三级工具分层（AlwaysOn/SkillGate/OnDemand）
+  3. 注入风险时只暴露 AlwaysOn 工具，防止恶意调用
+  4. 用户可自定义 Skill，JSON 配置即注册
 ```
 
 ### 5.4 chat_pipeline/prompt.go —— Prompt 工程
@@ -462,12 +472,12 @@ Prompt 分三层设计，这是工程化的关键：
 
 | 天数 | 读什么 | 重点 |
 |------|--------|------|
-| 第1天 | `main.go` + `AGENTS.md` | 建立全局地图 |
+| 第1天 | `main.go` + `CLAUDE.md` | 建立全局地图 |
 | 第2天 | `internal/ai/agent/chat_pipeline/orchestration.go` | 理解 ReAct Agent |
-| 第3天 | `internal/ai/agent/triage/triage.go` | 理解多 Agent 路由 |
+| 第3天 | `internal/ai/skills/` 目录 | 理解 Skill 系统和渐进披露 |
 | 第4天 | `internal/ai/rag/` 目录 | 理解知识检索 |
 | 第5天 | `internal/ai/contextengine/` | 理解上下文管理 |
-| 第6天 | `internal/ai/service/memory_service.go` | 理解记忆系统 |
+| 第6天 | `internal/ai/memory/` | 理解记忆系统 |
 | 第7天 | 回顾 + 自己画架构图 | 检验理解 |
 
 ---
@@ -480,7 +490,7 @@ Prompt 分三层设计，这是工程化的关键：
 - [ ] 项目目录分几大块？每块干什么？
 - [ ] 用户发一条消息，数据经过哪些模块？
 - [ ] ReAct Agent 用的是什么框架？为什么用图来编排？
-- [ ] Triage Agent 怎么决定把任务分给哪个 Specialist？
+- [ ] IntentRecognizer / routing 怎么决定走 Chat ReAct、AIOps Plan 还是 GoS？
 - [ ] Prompt 为什么要分三层？
 - [ ] RAG 检索有几个步骤？
 - [ ] 什么是 Context Engine？为什么需要它？

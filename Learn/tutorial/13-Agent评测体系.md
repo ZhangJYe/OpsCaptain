@@ -95,8 +95,8 @@ graph TD
 测**单个函数**的正确性。Agent 评测中，重点测这些：
 
 ```go
-// 示例 1：测试意图识别
-func TestTriageIntentClassification(t *testing.T) {
+// 示例 1：测试意图识别（当前主链路使用 IntentRecognizer / routing 口径）
+func TestIntentClassification(t *testing.T) {
     cases := []struct{
         query    string
         expected string  // "alert_analysis" / "kb_qa" / "incident_analysis"
@@ -121,7 +121,7 @@ func TestAgentModeRouting(t *testing.T) {
 ```
 
 **Agent 特有测试重点：**
-- 意图分类（Triage Agent）
+- 意图分类（IntentRecognizer / routing）
 - 路由规则
 - Tool 参数解析（LLM 返回的 JSON 能不能正确解析）
 - 降级逻辑（Mock 工具失败 → 验证降级路径）
@@ -260,14 +260,16 @@ graph TD
 | **收敛性** | 行为指标：Replan 次数 | 平均 ≤ 2 次 Replan，最多 5 轮 |
 | **计划修改质量** | LLM-as-Judge：新计划和旧计划的差异是否合理 | "加查网络层"而非"把时间从 15 分钟改成 20 分钟" |
 
-### 4.3 Multi-Agent 编排评测要点
+### 4.3 历史 Multi-Agent 编排评测要点（只作演进样本）
+
+> 这一节用于解释早期 supervisor / triage / reporter pipeline 的评测思路，不作为当前 OpsCaption 主链路。当前主线请看 Chat ReAct、AIOps Plan-Execute-Replan 和 GoS 的评测。
 
 | 关注点 | 怎么测 | 好/坏的标准 |
 |--------|--------|-----------|
-| **Triage 准确率** | Golden Case：100 条 query 的意图分类 | > 90% 准确率 |
-| **Specialist 并行度** | 行为指标：实际并行执行 vs 串行 | 不相关的 Specialist 应该并行执行 |
-| **级联失败** | 边界 Case：一个 Specialist 超时，Supervisor 的行为 | Supervisor 继续编排其他 Specialist，不全局失败 |
-| **Reporter 聚合质量** | LLM-as-Judge：报告是否整合了所有 Specialist 的发现 | 三个 Specialist 都查了，报告里都提到了 |
+| **历史 Triage 准确率** | Golden Case：100 条 query 的意图分类 | > 90% 准确率 |
+| **历史 Specialist 并行度** | 行为指标：实际并行执行 vs 串行 | 不相关的 Specialist 应该并行执行 |
+| **历史级联失败** | 边界 Case：一个 Specialist 超时，Supervisor 的行为 | Supervisor 继续编排其他 Specialist，不全局失败 |
+| **历史 Reporter 聚合质量** | LLM-as-Judge：报告是否整合了所有 Specialist 的发现 | 三个 Specialist 都查了，报告里都提到了 |
 
 ---
 
@@ -302,8 +304,8 @@ graph TD
 
 | 能力 | 方法 | 状态 |
 |------|------|------|
-| RAG 检索质量 | Recall@K（AIOps Challenge 2025 案例集） | ✅ 78% |
-| Triage 意图分类 | 规则表 + 抽样验证 | ⚠️ 缺自动化 |
+| RAG 检索质量 | Recall@K（AIOps Challenge 2025 案例集） | 历史样例口径 78%，正式汇报以最新 eval runbook 复跑结果为准 |
+| 意图识别 / routing | 规则表 + 抽样验证 | ⚠️ 缺自动化 |
 | 行为指标 | ContextTrace（每次请求上下文装配全链路追踪） | ✅ |
 | 安全防护 | Prompt Guard + Output Filter 规则 | ✅ |
 | Agent 输出质量 | Contract Schema Gate（历史 runtime 已验证，当前主链路迁移中） | ⚠️ 迁移中 |
@@ -356,7 +358,7 @@ type JudgeResult struct {
 |------|------|--------|
 | Golden Case 回归 | 10 个典型运维问题 + 预期输出 | P0 |
 | Agent 步数监控 | Prometheus Counter + Grafana Dashboard | P0 |
-| LLM-as-Judge 每夜跑 | DeepSeek V3 做裁判，10 个 Golden Case | P1 |
+| LLM-as-Judge 每夜跑 | 使用独立 judge model，10 个 Golden Case | P1 |
 | 人工评测闭环 | 每周 20 条，人评和 Judge 一致性 > 80% | P1 |
 
 ---
@@ -367,11 +369,11 @@ type JudgeResult struct {
 
 > 我有四层评测。**第一层，确定性约束**——对可结构化的输出做 Contract / schema 校验，历史 runtime 已接入 `EnforceContract()`，当前主链路会优先把关键输出和降级原因纳入可校验结构。**第二层，Replay Case 回归**——用 `DiagCase` 定义典型运维问题，分别覆盖 Chat ReAct 和 AIOps Plan-Execute-Replan，验证是否调用了正确工具、是否引用证据、是否能降级。**第三层，行为指标监控**——通过 ContextTrace、事件链和 Prometheus 观察工具成功率、LLM 延迟、token 消耗和降级率。**第四层，LLM-as-Judge + 人工抽检**——用 `DiagScores` 四维打分（正确性/完整性/逻辑性/可操作性），`JudgeResult` 做 A/B 对比看 delta，每周人工抽查做一致性校验。
 >
-> 另外 RAG 层面有独立的 Recall@K 评测——当前 Recall@10 = 78%，用 AIOps Challenge 2025 案例集，build/holdout split 严格分开。
+> 另外 RAG 层面有独立的 Recall@K 评测。历史样例口径可以讲 Recall@10=78%，但我会带上 `Learn/eval/*` 的 runbook 或最新报告，说明 AIOps Challenge 2025 案例集、build/holdout split 和复跑结果。
 
 ### Q2: "LLM-as-Judge 你怎么保证裁判打分是公正的？"
 
-> 三个措施。第一，**不同模型当裁判**——不用 DeepSeek V3 给自己打分，用另一个模型或不同 temperature 做裁判。第二，**人工一致性校验**——每周随机抽 20 条，同时让人和 Judge 打分，计算 Spearman 相关系数，低于 0.7 就调整 Judge Prompt。第三，**分维度打分而非总分**——正确性、完整性、逻辑性、可操作性分开评，比"总分 8 分"有区分度——因为 AIOps 场景中正确性权重远高于其他维度。
+> 三个措施。第一，**不同模型当裁判**——尽量不用同一个业务模型给自己打分，改用独立 judge model 或不同 temperature 做裁判。第二，**人工一致性校验**——每周随机抽 20 条，同时让人和 Judge 打分，计算 Spearman 相关系数，低于 0.7 就调整 Judge Prompt。第三，**分维度打分而非总分**——正确性、完整性、逻辑性、可操作性分开评，比"总分 8 分"有区分度——因为 AIOps 场景中正确性权重远高于其他维度。
 
 ### Q3: "你的评测集怎么保证不泄露？"
 

@@ -23,8 +23,8 @@ var (
 	chatDisclosureIns  *skills.ProgressiveDisclosure
 
 	// Lazy-initialized user tools dependencies; set via SetUserToolDeps before first chat.
-	userToolStoreDeps  skills.UserSkillStore
-	dynamicMCPRegDeps  *tools.DynamicMCPRegistry
+	userToolStoreDeps skills.UserSkillStore
+	dynamicMCPRegDeps *tools.DynamicMCPRegistry
 )
 
 // SetUserToolDeps configures user tool dependencies for progressive disclosure.
@@ -145,7 +145,7 @@ func newReactAgentLambdaWithQuery(ctx context.Context, query string) (lba *compo
 			emitter,
 			traceID,
 			events.ValidateBeforeToolCall(), // 参数基础校验
-			events.SummaryAfterToolCall(chatConfigInt(ctx, "events.tool_summary_max_len", 4000)),
+			events.CompressAfterToolCall(func() string { return query }, chatConfigInt(ctx, "events.tool_summary_max_len", 4000)),
 		)
 	}
 

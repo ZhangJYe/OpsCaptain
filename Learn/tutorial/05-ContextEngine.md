@@ -395,7 +395,7 @@ graph TD
 | 来源 | 作用 | 生命周期 | 预算（maxTokens=8000） | 代码位置 |
 |------|------|---------|------|---------|
 | HistoryMessages | 对话连贯性 | 会话级 | 3200 tokens (40%) | `selectHistory()` |
-| MemoryItems | 用户/项目背景 | 跨会话持久 | 800 tokens (10%) | `selectMemories()` |
+| MemoryItems | 用户/项目背景 | 跨会话持久 | 1600 tokens (20%) | `selectMemories()` |
 | DocumentItems | 知识库参考 | 请求级 | 1200 tokens (15%) | `selectDocuments()` |
 | ToolItems | 实时工具结果 | 请求级 | 800 tokens (10%) | `selectToolItems()` |
 
@@ -425,7 +425,7 @@ graph LR
     subgraph LLM Token 总预算 MaxTotalTokens
         A["System Prompt<br/>1600 (20%)"]
         B["History<br/>3200 (40%)"]
-        C["Memory<br/>800 (10%)"]
+        C["Memory<br/>1600 (20%)"]
         D["Docs<br/>1200 (15%)"]
         E["Tools<br/>800 (10%)"]
         F["Reserved<br/>400 (5%)"]
@@ -450,7 +450,7 @@ maxTokens := defaultMaxContextTokens  // 默认 8000，可由 memory.max_context
 
 SystemReserve   = maxTokens × 0.20    // System Prompt 占 20%
 HistoryReserve  = maxTokens × 0.40    // 对话历史占 40%
-MemoryReserve   = maxTokens × 0.10    // 长期记忆占 10%
+MemoryReserve   = maxTokens × 0.20    // 长期记忆占 20%
 DocumentReserve = maxTokens × 0.15    // RAG 文档占 15%
 ```
 
@@ -460,10 +460,10 @@ DocumentReserve = maxTokens × 0.15    // RAG 文档占 15%
 |--------|:----:|---------|:----:|
 | `SystemReserve` | 20% | `int(8000 × 0.20)` | **1600** |
 | `HistoryReserve` | 40% | `int(8000 × 0.40)` | **3200** |
-| `MemoryReserve` | 10% | `int(8000 × 0.10)` | **800** |
+| `MemoryReserve` | 20% | `int(8000 × 0.20)` | **1600** |
 | `DocumentReserve` | 15% | `int(8000 × 0.15)` | **1200** |
-| **小计（已分配）** | 85% | — | **6800** |
-| **剩余池（待 Profile 分配）** | 15% | — | **1200** |
+| **小计（已分配）** | 95% | — | **7600** |
+| **剩余池（待 Profile 分配）** | 5% | — | **400** |
 
 > **注**：`GetTokenBudget()` 使用 `sync.Once` 确保全局单例，配置变更需重启生效。配置项为 `memory.max_context_tokens`，从 `manifest/config/config.yaml` 读取。
 
@@ -561,8 +561,8 @@ if item.TokenEstimate > remaining {
 | Profile | AllowHistory | AllowMemory | AllowDocs | AllowToolResults | Staged | 使用场景 |
 |---------|:-----------:|:-----------:|:---------:|:----------------:|:------:|---------|
 | **chat** | ✅ | ✅ | ✅ | ❌ | ✅ | 日常对话、知识问答 |
-| **aiops** | ❌ | ✅ | ❌ | ❌ | ❌ | 运维故障排查 |
-| **report** | ❌ | ❌ | ❌ | ✅ | ❌ | 报告/摘要生成 |
+| **aiops / specialist** | ❌ | ✅ | ❌ | ❌ | ❌ | Plan-Execute-Replan 执行前的轻量诊断上下文 |
+| **aiops_diagnosis** | ✅ | ✅ | ✅ | ✅ | ✅ | 诊断 replay / 带证据上下文的综合分析 |
 
 #### chat 模式
 
@@ -595,16 +595,16 @@ graph TD
 > 这些工具结果是**动态的**——取决于 Planner 制定的执行计划，不可能在请求开始前就预知需要哪些文档。
 > 所以 ContextEngine 只负责装配 Memory（用户偏好），Docs 和 Tools 由 Agent 在 ReAct/Plan-Execute 循环中自行获取。
 
-#### report 模式
+#### aiops_diagnosis 模式
 
 ```mermaid
 graph TD
-    subgraph report 模式
-        A["❌ History → 不需要对话历史"]
-        B["❌ Memory → 不需要长期记忆"]
-        C["❌ Docs → 不需要知识检索"]
-        D["✅ Tools → 只有工具结果作为素材"]
-        E["❌ Staged → 记忆不进对话流"]
+    subgraph aiops_diagnosis 模式
+        A["✅ History → 保留诊断对话上下文"]
+        B["✅ Memory → 用户偏好、历史经验"]
+        C["✅ Docs → 可注入 RAG 证据"]
+        D["✅ Tools → 可纳入工具结果"]
+        E["✅ Staged → 记忆作为消息前置注入"]
     end
 ```
 
@@ -633,14 +633,13 @@ func (r *PolicyResolver) Resolve(ctx context.Context, req ContextRequest) Contex
         base.Staged = false
         // Budget: HistoryTokens = 0, ToolTokens = 0
 
-    case "reporter":
-        base.Name = "reporter-default"
-        base.AllowHistory = false
-        base.AllowMemory = false
-        base.AllowDocs = false
-        base.AllowToolResults = true        // ← 只保留 Tools
-        base.Staged = false
-        // Budget: HistoryTokens = 0, MemoryTokens = 0, DocumentTokens = 0
+    case "aiops_diagnosis":
+        base.Name = "aiops-diagnosis"
+        base.AllowHistory = true
+        base.AllowDocs = true
+        base.AllowToolResults = true
+        base.Staged = true
+        base.Budget.ToolTokens = MaxTokens × 15%
 
     case "chat":
         // 使用默认配置，不需要修改
@@ -652,60 +651,61 @@ func (r *PolicyResolver) Resolve(ctx context.Context, req ContextRequest) Contex
 
 ### 5.4 三种 Profile 预算分配对比表
 
-以下基于 **maxTokens=8000**（默认值）展示三种 Profile 的实际预算分配。所有值均由 `resolver.go:Resolve()` 根据 `GetTokenBudget()` 基础值 + Mode 覆盖计算得出。
+以下基于 **maxTokens=8000** 展示三种 Profile 的实际预算分配。注意：当前仓库配置 `memory.max_context_tokens=4096`，运行时会按相同比例缩放；这里用 8000 是为了便于心算。
+
+> **实现口径**：表格按当前 `resolver.go:Resolve()` 说明，不是理想配比。`ToolTokens` 是在 `GetTokenBudget()` 的 95% 基础预留之外额外计算的 10%/15%，所以 `ReservedTokens` 在 8000 示例下会出现负数。这是实现层后续应优化的点，面试时不要把它讲成"固定预留 5%"。
 
 #### 5.4.1 预算分配明细（数值）
 
-| 预算字段 | **chat**（默认） | **aiops**（诊断） | **reporter**（报告） | 来源 |
+| 预算字段 | **chat**（默认） | **aiops / specialist** | **aiops_diagnosis** | 来源 |
 |---------|:---:|:---:|:---:|------|
 | `MaxTotalTokens` | 8000 | 8000 | 8000 | `budget.MaxTokens` |
-| `SystemTokens` | 1600 | 1600 | 1600 | `MaxTokens × 20%`（固定） |
-| `HistoryTokens` | **3200** | **0** ❌ | **0** ❌ | chat: `HistoryReserve`; aiops/reporter: Profile 覆盖为 0 |
-| `MemoryTokens` | **800** | **800** | **0** ❌ | chat/aiops: `MemoryReserve`; reporter: Profile 覆盖为 0 |
-| `DocumentTokens` | **1200** | **0** ❌ | **0** ❌ | chat: `DocumentReserve`; aiops/reporter: Profile 覆盖为 0 |
-| `ToolTokens` | 800 (禁用) | **0** ❌ | **800** | chat: 800 但 `AllowToolResults=false`; aiops: 覆盖为 0; reporter: `MaxTokens × 10%` |
-| `ReservedTokens` | 400 | 400 | 400 | `MaxTokens × 5%`（固定） |
-| **有效上下文预算** | **5200** | **800** | **800** | = 实际可分配给非 System 来源的 token |
-| **System + Reserved** | 2000 | 2000 | 2000 | 固定开销 |
+| `SystemTokens` | 1600 | 1600 | 1600 | `MaxTokens × 20%` |
+| `HistoryTokens` | **3200** | **0** ❌ | **3200** | aiops/specialist 覆盖为 0 |
+| `MemoryTokens` | **1600** | **1600** | **1600** | `MemoryReserve` |
+| `DocumentTokens` | **1200** | 1200（禁用） | **1200** | aiops/specialist `AllowDocs=false`，预算字段存在但不会使用 |
+| `ToolTokens` | 800（禁用） | **0** ❌ | **1200** | chat 默认 10% 但不启用；aiops_diagnosis 覆盖为 15% |
+| `ReservedTokens` | -400 | -400 | -400 | 当前实现未重新归一化，应作为优化点 |
+| **有效上下文预算** | **6000** | **1600** | **7200** | = 已启用来源的预算之和，不计 System |
 
-> **"有效上下文预算"** = 启用的来源预算之和（不计 System 和 Reserved）。chat 模式有 5200 token 用于 History/Memory/Docs，而 aiops 和 reporter 各自只有 800 token 用于单一来源。
+> **"有效上下文预算"** = 启用的来源预算之和。chat 模式用于 History/Memory/Docs；aiops/specialist 只把 Memory 注入执行前上下文；aiops_diagnosis 会把 History/Memory/Docs/Tools 都纳入诊断上下文。
 
 #### 5.4.2 功能开关一览
 
-| 功能开关 | **chat** | **aiops** | **reporter** | 含义 |
+| 功能开关 | **chat** | **aiops / specialist** | **aiops_diagnosis** | 含义 |
 |---------|:---:|:---:|:---:|------|
-| `AllowHistory` | ✅ | ❌ | ❌ | 是否注入对话历史 |
-| `AllowMemory` | ✅ | ✅ | ❌ | 是否检索长期记忆 |
-| `AllowDocs` | ✅ | ❌ | ❌ | 是否触发 RAG 检索 |
+| `AllowHistory` | ✅ | ❌ | ✅ | 是否注入对话历史 |
+| `AllowMemory` | ✅ | ✅ | ✅ | 是否检索长期记忆 |
+| `AllowDocs` | ✅ | ❌ | ✅ | 是否触发 RAG 检索 |
 | `AllowToolResults` | ❌ | ❌ | ✅ | 是否纳入工具调用结果 |
-| `Staged` | ✅ | ❌ | ❌ | 记忆是否以消息形式前置注入 |
-| `MaxHistoryMessages` | 10 | 0 | 0 | 数量窗口：最大历史消息数 |
-| `MaxMemoryItems` | 5 | 5 | 0 | 数量窗口：最大记忆条目数 |
+| `Staged` | ✅ | ❌ | ✅ | 记忆是否以消息形式前置注入 |
+| `MaxHistoryMessages` | 10 | 0 | 10 | 数量窗口：最大历史消息数 |
+| `MaxMemoryItems` | 5 | 5 | 5 | 数量窗口：最大记忆条目数 |
 | `MaxToolItems` | 0 | 0 | 8 | 数量窗口：最大工具结果数 |
-| `MinMemoryConfidence` | 0.50 | 0.50 | — | 记忆置信度阈值 |
-| `AllowedMemoryScopes` | session/user/project/global | session/user/project/global | — | 记忆作用域允许列表 |
+| `MinMemoryConfidence` | 0.50 | 0.50 | 0.50 | 记忆置信度阈值 |
+| `AllowedMemoryScopes` | session/user/project/global | session/user/project/global | session/user/project/global | 记忆作用域允许列表 |
 
 #### 5.4.3 各 Profile 预算占比可视化
 
 ```mermaid
 graph TD
-    subgraph chat 模式 maxTokens=8000
+    subgraph ChatMode["chat 模式 maxTokens=8000"]
         direction LR
-        C1["System 1600 (20%)"] --- C2["History 3200 (40%)"] --- C3["Memory 800 (10%)"] --- C4["Docs 1200 (15%)"] --- C5["Reserved 400 (5%)"] --- C6["Tool* 800 (禁用)"]
+        C1["System 1600"] --- C2["History 3200"] --- C3["Memory 1600"] --- C4["Docs 1200"] --- C5["Tool 800 字段存在但禁用"]
     end
 
-    subgraph aiops 模式 maxTokens=8000
+    subgraph AIOpsMode["aiops/specialist 模式 maxTokens=8000"]
         direction LR
-        A1["System 1600 (20%)"] --- A2["(未使用) 5200 token 留空<br/>History=0, Docs=0, Tool=0"] --- A3["Memory 800 (10%)"] --- A4["Reserved 400 (5%)"]
+        A1["System 1600"] --- A2["History=0"] --- A3["Memory 1600"] --- A4["Docs 字段存在但禁用"] --- A5["Tool=0"]
     end
 
-    subgraph reporter 模式 maxTokens=8000
+    subgraph AIOpsDiagnosisMode["aiops_diagnosis 模式 maxTokens=8000"]
         direction LR
-        R1["System 1600 (20%)"] --- R2["(未使用) 5200 token 留空<br/>History=0, Memory=0, Docs=0"] --- R3["Tool 800 (10%)"] --- R4["Reserved 400 (5%)"]
+        R1["System 1600"] --- R2["History 3200"] --- R3["Memory 1600"] --- R4["Docs 1200"] --- R5["Tool 1200"]
     end
 ```
 
-> **设计理念**：aiops 和 reporter 模式下大量 token 留空，不是浪费，而是**明确拒绝了不需要的信息来源**。这些留空的 token 在实际上不会进入 LLM 上下文窗口，让 LLM 可以完全聚焦于当前任务。System Prompt 和 Reserved（答案输出）的空间始终保留。
+> **设计理念**：`aiops/specialist` 只带必要的 Memory，避免执行前上下文被历史对话和预取文档污染；`aiops_diagnosis` 面向综合诊断和 replay，需要把 History、Memory、Docs、Tools 都作为可审计证据纳入。
 
 ### 5.5 Staged 模式是什么？
 
@@ -801,7 +801,7 @@ graph TD
 ```go
 // types.go - ContextAssemblyTrace
 type ContextAssemblyTrace struct {
-    Profile           string           // 使用的 Profile 名称（chat-default / aiops-default / reporter-default）
+    Profile           string           // 使用的 Profile 名称（chat-default / aiops-default / aiops-diagnosis）
     Stages            []StageTrace     // 每个阶段的详细信息
     SourcesConsidered int             // 考虑的来源总数
     SourcesSelected   int             // 最终选中的来源数
@@ -874,7 +874,36 @@ latency_ms=45
 
 ---
 
-## 8. 面试问答
+## 8. STAR 法则面试讲解
+
+### 上下文管理 STAR 讲法
+
+**Situation：**
+
+LLM 有 token 上限，不能把所有信息都塞进去。OpsCaptain 的 LLM 需要从多个来源获取上下文：对话历史、长期记忆、RAG 文档、工具调用结果。这些内容的总 token 数可能远超 LLM 的上下文窗口。
+
+**Task：**
+
+设计一个上下文引擎，根据场景动态组装上下文包，按 token 预算分配各来源的容量，并支持意图识别动态切换策略。
+
+**Action：**
+
+1. **Profile 机制**：四种模式（chat/aiops/aiops_diagnosis/specialist），每种模式有独立的 ContextProfile
+2. **五阶段组装**：策略解析 → 历史选择 → 记忆选择 → 文档选择 → 工具结果选择
+3. **Token 预算分配**：基于 `memory.max_context_tokens` 做比例预留，Mode 再覆盖 History/Docs/Tools 的启用状态
+4. **渐进式降级**：每个外部依赖都有超时和 fallback
+5. **上下文压缩**：工具输出和 RAG 文档支持 audit/optimize 两种模式；当前配置默认 audit/关闭，评测口径可单独说明 78.81% 压缩率
+
+**Result：**
+
+- 同一引擎服务聊天和诊断两种场景
+- 意图识别动态升级 profile
+- 全链路 trace 观测
+- ContextTrace 能解释每个来源被选择或丢弃的原因
+
+---
+
+## 9. 面试问答
 
 ### Q1: Context Engine 是什么？（一句话）
 
@@ -920,31 +949,31 @@ latency_ms=45
 **第一阶段：`GetTokenBudget()` — 全局基础预留**（`utility/mem/token_budget.go`）
 
 ```
-SystemReserve   = MaxTokens × 20%    // 1600（默认）
+SystemReserve   = MaxTokens × 20%    // 1600（示例）
 HistoryReserve  = MaxTokens × 40%    // 3200
-MemoryReserve   = MaxTokens × 10%    //  800
+MemoryReserve   = MaxTokens × 20%    //  1600
 DocumentReserve = MaxTokens × 15%    // 1200
                  ─────────────────
                  已占用 85%          // 6800
-                 剩余 15%            // 1200 → 待第二阶段分配
+                 剩余 15%            // 1200 → 注意当前 ToolTokens 会额外计算
 ```
 
 **第二阶段：`Resolve()` — Profile 级覆盖**（`resolver.go`）
 
 ```
 ToolTokens     = MaxTokens × 10%     //  800（从剩余池分配）
-ReservedTokens = MaxTokens × 5%      //  400（= 100%-20%-40%-10%-15%-10%）
+ReservedTokens = MaxTokens - System - History - Memory - Docs - Tool
 ```
 
 然后根据 `req.Mode` 覆盖：
 
-| 覆盖项 | **chat** | **aiops** | **reporter** |
+| 覆盖项 | **chat** | **aiops / specialist** | **aiops_diagnosis** |
 |--------|:---:|:---:|:---:|
-| `HistoryTokens` | 3200（不变） | **→ 0** | **→ 0** |
-| `MemoryTokens` | 800（不变） | 800（不变） | **→ 0** |
-| `DocumentTokens` | 1200（不变） | **→ 0** | **→ 0** |
-| `ToolTokens` | 800（`AllowToolResults=false`） | **→ 0** | 800（不变） |
-| 有效上下文预算 | **5200** | **800** | **800** |
+| `HistoryTokens` | 3200（不变） | **→ 0** | 3200（不变） |
+| `MemoryTokens` | 1600（不变） | 1600（不变） | 1600（不变） |
+| `DocumentTokens` | 1200（不变） | 字段保留但 `AllowDocs=false` | 1200（不变） |
+| `ToolTokens` | 800（`AllowToolResults=false`） | **→ 0** | **→ 1200** |
+| 有效上下文预算 | **6000** | **1600** | **7200** |
 
 **Token 估算**（`EstimateTokens`）：
 
@@ -957,7 +986,8 @@ ASCII 字符 (33~126)       → 每4个 = 1 token
 **为什么要分开设？**
 - History 独占 40%（最大块），因为对话连贯性对回答质量影响最大
 - 每类独立预算防止单一来源（如 RAG 返回大量文档）挤掉对话历史
-- aiops 和 reporter 主动将不需要的来源预算归零，避免信息噪音
+- aiops/specialist 主动关闭 History、Docs、Tools，避免执行前上下文噪音
+- aiops_diagnosis 保留四类来源，适合带证据的综合诊断和 replay
 
 </details>
 

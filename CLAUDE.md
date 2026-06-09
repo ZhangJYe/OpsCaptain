@@ -1,115 +1,146 @@
-# OpsCaptain - AI Ops Agent Workbench
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
 
-OpsCaptain is an AI-powered operations assistant that provides fault diagnosis, knowledge retrieval, and automated incident analysis. It features two AI engines: Plan-Execute-Replan (linear runbook) and GoS Belief Engine (graph-of-specialists with confidence scoring).
+OpsCaptain is an AI-powered operations assistant for fault diagnosis, knowledge retrieval, and automated incident analysis. It features two AI engines: Plan-Execute-Replan (linear runbook) and GoS Belief Engine (graph-of-specialists with confidence scoring).
 
 ## Tech Stack
 
 - **Backend**: Go 1.24, GoFrame v2, ByteDance Eino framework
-- **Frontend**: React 18, TypeScript, Vite, Tailwind CSS, Framer Motion
-- **AI**: Doubao LLM + Embedding, Milvus vector DB, MCP protocol
-- **Infra**: Redis, RabbitMQ, MySQL, Prometheus, Docker, K8s
-
-## Project Structure
-
-```
-OpsCaptain/
-├── main.go                          # GoFrame server entry
-├── api/chat/v1/                     # API request/response types (GoFrame routing)
-├── internal/
-│   ├── controller/chat/             # HTTP controllers
-│   ├── ai/
-│   │   ├── agent/
-│   │   │   ├── chat_pipeline/       # Main chat orchestration + prompts
-│   │   │   ├── gos_engine/          # GoS Belief Engine
-│   │   │   ├── plan_execute_replan/ # Plan-Execute-Replan engine
-│   │   │   ├── experts/             # Expert agent implementations
-│   │   ├── skills/                  # Skill registry and progressive disclosure
-│   │   │   └── domains/             # Domain skill definitions (metrics/logs/knowledge)
-│   │   │   └── contracts/           # Agent behavioral contracts
-│   │   ├── rag/                     # RAG: indexing, retrieval, hybrid search
-│   │   ├── contextengine/           # Intent recognition, tool recall, context assembly
-│   │   ├── tools/                   # Built-in tools (query_log, metrics_alerts, mysql_crud)
-│   │   ├── models/                  # LLM model wrappers
-│   │   ├── embedder/                # Doubao embedding client
-│   │   ├── belief/                  # Belief graph + FSM
-│   │   ├── runtime/                 # Task runtime, ledger, artifact store
-│   │   ├── service/                 # Business service layer (AIOps, chat, memory, approval)
-│   │   ├── protocol/                # Shared protocol types
-│   │   ├── indexer/                 # Milvus indexer
-│   │   └── events/                  # Event emission, tool wrapper, LLM validator
-│   └── utility/
-│       ├── auth/                    # JWT, rate limiting
-│       ├── cache/                   # LLM response cache
-│       ├── client/                  # Milvus client setup
-│       ├── mem/                     # Memory agent
-│       ├── middleware/               # HTTP middleware (CORS, auth, metrics, tracing)
-│       ├── resilience/              # Semaphore, circuit breaker
-│       └── safety/                  # Prompt guard, injection classifier, output filter
-├── prompts/                         # Centralized prompt management
-├── docs/                            # Project documentation
-├── deploy/                          # Docker, Prometheus, remote deploy
-├── manifest/                        # K8s manifests, config files
-├── skills/                          # Skill definition markdown files
-├── frontend/           # React frontend (separate Vite project)
-└── Learn/                           # Learning notes and tutorials
-```
-
-## Development Rules
-
-### Go Backend
-
-- Use GoFrame conventions: `g.Meta` tag defines routes, `g.DB()` for database, `g.Redis()` for cache
-- API types go in `api/chat/v1/chat.go`, controllers in `internal/controller/chat/`
-- All prompt strings should be extracted to `prompts/` and loaded at startup
-- Prefer `errgroup` for concurrent expert execution over raw goroutines
-- Use `context.Context` for cancellation propagation, never ignore it
-- Error handling: wrap errors with `fmt.Errorf("context: %w", err)`, log before returning
-
-### Frontend
-
-- Components in `src/components/`, hooks in `src/hooks/`, types in `src/types/`
-- Use `useChat.ts` for all chat/AIOps state management
-- Glass morphism design system: `border border-white/60 bg-white/70 backdrop-blur-2xl`
-- Sky-500 as primary accent color, amber for GoS engine theme
-- Asymmetric border radius: `rounded-[22px] rounded-bl-[6px]` for assistant bubbles
-
-### Prompts
-
-- All system prompts live in `prompts/` as markdown files
-- Dynamic sections (date, documents, safety warnings) are templated with `{variable}` placeholders
-- Each prompt file includes metadata: purpose, used_by, variables, version
-
-### Safety
-
-- Never log or expose API keys, tokens, or internal IPs
-- Prompt injection guard is mandatory on all user inputs
-- Output filter redacts system prompt blocks, API keys, internal IPs
-- ApprovalGate must be checked before any AIOps execution (sync and async)
+- **Frontend**: React 18, TypeScript, Vite, Tailwind CSS, GSAP
+- **AI**: DeepSeek V4 Pro/Flash, Doubao Embedding Vision (2048dim), Milvus vector DB, MCP protocol
+- **Infra**: Redis, RabbitMQ, MySQL, Prometheus, Jaeger, Docker
 
 ## Common Commands
 
 ```bash
 # Backend
-go build ./...                     # Build all
-go test ./...                      # Run tests
-go run main.go                     # Start server
+go build ./...                          # Build all
+go test ./...                           # Run all tests
+go test -run TestFunctionName ./path/   # Run single test
+go run main.go                          # Start server
+
+# Makefile targets
+make test                               # Run tests with -count=1
+make test-race                          # Run tests with race detector
+make build                              # Build binary to bin/superbizagent
+make eval-compression                   # Run context compression eval
+make ci                                 # Full CI pipeline (fmt, vet, test, build, eval)
 
 # Frontend
 cd frontend
-npm run dev                        # Dev server
-npm run build                      # Production build
+npm run dev                             # Dev server
+npm run build                           # Production build
 
-# Knowledge indexing
-go run internal/ai/cmd/knowledge_cmd/main.go -dir ./docs
+# Knowledge indexing (default: indexes /app/knowledge_seed)
+docker compose -f deploy/docker-compose.prod.yml run --rm knowledge-indexer
 
 # Docker
 docker build -t opsagent .
 docker compose -f deploy/docker-compose.prod.yml up -d
 ```
 
-## API Endpoints
+## Architecture
+
+Five-layer architecture with strict import rules:
+
+```
+Controller Layer    internal/controller/    Parameter parsing → call Application → format response
+Application Layer   internal/app/           Business orchestration: ChatApp, AIOpsApp, KnowledgeApp
+Domain Layer        internal/ai/            Core business: retrieval, reasoning, evidence, Agent
+Infrastructure      internal/infra/         External system adapters: Milvus, RabbitMQ, Redis
+Common Layer        utility/                Cross-cutting concerns: auth, rate limiting, safety, health
+```
+
+Import rules (target state, no new exceptions allowed):
+- `controller/ → app/` ✅
+- `app/ → ai/` ✅
+- `app/ → infra/` ✅ (via interface only)
+- `ai/ → infra/` ❌ (must inject via interface)
+- `infra/ → ai/` ❌
+- `utility/ → internal/` ❌
+- `RAG package must not import infra/milvus directly` (has import guard test)
+
+See AGENTS.md section 3 for registered exceptions; do not add new ones.
+
+### Key Modules
+
+| Module | Path | Purpose |
+|--------|------|---------|
+| Chat Pipeline | `internal/ai/agent/chat_pipeline/` | ReAct Agent orchestration, prompt assembly |
+| GoS Engine | `internal/ai/agent/gos_engine/` | Belief graph + FSM diagnosis engine |
+| Plan-Execute-Replan | `internal/ai/agent/plan_execute_replan/` | Linear runbook execution |
+| Experts | `internal/ai/agent/experts/` | LinuxSRE, NetworkSRE, DatabaseSRE agents |
+| Skills | `internal/ai/skills/` | Skill registry, progressive disclosure (AlwaysOn/SkillGate/OnDemand) |
+| RAG | `internal/ai/rag/` | Hybrid retrieval (Dense + BM25 + RRF), indexing |
+| Context Engine | `internal/ai/contextengine/` | Context assembly with token budget, intent recognition |
+| Memory | `internal/ai/memory/` | Short-term (sliding window), long-term (persistent), extraction |
+| Context Compression | `internal/ai/contextcompression/` | JSON/log compression with audit/optimize modes |
+| Tools | `internal/ai/tools/` | Built-in tools + MCP integration with 3-level fallback |
+| Events | `internal/ai/events/` | Tool wrapper, anti-hallucination pipeline, schema gate |
+| Models | `internal/ai/models/` | LLM wrappers with instrumentation, circuit breaker, retry |
+
+### Request Flow
+
+```
+User → Controller → App → Service (Memory + Context Assembly)
+                            → Agent (ReAct or Plan-Execute-Replan)
+                              → Tools (Prometheus/Logs/RAG/MySQL)
+                            → Response + Memory Persistence
+```
+
+### Progressive Disclosure (Tool Tiers)
+
+- **TierAlwaysOn**: get_current_time, query_internal_docs, MCP log tools, prometheus_alerts
+- **TierSkillGate**: prometheus_metrics_discovery, prometheus_range/instant_query, user MCP tools
+- **TierOnDemand**: mysql_crud (requires whitelist config)
+
+When injection risk is detected, only AlwaysOn tools are exposed.
+
+## Development Rules
+
+### Go Backend
+
+- Use GoFrame conventions: `g.Meta` tag defines routes
+- **Controller must not directly access DB/Redis/Milvus** — only parse params and map responses; access infra through app/service/infra layers
+- API types go in `api/chat/v1/`, controllers in `internal/controller/chat/`
+- All prompt strings should be extracted to `prompts/` and loaded at startup
+- Prefer `errgroup` for concurrent expert execution over raw goroutines
+- Use `context.Context` for cancellation propagation, never ignore it
+- Error handling: wrap errors with `fmt.Errorf("context: %w", err)`, log before returning
+- Error degradation: use `ResultStatusDegraded` instead of fatal/crash
+- Tool failures return formatted strings (not Go error) to avoid Eino framework retry loops
+- New tools must have schema, timeout, permission bounds, degradation behavior, and tests
+- New capabilities must be configurable (budget / top_k / timeout / feature flag)
+- RAG/Agent/ContextEngine changes must run corresponding package tests
+
+### Frontend
+
+- Components in `src/components/`, hooks in `src/hooks/`, types in `src/types/`
+- Use `useChat.ts` for all chat/AIOps state management
+- GSAP for complex animations and scroll effects, Framer Motion for simple transitions
+- Glass morphism design system: `border border-white/60 bg-white/70 backdrop-blur-2xl`
+- Sky-500 as primary accent color, amber for GoS engine theme
+
+### Safety
+
+- Prompt injection guard is mandatory on all user inputs (regex + optional LLM classifier)
+- Output filter redacts system prompt blocks, API keys, internal IPs
+- ApprovalGate distinguishes "analysis" (allowed) from "execution" (requires approval)
+- MCP tools have CIDR whitelist validation
+- SQL injection protection: regex blacklist + table whitelist + subquery禁用 + auto LIMIT
+
+### Commit Rules
+
+- Commit messages must be in Chinese
+- Never commit/push unless explicitly requested
+- Run `go test ./...` and `npm run build` before pushing
+- Always `git pull --rebase` before pushing
+- Do not restore `chat_multi_agent` route (deprecated architecture)
+
+## API Endpoints (Key)
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -123,12 +154,21 @@ docker compose -f deploy/docker-compose.prod.yml up -d
 | GET | /api/ai_ops_trace | Get AIOps trace events |
 | POST | /api/upload | File upload for knowledge indexing |
 | GET | /api/memories | Query memories |
+| POST | /api/memories/action | Memory actions (delete, etc.) |
+| POST | /api/memories/promote | Promote memory scope |
 | GET | /api/approval_requests | Query approval requests |
+| POST | /api/approval_requests/approve | Approve request |
+| POST | /api/approval_requests/reject | Reject request |
+| GET | /api/token_audit | Token usage audit |
 
-## Key Design Decisions
+Full route definitions in `api/chat/v1/*.go` (chat.go, user_tools.go, etc.).
 
-1. **Two-engine architecture**: Plan for linear runbook-style, GoS for complex multi-hypothesis analysis
-2. **Async kickoff pattern**: `/ai_ops_runs` returns trace_id immediately, frontend polls `/ai_ops_trace` for progress
-3. **Hybrid RAG**: BM25 + vector search with RRF fusion for best recall
-4. **Agent contracts**: Each expert has Must/MustNot/EvidencePolicy rules to prevent hallucination
-5. **Safety layers**: Prompt guard -> Injection classifier -> Output filter -> ApprovalGate
+## Config
+
+All configuration in `manifest/config/config.yaml`. Key sections:
+- `chat_model` / `chat_model_fast`: LLM model config
+- `embedding_model`: Doubao embedding config
+- `context_compression`: Compression settings (enabled/mode/min_tokens)
+- `rag`: Retrieval config (top_k, rewrite_enabled, rerank_enabled)
+- `memory`: Token budget, extraction settings
+- `safety`: Prompt guard, output filter, injection classifier

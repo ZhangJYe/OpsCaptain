@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"SuperBizAgent/internal/ai/contextcompression"
 	"SuperBizAgent/internal/ai/memory"
 
 	"github.com/cloudwego/eino/schema"
@@ -134,6 +135,9 @@ func (a *Assembler) Assemble(ctx context.Context, req ContextRequest, history []
 			Notes:         docResult.notes,
 			Retrieval:     docResult.metrics,
 		})
+		if len(docResult.compressionReports) > 0 {
+			trace.CompressionReports = append(trace.CompressionReports, docResult.compressionReports...)
+		}
 	}
 
 	if profile.AllowToolResults && len(req.ToolItems) > 0 {
@@ -149,8 +153,13 @@ func (a *Assembler) Assemble(ctx context.Context, req ContextRequest, history []
 			}
 		}
 
-		selectedTools, droppedTools, usedTools, toolNotes := selectToolItems(items, profile)
+		compCfg := contextcompression.LoadConfig(ctx)
+		selectedTools, droppedTools, usedTools, toolNotes, compressionReports := selectToolItemsWithCompression(ctx, items, profile, req.Query, compCfg)
 		pkg.ToolItems = selectedTools
+
+		if len(compressionReports) > 0 {
+			trace.CompressionReports = append(trace.CompressionReports, compressionReports...)
+		}
 		trace.SourcesConsidered += len(selectedTools) + len(droppedTools)
 		trace.SourcesSelected += len(selectedTools)
 		trace.DroppedItems = append(trace.DroppedItems, droppedTools...)
@@ -201,14 +210,20 @@ func memoryScopeRefs(req ContextRequest) []memory.MemoryScopeRef {
 }
 
 func selectToolItems(items []ContextItem, profile ContextProfile) ([]ContextItem, []ContextItem, int, []string) {
+	selected, dropped, used, notes, _ := selectToolItemsWithCompression(context.Background(), items, profile, "", nil)
+	return selected, dropped, used, notes
+}
+
+func selectToolItemsWithCompression(ctx context.Context, items []ContextItem, profile ContextProfile, query string, compCfg *contextcompression.CompressionConfig) ([]ContextItem, []ContextItem, int, []string, []contextcompression.Report) {
 	if len(items) == 0 || profile.MaxToolItems == 0 || profile.Budget.ToolTokens == 0 {
-		return nil, nil, 0, []string{"tool results empty or disabled"}
+		return nil, nil, 0, []string{"tool results empty or disabled"}, nil
 	}
 
 	remaining := profile.Budget.ToolTokens
 	selected := make([]ContextItem, 0, min(len(items), profile.MaxToolItems))
 	dropped := make([]ContextItem, 0)
 	used := 0
+	compressionReports := make([]contextcompression.Report, 0)
 	for idx, item := range items {
 		item.TokenEstimate = memory.EstimateTokens(item.Content)
 		if idx >= profile.MaxToolItems {
@@ -216,6 +231,28 @@ func selectToolItems(items []ContextItem, profile ContextProfile) ([]ContextItem
 			dropped = append(dropped, item)
 			continue
 		}
+
+		if compCfg != nil && compCfg.Enabled && compCfg.Mode != contextcompression.ModeOff {
+			compResult := contextcompression.Compress(ctx, contextcompression.Request{
+				SourceType: contextcompression.SourceTool,
+				SourceID:   item.SourceID,
+				Query:      query,
+				Content:    item.Content,
+			}, compCfg)
+			if shouldRecordCompressionReport(compResult.Report) {
+				compressionReports = append(compressionReports, compResult.Report)
+			}
+			if compCfg.Mode == contextcompression.ModeOptimize &&
+				!compResult.Report.Degraded &&
+				compResult.Report.CompressionRatio < 1.0 {
+				item.Content = compResult.Content
+				item.TokenEstimate = memory.EstimateTokens(item.Content)
+				item.CompressionLevel = "compressed"
+			} else if compCfg.Mode == contextcompression.ModeAudit && shouldRecordCompressionReport(compResult.Report) {
+				item.CompressionLevel = "audit"
+			}
+		}
+
 		if item.TokenEstimate > remaining {
 			trimmed := memory.TrimToTokenBudget(item.Content, remaining)
 			if strings.TrimSpace(trimmed) == "" {
@@ -225,7 +262,9 @@ func selectToolItems(items []ContextItem, profile ContextProfile) ([]ContextItem
 			}
 			item.Content = trimmed
 			item.TokenEstimate = memory.EstimateTokens(trimmed)
-			item.CompressionLevel = "trimmed"
+			if item.CompressionLevel == "" || item.CompressionLevel == "audit" {
+				item.CompressionLevel = "trimmed"
+			}
 		}
 		item.Selected = true
 		selected = append(selected, item)
@@ -239,7 +278,14 @@ func selectToolItems(items []ContextItem, profile ContextProfile) ([]ContextItem
 			break
 		}
 	}
-	return selected, dropped, used, []string{fmt.Sprintf("tokens=%d/%d", used, profile.Budget.ToolTokens)}
+	return selected, dropped, used, []string{fmt.Sprintf("tokens=%d/%d", used, profile.Budget.ToolTokens)}, compressionReports
+}
+
+func shouldRecordCompressionReport(report contextcompression.Report) bool {
+	return report.Strategy != "" &&
+		report.Strategy != "disabled" &&
+		report.Strategy != "source_type_excluded" &&
+		report.Strategy != "below_min_tokens"
 }
 
 func TraceDetails(trace ContextAssemblyTrace) []string {
@@ -282,6 +328,20 @@ func TraceDetails(trace ContextAssemblyTrace) []string {
 		}
 		sort.Strings(reasons)
 		details = append(details, "context dropped "+strings.Join(reasons, ", "))
+	}
+	if len(trace.CompressionReports) > 0 {
+		totalBefore := 0
+		totalAfter := 0
+		for _, r := range trace.CompressionReports {
+			totalBefore += r.TokensBefore
+			totalAfter += r.TokensAfter
+		}
+		ratio := 1.0
+		if totalBefore > 0 {
+			ratio = float64(totalAfter) / float64(totalBefore)
+		}
+		details = append(details, fmt.Sprintf("compression items=%d before=%d after=%d ratio=%.2f",
+			len(trace.CompressionReports), totalBefore, totalAfter, ratio))
 	}
 	return details
 }

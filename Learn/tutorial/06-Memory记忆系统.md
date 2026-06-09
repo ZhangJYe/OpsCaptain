@@ -243,16 +243,13 @@ type MemoryEntry struct {
     Confidence    float64     // 置信度 (0~1)
     SafetyLabel   string      // 安全标签 (internal/trusted_internal/safe/disabled)
     Provenance    string      // 溯源标记 (extractor:rule_fact / memory_agent)
-    UpdatePolicy  string      // 更新策略 (reinforce/superseded/disabled)
     ConflictGroup string      // 冲突组（同组内的记忆会互斥）
     ExpiresAt     int64       // 过期时间戳（毫秒）
-    AllowTriage   bool        // 是否允许在 triage 阶段使用
     Relevance     float64     // 当前相关性分数
     AccessCnt     int         // 被检索次数
     CreatedAt     time.Time
     UpdatedAt     time.Time
     LastUsed      time.Time   // 最后一次被使用的时间
-    Decay         float64     // 时间衰减系数
 }
 ```
 
@@ -456,7 +453,7 @@ func processMemoryEventWithConfiguredAgent(ctx context.Context, event mem.Memory
 
 | | Rule Agent | LLM Agent |
 |---|---|---|
-| 实现 | 关键词匹配 + 正则 | GLM Fast 模型推理 |
+| 实现 | 关键词匹配 + 正则 | 当前 `chat_model_fast` 配置的 OpenAI-compatible 模型推理 |
 | 提取质量 | 精确但覆盖有限 | 理解语义，覆盖更广 |
 | 延迟 | ~0ms | ~数百ms |
 | 成本 | 免费 | API 调用费用 |
@@ -878,7 +875,36 @@ func startCleanup() {
 
 ---
 
-## 7. 面试问答
+## 7. STAR 法则面试讲解
+
+### 记忆系统 STAR 讲法
+
+**Situation：**
+
+OpsCaptain 是 AIOps 助手，用户会反复咨询同一类问题。每次对话都是独立的，LLM 不记得用户之前问过什么、有什么偏好。用户每次都要重复描述上下文。
+
+**Task：**
+
+设计一个双层记忆系统：短期记忆管理当前对话窗口，长期记忆跨会话持久化用户的事实、偏好和排障经验。
+
+**Action：**
+
+1. **短期记忆（SimpleMemory）**：滑动窗口 20 条消息，超出时自动摘要压缩
+2. **长期记忆（LongTermMemory）**：四种类型（fact/preference/procedure/episode），四级作用域（session/user/project/global）
+3. **记忆提取**：双模式——规则提取器（零延迟）和 LLM 提取器（更智能），异步执行不阻塞对话
+4. **记忆检索**：BM25 分词匹配 + 时间衰减（24h 半衰）+ 频率加成
+5. **冲突淘汰**：同类同域的新记忆自动淘汰旧记忆
+
+**Result：**
+
+- 记忆提取延迟 < 50ms（规则模式），不阻塞对话
+- BM25 精确匹配适合运维领域的结构化关键词
+- 自动淘汰过时信息，无需手动清理
+- 四级作用域支持记忆晋升
+
+---
+
+## 8. 面试问答
 
 ### Q1: 记忆系统怎么设计？三层分别是什么？
 
@@ -921,7 +947,7 @@ func startCleanup() {
 
 2. **Agent 决策**：
    - **Rule Agent**：关键词匹配（"服务名""IP地址""我喜欢""不要用"等）
-   - **LLM Agent**：GLM 推理（理解语义，覆盖面更广）
+   - **LLM Agent**：当前 `chat_model_fast` 配置的模型推理（理解语义，覆盖面更广）
    - LLM 失败时自动 fallback 到 Rule Agent
 
 3. **候选验证**：`ValidateMemoryCandidate` 六重过滤
@@ -1078,4 +1104,4 @@ AI 回复: "作为AI助手，我无法直接操作你的服务器，但我可以
 
 ---
 
-> **下一章预告**：Multi-Agent Runtime — 多 Agent 协作运行时，Supervisor 如何编排 Triage → Specialists → Reporter 的完整链路。
+> **下一章预告**：MQ 异步任务 — 记忆提取、异步执行和失败重试如何解耦主请求链路。

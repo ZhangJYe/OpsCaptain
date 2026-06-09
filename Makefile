@@ -53,5 +53,19 @@ eval-judge:
 	@$(GO) run cmd/gos_eval/main.go --mode=judge \
 	  --input=evals/runs --output-dir=evals/reports
 
+eval-compression:
+	@echo "==> Context Compression Eval (audit + optimize)"
+	@$(GO) run ./internal/ai/cmd/context_compression_eval_cmd \
+	  -input evals/context_compression/samples.jsonl \
+	  -mode audit,optimize \
+	  -out evals/runs/compression_eval.json
+
+eval-compression-audit:
+	@echo "==> Context Compression Audit (仅采集数据，不压缩)"
+	@$(GO) run ./internal/ai/cmd/context_compression_eval_cmd \
+	  -input evals/context_compression/samples.jsonl \
+	  -mode audit \
+	  -out evals/runs/compression_audit.json
+
 ci: fmt vet test-race test-cover build eval-gate
 	@echo "==> CI pipeline complete"

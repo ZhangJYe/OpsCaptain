@@ -239,6 +239,15 @@ rag:
   hybrid_metadata_boost_enabled: true
   owner_scope_server_filter_enabled: true
 
+context_compression:
+  enabled: false
+  mode: "audit"              # off | audit | optimize
+  min_tokens: 300            # 小于此 token 数不压缩
+  preserve_first: 3          # JSON: 保留前 N 项
+  preserve_last: 2           # JSON: 保留后 M 项
+  log_context_lines: 1       # 日志: 错误行上下文窗口行数
+  source_types: ["tool", "rag"]
+
 aiops:
   engine: "plan_execute_replan"
   plan:
