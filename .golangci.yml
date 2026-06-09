@@ -1,0 +1,64 @@
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gosimple
+    - gocritic
+    - errorlint
+    - unconvert
+    - gofmt
+    - goimports
+
+linters-settings:
+  errcheck:
+    check-blank: false
+    exclude-functions:
+      - (io.Closer).Close
+      - (net.Conn).Close
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - performance
+    disabled-checks:
+      - hugeParam
+  errorlint:
+    errorf: true
+    asserts: true
+    comparison: true
+
+issues:
+  exclude-rules:
+    # Test files can be more relaxed
+    - path: _test\.go
+      linters:
+        - errcheck
+        - govet
+    # Allow interface{} in API types (GoFrame convention)
+    - path: api/
+      linters:
+        - gocritic
+    # Allow panic in main/CLI entry points
+    - path: main\.go
+      linters:
+        - errcheck
+  max-issues-per-linter: 50
+  max-same-issues: 5
+
+run:
+  timeout: 5m
+  build-tags: []
+  skip-dirs:
+    - frontend
+    - node_modules
+    - vendor
+    - Learn
+    - docs
+    - evals
+    - output

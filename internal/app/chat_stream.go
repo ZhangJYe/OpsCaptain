@@ -33,6 +33,12 @@ type ChatStreamInput struct {
 // HandleChatStream executes the full streaming chat flow.
 // The caller provides a StreamSink for sending events to the client.
 func (a *ChatApp) HandleChatStream(ctx context.Context, input *ChatStreamInput, sink StreamSink) (*ChatStreamResult, error) {
+	if d := chatTimeout(ctx); d > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, d)
+		defer cancel()
+	}
+
 	id := input.SessionID
 	msg := input.Question
 	selectedSkillIDs := chat_pipeline.NormalizeSelectedSkillIDs(input.SkillIDs)

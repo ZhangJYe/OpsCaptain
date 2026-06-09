@@ -36,13 +36,20 @@ type ChatApp struct {
 	degradationCheck func(ctx context.Context, entrypoint string) aiservice.DegradationDecision
 }
 
+const (
+	sessionLockTTL     = 10 * time.Minute
+	sessionLockCleanup = 5 * time.Minute
+)
+
 // NewChatApp creates a ChatApp with default dependencies.
 func NewChatApp() *ChatApp {
-	return &ChatApp{
+	a := &ChatApp{
 		sessionLocks:     make(map[string]*sessionLockEntry),
 		buildChatAgent:   chat_pipeline.BuildChatAgentWithQuery,
 		degradationCheck: aiservice.GetDegradationDecision,
 	}
+	go a.cleanupStaleSessionLocks()
+	return a
 }
 
 // SetBuildChatAgent overrides the agent builder for testing.
@@ -213,6 +220,23 @@ func (a *ChatApp) releaseSessionLock(id string, entry *sessionLockEntry) {
 	entry.lastUsed = time.Now()
 	if entry.refCount == 0 {
 		delete(a.sessionLocks, id)
+	}
+}
+
+// cleanupStaleSessionLocks periodically removes session lock entries
+// that have not been used within the TTL window.
+func (a *ChatApp) cleanupStaleSessionLocks() {
+	ticker := time.NewTicker(sessionLockCleanup)
+	defer ticker.Stop()
+	for range ticker.C {
+		a.sessionLocksMu.Lock()
+		now := time.Now()
+		for id, entry := range a.sessionLocks {
+			if entry.refCount == 0 && now.Sub(entry.lastUsed) > sessionLockTTL {
+				delete(a.sessionLocks, id)
+			}
+		}
+		a.sessionLocksMu.Unlock()
 	}
 }
 

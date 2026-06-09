@@ -75,12 +75,12 @@ func queryPrometheusAlerts(ctx context.Context) (PrometheusAlertsResult, error) 
 
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, apiURL, nil)
 	if err != nil {
-		return result, fmt.Errorf("failed to build prometheus request: %v", err)
+		return result, fmt.Errorf("failed to build prometheus request: %w", err)
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return result, fmt.Errorf("failed to query Prometheus alerts: %v", err)
+		return result, fmt.Errorf("failed to query Prometheus alerts: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -91,11 +91,11 @@ func queryPrometheusAlerts(ctx context.Context) (PrometheusAlertsResult, error) 
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
 	if err != nil {
-		return result, fmt.Errorf("failed to read response: %v", err)
+		return result, fmt.Errorf("failed to read response: %w", err)
 	}
 
 	if err = json.Unmarshal(body, &result); err != nil {
-		return result, fmt.Errorf("failed to parse response: %v", err)
+		return result, fmt.Errorf("failed to parse response: %w", err)
 	}
 
 	if result.Status != "success" {

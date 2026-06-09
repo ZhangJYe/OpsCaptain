@@ -103,6 +103,11 @@ var (
 	globalLTMOnce sync.Once
 )
 
+// GetLongTermMemory returns a process-wide singleton instance.
+//
+// WARNING: Without a persistent store (default), this is best-effort in-memory only.
+// Memory is lost on restart and not shared across instances.
+// For production, enable a Redis-backed store via config.
 func GetLongTermMemory() *LongTermMemory {
 	globalLTMOnce.Do(func() {
 		globalLTM = NewLongTermMemoryWithStore(context.Background(), loadLongTermMemoryStore())

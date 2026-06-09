@@ -30,7 +30,15 @@ func (m *mockExpert) Name() string {
 
 func (m *mockExpert) Run(ctx context.Context, frontier *belief.Frontier, graph *belief.BeliefGraph) *experts.ExpertAnalysis {
 	if m.delay > 0 {
-		time.Sleep(m.delay)
+		select {
+		case <-time.After(m.delay):
+		case <-ctx.Done():
+			return &experts.ExpertAnalysis{
+				ExpertName:        m.name,
+				Status:            "degraded",
+				DegradationReason: "context_cancelled",
+			}
+		}
 	}
 	return m.response
 }

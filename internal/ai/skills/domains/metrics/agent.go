@@ -147,7 +147,8 @@ func buildMetricsSkillRegistry() *skills.Registry {
 		skills.WithDefault("metrics_incident_snapshot"),
 	)
 	if err != nil {
-		panic(fmt.Sprintf("failed to build metrics skills registry: %v", err))
+		g.Log().Errorf(context.Background(), "failed to build metrics skills registry: %v", err)
+		return nil
 	}
 	return registry
 }

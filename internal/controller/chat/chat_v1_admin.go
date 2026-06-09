@@ -13,6 +13,20 @@ var (
 	listApprovalRequests      = service.ListApprovalRequests
 	approveQueuedAIOpsRequest = service.ApproveQueuedAIOpsRequest
 	rejectQueuedAIOpsRequest  = service.RejectQueuedAIOpsRequest
+
+	// Memory operations injected as function pointers to avoid direct service import.
+	listMemoriesFn = func(ctx context.Context, opts service.MemoryListOptions) []service.MemoryItemView {
+		return service.NewMemoryService().ListMemories(ctx, opts)
+	}
+	deleteMemoryFn = func(ctx context.Context, id string) bool {
+		return service.NewMemoryService().DeleteMemory(ctx, id)
+	}
+	disableMemoryFn = func(ctx context.Context, id string) bool {
+		return service.NewMemoryService().DisableMemory(ctx, id)
+	}
+	promoteMemoryFn = func(ctx context.Context, id string, opts service.MemoryPromoteOptions) bool {
+		return service.NewMemoryService().PromoteMemory(ctx, id, opts)
+	}
 )
 
 func (c *ControllerV1) TokenAudit(ctx context.Context, req *v1.TokenAuditReq) (res *v1.TokenAuditRes, err error) {
@@ -121,7 +135,7 @@ func toApprovalRequestItem(request service.ApprovalRequest) v1.ApprovalRequestIt
 }
 
 func (c *ControllerV1) MemoryList(ctx context.Context, req *v1.MemoryListReq) (res *v1.MemoryListRes, err error) {
-	items := service.NewMemoryService().ListMemories(ctx, service.MemoryListOptions{
+	items := listMemoriesFn(ctx, service.MemoryListOptions{
 		SessionID:      req.SessionID,
 		UserID:         req.UserID,
 		ProjectID:      req.ProjectID,
@@ -135,19 +149,18 @@ func (c *ControllerV1) MemoryList(ctx context.Context, req *v1.MemoryListReq) (r
 }
 
 func (c *ControllerV1) MemoryAction(ctx context.Context, req *v1.MemoryActionReq) (res *v1.MemoryActionRes, err error) {
-	svc := service.NewMemoryService()
 	switch req.Action {
 	case "delete":
-		return &v1.MemoryActionRes{Success: svc.DeleteMemory(ctx, req.ID)}, nil
+		return &v1.MemoryActionRes{Success: deleteMemoryFn(ctx, req.ID)}, nil
 	case "disable":
-		return &v1.MemoryActionRes{Success: svc.DisableMemory(ctx, req.ID)}, nil
+		return &v1.MemoryActionRes{Success: disableMemoryFn(ctx, req.ID)}, nil
 	default:
 		return nil, fmt.Errorf("unsupported memory action: %s", req.Action)
 	}
 }
 
 func (c *ControllerV1) MemoryPromote(ctx context.Context, req *v1.MemoryPromoteReq) (res *v1.MemoryActionRes, err error) {
-	success := service.NewMemoryService().PromoteMemory(ctx, req.ID, service.MemoryPromoteOptions{
+	success := promoteMemoryFn(ctx, req.ID, service.MemoryPromoteOptions{
 		Scope:      req.Scope,
 		ScopeID:    req.ScopeID,
 		Confidence: req.Confidence,

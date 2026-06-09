@@ -2,37 +2,49 @@ package indexer
 
 import (
 	embedder2 "SuperBizAgent/internal/ai/embedder"
-	inframv "SuperBizAgent/internal/infra/milvus"
 	"context"
 	"encoding/json"
 	"fmt"
 
 	"github.com/cloudwego/eino-ext/components/indexer/milvus"
+	einoindexer "github.com/cloudwego/eino/components/indexer"
 	"github.com/cloudwego/eino/schema"
+	"github.com/milvus-io/milvus-sdk-go/v2/client"
+	"github.com/milvus-io/milvus-sdk-go/v2/entity"
 )
 
-func NewMilvusIndexer(ctx context.Context) (*milvus.Indexer, error) {
-	cli, err := inframv.NewMilvusClient(ctx)
-	if err != nil {
-		return nil, err
+// MilvusFieldBuilder is a function type that builds Milvus entity fields from config.
+// Injected from the infra layer to avoid direct import.
+type MilvusFieldBuilder func(collectionName string) []*entity.Field
+
+// MilvusIndexerConfig holds the configuration needed to create a Milvus indexer.
+type MilvusIndexerConfig struct {
+	Client         client.Client
+	CollectionName string
+	Fields         []*entity.Field
+}
+
+// NewMilvusIndexerWithConfig creates a Milvus indexer using pre-built config.
+// This avoids a direct import of the infra layer.
+func NewMilvusIndexerWithConfig(cfg MilvusIndexerConfig) func(ctx context.Context) (einoindexer.Indexer, error) {
+	return func(ctx context.Context) (einoindexer.Indexer, error) {
+		eb, err := embedder2.DoubaoEmbedding(ctx)
+		if err != nil {
+			return nil, err
+		}
+		config := &milvus.IndexerConfig{
+			Client:            cfg.Client,
+			Collection:        cfg.CollectionName,
+			Fields:            cfg.Fields,
+			Embedding:         eb,
+			DocumentConverter: buildFloatVectorRows,
+		}
+		indexer, err := milvus.NewIndexer(ctx, config)
+		if err != nil {
+			return nil, err
+		}
+		return indexer, nil
 	}
-	eb, err := embedder2.DoubaoEmbedding(ctx)
-	if err != nil {
-		return nil, err
-	}
-	cfg := inframv.MilvusConfigFromContext(ctx)
-	config := &milvus.IndexerConfig{
-		Client:            cli,
-		Collection:        cfg.CollectionName,
-		Fields:            inframv.BuildMilvusFields(cfg),
-		Embedding:         eb,
-		DocumentConverter: buildFloatVectorRows,
-	}
-	indexer, err := milvus.NewIndexer(ctx, config)
-	if err != nil {
-		return nil, err
-	}
-	return indexer, nil
 }
 
 type floatVectorRow struct {

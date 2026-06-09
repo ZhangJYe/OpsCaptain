@@ -145,6 +145,7 @@ upload:
   max_size_mb: 20
 
 cors:
+  # WARNING: "*" allows any origin. For production, restrict to specific domains.
   allowed_origins:
     - "*"
 
@@ -249,9 +250,12 @@ context_compression:
   source_types: ["tool", "rag"]
 
 aiops:
+  enabled: true                  # 主开关（替代 multi_agent.enabled / multi_agent.ai_ops_enabled）
   engine: "plan_execute_replan"
   plan:
     model_path: "chat_model_fast"
+    timeout_ms: 180000           # Plan agent 总超时（默认 3 分钟）
+    max_iterations: 5            # Plan-Execute-Replan 最大迭代次数
     report_timeout_ms: 45000
   incident:
     enabled: true

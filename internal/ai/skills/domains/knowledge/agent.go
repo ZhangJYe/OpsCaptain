@@ -163,7 +163,8 @@ func buildKnowledgeSkillRegistry() *skills.Registry {
 		skills.WithDefault("knowledge_incident_guidance"),
 	)
 	if err != nil {
-		panic(fmt.Sprintf("failed to build knowledge skills registry: %v", err))
+		g.Log().Errorf(context.Background(), "failed to build knowledge skills registry: %v", err)
+		return nil
 	}
 	return registry
 }

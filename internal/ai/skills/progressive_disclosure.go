@@ -70,6 +70,15 @@ func (pd *ProgressiveDisclosure) Disclose(query string, selectedSkillIDs []strin
 				result.Tools = append(result.Tools, tt.Tool)
 				result.DisclosedTier[TierSkillGate]++
 			}
+
+		case TierOnDemand:
+			// On-demand tools are activated when query matches their domain.
+			// This ensures MySQL CRUD and similar tools are available when
+			// the user's query is relevant (e.g., log analysis needing DB lookup).
+			if domainOverlap(matchedDomains, tt.Domains) {
+				result.Tools = append(result.Tools, tt.Tool)
+				result.DisclosedTier[TierOnDemand]++
+			}
 		}
 	}
 

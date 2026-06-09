@@ -11,8 +11,8 @@ import (
 
 	"SuperBizAgent/internal/ai/skills"
 
-	toolapi "github.com/cloudwego/eino/components/tool"
 	e_mcp "github.com/cloudwego/eino-ext/components/tool/mcp"
+	toolapi "github.com/cloudwego/eino/components/tool"
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
 )
@@ -37,7 +37,7 @@ type DynamicMCPRegistry struct {
 }
 
 // NewDynamicMCPRegistry creates a registry with a CIDR whitelist.
-// An empty whitelist means all endpoints are allowed.
+// An empty whitelist means all endpoints are rejected.
 func NewDynamicMCPRegistry(whitelist []string, timeoutMs int) (*DynamicMCPRegistry, error) {
 	var nets []*net.IPNet
 	for _, cidr := range whitelist {
@@ -146,10 +146,11 @@ func (r *DynamicMCPRegistry) ListConfigs() []skills.UserMCPTool {
 }
 
 // checkWhitelist verifies that the host in endpointURL resolves to an IP
-// allowed by the whitelist. If the whitelist is empty, all are allowed.
+// allowed by the whitelist. If the whitelist is empty, all endpoints are rejected
+// to prevent unauthenticated SSRF.
 func (r *DynamicMCPRegistry) checkWhitelist(endpointURL string) error {
 	if len(r.whitelist) == 0 {
-		return nil
+		return fmt.Errorf("no network whitelist configured; rejecting endpoint %q", endpointURL)
 	}
 	parsed, err := url.Parse(endpointURL)
 	if err != nil {

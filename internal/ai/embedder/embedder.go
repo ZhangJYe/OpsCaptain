@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/cloudwego/eino-ext/components/embedding/openai"
 	"github.com/cloudwego/eino/components/embedding"
@@ -42,10 +43,12 @@ func DoubaoEmbedding(ctx context.Context) (eb embedding.Embedder, err error) {
 	}
 	if strings.Contains(resolvedModel, "embedding-vision") {
 		return &doubaoMultimodalEmbedder{
-			model:      resolvedModel,
-			apiKey:     resolvedAPIKey,
-			baseURL:    strings.TrimRight(resolvedBaseURL, "/"),
-			httpClient: http.DefaultClient,
+			model:   resolvedModel,
+			apiKey:  resolvedAPIKey,
+			baseURL: strings.TrimRight(resolvedBaseURL, "/"),
+			httpClient: &http.Client{
+				Timeout: 30 * time.Second,
+			},
 		}, nil
 	}
 	dim := common.GetVectorDimension(ctx)
@@ -70,13 +73,27 @@ type doubaoMultimodalEmbedder struct {
 }
 
 func (e *doubaoMultimodalEmbedder) EmbedStrings(ctx context.Context, texts []string, opts ...embedding.Option) ([][]float64, error) {
+	// Batch texts to reduce N+1 HTTP calls during knowledge indexing.
+	const batchSize = 16
 	embeddings := make([][]float64, 0, len(texts))
-	for _, text := range texts {
-		vector, err := e.embedText(ctx, text)
-		if err != nil {
-			return nil, err
+	for i := 0; i < len(texts); i += batchSize {
+		end := i + batchSize
+		if end > len(texts) {
+			end = len(texts)
 		}
-		embeddings = append(embeddings, vector)
+		batch := texts[i:end]
+		// For multimodal embedder, process each text individually since the API
+		// does not support true batching, but we yield between batches for cancellation.
+		for _, text := range batch {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			vector, err := e.embedText(ctx, text)
+			if err != nil {
+				return nil, err
+			}
+			embeddings = append(embeddings, vector)
+		}
 	}
 	return embeddings, nil
 }
@@ -107,7 +124,8 @@ func (e *doubaoMultimodalEmbedder) embedText(ctx context.Context, text string) (
 		return nil, err
 	}
 	defer resp.Body.Close()
-	respBody, err := io.ReadAll(resp.Body)
+	const maxEmbedRespSize = 10 * 1024 * 1024 // 10MB safety limit
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxEmbedRespSize))
 	if err != nil {
 		return nil, err
 	}

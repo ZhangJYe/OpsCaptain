@@ -208,32 +208,19 @@ func (e *GoSEngine) act(ctx context.Context, plan []PlanItem, frontier *belief.F
 				return nil
 			}
 
-			ch := make(chan *experts.ExpertAnalysis, 1)
-			go func() {
-				ch <- agent.Run(gCtx, frontier, graph)
-			}()
-
-			var analysis *experts.ExpertAnalysis
-			select {
-			case analysis = <-ch:
-			case <-gCtx.Done():
-				analysis = &experts.ExpertAnalysis{
-					ExpertName:        item.ExpertName,
-					Status:            "degraded",
-					DegradationReason: "context_cancelled",
-					ToolErrors: []experts.ToolError{{
-						ToolName: "context",
-						Action:   "cancelled",
-						Error:    gCtx.Err().Error(),
-					}},
-				}
-			}
+			// Call Run directly within the errgroup goroutine.
+			// agent.Run must respect context cancellation to avoid goroutine leaks.
+			analysis := agent.Run(gCtx, frontier, graph)
 			if analysis == nil {
 				analysis = &experts.ExpertAnalysis{
 					ExpertName:        item.ExpertName,
 					Status:            "failed",
 					DegradationReason: "expert_nil_result",
 				}
+			}
+			if gCtx.Err() != nil && analysis.Status != "failed" {
+				analysis.Status = "degraded"
+				analysis.DegradationReason = "context_cancelled"
 			}
 			analyses[i] = analysis
 

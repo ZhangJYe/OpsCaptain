@@ -140,6 +140,15 @@ When injection risk is detected, only AlwaysOn tools are exposed.
 - Always `git pull --rebase` before pushing
 - Do not restore `chat_multi_agent` route (deprecated architecture)
 
+### Memory Capture
+
+- When stable project knowledge is discovered, update Claude Code project memory with a concise note
+- Only write memory when it is useful for future coding/review/debugging and backed by source paths or command results
+- Prefer updating existing memory over creating new files; deduplicate before writing
+- Each memory entry must include `last_updated`, summary, authoritative source paths, usage guidance, and freshness caveat when needed
+- Store only indexes and high-density summaries for large docs; keep detailed content in repository docs
+- Do not store secrets, credentials, private IPs, long document bodies, temporary TODOs, speculative conclusions, or routine test output
+
 ## API Endpoints (Key)
 
 | Method | Path | Description |

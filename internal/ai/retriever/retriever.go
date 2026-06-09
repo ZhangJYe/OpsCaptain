@@ -3,7 +3,6 @@ package retriever
 import (
 	"SuperBizAgent/internal/ai/embedder"
 	"SuperBizAgent/internal/consts"
-	inframv "SuperBizAgent/internal/infra/milvus"
 	"SuperBizAgent/utility/common"
 	"context"
 	"fmt"
@@ -13,6 +12,7 @@ import (
 	"github.com/cloudwego/eino/components/retriever"
 	"github.com/cloudwego/eino/schema"
 	"github.com/gogf/gf/v2/frame/g"
+	"github.com/milvus-io/milvus-sdk-go/v2/client"
 	"github.com/milvus-io/milvus-sdk-go/v2/entity"
 )
 
@@ -38,43 +38,43 @@ func (s *safeRetriever) Retrieve(ctx context.Context, query string, opts ...retr
 	return docs, err
 }
 
-func NewMilvusRetriever(ctx context.Context) (rtr retriever.Retriever, err error) {
-	cli, err := inframv.NewMilvusClient(ctx)
-	if err != nil {
-		return nil, err
+// NewMilvusRetrieverWithClient creates a Milvus retriever using a pre-created client.
+// This avoids a direct import of the infra layer.
+func NewMilvusRetrieverWithClient(cli client.Client) func(ctx context.Context) (retriever.Retriever, error) {
+	return func(ctx context.Context) (rtr retriever.Retriever, err error) {
+		eb, err := embedder.DoubaoEmbedding(ctx)
+		if err != nil {
+			return nil, err
+		}
+		topK := common.GetRetrieverTopK(ctx)
+		metricType, err := resolveMilvusMetricType(ctx)
+		if err != nil {
+			return nil, err
+		}
+		searchParam, err := resolveMilvusSearchParam(ctx, topK)
+		if err != nil {
+			return nil, err
+		}
+		r, err := milvusretriever.NewRetriever(ctx, &milvusretriever.RetrieverConfig{
+			Client:      cli,
+			Collection:  common.GetMilvusCollectionName(ctx),
+			VectorField: "vector",
+			OutputFields: []string{
+				"id",
+				"content",
+				"metadata",
+			},
+			TopK:            topK,
+			MetricType:      metricType,
+			VectorConverter: floatVectorConverter,
+			Sp:              searchParam,
+			Embedding:       eb,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return &safeRetriever{inner: r}, nil
 	}
-	eb, err := embedder.DoubaoEmbedding(ctx)
-	if err != nil {
-		return nil, err
-	}
-	topK := common.GetRetrieverTopK(ctx)
-	metricType, err := resolveMilvusMetricType(ctx)
-	if err != nil {
-		return nil, err
-	}
-	searchParam, err := resolveMilvusSearchParam(ctx, topK)
-	if err != nil {
-		return nil, err
-	}
-	r, err := milvusretriever.NewRetriever(ctx, &milvusretriever.RetrieverConfig{
-		Client:      cli,
-		Collection:  common.GetMilvusCollectionName(ctx),
-		VectorField: "vector",
-		OutputFields: []string{
-			"id",
-			"content",
-			"metadata",
-		},
-		TopK:            topK,
-		MetricType:      metricType,
-		VectorConverter: floatVectorConverter,
-		Sp:              searchParam,
-		Embedding:       eb,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &safeRetriever{inner: r}, nil
 }
 
 func floatVectorConverter(ctx context.Context, vectors [][]float64) ([]entity.Vector, error) {

@@ -83,7 +83,11 @@ func IsRedisAvailable(ctx context.Context) bool {
 	if err != nil || v.String() == "" {
 		return false
 	}
-	defer func() { recover() }()
+	defer func() {
+		if r := recover(); r != nil {
+			g.Log().Warningf(ctx, "redis ping panic recovered: %v", r)
+		}
+	}()
 	result, err := g.Redis().Do(ctx, "PING")
 	if err != nil {
 		g.Log().Debugf(ctx, "redis ping failed, falling back to in-memory rate limiter: %v", err)

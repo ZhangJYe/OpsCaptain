@@ -275,6 +275,8 @@ func RequiredRolesForPath(path string) []string {
 		return []string{RoleOperator, RoleAdmin}
 	case "/api/approval_requests/approve", "/api/approval_requests/reject", "/api/memories/action", "/api/memories/promote":
 		return []string{RoleAdmin}
+	case "/api/mcp_tools", "/api/skills":
+		return []string{RoleOperator, RoleAdmin}
 	default:
 		return nil
 	}

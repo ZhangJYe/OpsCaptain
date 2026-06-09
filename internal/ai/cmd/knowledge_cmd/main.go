@@ -1,6 +1,8 @@
 package main
 
 import (
+	"SuperBizAgent/internal/ai/agent/knowledge_index_pipeline"
+	"SuperBizAgent/internal/ai/indexer"
 	"SuperBizAgent/internal/ai/rag"
 	"SuperBizAgent/internal/ai/retriever"
 	inframv "SuperBizAgent/internal/infra/milvus"
@@ -19,12 +21,26 @@ import (
 
 func main() {
 	ctx := context.Background()
-	rag.SetDefaultVectorStore(inframv.NewMilvusVectorStore(inframv.NewMilvusClient))
-	rag.NewRetrieverFunc = retriever.NewMilvusRetriever
 	if err := run(ctx, os.Args[1:], rag.DefaultIndexingService(), os.Stdout); err != nil {
 		g.Log().Errorf(ctx, "knowledge index failed: %v", err)
 		os.Exit(1)
 	}
+}
+
+func configureMilvusFactories(ctx context.Context) error {
+	rag.SetDefaultVectorStore(inframv.NewMilvusVectorStore(inframv.NewMilvusClient))
+	milvusClient, err := inframv.NewMilvusClient(ctx)
+	if err != nil {
+		return err
+	}
+	milvusCfg := inframv.MilvusConfigFromContext(ctx)
+	knowledge_index_pipeline.NewIndexerFunc = indexer.NewMilvusIndexerWithConfig(indexer.MilvusIndexerConfig{
+		Client:         milvusClient,
+		CollectionName: milvusCfg.CollectionName,
+		Fields:         inframv.BuildMilvusFields(milvusCfg),
+	})
+	rag.NewRetrieverFunc = retriever.NewMilvusRetrieverWithClient(milvusClient)
+	return nil
 }
 
 type options struct {
@@ -58,6 +74,9 @@ func run(ctx context.Context, args []string, indexing *rag.IndexingService, out 
 	}
 	if indexing == nil {
 		return fmt.Errorf("indexing service is nil")
+	}
+	if err := configureMilvusFactories(ctx); err != nil {
+		return fmt.Errorf("milvus client init failed: %w", err)
 	}
 
 	for _, path := range paths {

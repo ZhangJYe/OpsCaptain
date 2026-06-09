@@ -2,13 +2,19 @@ package main
 
 import (
 	retriever2 "SuperBizAgent/internal/ai/retriever"
+	inframv "SuperBizAgent/internal/infra/milvus"
 	"context"
 	"fmt"
 )
 
 func main() {
 	ctx := context.Background()
-	r, err := retriever2.NewMilvusRetriever(ctx)
+	cli, err := inframv.NewMilvusClient(ctx)
+	if err != nil {
+		panic(err)
+	}
+	factory := retriever2.NewMilvusRetrieverWithClient(cli)
+	r, err := factory(ctx)
 	if err != nil {
 		panic(err)
 	}

@@ -1,14 +1,16 @@
 package main
 
 import (
+	chat_pipeline "SuperBizAgent/internal/ai/agent/chat_pipeline"
+	"SuperBizAgent/internal/ai/agent/knowledge_index_pipeline"
 	"SuperBizAgent/internal/ai/events"
+	"SuperBizAgent/internal/ai/indexer"
 	"SuperBizAgent/internal/ai/models"
 	"SuperBizAgent/internal/ai/rag"
 	"SuperBizAgent/internal/ai/retriever"
 	aiservice "SuperBizAgent/internal/ai/service"
 	"SuperBizAgent/internal/ai/skills"
 	"SuperBizAgent/internal/ai/tools"
-	chat_pipeline "SuperBizAgent/internal/ai/agent/chat_pipeline"
 	"SuperBizAgent/internal/app"
 	"SuperBizAgent/internal/controller/chat"
 	infrafs "SuperBizAgent/internal/infra/filestore"
@@ -19,6 +21,7 @@ import (
 	"SuperBizAgent/utility/logging"
 	"SuperBizAgent/utility/metrics"
 	"SuperBizAgent/utility/middleware"
+	"SuperBizAgent/utility/safety"
 	traceutil "SuperBizAgent/utility/tracing"
 	"context"
 	"errors"
@@ -86,7 +89,22 @@ func main() {
 
 	rag.DefaultIndexingService().SyncBM25Index(ctx)
 	rag.SetDefaultVectorStore(inframv.NewMilvusVectorStore(inframv.NewMilvusClient))
-	rag.NewRetrieverFunc = retriever.NewMilvusRetriever
+	milvusClient, milvusErr := inframv.NewMilvusClient(ctx)
+	if milvusErr == nil {
+		milvusCfg := inframv.MilvusConfigFromContext(ctx)
+		knowledge_index_pipeline.NewIndexerFunc = indexer.NewMilvusIndexerWithConfig(indexer.MilvusIndexerConfig{
+			Client:         milvusClient,
+			CollectionName: milvusCfg.CollectionName,
+			Fields:         inframv.BuildMilvusFields(milvusCfg),
+		})
+	}
+	if milvusErr != nil {
+		g.Log().Warningf(ctx, "milvus client init failed, retriever will be unavailable: %v", milvusErr)
+	} else {
+		rag.NewRetrieverFunc = retriever.NewMilvusRetrieverWithClient(milvusClient)
+	}
+	safety.ClassifierModelFunc = models.OpenAIForGLMFast
+	health.CloseMySQLFunc = tools.CloseMySQL
 	health.CloseAllMilvusClientsFunc = inframv.CloseAllClients
 	health.MilvusReadyCheckFunc = inframv.PingMilvus
 	health.InspectMilvusCollectionFunc = func(ctx context.Context) (health.MilvusCollectionReport, error) {

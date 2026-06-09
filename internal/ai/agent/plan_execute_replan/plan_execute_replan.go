@@ -26,8 +26,25 @@ func WithStageEmitter(ctx context.Context, emit StageEmitter) context.Context {
 	return context.WithValue(ctx, stageEmitterContextKey{}, emit)
 }
 
+func planTimeout(ctx context.Context) time.Duration {
+	const defaultTimeout = 3 * time.Minute
+	if v, err := g.Cfg().Get(ctx, "aiops.plan.timeout_ms"); err == nil && v.Int64() > 0 {
+		return time.Duration(v.Int64()) * time.Millisecond
+	}
+	return defaultTimeout
+}
+
+func planMaxIterations(ctx context.Context) int {
+	const defaultMaxIterations = 5
+	if v, err := g.Cfg().Get(ctx, "aiops.plan.max_iterations"); err == nil && v.Int() > 0 {
+		return v.Int()
+	}
+	return defaultMaxIterations
+}
+
 func BuildPlanAgent(ctx context.Context, query string) (string, []string, error) {
-	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+	timeout := planTimeout(ctx)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	emitPlanStage(ctx, "planning", "正在制定排障计划", nil)
 
@@ -47,7 +64,7 @@ func BuildPlanAgent(ctx context.Context, query string) (string, []string, error)
 		Planner:       planAgent,
 		Executor:      executeAgent,
 		Replanner:     replanAgent,
-		MaxIterations: 5,
+		MaxIterations: planMaxIterations(ctx),
 	})
 	if err != nil {
 		return "", []string{}, fmt.Errorf("build PlanExecuteAgent Error: %w", err)

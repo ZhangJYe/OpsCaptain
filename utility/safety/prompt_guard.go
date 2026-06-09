@@ -23,11 +23,16 @@ type promptPattern struct {
 
 var promptPatterns = []promptPattern{
 	{name: "ignore_previous_instructions", regex: regexp.MustCompile(`(?i)\bignore\s+(all\s+)?previous\s+instructions?\b`)},
+	{name: "forget_instructions", regex: regexp.MustCompile(`(?i)\bforget\s+(all\s+)?(your\s+)?(previous\s+)?instructions?\b`)},
+	{name: "new_instructions", regex: regexp.MustCompile(`(?i)\bnew\s+instructions?\s*:`)},
 	{name: "you_are_now", regex: regexp.MustCompile(`(?i)\byou\s+are\s+now\b`)},
 	{name: "system_prefix", regex: regexp.MustCompile(`(?i)\bsystem\s*:`)},
 	{name: "inst_block", regex: regexp.MustCompile(`(?i)\[inst\]|<<\s*sys\s*>>`)},
+	{name: "markdown_system", regex: regexp.MustCompile("(?i)```\\s*system")},
+	{name: "dan_jailbreak", regex: regexp.MustCompile(`(?i)\bdan\s+mode\b|\bdo\s+anything\s+now\b`)},
 	{name: "chinese_ignore", regex: regexp.MustCompile(`忽略(之前|以上|前面)的?指令`)},
 	{name: "chinese_role_override", regex: regexp.MustCompile(`你现在是`)},
+	{name: "chinese_new_instructions", regex: regexp.MustCompile(`新的指令[：:]`)},
 }
 
 func CheckPrompt(ctx context.Context, input string) PromptGuardDecision {

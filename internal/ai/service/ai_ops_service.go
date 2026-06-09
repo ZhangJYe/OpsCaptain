@@ -76,8 +76,8 @@ func aiOpsIncidentContext(ctx context.Context) string {
 
 func RunAIOpsMultiAgent(ctx context.Context, query string) (ExecutionResponse, error) {
 	agentName, agentAvailable, unavailableReason := resolveAIOpsAgentName(ctx)
-	if !aiOpsMultiAgentEnabled(ctx) {
-		response := multiAgentDisabledResponse()
+	if !aiOpsEnabled(ctx) {
+		response := aiOpsDisabledResponse()
 		response.Engine = agentName
 		return response, nil
 	}
@@ -226,12 +226,12 @@ type AIOpsRunInfo struct {
 
 func RunAIOpsAsync(ctx context.Context, query string) (*AIOpsRunInfo, error) {
 	agentName, agentAvailable, unavailableReason := resolveAIOpsAgentName(ctx)
-	if !aiOpsMultiAgentEnabled(ctx) {
+	if !aiOpsEnabled(ctx) {
 		return &AIOpsRunInfo{
 			Engine:            agentName,
 			Status:            "degraded",
 			Degraded:          true,
-			DegradationReason: "multi_agent_disabled",
+			DegradationReason: "aiops_disabled",
 		}, nil
 	}
 	if !agentAvailable {
@@ -407,31 +407,33 @@ func aiOpsAsyncTimeout(ctx context.Context) time.Duration {
 	return defaultTimeout
 }
 
-func aiOpsMultiAgentEnabled(ctx context.Context) bool {
-	if !multiAgentEnabled(ctx) {
-		return false
+// aiOpsEnabled checks the primary AIOps switch.
+// Reads aiops.enabled first; falls back to multi_agent.enabled / multi_agent.ai_ops_enabled
+// for backward compatibility.
+func aiOpsEnabled(ctx context.Context) bool {
+	// Primary: aiops.enabled (new canonical key)
+	if enabled, configured := multiAgentConfigBool(ctx, "aiops.enabled"); configured {
+		return enabled
 	}
-	enabled, configured := multiAgentConfigBool(ctx, "multi_agent.ai_ops_enabled")
-	if configured {
+	// Fallback: multi_agent.enabled (legacy)
+	if enabled, configured := multiAgentConfigBool(ctx, "multi_agent.enabled"); configured {
+		if !enabled {
+			return false
+		}
+	}
+	// Fallback: multi_agent.ai_ops_enabled (legacy)
+	if enabled, configured := multiAgentConfigBool(ctx, "multi_agent.ai_ops_enabled"); configured {
 		return enabled
 	}
 	return true
 }
 
-func multiAgentEnabled(ctx context.Context) bool {
-	enabled, configured := multiAgentConfigBool(ctx, "multi_agent.enabled")
-	if configured {
-		return enabled
-	}
-	return true
-}
-
-func multiAgentDisabledResponse() ExecutionResponse {
+func aiOpsDisabledResponse() ExecutionResponse {
 	return ExecutionResponse{
-		Content:           "Multi-agent runtime is disabled; use the Chat/RAG baseline route.",
-		Detail:            []string{"multi_agent.enabled=false"},
+		Content:           "AIOps is disabled; use the Chat/RAG baseline route.",
+		Detail:            []string{"aiops.enabled=false"},
 		Status:            protocol.ResultStatusDegraded,
-		DegradationReason: "multi_agent_disabled",
+		DegradationReason: "aiops_disabled",
 	}
 }
 

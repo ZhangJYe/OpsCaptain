@@ -6,11 +6,14 @@ import (
 	"strings"
 	"time"
 
-	"SuperBizAgent/internal/ai/models"
-
+	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/schema"
 	"github.com/gogf/gf/v2/frame/g"
 )
+
+// ClassifierModelFunc is the factory function for creating the LLM model
+// used by the injection classifier. Set by main to avoid direct import of internal/ai/models.
+var ClassifierModelFunc func(ctx context.Context) (model.ToolCallingChatModel, error)
 
 const (
 	defaultClassifierTimeout   = 3 * time.Second
@@ -57,7 +60,10 @@ func ClassifyInjection(ctx context.Context, input string) InjectionVerdict {
 	classifyCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	chatModel, err := models.OpenAIForGLMFast(classifyCtx)
+	if ClassifierModelFunc == nil {
+		return InjectionVerdict{Score: 0, Reason: "classifier not configured"}
+	}
+	chatModel, err := ClassifierModelFunc(classifyCtx)
 	if err != nil {
 		g.Log().Debugf(ctx, "[injection_classifier] model init failed, degrading to safe: %v", err)
 		return InjectionVerdict{Score: 0, Reason: "classifier unavailable"}

@@ -1,7 +1,6 @@
 package health
 
 import (
-	"SuperBizAgent/internal/ai/tools"
 	"SuperBizAgent/utility/common"
 	"context"
 	"errors"
@@ -29,6 +28,7 @@ var (
 	CloseAllMilvusClientsFunc   func() error
 	InspectMilvusCollectionFunc func(ctx context.Context) (MilvusCollectionReport, error)
 	MilvusReadyCheckFunc        func(ctx context.Context) error
+	CloseMySQLFunc              func() error
 )
 
 type CheckStatus struct {
@@ -148,8 +148,8 @@ func CloseResources(ctx context.Context) error {
 			errs = append(errs, fmt.Sprintf("redis close failed: %v", err))
 		}
 	}
-	if hasMySQLConfig(ctx) {
-		if err := tools.CloseMySQL(); err != nil {
+	if hasMySQLConfig(ctx) && CloseMySQLFunc != nil {
+		if err := CloseMySQLFunc(); err != nil {
 			errs = append(errs, fmt.Sprintf("mysql close failed: %v", err))
 		}
 	}

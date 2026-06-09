@@ -39,12 +39,27 @@ var outputPatterns = []outputPattern{
 	{
 		name:        "api_key",
 		replacement: "[REDACTED_API_KEY]",
-		regex:       regexp.MustCompile(`(?i)(sk-[a-z0-9]{16,}|api[_-]?key\s*[:=]\s*[a-z0-9._-]{10,}|bearer\s+[a-z0-9._-]{16,})`),
+		regex:       regexp.MustCompile(`(?i)(sk-[a-z0-9]{16,}|AKIA[0-9A-Z]{16}|api[_-]?key\s*[:=]\s*[a-z0-9._-]{10,}|bearer\s+[a-z0-9._-]{16,})`),
+	},
+	{
+		name:        "private_key",
+		replacement: "[REDACTED_PRIVATE_KEY]",
+		regex:       regexp.MustCompile(`(?s)-----BEGIN\s+(RSA\s+)?PRIVATE\s+KEY-----.*?-----END\s+(RSA\s+)?PRIVATE\s+KEY-----`),
+	},
+	{
+		name:        "jwt_token",
+		replacement: "[REDACTED_JWT]",
+		regex:       regexp.MustCompile(`eyJ[a-zA-Z0-9_-]{10,}\.eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}`),
 	},
 	{
 		name:        "internal_ip",
 		replacement: "[REDACTED_INTERNAL_IP]",
 		regex:       regexp.MustCompile(`\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|127\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})\b`),
+	},
+	{
+		name:        "internal_ipv6",
+		replacement: "[REDACTED_INTERNAL_IP]",
+		regex:       regexp.MustCompile(`(?i)\b(?:fc|fd)[0-9a-f]{2}(?::[0-9a-f]{1,4}){7}\b|\bfe80(?::[0-9a-f]{1,4}){0,7}\b`),
 	},
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -131,10 +132,13 @@ func (w *ToolWrapper) emitToolEnd(ctx context.Context, toolName, args string, st
 	if err != nil {
 		payload["error"] = err.Error()
 	}
-	if len(result) > 200 {
-		payload["summary"] = result[:200] + "..."
-	} else if result != "" {
-		payload["summary"] = result
+	if result != "" {
+		// Truncate and redact sensitive information before emitting to events/SSE/logs.
+		summary := result
+		if len(summary) > 200 {
+			summary = summary[:200] + "..."
+		}
+		payload["summary"] = RedactSensitiveInfo(summary)
 	}
 
 	w.emitter.Emit(ctx, NewEvent(EventToolCallEnd, w.traceID, toolName, payload))
@@ -186,6 +190,25 @@ func ValidateBeforeToolCall() BeforeToolCallFunc {
 		}
 		return args, nil
 	}
+}
+
+// redactPatterns are lightweight patterns for redacting sensitive info from event summaries.
+var redactPatterns = []struct {
+	regex       *regexp.Regexp
+	replacement string
+}{
+	{regexp.MustCompile(`(?i)(sk-[a-z0-9]{16,}|AKIA[0-9A-Z]{16})`), "[REDACTED_KEY]"},
+	{regexp.MustCompile(`(?i)api[_-]?key\s*[:=]\s*[a-z0-9._-]{10,}`), "[REDACTED_API_KEY]"},
+	{regexp.MustCompile(`(?i)bearer\s+[a-z0-9._-]{16,}`), "[REDACTED_TOKEN]"},
+	{regexp.MustCompile(`\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})\b`), "[REDACTED_IP]"},
+}
+
+// RedactSensitiveInfo removes sensitive patterns from a string.
+func RedactSensitiveInfo(s string) string {
+	for _, p := range redactPatterns {
+		s = p.regex.ReplaceAllString(s, p.replacement)
+	}
+	return s
 }
 
 // SummaryAfterToolCall 结果摘要 afterToolCall

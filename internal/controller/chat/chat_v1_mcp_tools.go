@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 )
 
-// MCPToolCreate creates a new MCP tool with StatusApproved (no approval flow).
+// MCPToolCreate creates a new MCP tool pending admin approval.
 func (c *ControllerV1) MCPToolCreate(ctx context.Context, req *v1.MCPToolCreateReq) (res *v1.MCPToolCreateRes, err error) {
 	data, err := c.userSkillStore.Load(ctx)
 	if err != nil {
@@ -26,7 +26,7 @@ func (c *ControllerV1) MCPToolCreate(ctx context.Context, req *v1.MCPToolCreateR
 		Description: req.Description,
 		Transport:   req.Protocol,
 		EndpointURL: req.Endpoint,
-		Status:      skills.StatusApproved,
+		Status:      skills.StatusPending,
 		CreatedAt:   time.Now(),
 		CreatedBy:   g.RequestFromCtx(ctx).GetClientIp(),
 	}
@@ -74,7 +74,12 @@ func (c *ControllerV1) MCPToolList(ctx context.Context, req *v1.MCPToolListReq) 
 		if req.Status != "" && t.Status != req.Status {
 			continue
 		}
-		items = append(items, t)
+		// Mask auth token in API responses to prevent credential leakage.
+		sanitized := t
+		if sanitized.AuthToken != "" {
+			sanitized.AuthToken = "***REDACTED***"
+		}
+		items = append(items, sanitized)
 	}
 
 	return &v1.MCPToolListRes{Items: items, Total: len(items)}, nil

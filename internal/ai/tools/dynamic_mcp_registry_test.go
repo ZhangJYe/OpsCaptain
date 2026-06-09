@@ -36,16 +36,17 @@ func TestDynamicMCPRegistry_Whitelist_PublicIPRejected(t *testing.T) {
 	}
 }
 
-func TestDynamicMCPRegistry_Whitelist_NoWhitelistAllowsAll(t *testing.T) {
+func TestDynamicMCPRegistry_Whitelist_NoWhitelistRejectsAll(t *testing.T) {
 	r, err := NewDynamicMCPRegistry(nil, 5000)
 	if err != nil {
 		t.Fatalf("NewDynamicMCPRegistry: %v", err)
 	}
-	if err := r.checkWhitelist("http://8.8.8.8:8080/sse"); err != nil {
-		t.Errorf("expected no-whitelist to allow all, got: %v", err)
+	// Empty whitelist should reject all endpoints to prevent unauthenticated SSRF.
+	if err := r.checkWhitelist("http://8.8.8.8:8080/sse"); err == nil {
+		t.Error("expected no-whitelist to reject all, but got nil error")
 	}
-	if err := r.checkWhitelist("http://example.com:8080/sse"); err != nil {
-		t.Errorf("expected no-whitelist to allow hostname, got: %v", err)
+	if err := r.checkWhitelist("http://example.com:8080/sse"); err == nil {
+		t.Error("expected no-whitelist to reject hostname, but got nil error")
 	}
 }
 

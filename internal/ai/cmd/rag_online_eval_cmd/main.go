@@ -4,6 +4,7 @@ import (
 	"SuperBizAgent/internal/ai/rag"
 	"SuperBizAgent/internal/ai/rag/eval"
 	"SuperBizAgent/internal/ai/retriever"
+	inframv "SuperBizAgent/internal/infra/milvus"
 	"SuperBizAgent/utility/common"
 	"context"
 	"encoding/json"
@@ -41,7 +42,13 @@ func main() {
 	}
 
 	wantRewrite, wantRerank, isHybrid, useConfigDefaults := parseEvalMode(*modeRaw)
-	rag.NewRetrieverFunc = retriever.NewMilvusRetriever
+	ctx := context.Background()
+	milvusClient, milvusErr := inframv.NewMilvusClient(ctx)
+	if milvusErr != nil {
+		fmt.Fprintf(os.Stderr, "milvus client init failed: %v\n", milvusErr)
+		os.Exit(1)
+	}
+	rag.NewRetrieverFunc = retriever.NewMilvusRetrieverWithClient(milvusClient)
 
 	var cases []eval.EvalCase
 	if strings.TrimSpace(*evalPath) == "" {

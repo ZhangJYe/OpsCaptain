@@ -69,7 +69,7 @@ func TestRunAIOpsMultiAgentDisabledByConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run aiops: %v", err)
 	}
-	if response.Status != protocol.ResultStatusDegraded || response.DegradationReason != "multi_agent_disabled" {
+	if response.Status != protocol.ResultStatusDegraded || response.DegradationReason != "aiops_disabled" {
 		t.Fatalf("expected disabled degraded response, got %+v", response)
 	}
 }
