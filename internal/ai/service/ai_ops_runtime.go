@@ -200,7 +200,7 @@ func getOrCreateAIOpsRuntime(ctx context.Context) (*runtime.Runtime, error) {
 		return rt, nil
 	}
 
-	rt, err := newPersistentRuntime(dataDir)
+	rt, err := buildAIOpsRuntime(ctx, dataDir)
 	if err != nil {
 		return nil, err
 	}
@@ -209,6 +209,53 @@ func getOrCreateAIOpsRuntime(ctx context.Context) (*runtime.Runtime, error) {
 	}
 	aiOpsRuntimes[dataDir] = rt
 	return rt, nil
+}
+
+// buildAIOpsRuntime 根据配置选择 Ledger 后端：
+//   - aiops.ledger.backend = redis (推荐多实例部署)：跨实例共享 trace_id/task/result
+//   - 默认 = file：本地落盘，单实例 / 共享 PVC 部署
+//
+// 多实例选 file 会出现「在 A 提交、5 秒后查询路由到 B → 404」，
+// 因此在多副本配置下必须切到 redis。
+func buildAIOpsRuntime(ctx context.Context, dataDir string) (*runtime.Runtime, error) {
+	backend := strings.ToLower(strings.TrimSpace(func() string {
+		v, _ := aiOpsConfigString(ctx, "aiops.ledger.backend")
+		return v
+	}()))
+	switch backend {
+	case "redis":
+		retention := 24 * time.Hour
+		if v, ok := aiOpsConfigInt(ctx, "aiops.ledger.retention_hours"); ok {
+			retention = time.Duration(v) * time.Hour
+		}
+		maxTasks := 20000
+		if v, ok := aiOpsConfigInt(ctx, "aiops.ledger.max_tasks"); ok {
+			maxTasks = v
+		}
+		maxResults := 20000
+		if v, ok := aiOpsConfigInt(ctx, "aiops.ledger.max_results"); ok {
+			maxResults = v
+		}
+		redis := g.Redis()
+		if redis == nil {
+			g.Log().Warningf(ctx, "[aiops] ledger.backend=redis but g.Redis() is nil; falling back to persistent file backend")
+			return newPersistentRuntime(dataDir)
+		}
+		prefix := "opscaption:ai:"
+		if v, ok := aiOpsConfigString(ctx, "aiops.ledger.prefix"); ok {
+			prefix = v
+		}
+		ledger := runtime.NewRedisLedger(redis, prefix, retention, maxTasks, maxResults)
+		// artifacts 暂时仍走 file（H6 单独切 Redis）；bus 走 ledger bus 即可
+		artifacts, err := runtime.NewFileArtifactStore(dataDir)
+		if err != nil {
+			return nil, fmt.Errorf("init artifact store: %w", err)
+		}
+		g.Log().Infof(ctx, "[aiops] using Redis ledger (prefix=%s, retention=%s, max_tasks=%d)", prefix, retention, maxTasks)
+		return runtime.NewWithStores(ledger, runtime.NewLedgerBus(ledger), artifacts), nil
+	default:
+		return newPersistentRuntime(dataDir)
+	}
 }
 
 func registerAIOpsAgents(rt *runtime.Runtime) error {

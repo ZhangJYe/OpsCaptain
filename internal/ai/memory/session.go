@@ -88,6 +88,11 @@ func GetSimpleMemory(id string) *SimpleMemory {
 
 	entry, ok := sessionMap[id]
 	if !ok {
+		// 跨实例模式：先去 store 取一次（其他实例可能已经写过这个 session）。
+		if mem := loadFromStore(id); mem != nil {
+			sessionMap[id] = &sessionEntry{memory: mem, lastAccess: time.Now()}
+			return mem
+		}
 		if len(sessionMap) >= maxSessions {
 			var oldestID string
 			var oldestTime time.Time
@@ -124,6 +129,7 @@ func ClearSession(id string) {
 	sessionMu.Lock()
 	defer sessionMu.Unlock()
 	delete(sessionMap, id)
+	deleteFromStore(id)
 }
 
 func SessionCount() int {
@@ -179,17 +185,19 @@ func (c *SimpleMemory) TurnCount() int {
 
 func (c *SimpleMemory) AddUserAssistantPair(userMsg string, assistantMsg string) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	c.Messages = append(c.Messages, schema.UserMessage(userMsg), schema.AssistantMessage(assistantMsg, nil))
 	c.turnCount++
 	c.trimWindow()
+	c.mu.Unlock()
+	saveToStore(c)
 }
 
 func (c *SimpleMemory) SetMessages(msg *schema.Message) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	c.Messages = append(c.Messages, msg)
 	c.trimWindow()
+	c.mu.Unlock()
+	saveToStore(c)
 }
 
 func (c *SimpleMemory) trimWindow() {
@@ -294,8 +302,9 @@ func (c *SimpleMemory) GetContextMessages() []*schema.Message {
 
 func (c *SimpleMemory) Reset() {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	c.Messages = []*schema.Message{}
 	c.Summary = ""
 	c.turnCount = 0
+	c.mu.Unlock()
+	saveToStore(c)
 }

@@ -193,6 +193,10 @@ memory:
   extract_timeout_ms: 1500
   extract_max_concurrency: 8
   extract_wait_timeout_ms: 50
+  session_store:                 # 多实例必填：短期对话跨 Pod 共享
+    redis_enabled: false         # 多副本改 true，否则换 Pod 丢历史
+    prefix: "opscaption:session:"
+    ttl_seconds: 7200
   long_term_max_entries: 1000
   long_term_max_entries_per_session: 100
 
@@ -252,6 +256,12 @@ context_compression:
 aiops:
   enabled: true                  # 主开关（替代 multi_agent.enabled / multi_agent.ai_ops_enabled）
   engine: "plan_execute_replan"
+  ledger:                        # 多实例必填：选 redis，让 trace_id/task/result 跨实例可见
+    backend: "file"              # file | redis；多副本部署改 redis
+    prefix: "opscaption:ai:"
+    retention_hours: 24
+    max_tasks: 20000
+    max_results: 20000
   plan:
     model_path: "chat_model_fast"
     timeout_ms: 180000           # Plan agent 总超时（默认 3 分钟）
@@ -310,6 +320,10 @@ change_events:
   indexing:
     enabled: true                 # 变更事件索引到 RAG（语义辅助）
     source_prefix: "change_event"
+  cluster_broadcast:              # 多实例 SSE 跨实例广播（Redis Pub/Sub）
+    enabled: true                 # 多副本必开，单实例可关
+    channel: "change_events"
+    prefix: "opscaption"
 
 multi_agent:
   enabled: false

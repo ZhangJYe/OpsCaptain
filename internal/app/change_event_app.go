@@ -25,7 +25,15 @@ func NewChangeEventApp(bus *changeevent.ChangeEventBus) *ChangeEventApp {
 // NewChangeEventAppWithAdapterConfig creates the change-event app with a
 // configured webhook adapter registry.
 func NewChangeEventAppWithAdapterConfig(bus *changeevent.ChangeEventBus, adapterCfg changeevent.AdapterRegistryConfig) *ChangeEventApp {
-	broker := changeevent.NewNotificationBroker()
+	return NewChangeEventAppWithBroker(bus, changeevent.NewNotificationBroker(), adapterCfg)
+}
+
+// NewChangeEventAppWithBroker 允许调用方注入自定义 broker（典型场景：跨实例 broker）。
+// 用 changeevent.NewNotificationBrokerWithCluster 构造的 broker 会跨实例广播 SSE 通知。
+func NewChangeEventAppWithBroker(bus *changeevent.ChangeEventBus, broker *changeevent.NotificationBroker, adapterCfg changeevent.AdapterRegistryConfig) *ChangeEventApp {
+	if broker == nil {
+		broker = changeevent.NewNotificationBroker()
+	}
 	if bus != nil {
 		bus.Register(broker)
 	}

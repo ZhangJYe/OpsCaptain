@@ -72,7 +72,7 @@ type rabbitMQMemoryConfig struct {
 type rabbitMQMemoryClient struct {
 	cfg       rabbitMQMemoryConfig
 	client    *rabbitmq.Client
-	completed *rabbitmq.TTLSet
+	completed rabbitmq.Deduper
 }
 
 var (
@@ -266,8 +266,22 @@ func newRabbitMQMemoryClient(cfg rabbitMQMemoryConfig) (*rabbitMQMemoryClient, e
 	return &rabbitMQMemoryClient{
 		cfg:       cfg,
 		client:    client,
-		completed: rabbitmq.NewTTLSet(dedupTTL, dedupMax),
+		completed: buildMemoryDeduper(cfg, dedupTTL, dedupMax),
 	}, nil
+}
+
+// buildMemoryDeduper 跨实例 Redis SETNX + 本实例 TTLSet 双层去重。
+// 多实例 consumer 同时拉到同一条 memory 抽取事件时，谁先 Claim 谁干活，
+// 失败方 ack 跳过，避免对同一条对话重复跑 LLM 抽取。
+func buildMemoryDeduper(cfg rabbitMQMemoryConfig, ttl time.Duration, max int) rabbitmq.Deduper {
+	local := rabbitmq.NewTTLSet(ttl, max)
+	redis := g.Redis()
+	if redis == nil {
+		g.Log().Warningf(context.Background(), "[memory] redis unavailable, dedup falls back to in-memory (multi-instance may double-extract)")
+		return local
+	}
+	prefix := "opscaption:dedup:memory_extract:"
+	return rabbitmq.NewCompositeDeduper(rabbitmq.NewRedisDeduper(redis, prefix, ttl), local)
 }
 
 func memoryTopology(cfg rabbitMQMemoryConfig) rabbitmq.TopologyConfig {
@@ -313,7 +327,7 @@ func (c *rabbitMQMemoryClient) handleDelivery(delivery amqp.Delivery) {
 	if strings.TrimSpace(event.EventID) == "" {
 		event.EventID = buildMemoryExtractionEventID(event.SessionID, event.Query, event.Summary)
 	}
-	if c.completed.Has(event.EventID) {
+	if !c.completed.Claim(context.Background(), event.EventID) {
 		metrics.ObserveMemoryExtraction("rabbitmq", "deduped")
 		c.ack(delivery)
 		return
@@ -331,7 +345,7 @@ func (c *rabbitMQMemoryClient) handleDelivery(delivery amqp.Delivery) {
 				g.Log().Errorf(context.Background(), "[memory] publish retry event failed: %v", publishErr)
 				if dlqErr := publishMemoryEvent(c, context.Background(), event, c.cfg.MemoryExtractDLQRoutingKey); dlqErr == nil {
 					metrics.ObserveMemoryExtraction("rabbitmq", "dlq")
-					c.completed.Mark(event.EventID)
+					// Claim 已标记
 					c.ack(delivery)
 					return
 				} else {
@@ -344,7 +358,7 @@ func (c *rabbitMQMemoryClient) handleDelivery(delivery amqp.Delivery) {
 		}
 		if dlqErr := publishMemoryEvent(c, context.Background(), event, c.cfg.MemoryExtractDLQRoutingKey); dlqErr == nil {
 			metrics.ObserveMemoryExtraction("rabbitmq", "dlq")
-			c.completed.Mark(event.EventID)
+			// Claim 已标记
 			c.ack(delivery)
 			return
 		} else {
@@ -355,7 +369,7 @@ func (c *rabbitMQMemoryClient) handleDelivery(delivery amqp.Delivery) {
 		return
 	}
 
-	c.completed.Mark(event.EventID)
+	// Claim 已在入口标记
 	metrics.ObserveMemoryExtraction("rabbitmq", "consumed")
 	c.ack(delivery)
 }

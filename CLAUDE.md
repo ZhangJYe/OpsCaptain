@@ -181,3 +181,49 @@ All configuration in `manifest/config/config.yaml`. Key sections:
 - `rag`: Retrieval config (top_k, rewrite_enabled, rerank_enabled)
 - `memory`: Token budget, extraction settings
 - `safety`: Prompt guard, output filter, injection classifier
+
+## Multi-Instance Deployment
+
+OpsCaptain 默认按单实例配置。扩展到多副本（K8s Deployment N=2+）必须显式开启以下配置项，
+否则会出现状态分裂（trace 404、SSE 静默、对话历史丢失、token 翻倍等）：
+
+### 必开（CRITICAL）
+
+| 配置项 | 默认 | 多实例必须 | 作用 |
+|--------|------|-----------|------|
+| `aiops.ledger.backend` | `file` | `redis` | AIOps task/result/event 共享，避免 `submit on A → query on B → 404` |
+| `memory.session_store.redis_enabled` | `false` | `true` | 短期对话跨实例共享，避免轮间换 Pod 丢上下文 |
+| `change_events.cluster_broadcast.enabled` | `true` | `true` | SSE 通知跨实例 fan-out，确保所有客户端实时收到事件 |
+
+RabbitMQ 单消费者（`chat-task` / `memory-extract`）默认通过 **Redis SETNX 去重**保护，
+无需额外配置；只需保证 Redis 可达即可。
+
+### 强烈建议（HIGH）
+
+- **上传文件**：`filestore.UploadStore` 是接口，默认 `LocalUploadStore` 写本地磁盘。
+  多副本必须挂同一个 PVC（ReadWriteMany NFS/EFS）到 `file_dir` 目录，或自行实现
+  S3 适配（后续会提供）。否则上传到 A 的文件，B 上查询/索引会 404。
+- **MCP 用户工具**（`internal/ai/skills/user_skill_store.go`）：当前用本地 JSON
+  持久化，多实例下注册的工具只对一个实例生效。临时方案：挂共享卷；长期：迁 Redis（H2）。
+- **BM25 索引**（`internal/ai/rag/shared_bm25.go`）：每个 pod 启动时扫本地
+  `file_dir` 重建。多实例必须确保 `file_dir` 是共享卷，或把新增文档走外部 indexer job。
+
+### Redis 是硬依赖
+
+多实例部署下，下列功能 **全部依赖** Redis 共享后端，Redis 不可达时会：
+- AIOps Ledger 回退到本地 file → 跨实例 404 重新出现
+- Session store 回退到 in-process → 对话历史不跨实例
+- Dedup 回退到 in-memory TTLSet → 同条 RabbitMQ delivery 可能被双消费
+- SSE 跨实例广播失效 → 订阅者只能收到本实例 ingest 的事件
+- Rate limiter 回退到 in-process → 总限流值 = 配置值 × 实例数（限制被放大）
+
+建议在 K8s 健康探针中加 Redis 连通性检查，Redis 故障期间标记 Pod 不健康。
+
+### 已知限制
+
+- **变更事件 ringBuffer**（`internal/ai/changeevent/bus.go`）仅作本实例性能缓存；
+  Query/Get 走 Redis（共享），但 `RecentByService`/`RecentAll` 只看本实例最近 200 条。
+- **AIOps Artifact**（`internal/ai/runtime/artifacts.go`）仍走 file backend；
+  artifact_id 跨实例不可见（H6 待迁 Redis）。
+- **限流降级路径**（`utility/auth/rate_limiter.go`）：Redis 抖动时回退 in-memory，
+  限制按实例独立计数。生产建议加监控告警。

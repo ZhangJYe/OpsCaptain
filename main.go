@@ -6,6 +6,7 @@ import (
 	"SuperBizAgent/internal/ai/changeevent"
 	"SuperBizAgent/internal/ai/events"
 	"SuperBizAgent/internal/ai/indexer"
+	"SuperBizAgent/internal/ai/memory"
 	"SuperBizAgent/internal/ai/models"
 	"SuperBizAgent/internal/ai/rag"
 	"SuperBizAgent/internal/ai/retriever"
@@ -17,6 +18,7 @@ import (
 	infrafs "SuperBizAgent/internal/infra/filestore"
 	inframv "SuperBizAgent/internal/infra/milvus"
 	"SuperBizAgent/utility/auth"
+	"SuperBizAgent/utility/clusterbus"
 	"SuperBizAgent/utility/common"
 	"SuperBizAgent/utility/health"
 	"SuperBizAgent/utility/logging"
@@ -71,6 +73,15 @@ func main() {
 	}
 	if err := aiservice.ValidateChatTaskPipelineConfig(ctx); err != nil {
 		panic(err)
+	}
+
+	// 短期对话存储：多实例配置下切到 Redis，跨实例共享对话历史。
+	// 默认 in-process（向后兼容单实例）。
+	if configBool(ctx, "memory.session_store.redis_enabled", false) {
+		ttl := time.Duration(configInt(ctx, "memory.session_store.ttl_seconds", 7200)) * time.Second
+		prefix := configString(ctx, "memory.session_store.prefix", "opscaption:session:")
+		memory.EnableRedisSessionStore(prefix, ttl)
+		g.Log().Infof(ctx, "[memory] session store: redis (prefix=%s, ttl=%s)", prefix, ttl)
 	}
 
 	authEnabled, _ := g.Cfg().Get(ctx, "auth.enabled")
@@ -249,6 +260,18 @@ func configureChangeEvents(ctx context.Context, aiopsApp *app.AIOpsApp) (*app.Ch
 	}
 	aiservice.SetChangeEventBus(changeEventBus)
 
+	// SSE 跨实例广播：本实例 ingest 的事件除了 fan-out 给本地 SSE 订阅者，
+	// 还 publish 到 clusterbus，其他实例订阅同一 channel 后再 fan-out 给各自的订阅者。
+	// 没开启或 Redis 不可达时退化为单实例模式（仅本地 fan-out）。
+	var broker *changeevent.NotificationBroker
+	if configBool(ctx, "change_events.cluster_broadcast.enabled", true) {
+		cbus := clusterbus.New(configString(ctx, "change_events.cluster_broadcast.prefix", "opscaption"))
+		channel := configString(ctx, "change_events.cluster_broadcast.channel", "change_events")
+		broker = changeevent.NewNotificationBrokerWithCluster(ctx, cbus, channel)
+	} else {
+		broker = changeevent.NewNotificationBroker()
+	}
+
 	// 启动定时清理 goroutine。使用独立可取消 context，保证 waitForShutdown
 	// 能在进程退出前优雅停止 cleanup loop —— gctx.New() 包装的是
 	// context.Background()，Done 永远不会触发。
@@ -283,7 +306,7 @@ func configureChangeEvents(ctx context.Context, aiopsApp *app.AIOpsApp) (*app.Ch
 		}
 	}
 
-	return app.NewChangeEventAppWithAdapterConfig(changeEventBus, changeEventAdapterConfig(ctx)), shutdown
+	return app.NewChangeEventAppWithBroker(changeEventBus, broker, changeEventAdapterConfig(ctx)), shutdown
 }
 
 func changeEventAdapterConfig(ctx context.Context) changeevent.AdapterRegistryConfig {

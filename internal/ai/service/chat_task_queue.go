@@ -104,7 +104,7 @@ type rabbitMQChatTaskConfig struct {
 type rabbitMQChatTaskClient struct {
 	cfg       rabbitMQChatTaskConfig
 	client    *rabbitmq.Client
-	completed *rabbitmq.TTLSet
+	completed rabbitmq.Deduper
 }
 
 var (
@@ -339,8 +339,28 @@ func newRabbitMQChatTaskClient(cfg rabbitMQChatTaskConfig) (*rabbitMQChatTaskCli
 	return &rabbitMQChatTaskClient{
 		cfg:       cfg,
 		client:    client,
-		completed: rabbitmq.NewTTLSet(10*time.Minute, 20000),
+		completed: buildChatTaskDeduper(cfg),
 	}, nil
+}
+
+// buildChatTaskDeduper 组合跨实例 Redis 去重 + 本实例热缓存。
+// 多实例下：A、B 同时拉到同一条 delivery → 谁先 Claim 谁处理；
+// 失败方直接 ack 跳过，避免重复执行 LLM。Redis 不可用时退化到本实例 TTLSet
+// （多实例可能漏防，但至少不会因为 deduper 失败而 nack 雪崩）。
+func buildChatTaskDeduper(cfg rabbitMQChatTaskConfig) rabbitmq.Deduper {
+	local := rabbitmq.NewTTLSet(10*time.Minute, 20000)
+	redis := g.Redis()
+	if redis == nil {
+		g.Log().Warningf(context.Background(), "[chat_task] redis unavailable, dedup falls back to in-memory (multi-instance may double-execute)")
+		return local
+	}
+	prefix := strings.TrimSpace(cfg.RedisKeyPrefix)
+	if prefix == "" {
+		prefix = "chat_task:"
+	}
+	prefix = "opscaption:dedup:" + prefix
+	redisDed := rabbitmq.NewRedisDeduper(redis, prefix, 10*time.Minute)
+	return rabbitmq.NewCompositeDeduper(redisDed, local)
 }
 
 func chatTaskTopology(cfg rabbitMQChatTaskConfig) rabbitmq.TopologyConfig {
@@ -383,7 +403,7 @@ func (c *rabbitMQChatTaskClient) handleDelivery(delivery amqp.Delivery) {
 		c.ack(delivery)
 		return
 	}
-	if c.completed.Has(event.TaskID) {
+	if !c.completed.Claim(context.Background(), event.TaskID) {
 		metrics.ObserveChatTask("deduped")
 		c.ack(delivery)
 		return
@@ -404,7 +424,7 @@ func (c *rabbitMQChatTaskClient) handleDelivery(delivery amqp.Delivery) {
 
 		if dlqErr := c.publishEvent(context.Background(), event, c.cfg.DLQRoutingKey); dlqErr == nil {
 			metrics.ObserveChatTask("dlq")
-			c.completed.Mark(event.TaskID)
+			// Claim 已在 handleDelivery 入口标记，无需再 Mark
 			c.ack(delivery)
 			return
 		}
@@ -413,7 +433,7 @@ func (c *rabbitMQChatTaskClient) handleDelivery(delivery amqp.Delivery) {
 		return
 	}
 
-	c.completed.Mark(event.TaskID)
+	// Claim 已在 handleDelivery 入口标记
 	metrics.ObserveChatTask("consumed")
 	c.ack(delivery)
 }
