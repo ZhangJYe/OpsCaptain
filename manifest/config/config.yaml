@@ -277,6 +277,40 @@ aiops:
       max_steps: 3
       min_confidence: 0.7
 
+change_events:
+  enabled: true
+  store_backend: "redis"          # redis | memory
+  max_events: 10000               # 最大存储事件数
+  recent_buffer_size: 200         # 内存 ring buffer 大小
+  retention_hours: 720            # 事件保留时长（30 天）
+  webhook:
+    enabled: true
+    json_enabled: false           # 外部 webhook 默认只开放 provider adapter；标准 JSON 走 /api/change_events + JWT
+    sources:
+      github:
+        enabled: false
+        secret: "${OPSCAPTION_GITHUB_WEBHOOK_SECRET}"
+      gitlab:
+        enabled: false
+        secret: "${OPSCAPTION_GITLAB_WEBHOOK_SECRET}"
+      argocd:
+        enabled: false
+        secret: "${OPSCAPTION_ARGOCD_WEBHOOK_SECRET}"
+  proactive:
+    enabled: true                 # 变更后主动巡检
+    debounce_seconds: 300         # 同服务变更去重窗口（5 分钟）
+    inspection_timeout_ms: 120000 # 主动巡检超时（毫秒）
+    require_env: "prod"           # 必须是生产环境
+    require_risk_level: "medium"  # risk_level >= medium
+    require_event_types:
+      - "deploy"
+      - "rollback"
+      - "config_update"
+      - "scale"
+  indexing:
+    enabled: true                 # 变更事件索引到 RAG（语义辅助）
+    source_prefix: "change_event"
+
 multi_agent:
   enabled: false
   data_dir: "./var/runtime"

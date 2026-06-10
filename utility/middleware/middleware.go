@@ -198,6 +198,13 @@ func AuthMiddleware(r *ghttp.Request) {
 	}
 
 	authHeader := r.GetHeader("Authorization")
+	// SSE 客户端（EventSource）无法发送自定义 header，允许从查询参数携带 JWT。
+	// 仅对 GET 请求生效，避免在写操作中扩大攻击面。
+	if authHeader == "" && r.Method == http.MethodGet {
+		if qsToken := strings.TrimSpace(r.GetQuery("access_token").String()); qsToken != "" {
+			authHeader = "Bearer " + qsToken
+		}
+	}
 	if authHeader == "" {
 		if allowAnonymousPath(path) {
 			applyAnonymousViewerContext(r, ctx)

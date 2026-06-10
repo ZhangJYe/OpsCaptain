@@ -270,7 +270,21 @@ func IsRoleAllowed(role string, allowed ...string) bool {
 }
 
 func RequiredRolesForPath(path string) []string {
-	switch strings.ToLower(strings.TrimSpace(path)) {
+	normalized := strings.ToLower(strings.TrimSpace(path))
+	// SSE stream / 单事件 / 列表查询 / 创建 全部要求登录角色。
+	// EventSource 用 ?access_token=<jwt> 走查询参数鉴权（见 middleware.AuthMiddleware）。
+	if normalized == "/api/change_events" ||
+		strings.HasPrefix(normalized, "/api/change_events/") {
+		return []string{RoleOperator, RoleAdmin}
+	}
+	if strings.HasPrefix(normalized, "/api/webhooks/change_events/") {
+		source := strings.TrimPrefix(normalized, "/api/webhooks/change_events/")
+		if source == "json" || source == "manual" {
+			return []string{RoleOperator, RoleAdmin}
+		}
+		return nil
+	}
+	switch normalized {
 	case "/api/ai_ops", "/api/ai_ops_trace", "/api/upload", "/api/token_audit", "/api/approval_requests", "/api/memories":
 		return []string{RoleOperator, RoleAdmin}
 	case "/api/approval_requests/approve", "/api/approval_requests/reject", "/api/memories/action", "/api/memories/promote":

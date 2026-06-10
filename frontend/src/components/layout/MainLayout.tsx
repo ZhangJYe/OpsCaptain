@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { TopBar } from './TopBar'
 import { Sidebar } from '../sidebar/Sidebar'
+import { ChangeEventSentinel } from '../change-events/ChangeEventSentinel'
 import type { ReactNode } from 'react'
 import type { AIOpsEngine, ChatMessage, ChatMode, ChatSession, IncidentSession, WorkbenchMode } from '../../types/chat'
 import { getSiteRecord } from '../../lib/utils'
@@ -139,6 +140,7 @@ export function MainLayout({
             )}
           </div>
         </div>
+        <ChangeEventSentinel />
       </div>
     </div>
   )

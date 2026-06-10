@@ -95,3 +95,17 @@ func promptGuardEnabled(ctx context.Context) bool {
 	}
 	return v.Bool()
 }
+
+// SanitizeForLLMContext 对将被拼入 LLM prompt 的外部文本做注入清洗。
+// 匹配到注入模式的片段会被替换为 [已过滤]。
+// 用于变更事件、外部 webhook 内容等非直接用户输入但会被注入到 LLM 上下文的场景。
+func SanitizeForLLMContext(input string) string {
+	if input == "" {
+		return input
+	}
+	result := input
+	for _, pattern := range promptPatterns {
+		result = pattern.regex.ReplaceAllString(result, "[已过滤]")
+	}
+	return result
+}

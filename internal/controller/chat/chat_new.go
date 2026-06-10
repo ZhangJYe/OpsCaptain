@@ -17,12 +17,14 @@ type ControllerV1 struct {
 	chatApp         *app.ChatApp
 	knowledgeApp    *app.KnowledgeApp
 	aiopsApp        *app.AIOpsApp
+	changeEventApp  *app.ChangeEventApp
 	userSkillStore  skills.UserSkillStore
 	dynamicMCPReg   *tools.DynamicMCPRegistry
 	userSkillLoader *skills.UserSkillLoader
 }
 
 func NewV1(chatApp *app.ChatApp, knowledgeApp *app.KnowledgeApp, aiopsApp *app.AIOpsApp,
+	changeEventApp *app.ChangeEventApp,
 	userSkillStore skills.UserSkillStore, dynamicMCPReg *tools.DynamicMCPRegistry,
 	userSkillLoader *skills.UserSkillLoader) chat.IChatV1 {
 	return &ControllerV1{
@@ -30,6 +32,7 @@ func NewV1(chatApp *app.ChatApp, knowledgeApp *app.KnowledgeApp, aiopsApp *app.A
 		chatApp:         chatApp,
 		knowledgeApp:    knowledgeApp,
 		aiopsApp:        aiopsApp,
+		changeEventApp:  changeEventApp,
 		userSkillStore:  userSkillStore,
 		dynamicMCPReg:   dynamicMCPReg,
 		userSkillLoader: userSkillLoader,

@@ -185,4 +185,26 @@ func TestRequiredRolesForPath(t *testing.T) {
 	if len(memoryActionRoles) != 1 || memoryActionRoles[0] != RoleAdmin {
 		t.Fatalf("unexpected memory action roles: %v", memoryActionRoles)
 	}
+	// SSE stream / 列表 / 单事件 / 创建都要求 Operator/Admin。
+	// EventSource 通过 ?access_token= 携带 JWT（见 middleware.AuthMiddleware）。
+	for _, path := range []string{
+		"/api/change_events",
+		"/api/change_events/stream",
+		"/api/change_events/event-1",
+		"/api/webhooks/change_events/json",
+	} {
+		roles := RequiredRolesForPath(path)
+		if len(roles) != 2 || roles[0] != RoleOperator {
+			t.Fatalf("unexpected change event roles for %s: %v", path, roles)
+		}
+	}
+	for _, path := range []string{
+		"/api/webhooks/change_events/github",
+		"/api/webhooks/change_events/gitlab",
+		"/api/webhooks/change_events/argocd",
+	} {
+		if roles := RequiredRolesForPath(path); len(roles) != 0 {
+			t.Fatalf("provider webhook path should use provider signature, got roles for %s: %v", path, roles)
+		}
+	}
 }

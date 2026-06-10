@@ -30,4 +30,9 @@ type IChatV1 interface {
 	MemoryList(ctx context.Context, req *v1.MemoryListReq) (res *v1.MemoryListRes, err error)
 	MemoryAction(ctx context.Context, req *v1.MemoryActionReq) (res *v1.MemoryActionRes, err error)
 	MemoryPromote(ctx context.Context, req *v1.MemoryPromoteReq) (res *v1.MemoryActionRes, err error)
+	ChangeEventCreate(ctx context.Context, req *v1.ChangeEventCreateReq) (res *v1.ChangeEventCreateRes, err error)
+	ChangeEventList(ctx context.Context, req *v1.ChangeEventListReq) (res *v1.ChangeEventListRes, err error)
+	ChangeEventGet(ctx context.Context, req *v1.ChangeEventGetReq) (res *v1.ChangeEventGetRes, err error)
+	ChangeEventStream(ctx context.Context, req *v1.ChangeEventStreamReq) (res *v1.ChangeEventStreamRes, err error)
+	ChangeEventWebhook(ctx context.Context, req *v1.ChangeEventWebhookReq) (res *v1.ChangeEventWebhookRes, err error)
 }

@@ -75,6 +75,9 @@ Learn/*.base
 Learn/review/
 Learn/design/*.progress.md
 
+# Private interview retrospectives and personal notes
+docs/private/
+
 # Accidental root npm manifests
 /package.json
 /package-lock.json

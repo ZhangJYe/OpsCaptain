@@ -3,6 +3,7 @@ package main
 import (
 	chat_pipeline "SuperBizAgent/internal/ai/agent/chat_pipeline"
 	"SuperBizAgent/internal/ai/agent/knowledge_index_pipeline"
+	"SuperBizAgent/internal/ai/changeevent"
 	"SuperBizAgent/internal/ai/events"
 	"SuperBizAgent/internal/ai/indexer"
 	"SuperBizAgent/internal/ai/models"
@@ -134,6 +135,8 @@ func main() {
 	aiopsApp := app.NewAIOpsApp()
 	app.RegisterChatTaskExecutor(chatApp)
 
+	changeEventApp, changeEventShutdown := configureChangeEvents(ctx, aiopsApp)
+
 	// Initialize user tools system
 	userSkillStore := skills.NewFileUserSkillStore(g.Cfg().MustGet(ctx, "user_tools.store_path").String())
 	whitelistCfg, _ := g.Cfg().Get(ctx, "user_tools.network_whitelist")
@@ -199,14 +202,162 @@ func main() {
 		group.Middleware(middleware.AuthMiddleware)
 		group.Middleware(middleware.RateLimitMiddleware)
 		group.Middleware(middleware.ResponseMiddleware)
-		group.Bind(chat.NewV1(chatApp, knowledgeApp, aiopsApp, userSkillStore, dynamicMCPReg, userSkillLoader))
+		group.Bind(chat.NewV1(chatApp, knowledgeApp, aiopsApp, changeEventApp, userSkillStore, dynamicMCPReg, userSkillLoader))
 	})
 
 	if err := s.Start(); err != nil {
 		panic(err)
 	}
 
-	waitForShutdown(ctx, s, &shuttingDown, pprofServer, traceShutdown, memoryPipelineShutdown, chatTaskPipelineShutdown, healthReportingShutdown)
+	waitForShutdown(ctx, s, &shuttingDown, pprofServer, traceShutdown, memoryPipelineShutdown, chatTaskPipelineShutdown, healthReportingShutdown, changeEventShutdown)
+}
+
+func configureChangeEvents(ctx context.Context, aiopsApp *app.AIOpsApp) (*app.ChangeEventApp, func()) {
+	if !configBool(ctx, "change_events.enabled", true) {
+		aiservice.SetChangeEventBus(nil)
+		g.Log().Info(ctx, "change events are disabled by config")
+		return app.NewDisabledChangeEventApp(), func() {}
+	}
+
+	retentionHours := configInt(ctx, "change_events.retention_hours", 720)
+	maxEvents := configInt(ctx, "change_events.max_events", 10000)
+	storeBackend := strings.ToLower(strings.TrimSpace(configString(ctx, "change_events.store_backend", "redis")))
+	var store changeevent.ChangeEventStore
+	switch storeBackend {
+	case "memory":
+		store = changeevent.NewMemoryChangeEventStore()
+	case "redis", "":
+		store = changeevent.NewRedisChangeEventStore(g.Redis(), "opscaptionai:ce:", retentionHours, maxEvents)
+	default:
+		g.Log().Warningf(ctx, "unsupported change_events.store_backend=%q, falling back to redis", storeBackend)
+		store = changeevent.NewRedisChangeEventStore(g.Redis(), "opscaptionai:ce:", retentionHours, maxEvents)
+	}
+
+	changeEventBus := changeevent.NewChangeEventBus(store, configInt(ctx, "change_events.recent_buffer_size", 200))
+	if configBool(ctx, "change_events.indexing.enabled", true) {
+		changeEventBus.Register(changeevent.NewChangeRAGIndexer(configString(ctx, "change_events.indexing.source_prefix", "change_event")))
+	}
+	if configBool(ctx, "change_events.proactive.enabled", true) {
+		proactiveCfg := changeevent.DefaultProactiveAnalyzerConfig()
+		proactiveCfg.Enabled = true
+		proactiveCfg.DebounceSeconds = configInt(ctx, "change_events.proactive.debounce_seconds", proactiveCfg.DebounceSeconds)
+		proactiveCfg.RequireEnv = configString(ctx, "change_events.proactive.require_env", proactiveCfg.RequireEnv)
+		proactiveCfg.RequireRiskLevel = configString(ctx, "change_events.proactive.require_risk_level", proactiveCfg.RequireRiskLevel)
+		proactiveCfg.RequireEventTypes = configStringSlice(ctx, "change_events.proactive.require_event_types", proactiveCfg.RequireEventTypes)
+		proactiveCfg.InspectionTimeout = configInt(ctx, "change_events.proactive.inspection_timeout_ms", proactiveCfg.InspectionTimeout)
+		changeEventBus.Register(changeevent.NewProactiveAnalyzer(app.NewChangeEventAIOpsRunner(aiopsApp, ""), proactiveCfg))
+	}
+	aiservice.SetChangeEventBus(changeEventBus)
+
+	// 启动定时清理 goroutine。使用独立可取消 context，保证 waitForShutdown
+	// 能在进程退出前优雅停止 cleanup loop —— gctx.New() 包装的是
+	// context.Background()，Done 永远不会触发。
+	cleanupCtx, cancelCleanup := context.WithCancel(context.Background())
+	cleanupDone := make(chan struct{})
+	go func() {
+		defer close(cleanupDone)
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-cleanupCtx.Done():
+				return
+			case <-ticker.C:
+				cutoff := time.Now().Add(-time.Duration(retentionHours) * time.Hour)
+				deleted, err := store.Cleanup(cleanupCtx, cutoff)
+				if err != nil {
+					g.Log().Warningf(cleanupCtx, "change event cleanup error: %v", err)
+				} else if deleted > 0 {
+					g.Log().Infof(cleanupCtx, "change event cleanup: removed %d expired events (before %s)", deleted, cutoff.Format(time.RFC3339))
+				}
+			}
+		}
+	}()
+
+	shutdown := func() {
+		cancelCleanup()
+		select {
+		case <-cleanupDone:
+		case <-time.After(5 * time.Second):
+			g.Log().Warningf(ctx, "change event cleanup goroutine did not stop within 5s")
+		}
+	}
+
+	return app.NewChangeEventAppWithAdapterConfig(changeEventBus, changeEventAdapterConfig(ctx)), shutdown
+}
+
+func changeEventAdapterConfig(ctx context.Context) changeevent.AdapterRegistryConfig {
+	if !configBool(ctx, "change_events.webhook.enabled", true) {
+		return changeevent.AdapterRegistryConfig{}
+	}
+	return changeevent.AdapterRegistryConfig{
+		JSONEnabled: configBool(ctx, "change_events.webhook.json_enabled", false),
+		GitHub:      changeEventWebhookSourceConfig(ctx, "github"),
+		GitLab:      changeEventWebhookSourceConfig(ctx, "gitlab"),
+		ArgoCD:      changeEventWebhookSourceConfig(ctx, "argocd"),
+	}
+}
+
+func changeEventWebhookSourceConfig(ctx context.Context, source string) changeevent.WebhookAdapterConfig {
+	base := "change_events.webhook.sources." + source
+	enabled := configBool(ctx, base+".enabled", false)
+	secret := configSecret(ctx, base+".secret")
+	if enabled && secret == "" {
+		g.Log().Warningf(ctx, "change_events webhook source %s is enabled but secret is missing; adapter disabled", source)
+		enabled = false
+	}
+	return changeevent.WebhookAdapterConfig{
+		Enabled: enabled,
+		Secret:  secret,
+	}
+}
+
+func configBool(ctx context.Context, key string, fallback bool) bool {
+	v, err := g.Cfg().Get(ctx, key)
+	if err != nil {
+		return fallback
+	}
+	return v.Bool()
+}
+
+func configInt(ctx context.Context, key string, fallback int) int {
+	v, err := g.Cfg().Get(ctx, key)
+	if err != nil || v.Int() <= 0 {
+		return fallback
+	}
+	return v.Int()
+}
+
+func configString(ctx context.Context, key string, fallback string) string {
+	v, err := g.Cfg().Get(ctx, key)
+	if err != nil || strings.TrimSpace(v.String()) == "" {
+		return fallback
+	}
+	return strings.TrimSpace(v.String())
+}
+
+func configSecret(ctx context.Context, key string) string {
+	raw := configString(ctx, key, "")
+	if raw == "" {
+		return ""
+	}
+	resolved, ok := common.ResolveOptionalEnv(raw)
+	if !ok || common.LooksLikePlaceholderSecret(resolved) {
+		return ""
+	}
+	return strings.TrimSpace(resolved)
+}
+
+func configStringSlice(ctx context.Context, key string, fallback []string) []string {
+	v, err := g.Cfg().Get(ctx, key)
+	if err != nil {
+		return fallback
+	}
+	values := v.Strings()
+	if len(values) == 0 {
+		return fallback
+	}
+	return values
 }
 
 func waitForShutdown(
@@ -218,6 +369,7 @@ func waitForShutdown(
 	memoryPipelineShutdown func(context.Context) error,
 	chatTaskPipelineShutdown func(context.Context) error,
 	healthReportingShutdown func(),
+	changeEventShutdown func(),
 ) {
 	sigCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -238,6 +390,10 @@ func waitForShutdown(
 		if err := pprofServer.Shutdown(context.Background()); err != nil {
 			g.Log().Warningf(ctx, "pprof server shutdown failed: %v", err)
 		}
+	}
+
+	if changeEventShutdown != nil {
+		changeEventShutdown()
 	}
 
 	if healthReportingShutdown != nil {

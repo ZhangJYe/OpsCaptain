@@ -5,6 +5,26 @@ export function getApiBaseUrl(): string {
   return (config.apiBaseUrl || './api').replace(/\/+$/, '')
 }
 
+// getAccessToken 返回前端持有的 JWT。
+// 优先级：运行时全局配置（部署时注入） > localStorage > 空串。
+// EventSource 等无法自定义 header 的客户端可通过查询参数携带：?access_token=<token>。
+export function getAccessToken(): string {
+  if (typeof window === 'undefined') {
+    return ''
+  }
+  const config = (window as any).SUPERBIZAGENT_CONFIG || {}
+  const fromConfig = typeof config.accessToken === 'string' ? config.accessToken.trim() : ''
+  if (fromConfig) {
+    return fromConfig
+  }
+  try {
+    const stored = window.localStorage?.getItem('opscaption_access_token') || ''
+    return stored.trim()
+  } catch {
+    return ''
+  }
+}
+
 export function getSiteRecord(): { icpNumber: string; icpLink: string } | null {
   const config = (window as any).SUPERBIZAGENT_CONFIG || {}
   const siteRecord = config.siteRecord || {}
