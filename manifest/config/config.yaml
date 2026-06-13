@@ -243,6 +243,22 @@ rag:
   hybrid_final_top_k: 5
   hybrid_metadata_boost_enabled: true
   owner_scope_server_filter_enabled: true
+  planner:
+    enabled: false
+    model: "chat_model_fast"
+    timeout_ms: 200
+    max_sub_queries: 4
+    min_query_length: 15
+    exec_timeout_ms: 5000
+    decomposition_keywords:
+      - "和"
+      - "以及"
+      - "还有"
+      - "跟"
+      - "为什么"
+      - "怎么回事"
+      - "导致"
+      - "关系"
 
 context_compression:
   enabled: false

@@ -18,6 +18,10 @@ type QueryMetrics struct {
 	RerankLatencyMs   int64 `json:"rerank_latency_ms"`
 	ResultCount       int   `json:"result_count"`
 	TotalLatencyMs    int64 `json:"total_latency_ms"`
+	Decomposed        bool  `json:"decomposed"`
+	SubQueryCount     int   `json:"sub_query_count"`
+	PlanLatencyMs     int64 `json:"plan_latency_ms"`
+	MergeLatencyMs    int64 `json:"merge_latency_ms"`
 }
 
 type QueryExecutor func(context.Context, string) ([]RetrievedDoc, QueryMetrics, error)
@@ -37,6 +41,8 @@ type QuerySummary struct {
 	CacheHitRate         float64 `json:"cache_hit_rate"`
 	EmptyRate            float64 `json:"empty_rate"`
 	CitationCoverage     float64 `json:"citation_coverage"`
+	AvgPlanLatencyMs     float64 `json:"avg_plan_latency_ms"`
+	DecomposedCount      int     `json:"decomposed_count"`
 }
 
 func RunQueryEval(ctx context.Context, exec QueryExecutor, cases []EvalCase, ks []int) (QuerySummary, []QueryCaseResult, error) {
@@ -102,6 +108,10 @@ func accumulateQueryMetrics(qSummary *QuerySummary, metrics QueryMetrics, ranked
 	} else {
 		qSummary.CitationCoverage++
 	}
+	if metrics.Decomposed {
+		qSummary.AvgPlanLatencyMs += float64(metrics.PlanLatencyMs)
+		qSummary.DecomposedCount++
+	}
 }
 
 func finalizeQuerySummary(qSummary *QuerySummary, ks []int) {
@@ -118,6 +128,9 @@ func finalizeQuerySummary(qSummary *QuerySummary, ks []int) {
 	qSummary.CacheHitRate /= caseCount
 	qSummary.EmptyRate /= caseCount
 	qSummary.CitationCoverage /= caseCount
+	if qSummary.DecomposedCount > 0 {
+		qSummary.AvgPlanLatencyMs /= float64(qSummary.DecomposedCount)
+	}
 }
 
 const (

@@ -110,6 +110,31 @@ func main() {
 		return eval.SchemaDocsToRetrievedDocs(docs), metrics, nil
 	}
 
+	if *modeRaw == "planner" {
+		plannerCfg := rag.LoadPlannerConfig(context.Background())
+		plannerCfg.Enabled = true
+		exec = func(ctx context.Context, query string) ([]eval.RetrievedDoc, eval.QueryMetrics, error) {
+			start := time.Now()
+			queryCtx, cancel := context.WithTimeout(ctx, time.Duration(*perQueryTimeoutMs)*time.Millisecond)
+			defer cancel()
+
+			docs, merged, err := rag.QueryWithPlanner(queryCtx, rag.SharedPool(), query, plannerCfg)
+			if err != nil {
+				return nil, eval.QueryMetrics{}, err
+			}
+
+			metrics := eval.QueryMetrics{
+				TotalLatencyMs: time.Since(start).Milliseconds(),
+				ResultCount:    len(docs),
+				Decomposed:     merged.Trace.Analyzed && merged.Trace.SubQueryCount > 0,
+				SubQueryCount:  merged.Trace.SubQueryCount,
+				PlanLatencyMs:  merged.Trace.PlanLatencyMs,
+				MergeLatencyMs: merged.Trace.MergeLatencyMs,
+			}
+			return eval.SchemaDocsToRetrievedDocs(docs), metrics, nil
+		}
+	}
+
 	summary, results, err := eval.RunQueryEval(context.Background(), exec, cases, ks)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "run online eval failed: %v\n", err)
@@ -159,6 +184,8 @@ func parseEvalMode(raw string) (wantRewrite, wantRerank, isHybrid, useConfigDefa
 		return false, true, false, false
 	case "full":
 		return true, true, false, false
+	case "planner":
+		return false, false, false, true
 	default:
 		fmt.Fprintf(os.Stderr, "unknown eval mode %q, falling back to hybrid\n", raw)
 		return false, false, true, true
@@ -235,6 +262,10 @@ func printSummary(mode string, summary eval.QuerySummary, ks []int) {
 	fmt.Printf("  Avg Retrieve : %.2f\n", summary.AvgRetrieveLatencyMs)
 	fmt.Printf("  Avg Rerank   : %.2f\n", summary.AvgRerankLatencyMs)
 	fmt.Printf("  Avg Total ms : %.2f\n", summary.AvgTotalLatencyMs)
+	fmt.Printf("  Decomposed   : %d/%d (%.1f%%)\n", summary.DecomposedCount, summary.Cases, float64(summary.DecomposedCount)/float64(summary.Cases)*100)
+	if summary.DecomposedCount > 0 {
+		fmt.Printf("  Avg Plan ms  : %.2f\n", summary.AvgPlanLatencyMs)
+	}
 	fmt.Println("========================================")
 
 	fmt.Printf("%-12s", "Metric")
