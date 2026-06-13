@@ -259,6 +259,15 @@ rag:
       - "怎么回事"
       - "导致"
       - "关系"
+  agent:
+    enabled: false
+    model: "chat_model_fast"
+    max_rounds: 3
+    confidence_threshold: 0.7
+    eval_timeout_ms: 3000
+    plan_timeout_ms: 2000
+    total_timeout_ms: 30000
+    max_total_tokens: 8000
 
 context_compression:
   enabled: false
