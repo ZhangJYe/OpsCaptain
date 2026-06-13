@@ -135,6 +135,29 @@ func main() {
 		}
 	}
 
+	if *modeRaw == "agent" {
+		agentCfg := rag.LoadAgentConfig(context.Background())
+		agentCfg.Enabled = true
+		agent := rag.NewAgentRAG(agentCfg)
+		exec = func(ctx context.Context, query string) ([]eval.RetrievedDoc, eval.QueryMetrics, error) {
+			start := time.Now()
+			queryCtx, cancel := context.WithTimeout(ctx, time.Duration(*perQueryTimeoutMs)*time.Millisecond)
+			defer cancel()
+			docs, agentTrace, err := agent.Query(queryCtx, rag.SharedPool(), query)
+			if err != nil {
+				return nil, eval.QueryMetrics{}, err
+			}
+			metrics := eval.QueryMetrics{
+				TotalLatencyMs:  time.Since(start).Milliseconds(),
+				ResultCount:     len(docs),
+				AgentRounds:     agentTrace.Rounds,
+				FinalConfidence: agentTrace.FinalConfidence,
+				AgentLatencyMs:  agentTrace.TotalLatencyMs,
+			}
+			return eval.SchemaDocsToRetrievedDocs(docs), metrics, nil
+		}
+	}
+
 	summary, results, err := eval.RunQueryEval(context.Background(), exec, cases, ks)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "run online eval failed: %v\n", err)
@@ -185,6 +208,8 @@ func parseEvalMode(raw string) (wantRewrite, wantRerank, isHybrid, useConfigDefa
 	case "full":
 		return true, true, false, false
 	case "planner":
+		return false, false, false, true
+	case "agent":
 		return false, false, false, true
 	default:
 		fmt.Fprintf(os.Stderr, "unknown eval mode %q, falling back to hybrid\n", raw)

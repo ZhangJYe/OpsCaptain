@@ -22,6 +22,9 @@ type QueryMetrics struct {
 	SubQueryCount     int   `json:"sub_query_count"`
 	PlanLatencyMs     int64 `json:"plan_latency_ms"`
 	MergeLatencyMs    int64 `json:"merge_latency_ms"`
+	AgentRounds       int     `json:"agent_rounds"`
+	FinalConfidence   float64 `json:"final_confidence"`
+	AgentLatencyMs    int64   `json:"agent_latency_ms"`
 }
 
 type QueryExecutor func(context.Context, string) ([]RetrievedDoc, QueryMetrics, error)
@@ -43,6 +46,9 @@ type QuerySummary struct {
 	CitationCoverage     float64 `json:"citation_coverage"`
 	AvgPlanLatencyMs     float64 `json:"avg_plan_latency_ms"`
 	DecomposedCount      int     `json:"decomposed_count"`
+	AvgAgentRounds     float64 `json:"avg_agent_rounds"`
+	AvgFinalConfidence float64 `json:"avg_final_confidence"`
+	AvgAgentLatencyMs  float64 `json:"avg_agent_latency_ms"`
 }
 
 func RunQueryEval(ctx context.Context, exec QueryExecutor, cases []EvalCase, ks []int) (QuerySummary, []QueryCaseResult, error) {
@@ -112,6 +118,9 @@ func accumulateQueryMetrics(qSummary *QuerySummary, metrics QueryMetrics, ranked
 		qSummary.AvgPlanLatencyMs += float64(metrics.PlanLatencyMs)
 		qSummary.DecomposedCount++
 	}
+	qSummary.AvgAgentRounds += float64(metrics.AgentRounds)
+	qSummary.AvgFinalConfidence += metrics.FinalConfidence
+	qSummary.AvgAgentLatencyMs += float64(metrics.AgentLatencyMs)
 }
 
 func finalizeQuerySummary(qSummary *QuerySummary, ks []int) {
@@ -131,6 +140,9 @@ func finalizeQuerySummary(qSummary *QuerySummary, ks []int) {
 	if qSummary.DecomposedCount > 0 {
 		qSummary.AvgPlanLatencyMs /= float64(qSummary.DecomposedCount)
 	}
+	qSummary.AvgAgentRounds /= caseCount
+	qSummary.AvgFinalConfidence /= caseCount
+	qSummary.AvgAgentLatencyMs /= caseCount
 }
 
 const (
