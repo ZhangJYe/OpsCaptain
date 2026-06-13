@@ -29,6 +29,12 @@ var RAGRerank string
 //go:embed rag_planner.txt
 var RAGPlannerSystem string
 
+//go:embed rag_evaluator.txt
+var RAGEvaluator string
+
+//go:embed rag_planner_agent.txt
+var RAGPlannerAgent string
+
 func init() {
 	ChatBase = strings.TrimSpace(ChatBase)
 	ChatIdentity = strings.TrimSpace(ChatIdentity)
@@ -38,4 +44,6 @@ func init() {
 	RAGRewrite = strings.TrimSpace(RAGRewrite)
 	RAGRerank = strings.TrimSpace(RAGRerank)
 	RAGPlannerSystem = strings.TrimSpace(RAGPlannerSystem)
+	RAGEvaluator = strings.TrimSpace(RAGEvaluator)
+	RAGPlannerAgent = strings.TrimSpace(RAGPlannerAgent)
 }
