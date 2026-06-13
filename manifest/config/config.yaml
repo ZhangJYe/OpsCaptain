@@ -264,8 +264,8 @@ rag:
     model: "chat_model_fast"
     max_rounds: 3
     confidence_threshold: 0.7
-    eval_timeout_ms: 3000
-    plan_timeout_ms: 2000
+    eval_timeout_ms: 10000
+    plan_timeout_ms: 10000
     total_timeout_ms: 30000
     max_total_tokens: 8000
 

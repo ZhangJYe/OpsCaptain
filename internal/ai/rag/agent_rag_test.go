@@ -20,11 +20,11 @@ func TestDefaultAgentConfig(t *testing.T) {
 	if cfg.ConfidenceThreshold != 0.7 {
 		t.Errorf("expected ConfidenceThreshold=0.7, got %f", cfg.ConfidenceThreshold)
 	}
-	if cfg.EvalTimeoutMs != 3000 {
-		t.Errorf("expected EvalTimeoutMs=3000, got %d", cfg.EvalTimeoutMs)
+	if cfg.EvalTimeoutMs != 10000 {
+		t.Errorf("expected EvalTimeoutMs=10000, got %d", cfg.EvalTimeoutMs)
 	}
-	if cfg.PlanTimeoutMs != 2000 {
-		t.Errorf("expected PlanTimeoutMs=2000, got %d", cfg.PlanTimeoutMs)
+	if cfg.PlanTimeoutMs != 10000 {
+		t.Errorf("expected PlanTimeoutMs=10000, got %d", cfg.PlanTimeoutMs)
 	}
 	if cfg.TotalTimeoutMs != 30000 {
 		t.Errorf("expected TotalTimeoutMs=30000, got %d", cfg.TotalTimeoutMs)

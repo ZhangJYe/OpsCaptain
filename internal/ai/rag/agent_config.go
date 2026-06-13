@@ -24,8 +24,8 @@ func DefaultAgentConfig() AgentConfig {
 		Model:               "chat_model_fast",
 		MaxRounds:           3,
 		ConfidenceThreshold: 0.7,
-		EvalTimeoutMs:       3000,
-		PlanTimeoutMs:       2000,
+		EvalTimeoutMs:       10000,
+		PlanTimeoutMs:       10000,
 		TotalTimeoutMs:      30000,
 		MaxTotalTokens:      8000,
 	}
