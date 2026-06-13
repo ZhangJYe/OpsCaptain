@@ -181,4 +181,45 @@ Eval cases: 18 built-in sample cases
 1. 扩展关键词触发规则，覆盖更多复合 query
 2. 增加 AIOps 专用 eval cases（延迟诊断、告警关联等场景）
 3. 优化子查询生成 prompt，提升拆解质量
-4. 考虑 Plan C（Full Agentic RAG）：检索质量评估 + 自适应重试
+
+---
+
+## 8. Plan C (Full Agentic RAG) 实验结果
+
+### 实现状态 ✅
+
+Commits:
+- `e1c3f7e46` feat(rag): 新增 AgentRAG 配置与 prompt 注册
+- `582832471` feat(rag): 实现检索质量评估器 (Evaluator)
+- `26fb87101` feat(rag): 实现多轮检索规划器 (RetrievalPlanner)
+- `4f7aa33f3` feat(rag): 实现 AgentRAG 主入口
+- `e2b760898` feat(rag): AgentRAG 单元测试与 eval 集成
+- `d567ebec1` config(rag): 新增 AgentRAG 配置项
+- `b1135e0a4` fix(rag): evaluator/planner 超时调整为 10s
+
+### 线上实验结果
+
+服务器: 124.222.57.178
+执行时间: 2026-06-14 03:58 UTC
+
+| Mode | Recall@1 | Recall@3 | Recall@5 | MRR | Avg Total ms | Decomposed |
+|------|----------|----------|----------|-----|-------------|-----------|
+| hybrid (baseline) | 0.39 | 0.86 | 0.92 | 0.64 | 145ms | 0/18 |
+| planner (Plan A) | 0.78 | 0.94 | 0.94 | 0.88 | 578ms | 1/18 |
+| agent (Plan C) | 0.78 | 0.94 | 0.94 | 0.88 | 5462ms | 0/18 |
+
+### 关键发现
+
+1. **Agent 模式 LLM 调用持续超时** — evaluator 和 planner 的 LLM 调用从该服务器 consistently timeout（context deadline exceeded），导致 agent 降级到单轮检索
+2. **降级行为正确** — 即使 LLM 全部失败，agent 仍返回 Recall@1=0.78（与 planner 持平），证明降级逻辑工作正常
+3. **Agent Rounds = 1.0** — 因 evaluator 始终返回 confidence=0.5（fallback），loop 只运行 1 轮
+4. **延迟代价高** — 5462ms vs planner 578ms（9.4x），主要来自 LLM 超时重试
+5. **根因是服务器网络** — 同样的 API 调用在本地（macOS）846ms 成功，从服务器 consistently timeout
+
+### 待解决
+
+1. **服务器 LLM 连接稳定性** — 需要排查 DeepSeek API 从该服务器的连接问题（可能是 DNS、TLS、或路由问题）
+2. **LLM 可用时的预期效果** — 当 evaluator/planner LLM 正常工作时，agent 模式预期：
+   - 多轮检索提升复合 query 召回率
+   - 自适应策略选择优化检索质量
+   - 延迟增加 ~5-10s（可接受）
