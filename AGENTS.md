@@ -21,6 +21,7 @@
 | 10 | **不要重新接回 `chat_multi_agent`** 路由 | 已废弃架构 |
 | 11 | 修改 RAG / Agent / ContextEngine 后，**必须跑对应 package 测试** | 局部改动可能破坏上游 |
 | 12 | **每次 push 前必须先 pull 最新远端代码** | 避免推送失败 |
+| 13 | 修改 `Dockerfile` / `docker-compose` / `deploy/` 后，必须实际 `docker build` 并启动容器验证健康检查 | CI build 过了也可能 CD 启动失败 |
 
 ---
 
@@ -111,6 +112,7 @@ utility/    → internal/                ❌
 - [ ] `go build ./...` 通过
 - [ ] `go test ./...` 通过
 - [ ] `npm run build` 通过（如有前端改动）
+- [ ] 如修改镜像 / Compose / 部署脚本，必须运行对应镜像的 `docker build`，并用 `docker run` / `docker compose up` 验证容器能启动、健康检查能通过
 - [ ] 注释聚焦复杂逻辑、边界条件或外部协议
 - [ ] 没有创建不必要的新文件
 - [ ] commit message 是中文
@@ -128,6 +130,7 @@ utility/    → internal/                ❌
 - **RAG 先看 baseline / holdout** — 不能拿全量数据自证效果。
 - **不暴露 secrets** — 不要日志记录 API keys、tokens、内部 IP。
 - **push 前必须测试 + pull rebase** — CI 会挂，远端更新会冲突。
+- **不要随意给官方 nginx 镜像加 `USER nginx`** — nginx 启动阶段需要写 `/var/cache/nginx/*` 等运行时目录；只跑 `npm run build` 或镜像 build 不够，必须实际启动容器并请求 `/healthz` 或 `/`。
 
 ---
 
