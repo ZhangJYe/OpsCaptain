@@ -114,6 +114,32 @@ context:
 retriever:
   top_k: 5
 
+rag:
+  rewrite_enabled: false
+  rerank_enabled: false
+  hybrid_dense_top_k: 50
+  hybrid_lexical_top_k: 50
+  hybrid_fusion_k: 60
+  hybrid_candidate_top_k: 20
+  hybrid_final_top_k: 5
+  hybrid_metadata_boost_enabled: true
+  planner:
+    enabled: true
+    model: "chat_model_fast"
+    timeout_ms: 5000
+    max_sub_queries: 4
+    min_query_length: 15
+    exec_timeout_ms: 5000
+    decomposition_keywords:
+      - "和"
+      - "以及"
+      - "还有"
+      - "跟"
+      - "为什么"
+      - "怎么回事"
+      - "导致"
+      - "关系"
+
 aiops:
   engine: "plan_execute_replan"
   plan:
