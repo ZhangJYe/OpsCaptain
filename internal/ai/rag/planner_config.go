@@ -21,7 +21,7 @@ func DefaultPlannerConfig() PlannerConfig {
 	return PlannerConfig{
 		Enabled:           false,
 		Model:             "chat_model_fast",
-		TimeoutMs:         200,
+		TimeoutMs:         5000,
 		MaxSubQueries:     4,
 		MinQueryLength:    15,
 		ExecTimeoutMs:     5000,

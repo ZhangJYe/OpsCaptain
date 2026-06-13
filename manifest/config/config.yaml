@@ -246,7 +246,7 @@ rag:
   planner:
     enabled: false
     model: "chat_model_fast"
-    timeout_ms: 200
+    timeout_ms: 5000
     max_sub_queries: 4
     min_query_length: 15
     exec_timeout_ms: 5000

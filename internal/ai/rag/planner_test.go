@@ -45,8 +45,8 @@ func TestDefaultPlannerConfig(t *testing.T) {
 	if cfg.MaxSubQueries != 4 {
 		t.Errorf("expected MaxSubQueries=4, got %d", cfg.MaxSubQueries)
 	}
-	if cfg.TimeoutMs != 200 {
-		t.Errorf("expected TimeoutMs=200, got %d", cfg.TimeoutMs)
+	if cfg.TimeoutMs != 5000 {
+		t.Errorf("expected TimeoutMs=5000, got %d", cfg.TimeoutMs)
 	}
 	if cfg.MinQueryLength != 15 {
 		t.Errorf("expected MinQueryLength=15, got %d", cfg.MinQueryLength)
