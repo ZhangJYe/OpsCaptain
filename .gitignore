@@ -24,6 +24,7 @@ Thumbs.db
 # Env / secrets
 .env
 .env.*
+!.env.example
 
 # Config files with secrets
 manifest/config/config.yaml

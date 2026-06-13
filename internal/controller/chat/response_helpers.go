@@ -2,7 +2,7 @@ package chat
 
 import (
 	v1 "SuperBizAgent/api/chat/v1"
-	aiservice "SuperBizAgent/internal/ai/service"
+	"SuperBizAgent/internal/app"
 	"SuperBizAgent/utility/resilience"
 	"SuperBizAgent/utility/safety"
 	traceutil "SuperBizAgent/utility/tracing"
@@ -48,7 +48,7 @@ func userFacingAIOpsError(ctx context.Context, err error) *v1.AIOpsRes {
 
 func userFacingExecutionError(err error) (int, string) {
 	switch {
-	case aiservice.IsDailyTokenLimitError(err):
+	case app.IsDailyTokenLimitError(err):
 		return http.StatusTooManyRequests, "daily token limit exceeded for this session"
 	case resilience.IsConcurrencyLimitError(err):
 		return http.StatusServiceUnavailable, "AI is temporarily busy. Please retry shortly."

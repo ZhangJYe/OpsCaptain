@@ -2,6 +2,10 @@ package app
 
 import (
 	"SuperBizAgent/internal/ai/memory"
+	"SuperBizAgent/internal/ai/protocol"
+	"SuperBizAgent/internal/ai/service"
+	"SuperBizAgent/internal/ai/skills"
+	"SuperBizAgent/internal/ai/tools"
 	"fmt"
 )
 
@@ -45,3 +49,55 @@ type PromptRejectedError struct {
 func (e *PromptRejectedError) Error() string {
 	return fmt.Sprintf("prompt rejected: %s", e.Reason)
 }
+
+// --- Re-exports from ai/skills ---
+
+type UserSkillStore = skills.UserSkillStore
+type UserSkillLoader = skills.UserSkillLoader
+type UserSkill = skills.UserSkill
+type UserMCPTool = skills.UserMCPTool
+
+const (
+	StatusPending  = skills.StatusPending
+	StatusApproved = skills.StatusApproved
+	StatusRejected = skills.StatusRejected
+)
+
+// --- Re-exports from ai/tools ---
+
+type DynamicMCPRegistry = tools.DynamicMCPRegistry
+
+// --- Re-exports from ai/protocol ---
+
+type ChangeEvent = protocol.ChangeEvent
+
+// --- Re-exports from ai/service ---
+
+type SessionTokenAudit = service.SessionTokenAudit
+type ChatTaskStatus = service.ChatTaskStatus
+type IncidentEvent = service.IncidentEvent
+type IncidentSession = service.IncidentSession
+type ApprovalRequest = service.ApprovalRequest
+type ExecutionResponse = service.ExecutionResponse
+type MemoryListOptions = service.MemoryListOptions
+type MemoryItemView = service.MemoryItemView
+type MemoryPromoteOptions = service.MemoryPromoteOptions
+
+var (
+	NewMemoryService          = service.NewMemoryService
+	ListApprovalRequests      = service.ListApprovalRequests
+	ApproveQueuedAIOpsRequest = service.ApproveQueuedAIOpsRequest
+	RejectQueuedAIOpsRequest  = service.RejectQueuedAIOpsRequest
+	GetSessionTokenAudit      = service.GetSessionTokenAudit
+	IsDailyTokenLimitError    = service.IsDailyTokenLimitError
+	SubmitChatTask            = service.SubmitChatTask
+	GetChatTask               = service.GetChatTask
+	CreateAIOpsIncident       = service.CreateAIOpsIncident
+	AppendAIOpsIncidentTurn   = service.AppendAIOpsIncidentTurn
+	ListAIOpsIncidents        = service.ListAIOpsIncidents
+	GetAIOpsIncident          = service.GetAIOpsIncident
+	GetAIOpsIncidentEvents    = service.GetAIOpsIncidentEvents
+	IncidentLatestTurn        = service.IncidentLatestTurn
+	IncidentTurnTerminal      = service.IncidentTurnTerminal
+	ErrIncidentTurnRunning    = service.ErrIncidentTurnRunning
+)

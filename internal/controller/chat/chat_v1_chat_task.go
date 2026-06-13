@@ -2,7 +2,6 @@ package chat
 
 import (
 	v1 "SuperBizAgent/api/chat/v1"
-	aiservice "SuperBizAgent/internal/ai/service"
 	"SuperBizAgent/internal/app"
 	"SuperBizAgent/internal/consts"
 	"context"
@@ -15,8 +14,8 @@ import (
 )
 
 var (
-	submitChatTask = aiservice.SubmitChatTask
-	getChatTask    = aiservice.GetChatTask
+	submitChatTask = app.SubmitChatTask
+	getChatTask    = app.GetChatTask
 )
 
 func (c *ControllerV1) ChatSubmit(ctx context.Context, req *v1.ChatSubmitReq) (res *v1.ChatSubmitRes, err error) {

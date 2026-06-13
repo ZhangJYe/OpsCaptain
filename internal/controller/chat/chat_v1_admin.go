@@ -2,7 +2,7 @@ package chat
 
 import (
 	v1 "SuperBizAgent/api/chat/v1"
-	"SuperBizAgent/internal/ai/service"
+	"SuperBizAgent/internal/app"
 	"context"
 	"errors"
 	"fmt"
@@ -10,22 +10,22 @@ import (
 )
 
 var (
-	listApprovalRequests      = service.ListApprovalRequests
-	approveQueuedAIOpsRequest = service.ApproveQueuedAIOpsRequest
-	rejectQueuedAIOpsRequest  = service.RejectQueuedAIOpsRequest
+	listApprovalRequests      = app.ListApprovalRequests
+	approveQueuedAIOpsRequest = app.ApproveQueuedAIOpsRequest
+	rejectQueuedAIOpsRequest  = app.RejectQueuedAIOpsRequest
 
 	// Memory operations injected as function pointers to avoid direct service import.
-	listMemoriesFn = func(ctx context.Context, opts service.MemoryListOptions) []service.MemoryItemView {
-		return service.NewMemoryService().ListMemories(ctx, opts)
+	listMemoriesFn = func(ctx context.Context, opts app.MemoryListOptions) []app.MemoryItemView {
+		return app.NewMemoryService().ListMemories(ctx, opts)
 	}
 	deleteMemoryFn = func(ctx context.Context, id string) bool {
-		return service.NewMemoryService().DeleteMemory(ctx, id)
+		return app.NewMemoryService().DeleteMemory(ctx, id)
 	}
 	disableMemoryFn = func(ctx context.Context, id string) bool {
-		return service.NewMemoryService().DisableMemory(ctx, id)
+		return app.NewMemoryService().DisableMemory(ctx, id)
 	}
-	promoteMemoryFn = func(ctx context.Context, id string, opts service.MemoryPromoteOptions) bool {
-		return service.NewMemoryService().PromoteMemory(ctx, id, opts)
+	promoteMemoryFn = func(ctx context.Context, id string, opts app.MemoryPromoteOptions) bool {
+		return app.NewMemoryService().PromoteMemory(ctx, id, opts)
 	}
 )
 
@@ -38,7 +38,7 @@ func (c *ControllerV1) TokenAudit(ctx context.Context, req *v1.TokenAuditReq) (r
 		}
 	}
 
-	audit, err := service.GetSessionTokenAudit(ctx, req.SessionID, queryDate)
+	audit, err := app.GetSessionTokenAudit(ctx, req.SessionID, queryDate)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +113,7 @@ func (c *ControllerV1) RejectApprovalRequest(ctx context.Context, req *v1.Approv
 	return &item, nil
 }
 
-func toApprovalRequestItem(request service.ApprovalRequest) v1.ApprovalRequestItem {
+func toApprovalRequestItem(request app.ApprovalRequest) v1.ApprovalRequestItem {
 	return v1.ApprovalRequestItem{
 		ID:            request.ID,
 		Query:         request.Query,
@@ -135,7 +135,7 @@ func toApprovalRequestItem(request service.ApprovalRequest) v1.ApprovalRequestIt
 }
 
 func (c *ControllerV1) MemoryList(ctx context.Context, req *v1.MemoryListReq) (res *v1.MemoryListRes, err error) {
-	items := listMemoriesFn(ctx, service.MemoryListOptions{
+	items := listMemoriesFn(ctx, app.MemoryListOptions{
 		SessionID:      req.SessionID,
 		UserID:         req.UserID,
 		ProjectID:      req.ProjectID,
@@ -160,7 +160,7 @@ func (c *ControllerV1) MemoryAction(ctx context.Context, req *v1.MemoryActionReq
 }
 
 func (c *ControllerV1) MemoryPromote(ctx context.Context, req *v1.MemoryPromoteReq) (res *v1.MemoryActionRes, err error) {
-	success := promoteMemoryFn(ctx, req.ID, service.MemoryPromoteOptions{
+	success := promoteMemoryFn(ctx, req.ID, app.MemoryPromoteOptions{
 		Scope:      req.Scope,
 		ScopeID:    req.ScopeID,
 		Confidence: req.Confidence,
@@ -168,7 +168,7 @@ func (c *ControllerV1) MemoryPromote(ctx context.Context, req *v1.MemoryPromoteR
 	return &v1.MemoryActionRes{Success: success}, nil
 }
 
-func toMemoryItem(item service.MemoryItemView) v1.MemoryItem {
+func toMemoryItem(item app.MemoryItemView) v1.MemoryItem {
 	return v1.MemoryItem{
 		ID:            item.ID,
 		SessionID:     item.SessionID,

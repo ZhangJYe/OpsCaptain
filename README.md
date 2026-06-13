@@ -266,6 +266,10 @@ docker compose --env-file .env.production -f docker-compose.prod.yml ps
 | `todo/rag-engineering-complete-design.md` | RAG 工程设计 |
 | `res/harness-engineering-for-opscaptionai.md` | Harness Engineering 记录 |
 | `frontend/README.md` | 前端开发与部署说明 |
+| [快速开始](docs/getting-started.md) | 新开发者 3 分钟上手指南 |
+| [面试准备](docs/interview/) | 面试准备材料集 |
+| [技术决策](docs/tech-decisions/) | 技术选型与评审记录 |
+| [实施计划](docs/superpowers/plans/) | 功能实施计划与设计规格 |
 
 ## 协作约定
 

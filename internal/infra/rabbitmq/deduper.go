@@ -39,6 +39,16 @@ func (s *TTLSet) Claim(_ context.Context, key string) bool {
 	return true
 }
 
+// Release 移除已 claim 的 key，允许后续重新 claim。
+func (s *TTLSet) Release(_ context.Context, key string) {
+	if s == nil || strings.TrimSpace(key) == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.items, key)
+}
+
 // RedisDeduper 用 Redis SET NX EX 做跨实例幂等去重。
 // 适合多实例 RabbitMQ 消费者：每条 delivery 在处理前先 Claim，
 // 保证同一个 message_id / task_id 全集群只处理一次。
@@ -60,11 +70,12 @@ func NewRedisDeduper(redis *gredis.Redis, prefix string, ttl time.Duration) *Red
 	return &RedisDeduper{redis: redis, prefix: prefix, ttl: ttl}
 }
 
-// Claim 在 Redis 上原子地占位。失败（已有人占用 / Redis 错误）返回 false。
-// Redis 错误时返回 false 是「故障安全」选择：宁可漏一条也不让重复消费。
+// Claim 在 Redis 上原子地占位。返回 true 表示成功 claim（此前未见过）；
+// 返回 false 表示别人已 claim 过，调用方应跳过处理。
+// Redis 错误时返回 true（乐观放行）：dedup 是 best-effort，宁可重复处理也不丢任务。
+// TTL 保证 key 最终过期，CompositeDeduper 的本地 TTLSet 提供额外兜底。
 func (d *RedisDeduper) Claim(ctx context.Context, key string) bool {
 	if d == nil || d.redis == nil {
-		// 没 Redis 则默认放行，调用方应用 in-memory 兜底
 		return true
 	}
 	key = strings.TrimSpace(key)
@@ -78,9 +89,18 @@ func (d *RedisDeduper) Claim(ctx context.Context, key string) bool {
 	}
 	val, err := d.redis.Do(ctx, "SET", fullKey, "1", "NX", "EX", ttlSec)
 	if err != nil {
-		return false
+		return true
 	}
 	return !(val == nil || val.IsNil())
+}
+
+// Release 释放已 claim 的 key，允许后续重新 claim。
+// 用于 retry 场景：处理失败发 retry 队列前先 Release，使 retry delivery 可再次 Claim。
+func (d *RedisDeduper) Release(ctx context.Context, key string) {
+	if d == nil || d.redis == nil || strings.TrimSpace(key) == "" {
+		return
+	}
+	_, _ = d.redis.Do(ctx, "DEL", d.prefix+key)
 }
 
 // CompositeDeduper 组合多个 Deduper：所有都 Claim 通过才算成功。
@@ -107,6 +127,24 @@ func (c *CompositeDeduper) Claim(ctx context.Context, key string) bool {
 		}
 	}
 	return true
+}
+
+// Release 释放所有子 deduper 中已 claim 的 key。
+func (c *CompositeDeduper) Release(ctx context.Context, key string) {
+	if c == nil {
+		return
+	}
+	for _, p := range c.parts {
+		if p == nil {
+			continue
+		}
+		type releaser interface {
+			Release(ctx context.Context, key string)
+		}
+		if r, ok := p.(releaser); ok {
+			r.Release(ctx, key)
+		}
+	}
 }
 
 // evictOldestLocked 取最早过期的项移除，避免 map 无界增长。

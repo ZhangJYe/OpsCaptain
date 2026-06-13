@@ -2,7 +2,6 @@ package chat
 
 import (
 	v1 "SuperBizAgent/api/chat/v1"
-	"SuperBizAgent/internal/ai/protocol"
 	"SuperBizAgent/internal/app"
 	"context"
 	"encoding/json"
@@ -171,7 +170,7 @@ func serviceFilter(service string) []string {
 }
 
 // toChangeEventItem 将 protocol.ChangeEvent 转换为 API 响应格式。
-func toChangeEventItem(e *protocol.ChangeEvent) v1.ChangeEventItem {
+func toChangeEventItem(e *app.ChangeEvent) v1.ChangeEventItem {
 	return v1.ChangeEventItem{
 		EventID:         e.EventID,
 		Source:          e.Source,

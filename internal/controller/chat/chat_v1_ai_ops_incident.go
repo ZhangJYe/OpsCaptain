@@ -7,7 +7,7 @@ import (
 	"time"
 
 	v1 "SuperBizAgent/api/chat/v1"
-	"SuperBizAgent/internal/ai/service"
+	"SuperBizAgent/internal/app"
 
 	"github.com/gogf/gf/v2/frame/g"
 )
@@ -16,7 +16,7 @@ func (c *ControllerV1) AIOpsIncidentCreate(ctx context.Context, req *v1.AIOpsInc
 	if ctx, _, err = checkAndGuardPrompt(ctx, req.Query); err != nil {
 		return nil, err
 	}
-	incident, err := service.CreateAIOpsIncident(ctx, req.Query, req.Engine)
+	incident, err := app.CreateAIOpsIncident(ctx, req.Query, req.Engine)
 	if err != nil {
 		return nil, err
 	}
@@ -27,9 +27,9 @@ func (c *ControllerV1) AIOpsIncidentTurn(ctx context.Context, req *v1.AIOpsIncid
 	if ctx, _, err = checkAndGuardPrompt(ctx, req.Query); err != nil {
 		return nil, err
 	}
-	incident, err := service.AppendAIOpsIncidentTurn(ctx, req.IncidentID, req.Query)
+	incident, err := app.AppendAIOpsIncidentTurn(ctx, req.IncidentID, req.Query)
 	if err != nil {
-		if errors.Is(err, service.ErrIncidentTurnRunning) {
+		if errors.Is(err, app.ErrIncidentTurnRunning) {
 			return nil, errors.New("incident turn is still running")
 		}
 		return nil, err
@@ -38,7 +38,7 @@ func (c *ControllerV1) AIOpsIncidentTurn(ctx context.Context, req *v1.AIOpsIncid
 }
 
 func (c *ControllerV1) AIOpsIncidentList(ctx context.Context, _ *v1.AIOpsIncidentListReq) (res *v1.AIOpsIncidentListRes, err error) {
-	items, err := service.ListAIOpsIncidents(ctx)
+	items, err := app.ListAIOpsIncidents(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +53,7 @@ func (c *ControllerV1) AIOpsIncidentList(ctx context.Context, _ *v1.AIOpsInciden
 }
 
 func (c *ControllerV1) AIOpsIncidentGet(ctx context.Context, req *v1.AIOpsIncidentGetReq) (res *v1.AIOpsIncidentRes, err error) {
-	incident, err := service.GetAIOpsIncident(ctx, req.IncidentID)
+	incident, err := app.GetAIOpsIncident(ctx, req.IncidentID)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +70,7 @@ func (c *ControllerV1) AIOpsIncidentEvents(ctx context.Context, req *v1.AIOpsInc
 	}
 	seen := map[string]struct{}{}
 	sendEvents := func() error {
-		events, eventErr := service.GetAIOpsIncidentEvents(ctx, req.IncidentID, req.TurnID)
+		events, eventErr := app.GetAIOpsIncidentEvents(ctx, req.IncidentID, req.TurnID)
 		if eventErr != nil {
 			return eventErr
 		}
@@ -95,7 +95,7 @@ func (c *ControllerV1) AIOpsIncidentEvents(ctx context.Context, req *v1.AIOpsInc
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 	for {
-		incident, currentErr := service.GetAIOpsIncident(ctx, req.IncidentID)
+		incident, currentErr := app.GetAIOpsIncident(ctx, req.IncidentID)
 		if currentErr != nil {
 			client.SendToClient("error", currentErr.Error())
 			client.SendToClient("done", "incident stream completed")
@@ -118,7 +118,7 @@ func (c *ControllerV1) AIOpsIncidentEvents(ctx context.Context, req *v1.AIOpsInc
 	}
 }
 
-func toAIOpsIncident(ctx context.Context, incident *service.IncidentSession) v1.AIOpsIncident {
+func toAIOpsIncident(ctx context.Context, incident *app.IncidentSession) v1.AIOpsIncident {
 	if incident == nil {
 		return v1.AIOpsIncident{}
 	}
@@ -160,7 +160,7 @@ func toAIOpsIncident(ctx context.Context, incident *service.IncidentSession) v1.
 	}
 }
 
-func toAIOpsIncidentEvent(event service.IncidentEvent) v1.AIOpsIncidentEvent {
+func toAIOpsIncidentEvent(event app.IncidentEvent) v1.AIOpsIncidentEvent {
 	return v1.AIOpsIncidentEvent{
 		EventID:    event.EventID,
 		IncidentID: event.IncidentID,
@@ -174,17 +174,17 @@ func toAIOpsIncidentEvent(event service.IncidentEvent) v1.AIOpsIncidentEvent {
 	}
 }
 
-func incidentTurnStreamTerminal(incident *service.IncidentSession, turnID string) bool {
+func incidentTurnStreamTerminal(incident *app.IncidentSession, turnID string) bool {
 	if incident == nil {
 		return true
 	}
 	if turnID == "" {
-		turn := service.IncidentLatestTurn(incident)
-		return turn == nil || service.IncidentTurnTerminal(*turn)
+		turn := app.IncidentLatestTurn(incident)
+		return turn == nil || app.IncidentTurnTerminal(*turn)
 	}
 	for _, turn := range incident.Turns {
 		if turn.TurnID == turnID {
-			return service.IncidentTurnTerminal(turn)
+			return app.IncidentTurnTerminal(turn)
 		}
 	}
 	return true

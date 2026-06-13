@@ -17,6 +17,7 @@ import (
 	"SuperBizAgent/internal/controller/chat"
 	infrafs "SuperBizAgent/internal/infra/filestore"
 	inframv "SuperBizAgent/internal/infra/milvus"
+	"SuperBizAgent/internal/infra/rabbitmq"
 	"SuperBizAgent/utility/auth"
 	"SuperBizAgent/utility/clusterbus"
 	"SuperBizAgent/utility/common"
@@ -37,6 +38,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gogf/gf/v2/database/gredis"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/net/ghttp"
 	"github.com/gogf/gf/v2/os/gctx"
@@ -128,6 +130,44 @@ func main() {
 		}, err
 	}
 
+	aiservice.NewQueueClientFunc = func(cfg aiservice.QueueClientConfig, logPrefix string, onReconnectFailed func(error)) (aiservice.QueueClient, error) {
+		topo := rabbitmq.TopologyConfig{
+			URL:               cfg.URL,
+			Exchange:          cfg.Exchange,
+			Queue:             cfg.Queue,
+			RoutingKey:        cfg.RoutingKey,
+			RetryQueue:        cfg.RetryQueue,
+			RetryRoutingKey:   cfg.RetryRoutingKey,
+			DLQ:               cfg.DLQ,
+			DLQRoutingKey:     cfg.DLQRoutingKey,
+			RetryDelay:        cfg.RetryDelay,
+			Prefetch:          cfg.Prefetch,
+			ConsumerEnabled:   cfg.ConsumerEnabled,
+			ConnectionTimeout: cfg.ConnectionTimeout,
+		}
+		client := rabbitmq.NewClient(topo, logPrefix)
+		client.OnReconnectFailed = onReconnectFailed
+		if err := client.Connect(); err != nil {
+			return nil, err
+		}
+		return client, nil
+	}
+	aiservice.ResolveQueueStringFunc = rabbitmq.ResolveRabbitMQString
+	aiservice.SleepReconnectFunc = rabbitmq.SleepReconnect
+	aiservice.NewTTLSetFunc = func(ttl time.Duration, maxEntries int) aiservice.Deduper {
+		return rabbitmq.NewTTLSet(ttl, maxEntries)
+	}
+	aiservice.NewRedisDeduperFunc = func(redis interface{}, prefix string, ttl time.Duration) aiservice.Deduper {
+		return rabbitmq.NewRedisDeduper(redis.(*gredis.Redis), prefix, ttl)
+	}
+	aiservice.NewCompositeDeduperFunc = func(parts ...aiservice.Deduper) aiservice.Deduper {
+		rabbitParts := make([]rabbitmq.Deduper, len(parts))
+		for i, p := range parts {
+			rabbitParts[i] = p
+		}
+		return rabbitmq.NewCompositeDeduper(rabbitParts...)
+	}
+
 	s := g.Server()
 	s.SetGraceful(true)
 	s.SetGracefulShutdownTimeout(30)
@@ -175,6 +215,9 @@ func main() {
 		g.Log().Warningf(ctx, "load user skills: %v", reloadErr)
 	}
 
+	mcpToolApp := app.NewMCPToolApp(userSkillStore, dynamicMCPReg)
+	userSkillApp := app.NewUserSkillApp(userSkillStore, userSkillLoader)
+
 	// Wire user tool dependencies into chat pipeline for progressive disclosure
 	chat_pipeline.SetUserToolDeps(userSkillStore, dynamicMCPReg)
 
@@ -213,7 +256,7 @@ func main() {
 		group.Middleware(middleware.AuthMiddleware)
 		group.Middleware(middleware.RateLimitMiddleware)
 		group.Middleware(middleware.ResponseMiddleware)
-		group.Bind(chat.NewV1(chatApp, knowledgeApp, aiopsApp, changeEventApp, userSkillStore, dynamicMCPReg, userSkillLoader))
+		group.Bind(chat.NewV1(chatApp, knowledgeApp, aiopsApp, changeEventApp, mcpToolApp, userSkillApp))
 	})
 
 	if err := s.Start(); err != nil {

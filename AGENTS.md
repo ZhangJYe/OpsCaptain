@@ -83,8 +83,8 @@ utility/    → internal/                ❌
 | `internal/ai/retriever/retriever.go` | `ai/ → infra/milvus`、`ai/ → milvus-sdk-go` | eino-ext retriever 组件要求 raw Milvus client |
 | `internal/ai/indexer/indexer.go` | `ai/ → infra/milvus` | eino-ext indexer 组件要求 raw Milvus client |
 | `internal/ai/cmd/knowledge_cmd/main.go` | `ai/ → infra/milvus` | CLI 入口，组装时需要 infra 适配 |
-| `utility/health/health.go` | `utility/ → ai/tools` | MySQL 健康检查依赖 tools.CloseMySQL |
-| `utility/safety/injection_classifier.go` | `utility/ → ai/models` | 调用 models.TokenCount |
+| `internal/ai/cmd/rag_online_eval_cmd/main.go` | `ai/ → infra/milvus` | CLI 入口，组装时需要 infra 适配 |
+| `internal/ai/cmd/recall_cmd/main.go` | `ai/ → infra/milvus` | CLI 入口，组装时需要 infra 适配 |
 | `utility/logging/logging.go` | `utility/ → internal/consts` | 读取日志级别常量 |
 | `utility/tracing/tracing.go` | `utility/ → internal/consts` | 读取 tracing 常量 |
 | `utility/middleware/middleware.go` | `utility/ → internal/consts` | 读取中间件常量 |

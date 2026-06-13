@@ -134,9 +134,9 @@ aiops:
       min_confidence: 0.7
 
 multi_agent:
-  enabled: true
+  enabled: false
   data_dir: "/app/var/runtime"
-  ai_ops_enabled: true
+  ai_ops_enabled: false
   agent_timeout_ms: 120000
   metrics_query_timeout_ms: 5000
   knowledge_query_timeout_ms: 5000
