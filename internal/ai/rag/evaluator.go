@@ -51,7 +51,7 @@ const evaluatorPrompt = `你是运维知识检索质量评估器。给定用户�
 }`
 
 func (e *Evaluator) Evaluate(ctx context.Context, query string, docs []*schema.Document, round, maxRounds int) EvalResult {
-	evalCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	evalCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	chatModel, err := models.OpenAIForGLMFast(evalCtx)

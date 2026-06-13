@@ -51,7 +51,7 @@ const retrievalPlannerPrompt = `你是运维检索策略规划器。根据评估
 }`
 
 func (rp *RetrievalPlanner) Plan(ctx context.Context, query string, evalResult EvalResult, candidateDocs []*schema.Document) RetrievalPlan {
-	planCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	planCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	chatModel, err := models.OpenAIForGLMFast(planCtx)
