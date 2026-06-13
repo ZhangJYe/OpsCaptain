@@ -151,8 +151,34 @@ Eval cases: 18 built-in sample cases
 3. **Planner 延迟极低**：Avg Total ms 仅 184ms，比 full mode 快 40x
 4. **hybrid-retrieve 是最低延迟基线**：143ms，但 Recall@1 最低 (0.39)
 
-#### 待验证
+### 修复后实验结果 ✅
 
-- LLM 拆解正常工作时（容器网络修复后），planner 的 Recall@1 预期进一步提升
-- 复合 query (RAG-04, RAG-12, RAG-17) 的专项改善需要在 AIOps 专用 eval cases 上验证
-- Planner 指标 (Decomposed, SubQueryCount, PlanLatencyMs) 需要 LLM 可用时才能采集到真实数据
+修复内容:
+1. planner LLM 调用使用独立 `context.Background()` 而非父 context（避免 200ms 超时传递）
+2. planner 超时从 200ms 调整为 5000ms（LLM API 实际需要 ~700ms）
+
+服务器: 124.222.57.178
+执行时间: 2026-06-14 03:20 UTC
+
+#### 对比结果（修复后）
+
+| Mode | Recall@1 | Recall@3 | Recall@5 | MRR | Avg Total ms | Decomposed |
+|------|----------|----------|----------|-----|-------------|-----------|
+| hybrid (baseline) | 0.33 | 0.86 | 0.92 | 0.64 | 125ms | 0/18 |
+| planner | **0.78** | **0.94** | **0.94** | **0.88** | 404ms | **1/18** |
+| full (rewrite+rerank) | 0.78 | 0.94 | 0.94 | 0.89 | 7404ms | 0/18 |
+
+#### 关键发现
+
+1. **Planner LLM 拆解成功触发**: RAG-17 ("K8s 发布观察和 Helm 回滚的完整流程") 被拆解为 4 个子查询
+2. **Recall@1 提升显著**: 0.33 → 0.78 (+136%)，与 full mode 持平
+3. **延迟可控**: 404ms vs full mode 7404ms (快 18x)
+4. **拆解率低 (5.6%)**: 仅 1/18 query 触发拆解，因为关键词检测规则较严格（仅匹配 "和"、"以及" 等）
+5. **RAG-17 拆解后 Recall@1 仍为 0.5**: 子查询拆解本身不一定提升 top-1 召回，但可能提升 top-3/5
+
+#### 待优化
+
+1. 扩展关键词触发规则，覆盖更多复合 query
+2. 增加 AIOps 专用 eval cases（延迟诊断、告警关联等场景）
+3. 优化子查询生成 prompt，提升拆解质量
+4. 考虑 Plan C（Full Agentic RAG）：检索质量评估 + 自适应重试
