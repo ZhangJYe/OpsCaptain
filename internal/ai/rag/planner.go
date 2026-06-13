@@ -68,16 +68,16 @@ const plannerDecomposePrompt = `你是运维查询分析器。将用户问题拆
 输出:`
 
 func decomposeQuery(ctx context.Context, query string, cfg PlannerConfig) ([]string, error) {
-	planCtx, cancel := context.WithTimeout(ctx, plannerTimeout(ctx, cfg))
-	defer cancel()
+	llmCtx, llmCancel := context.WithTimeout(context.Background(), plannerTimeout(ctx, cfg))
+	defer llmCancel()
 
-	chatModel, err := models.OpenAIForGLMFast(planCtx)
+	chatModel, err := models.OpenAIForGLMFast(llmCtx)
 	if err != nil {
 		return nil, fmt.Errorf("planner model init failed: %w", err)
 	}
 
 	prompt := fmt.Sprintf(plannerDecomposePrompt, cfg.MaxSubQueries, query)
-	resp, err := chatModel.Generate(planCtx, []*schema.Message{
+	resp, err := chatModel.Generate(llmCtx, []*schema.Message{
 		{Role: schema.User, Content: prompt},
 	})
 	if err != nil {
