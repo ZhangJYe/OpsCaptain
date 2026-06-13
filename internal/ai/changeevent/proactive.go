@@ -214,13 +214,25 @@ func meetsRiskLevel(actual, required string) bool {
 }
 
 // DebounceTracker 跟踪同服务变更的去重。
+// 多实例语义：构造时传入 g.Redis() → Claim 走 Redis SETNX（跨实例去重）；
+// 传 nil → 仍走本地 map（单实例向后兼容）。
 type DebounceTracker struct {
 	mu     sync.Mutex
 	recent map[string]time.Time
 	window time.Duration
+
+	// 跨实例去重；nil 表示仅本地
+	redis  redisClaimer
+	prefix string
 }
 
-// NewDebounceTracker 创建去重跟踪器。
+// redisClaimer 抽象出 Redis SET NX EX 调用，便于在 NewDebounceTracker 不直接依赖
+// gredis.Redis 包（同时方便单测注入）。
+type redisClaimer interface {
+	Do(ctx context.Context, command string, args ...interface{}) (any, error)
+}
+
+// NewDebounceTracker 创建去重跟踪器（单实例模式）。
 func NewDebounceTracker(window time.Duration) *DebounceTracker {
 	return &DebounceTracker{
 		recent: make(map[string]time.Time),
@@ -228,24 +240,69 @@ func NewDebounceTracker(window time.Duration) *DebounceTracker {
 	}
 }
 
-// IsDuplicate 检查是否在去重窗口内。顺带清理过期条目防止内存泄漏。
-func (d *DebounceTracker) IsDuplicate(service string) bool {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	key := strings.ToLower(service)
-	now := time.Now()
+// NewDebounceTrackerWithRedis 创建跨实例去重跟踪器。
+// Redis Claim 失败（已被其他实例 claim）→ IsDuplicate 返回 true。
+// Redis 错误（连接 / 超时）→ 退化到本地 map（避免雪崩）。
+func NewDebounceTrackerWithRedis(window time.Duration, redis redisClaimer, prefix string) *DebounceTracker {
+	if strings.TrimSpace(prefix) == "" {
+		prefix = "opscaption:debounce:"
+	}
+	if !strings.HasSuffix(prefix, ":") {
+		prefix += ":"
+	}
+	return &DebounceTracker{
+		recent: make(map[string]time.Time),
+		window: window,
+		redis:  redis,
+		prefix: prefix,
+	}
+}
 
-	// 每次调用顺带清理过期条目（惰性清理，无需额外 goroutine）
+// IsDuplicate 检查是否在去重窗口内。
+// 多实例模式下用 Redis SETNX EX（窗口=ttl）；任何一个实例先 claim 成功，
+// 其他实例的同 service 在窗口内全部返回 true。
+// 本地 map 作为「同进程瞬时去重」L1 缓存。
+func (d *DebounceTracker) IsDuplicate(service string) bool {
+	key := strings.ToLower(service)
+
+	// 1) 同进程瞬时检查（避免 1 秒内连续触发，省一次 Redis 往返）
+	d.mu.Lock()
+	now := time.Now()
+	// 顺带清理过期条目防止内存泄漏
 	for k, t := range d.recent {
 		if now.Sub(t) > d.window*2 {
 			delete(d.recent, k)
 		}
 	}
-
-	last, ok := d.recent[key]
-	if ok && now.Sub(last) < d.window {
+	if last, ok := d.recent[key]; ok && now.Sub(last) < d.window {
+		d.mu.Unlock()
 		return true
 	}
 	d.recent[key] = now
+	d.mu.Unlock()
+
+	// 2) 跨实例 SETNX 兜底
+	if d.redis != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		defer cancel()
+		ttlSec := int(d.window.Seconds())
+		if ttlSec <= 0 {
+			ttlSec = 1
+		}
+		val, err := d.redis.Do(ctx, "SET", d.prefix+key, "1", "NX", "EX", ttlSec)
+		if err != nil {
+			// Redis 错误退化到本地（已上面更新过 recent），保守返回 false（不阻断）
+			return false
+		}
+		// SET NX 返回 nil/空 = 已存在 = 其他实例占住 = duplicate
+		if val == nil {
+			return true
+		}
+		if v, ok := val.(interface{ IsNil() bool }); ok && v.IsNil() {
+			return true
+		}
+		// SET NX 返回 OK = 我们刚 claim 成功 = 非 duplicate
+		return false
+	}
 	return false
 }
