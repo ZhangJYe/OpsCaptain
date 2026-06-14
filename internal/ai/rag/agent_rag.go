@@ -28,14 +28,12 @@ type RoundTrace struct {
 
 type AgentRAG struct {
 	evaluator *Evaluator
-	planner   *RetrievalPlanner
 	cfg       AgentConfig
 }
 
 func NewAgentRAG(cfg AgentConfig) *AgentRAG {
 	return &AgentRAG{
 		evaluator: NewEvaluator(cfg.Model),
-		planner:   NewRetrievalPlanner(cfg.Model),
 		cfg:       cfg,
 	}
 }
@@ -103,18 +101,33 @@ func (a *AgentRAG) Query(ctx context.Context, pool *RetrieverPool, query string)
 		}
 
 		if round < a.cfg.MaxRounds-1 {
-			plan := a.planner.Plan(agentCtx, query, evalResult, candidateDocs)
-			roundTrace.Strategy = plan.Strategy
-			if plan.Strategy == "none" || len(plan.SubQueries) == 0 {
+			nextQuery := buildNextQuery(query, evalResult)
+			if nextQuery == "" {
 				break
 			}
-			currentQuery = strings.Join(plan.SubQueries, " ")
+			currentQuery = nextQuery
 		}
 	}
 
 	finalDocs := mergeAndDedup(allDocs)
 	trace.TotalLatencyMs = time.Since(start).Milliseconds()
 	return finalDocs, trace, nil
+}
+
+func buildNextQuery(originalQuery string, evalResult EvalResult) string {
+	if len(evalResult.MissingInfo) == 0 {
+		return ""
+	}
+
+	var parts []string
+	parts = append(parts, originalQuery)
+	for _, info := range evalResult.MissingInfo {
+		info = strings.TrimSpace(info)
+		if info != "" {
+			parts = append(parts, info)
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 func filterNewDocs(docs []*schema.Document, seen map[string]struct{}) []*schema.Document {

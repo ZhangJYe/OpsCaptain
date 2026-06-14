@@ -14,8 +14,8 @@ func TestDefaultAgentConfig(t *testing.T) {
 	if cfg.Model != "chat_model_fast" {
 		t.Errorf("expected Model=chat_model_fast, got %s", cfg.Model)
 	}
-	if cfg.MaxRounds != 3 {
-		t.Errorf("expected MaxRounds=3, got %d", cfg.MaxRounds)
+	if cfg.MaxRounds != 2 {
+		t.Errorf("expected MaxRounds=2, got %d", cfg.MaxRounds)
 	}
 	if cfg.ConfidenceThreshold != 0.7 {
 		t.Errorf("expected ConfidenceThreshold=0.7, got %f", cfg.ConfidenceThreshold)

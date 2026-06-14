@@ -22,7 +22,7 @@ func DefaultAgentConfig() AgentConfig {
 	return AgentConfig{
 		Enabled:             false,
 		Model:               "chat_model_fast",
-		MaxRounds:           3,
+		MaxRounds:           2,
 		ConfidenceThreshold: 0.7,
 		EvalTimeoutMs:       10000,
 		PlanTimeoutMs:       10000,
