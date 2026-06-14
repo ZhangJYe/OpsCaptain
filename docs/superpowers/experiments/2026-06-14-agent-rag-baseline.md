@@ -252,3 +252,36 @@ Commits:
 #### 结论
 
 Agent RAG 代码完整可用，多轮机制验证通过。Recall@1 提升的瓶颈已从"检索策略"转移到"候选文档池质量"。下一步应优化文档索引质量（更多 AIOps 语料、更好的 metadata），而非继续增加检索轮数。
+
+---
+
+## 9. Agent 模式延迟优化
+
+### 优化措施
+
+1. 砍掉 Planner LLM 调用，用规则替代（missing_info 直接作为子查询）
+2. max_rounds 从 3 降到 2
+3. Evaluator 超时 10s → 4s
+4. 总超时 30s → 8s
+5. 每轮硬超时 60% × total_timeout（使用 context.WithDeadline）
+
+### 优化后最终结果
+
+| 指标 | hybrid | planner | agent (最终) |
+|------|--------|---------|-------------|
+| Recall@1 | 0.39 | 0.78 | 0.78 |
+| Recall@3 | 0.86 | 0.94 | 0.94 |
+| Recall@5 | 0.92 | 0.94 | **1.00** |
+| MRR | 0.64 | 0.88 | **0.89** |
+| Avg Total ms | 145 | 578 | **5064** |
+| Under 5s | - | - | **13/18 (72%)** |
+| Full Recall | 16/18 | 17/18 | **18/18** |
+| Agent Rounds | - | - | 1.28 |
+| Final Confidence | - | - | 0.58 |
+
+### 关键发现
+
+1. **Recall@5 提升到 1.00** — agent 多轮检索补齐了 planner 遗漏的文档
+2. **Full Recall 18/18** — 所有 query 至少在 top-5 中找到相关文档
+3. **延迟 5s 可接受** — 72% 的 query 在 5s 内完成，剩余 28% 因 LLM 超时重试略超
+4. **瓶颈是 LLM 调用延迟** — 服务器到 DeepSeek API 的网络延迟导致 evaluator 调用不稳定
