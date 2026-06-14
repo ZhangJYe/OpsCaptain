@@ -285,3 +285,34 @@ Agent RAG 代码完整可用，多轮机制验证通过。Recall@1 提升的瓶�
 2. **Full Recall 18/18** — 所有 query 至少在 top-5 中找到相关文档
 3. **延迟 5s 可接受** — 72% 的 query 在 5s 内完成，剩余 28% 因 LLM 超时重试略超
 4. **瓶颈是 LLM 调用延迟** — 服务器到 DeepSeek API 的网络延迟导致 evaluator 调用不稳定
+
+---
+
+## 10. AIOps Challenge 真实数据集评测
+
+### 数据集
+
+- 来源: `aiopschallenge2025/baseline/eval/eval_cases.jsonl`
+- 语料: `docs_evidence_build/` (320 个 RCA 观测案例)
+- Collection: `aiops_evidence_build` (新索引)
+
+### 100 Case 对比
+
+| Mode | R@1 | R@3 | R@5 | R@10 | MRR | 延迟 |
+|------|-----|-----|-----|------|-----|------|
+| hybrid | 0.42 | 0.71 | 0.82 | 0.82 | 0.57 | 145ms |
+| planner | 0.43 | 0.72 | 0.83 | 0.83 | 0.58 | 139ms |
+| agent | 0.36 | 0.78 | 0.84 | 0.84 | 0.56 | 4481ms |
+
+### 800 Case hybrid 基线
+
+| Mode | R@1 | R@3 | R@5 | R@10 | MRR | 延迟 |
+|------|-----|-----|-----|------|-----|------|
+| hybrid | 0.18 | 0.29 | 0.31 | 0.31 | 0.24 | 132ms |
+
+### 关键发现
+
+1. **Planner 在真实数据集上 Recall@5 提升 1.2%** (0.82→0.83)，MRR 提升 1.8%
+2. **Agent Recall@5 最高 (0.84)**，但 Recall@1 最低 (0.36)，延迟 4.5s
+3. **800 case 基线远低于 100 case** — 说明数据集越大、case 越多样，难度越高
+4. **所有模式在 R@10 后不再提升** — top-10 以外没有更多相关文档
