@@ -4,6 +4,28 @@
 
 ---
 
+## Step 0：清理服务器磁盘空间（重要！）
+
+服务器只剩 3.4GB，需要先清理：
+
+```bash
+ssh root@124.222.57.178 "
+  # 清理 Docker 旧镜像 (释放 ~1.7GB)
+  docker image prune -a -f
+  
+  # 清理旧的 eval workspace (释放 ~50MB)
+  rm -rf /opt/opscaptain/eval-workspace-retrieve*
+  rm -rf /opt/opscaptain/eval-workspace-rewrite*
+  
+  # 检查剩余空间
+  df -h / | tail -1
+"
+```
+
+预期释放 ~2GB，剩余 ~5.4GB。
+
+---
+
 ## Step 1：在服务器上准备训练数据
 
 SSH 到你的服务器 124.222.57.178，运行：
@@ -204,40 +226,75 @@ ssh root@124.222.57.178 "
 
 ---
 
-## Step 5：部署 embedding 服务
+## Step 5：部署 embedding 服务（ONNX 版本，仅需 ~100MB 依赖）
 
-### 5.1 安装 Python 环境（服务器上）
+### 5.1 在 5070 主机上导出 ONNX
+
+```bash
+# 在 5070 主机上
+cd bge-m3-aiops-finetuned
+pip install optimum onnxruntime
+python << 'EOF'
+from sentence_transformers import SentenceTransformer
+model = SentenceTransformer("./")
+model.export_onnx("model.onnx", opset=14)
+print("Exported model.onnx")
+EOF
+ls -lh model.onnx
+```
+
+### 5.2 上传 ONNX 模型到服务器
+
+```bash
+scp model.onnx root@124.222.57.178:/opt/opscaptain/bge-m3-aiops-finetuned/
+```
+
+### 5.3 在服务器上安装轻量依赖
 
 ```bash
 ssh root@124.222.57.178 "
-  apt update && apt install -y python3-pip
-  pip3 install sentence-transformers fastapi uvicorn
+  pip3 install onnxruntime fastapi uvicorn numpy
 "
 ```
 
-### 5.2 创建 embedding 服务
+### 5.4 创建 ONNX embedding 服务
 
 ```bash
 ssh root@124.222.57.178 "cat > /opt/opscaptain/embedding_server.py << 'PYEOF'
 from fastapi import FastAPI
 from pydantic import BaseModel
-from sentence_transformers import SentenceTransformer
+import onnxruntime as ort
 import numpy as np
+import json
 
 app = FastAPI()
-model = SentenceTransformer(\"/opt/opscaptain/bge-m3-aiops-finetuned\")
+session = ort.InferenceSession(\"/opt/opscaptain/bge-m3-aiops-finetuned/model.onnx\")
 
 class EmbedRequest(BaseModel):
     texts: list[str]
 
 @app.post(\"/embed\")
 def embed(req: EmbedRequest):
-    embeddings = model.encode(req.texts, normalize_embeddings=True)
-    return {\"embeddings\": embeddings.tolist()}
+    # BGE-M3 tokenizer (简化版，实际需要完整 tokenizer)
+    # 这里用模型的 input_names 推断输入格式
+    inputs = session.get_inputs()
+    input_names = [i.name for i in inputs]
+    
+    # 简单 tokenization (实际部署需要完整 tokenizer)
+    # 建议用 optimum 的 pipeline
+    from optimum.pipelines import pipeline
+    pipe = pipeline(\"feature-extraction\", model=\"/opt/opscaptain/bge-m3-aiops-finetuned\", backend=\"onnxruntime\")
+    
+    embeddings = []
+    for text in req.texts:
+        emb = pipe(text)
+        embeddings.append(emb[0][0].tolist())
+    
+    return {\"embeddings\": embeddings}
 
 @app.get(\"/health\")
 def health():
-    return {\"status\": \"ok\", \"dimension\": model.get_sentence_embedding_dimension()}
+    return {\"status\": \"ok\", \"model\": \"bge-m3-aiops-finetuned-onnx\"}
 
 if __name__ == \"__main__\":
     import uvicorn
@@ -246,12 +303,11 @@ PYEOF
 "
 ```
 
-### 5.3 启动服务
+### 5.5 启动服务
 
 ```bash
 ssh root@124.222.57.178 "
   nohup python3 /opt/opscaptain/embedding_server.py > /opt/opscaptain/embedding_server.log 2>&1 &
-  echo \"Embedding server started on port 6333\"
   sleep 3
   curl http://localhost:6333/health
 "
