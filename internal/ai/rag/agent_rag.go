@@ -58,13 +58,15 @@ func (a *AgentRAG) Query(ctx context.Context, pool *RetrieverPool, query string)
 	roundBudget := time.Duration(a.cfg.TotalTimeoutMs*6/10) * time.Millisecond
 
 	for round := 0; round < a.cfg.MaxRounds; round++ {
-		if agentCtx.Err() != nil {
-			g.Log().Debugf(ctx, "agent rag: total timeout at round %d", round+1)
+		elapsed := time.Since(start)
+		if elapsed >= time.Duration(a.cfg.TotalTimeoutMs)*time.Millisecond {
+			g.Log().Debugf(ctx, "agent rag: total timeout after %v", elapsed)
 			break
 		}
 
 		roundStart := time.Now()
-		roundCtx, roundCancel := context.WithTimeout(agentCtx, roundBudget)
+		roundDeadline := roundStart.Add(roundBudget)
+		roundCtx, roundCancel := context.WithDeadline(agentCtx, roundDeadline)
 
 		roundTrace := RoundTrace{Round: round + 1}
 
