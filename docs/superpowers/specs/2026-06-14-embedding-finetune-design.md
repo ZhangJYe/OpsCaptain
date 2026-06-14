@@ -200,11 +200,74 @@ service_map:
 
 ## 6. 推荐方案
 
-**方案 A（ARK Fine-tune）+ 方案 C（数据增强）组合**：
+**开源模型 BGE-M3 + 本地 RTX 5070 训练**：
 
-1. 先做数据增强（免费，快速）
-2. 再做 fine-tune（低成本，效果最好）
-3. 最终效果 = 基线 + 数据增强收益 + fine-tune 收益
+1. 在本地用 `sentence-transformers` fine-tune BGE-M3
+2. 用 800 对 AIOps (query→doc) 作为训练数据
+3. 训练完成后导出模型
+4. 部署到服务器，替换 embedding API
+
+### 成本
+
+| 项目 | 费用 |
+|------|------|
+| 模型 | 0 元 (BGE-M3 开源) |
+| GPU | 0 元 (本地 5070) |
+| 时间 | ~2-3 小时 |
+| 总计 | **0 元** |
+
+### 训练配置 (RTX 5070)
+
+```python
+from sentence_transformers import SentenceTransformer, InputExample, losses
+from torch.utils.data import DataLoader
+
+# 加载基座模型
+model = SentenceTransformer("BAAI/bge-m3")
+
+# 构造训练数据
+train_examples = [
+    InputExample(texts=["payment 服务延迟升高", "checkoutservice latency p99 spike"], label=1.0),
+    InputExample(texts=["OOM 容器重启", "pod CrashLoopBackOff OOMKilled"], label=1.0),
+    # ... 800 对
+]
+train_dataloader = DataLoader(train_examples, shuffle=True, batch_size=16)
+
+# 训练
+train_loss = losses.CosineSimilarityLoss(model)
+model.fit(
+    train_objectives=[(train_dataloader, train_loss)],
+    epochs=3,
+    warmup_steps=100,
+    output_path="./bge-m3-aiops-finetuned"
+)
+```
+
+### 部署方式
+
+Fine-tune 后的模型有两种部署方式：
+
+**方式 A：本地推理服务（推荐）**
+
+```python
+# 在服务器上部署 embedding 服务
+from sentence_transformers import SentenceTransformer
+model = SentenceTransformer("./bge-m3-aiops-finetuned")
+
+# 用 FastAPI 暴露 API
+@app.post("/embed")
+def embed(texts: list[str]):
+    embeddings = model.encode(texts)
+    return {"embeddings": embeddings.tolist()}
+```
+
+修改项目的 embedding 客户端指向本地服务。
+
+**方式 B：导出为 ONNX，用现有框架加载**
+
+```python
+model.export_onnx("bge-m3-aiops.onnx")
+```
 
 ## 7. 实验验证
 
