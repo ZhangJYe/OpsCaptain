@@ -55,6 +55,7 @@ func (a *AgentRAG) Query(ctx context.Context, pool *RetrieverPool, query string)
 	seenDocIDs := make(map[string]struct{})
 	currentQuery := query
 	plannerCfg := LoadPlannerConfig(ctx)
+	roundBudget := time.Duration(a.cfg.TotalTimeoutMs*6/10) * time.Millisecond
 
 	for round := 0; round < a.cfg.MaxRounds; round++ {
 		if agentCtx.Err() != nil {
@@ -62,11 +63,14 @@ func (a *AgentRAG) Query(ctx context.Context, pool *RetrieverPool, query string)
 			break
 		}
 
-		roundTrace := RoundTrace{Round: round + 1}
 		roundStart := time.Now()
+		roundCtx, roundCancel := context.WithTimeout(agentCtx, roundBudget)
 
-		docs, merged, err := QueryWithPlanner(agentCtx, pool, currentQuery, plannerCfg)
+		roundTrace := RoundTrace{Round: round + 1}
+
+		docs, merged, err := QueryWithPlanner(roundCtx, pool, currentQuery, plannerCfg)
 		if err != nil {
+			roundCancel()
 			g.Log().Debugf(ctx, "agent rag: retrieval failed at round %d: %v", round+1, err)
 			break
 		}
@@ -77,6 +81,7 @@ func (a *AgentRAG) Query(ctx context.Context, pool *RetrieverPool, query string)
 		roundTrace.SubQueryCount = merged.Trace.SubQueryCount
 
 		if len(newDocs) == 0 && round > 0 {
+			roundCancel()
 			g.Log().Debugf(ctx, "agent rag: no new docs at round %d, stopping", round+1)
 			break
 		}
@@ -84,7 +89,8 @@ func (a *AgentRAG) Query(ctx context.Context, pool *RetrieverPool, query string)
 		allDocs = append(allDocs, newDocs...)
 		candidateDocs := mergeAndDedup(allDocs)
 
-		evalResult := a.evaluator.Evaluate(agentCtx, query, candidateDocs, round+1, a.cfg.MaxRounds)
+		evalResult := a.evaluator.Evaluate(roundCtx, query, candidateDocs, round+1, a.cfg.MaxRounds)
+		roundCancel()
 		roundTrace.Confidence = evalResult.Confidence
 		roundTrace.Strategy = evalResult.NextStrategy
 		roundTrace.LatencyMs = time.Since(roundStart).Milliseconds()
