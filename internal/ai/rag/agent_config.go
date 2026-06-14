@@ -26,7 +26,7 @@ func DefaultAgentConfig() AgentConfig {
 		ConfidenceThreshold: 0.7,
 		EvalTimeoutMs:       10000,
 		PlanTimeoutMs:       10000,
-		TotalTimeoutMs:      30000,
+		TotalTimeoutMs:      8000,
 		MaxTotalTokens:      8000,
 	}
 }

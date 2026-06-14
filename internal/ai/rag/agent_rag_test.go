@@ -26,8 +26,8 @@ func TestDefaultAgentConfig(t *testing.T) {
 	if cfg.PlanTimeoutMs != 10000 {
 		t.Errorf("expected PlanTimeoutMs=10000, got %d", cfg.PlanTimeoutMs)
 	}
-	if cfg.TotalTimeoutMs != 30000 {
-		t.Errorf("expected TotalTimeoutMs=30000, got %d", cfg.TotalTimeoutMs)
+	if cfg.TotalTimeoutMs != 8000 {
+		t.Errorf("expected TotalTimeoutMs=8000, got %d", cfg.TotalTimeoutMs)
 	}
 	if cfg.MaxTotalTokens != 8000 {
 		t.Errorf("expected MaxTotalTokens=8000, got %d", cfg.MaxTotalTokens)
