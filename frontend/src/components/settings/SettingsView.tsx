@@ -1,8 +1,10 @@
 import React, { useState } from 'react'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import { useUserTools } from '../../hooks/useUserTools'
+import { useNotifications } from '../../hooks/useNotifications'
 import { ToolManager } from './ToolManager'
 import { SkillManager } from './SkillManager'
+import { FeishuNotificationConfigView } from './FeishuNotificationConfig'
 
 interface Props {
   onBack: () => void
@@ -11,15 +13,16 @@ interface Props {
 const TABS = [
   { id: 'tools' as const, label: 'MCP 工具' },
   { id: 'skills' as const, label: 'Skill' },
+  { id: 'notifications' as const, label: '通知' },
 ]
 
 export function SettingsView({ onBack }: Props) {
-  const [activeTab, setActiveTab] = useState<'tools' | 'skills'>('tools')
+  const [activeTab, setActiveTab] = useState<'tools' | 'skills' | 'notifications'>('tools')
   const {
     tools,
     skills,
-    isLoading,
-    error,
+    isLoading: isToolsLoading,
+    error: toolsError,
     createTool,
     deleteTool,
     testTool,
@@ -30,6 +33,18 @@ export function SettingsView({ onBack }: Props) {
     approveSkill,
     rejectSkill,
   } = useUserTools()
+
+  const {
+    config: notifConfig,
+    isLoading: isNotifLoading,
+    error: notifError,
+    testResult,
+    isTesting,
+    testConnection,
+  } = useNotifications()
+
+  const isLoading = activeTab === 'notifications' ? isNotifLoading : isToolsLoading
+  const error = activeTab === 'notifications' ? notifError : toolsError
 
   return (
     <div className="flex flex-col h-full">
@@ -95,6 +110,15 @@ export function SettingsView({ onBack }: Props) {
             tools={tools}
             onCreate={createSkill}
             onDelete={deleteSkill}
+          />
+        )}
+
+        {!isLoading && !error && activeTab === 'notifications' && (
+          <FeishuNotificationConfigView
+            config={notifConfig?.feishu || null}
+            isTesting={isTesting}
+            testResult={testResult}
+            onTest={testConnection}
           />
         )}
       </div>

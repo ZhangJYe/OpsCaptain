@@ -17,6 +17,7 @@ import (
 	"SuperBizAgent/internal/controller/chat"
 	infrafs "SuperBizAgent/internal/infra/filestore"
 	inframv "SuperBizAgent/internal/infra/milvus"
+	"SuperBizAgent/internal/infra/notifier"
 	"SuperBizAgent/internal/infra/rabbitmq"
 	"SuperBizAgent/utility/auth"
 	"SuperBizAgent/utility/clusterbus"
@@ -300,6 +301,20 @@ func configureChangeEvents(ctx context.Context, aiopsApp *app.AIOpsApp) (*app.Ch
 		proactiveCfg.RequireEventTypes = configStringSlice(ctx, "change_events.proactive.require_event_types", proactiveCfg.RequireEventTypes)
 		proactiveCfg.InspectionTimeout = configInt(ctx, "change_events.proactive.inspection_timeout_ms", proactiveCfg.InspectionTimeout)
 		changeEventBus.Register(changeevent.NewProactiveAnalyzer(app.NewChangeEventAIOpsRunner(aiopsApp, ""), proactiveCfg))
+	}
+	if configBool(ctx, "change_events.notifier.feishu.enabled", false) {
+		feishuCfg := notifier.FeishuNotifierConfig{
+			WebhookURL:   configString(ctx, "change_events.notifier.feishu.webhook_url", ""),
+			MinRiskLevel: configString(ctx, "change_events.notifier.feishu.min_risk_level", "medium"),
+			Services:     configStringSlice(ctx, "change_events.notifier.feishu.services", nil),
+			TimeoutMs:    configInt(ctx, "change_events.notifier.feishu.timeout_ms", 5000),
+		}
+		if feishuCfg.WebhookURL != "" {
+			changeEventBus.Register(notifier.NewFeishuNotifier(feishuCfg))
+			g.Log().Info(ctx, "[change_event] feishu notifier registered")
+		} else {
+			g.Log().Warning(ctx, "[change_event] feishu notifier enabled but webhook_url is empty, skipping")
+		}
 	}
 	aiservice.SetChangeEventBus(changeEventBus)
 

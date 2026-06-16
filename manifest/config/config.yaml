@@ -349,6 +349,13 @@ change_events:
     enabled: true                 # 多副本必开，单实例可关
     channel: "change_events"
     prefix: "opscaption"
+  notifier:
+    feishu:
+      enabled: true
+      webhook_url: "${FEISHU_WEBHOOK_URL}"  # 飞书群机器人 Webhook 地址
+      min_risk_level: "low"                 # 最低推送风险等级：low | medium | high | critical
+      services: []                          # 只推送这些服务的变更，空 = 全部
+      timeout_ms: 5000                      # HTTP 超时（毫秒）
 
 multi_agent:
   enabled: false

@@ -35,4 +35,6 @@ type IChatV1 interface {
 	ChangeEventGet(ctx context.Context, req *v1.ChangeEventGetReq) (res *v1.ChangeEventGetRes, err error)
 	ChangeEventStream(ctx context.Context, req *v1.ChangeEventStreamReq) (res *v1.ChangeEventStreamRes, err error)
 	ChangeEventWebhook(ctx context.Context, req *v1.ChangeEventWebhookReq) (res *v1.ChangeEventWebhookRes, err error)
+	NotificationConfig(ctx context.Context, req *v1.NotificationConfigReq) (res *v1.NotificationConfigRes, err error)
+	NotificationTest(ctx context.Context, req *v1.NotificationTestReq) (res *v1.NotificationTestRes, err error)
 }
