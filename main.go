@@ -304,7 +304,7 @@ func configureChangeEvents(ctx context.Context, aiopsApp *app.AIOpsApp) (*app.Ch
 	}
 	if configBool(ctx, "change_events.notifier.feishu.enabled", false) {
 		feishuCfg := notifier.FeishuNotifierConfig{
-			WebhookURL:   configString(ctx, "change_events.notifier.feishu.webhook_url", ""),
+			WebhookURL:   common.ResolveEnv(configString(ctx, "change_events.notifier.feishu.webhook_url", "")),
 			MinRiskLevel: configString(ctx, "change_events.notifier.feishu.min_risk_level", "medium"),
 			Services:     configStringSlice(ctx, "change_events.notifier.feishu.services", nil),
 			TimeoutMs:    configInt(ctx, "change_events.notifier.feishu.timeout_ms", 5000),

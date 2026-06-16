@@ -3,6 +3,7 @@ package chat
 import (
 	v1 "SuperBizAgent/api/chat/v1"
 	"SuperBizAgent/internal/infra/notifier"
+	"SuperBizAgent/utility/common"
 	"context"
 	"strings"
 	"time"
@@ -13,7 +14,7 @@ import (
 // NotificationConfig 获取通知配置。
 func (c *ControllerV1) NotificationConfig(ctx context.Context, req *v1.NotificationConfigReq) (res *v1.NotificationConfigRes, err error) {
 	enabled := g.Cfg().MustGet(ctx, "change_events.notifier.feishu.enabled", false).Bool()
-	webhookURL := g.Cfg().MustGet(ctx, "change_events.notifier.feishu.webhook_url", "").String()
+	webhookURL := common.ResolveEnv(g.Cfg().MustGet(ctx, "change_events.notifier.feishu.webhook_url", "").String())
 	minRiskLevel := g.Cfg().MustGet(ctx, "change_events.notifier.feishu.min_risk_level", "medium").String()
 	timeoutMs := g.Cfg().MustGet(ctx, "change_events.notifier.feishu.timeout_ms", 5000).Int()
 
@@ -45,7 +46,7 @@ func (c *ControllerV1) NotificationTest(ctx context.Context, req *v1.Notificatio
 
 	webhookURL := strings.TrimSpace(req.WebhookURL)
 	if webhookURL == "" {
-		webhookURL = g.Cfg().MustGet(ctx, "change_events.notifier.feishu.webhook_url", "").String()
+		webhookURL = common.ResolveEnv(g.Cfg().MustGet(ctx, "change_events.notifier.feishu.webhook_url", "").String())
 	}
 	if webhookURL == "" {
 		return &v1.NotificationTestRes{
