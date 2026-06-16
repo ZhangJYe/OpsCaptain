@@ -20,6 +20,7 @@ type FeishuNotifier struct {
 	webhookURL       string
 	minRiskLevel     string
 	services         []string // 空 = 所有服务
+	baseURL          string   // OpsCaption 前端地址
 	client           *http.Client
 	eventTypeNames   map[string]string
 	riskLevelColors  map[string]string
@@ -32,6 +33,7 @@ type FeishuNotifierConfig struct {
 	MinRiskLevel string   // 最低推送风险等级："low" | "medium" | "high" | "critical"
 	Services     []string // 只推送这些服务的变更，空 = 全部
 	TimeoutMs    int      // HTTP 超时毫秒，默认 5000
+	BaseURL      string   // OpsCaption 前端地址，用于生成操作链接
 }
 
 // NewFeishuNotifier 创建飞书通知器。
@@ -44,6 +46,7 @@ func NewFeishuNotifier(cfg FeishuNotifierConfig) *FeishuNotifier {
 		webhookURL:   strings.TrimSpace(cfg.WebhookURL),
 		minRiskLevel: normalizeRiskLevel(cfg.MinRiskLevel),
 		services:     cfg.Services,
+		baseURL:      strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/"),
 		client: &http.Client{
 			Timeout: time.Duration(timeoutMs) * time.Millisecond,
 		},
@@ -288,6 +291,9 @@ func (n *FeishuNotifier) buildCard(event *protocol.ChangeEvent) *feishuCard {
 	if event.Cluster != "" {
 		fields = append(fields, feishuField{IsShort: true, Text: feishuText{Tag: "lark_md", Content: fmt.Sprintf("**集群**\n%s", event.Cluster)}})
 	}
+	if event.Namespace != "" {
+		fields = append(fields, feishuField{IsShort: true, Text: feishuText{Tag: "lark_md", Content: fmt.Sprintf("**命名空间**\n%s", event.Namespace)}})
+	}
 
 	elements := []feishuElement{
 		{Tag: "div", Fields: fields},
@@ -295,21 +301,63 @@ func (n *FeishuNotifier) buildCard(event *protocol.ChangeEvent) *feishuCard {
 		{Tag: "div", Text: &feishuText{Tag: "lark_md", Content: fmt.Sprintf("**摘要**\n%s", event.Summary)}},
 	}
 
+	// Before/After 状态对比
+	if len(event.Before) > 0 || len(event.After) > 0 {
+		compareText := buildCompareText(event.Before, event.After)
+		if compareText != "" {
+			elements = append(elements, feishuElement{
+				Tag:  "div",
+				Text: &feishuText{Tag: "lark_md", Content: compareText},
+			})
+		}
+	}
+
+	// Diff 详情
 	if event.Diff != "" {
 		diff := event.Diff
-		if len(diff) > 500 {
-			diff = diff[:500] + "..."
+		if len(diff) > 800 {
+			diff = diff[:800] + "\n... (已截断)"
 		}
 		elements = append(elements, feishuElement{
 			Tag:  "div",
-			Text: &feishuText{Tag: "lark_md", Content: fmt.Sprintf("**变更详情**\n```\n%s\n```", diff)},
+			Text: &feishuText{Tag: "lark_md", Content: fmt.Sprintf("**变更详情**\n```diff\n%s\n```", diff)},
 		})
 	}
 
+	// 元数据（如果有额外信息）
+	if metaText := buildMetadataText(event.Metadata); metaText != "" {
+		elements = append(elements, feishuElement{
+			Tag:  "div",
+			Text: &feishuText{Tag: "lark_md", Content: metaText},
+		})
+	}
+
+	// 时间和事件 ID
 	elements = append(elements, feishuElement{
 		Tag: "div",
-		Text: &feishuText{Tag: "lark_md", Content: fmt.Sprintf("⏰ %s · `%s`", event.StartedAt.Format("2006-01-02 15:04:05"), event.EventID[:8])},
+		Text: &feishuText{Tag: "lark_md", Content: fmt.Sprintf("⏰ %s  ·  `%s`", event.StartedAt.Format("2006-01-02 15:04:05"), event.EventID[:8])},
 	})
+
+	// 操作按钮
+	if n.baseURL != "" {
+		elements = append(elements, feishuElement{Tag: "hr"})
+		elements = append(elements, feishuElement{
+			Tag: "action",
+			Actions: []feishuAction{
+				{
+					Tag:  "button",
+					Text: feishuText{Tag: "plain_text", Content: "📋 查看详情"},
+					URL:  fmt.Sprintf("%s/?event_id=%s", n.baseURL, event.EventID),
+					Type: "primary",
+				},
+				{
+					Tag:  "button",
+					Text: feishuText{Tag: "plain_text", Content: "🔍 查询关联告警"},
+					URL:  fmt.Sprintf("%s/?q=关联告警+%s+%s", n.baseURL, event.Service, event.Env),
+				},
+			},
+		})
+	}
 
 	return &feishuCard{
 		MsgType: "interactive",
@@ -321,4 +369,75 @@ func (n *FeishuNotifier) buildCard(event *protocol.ChangeEvent) *feishuCard {
 			Elements: elements,
 		},
 	}
+}
+
+// buildCompareText 构建 Before/After 对比文本。
+func buildCompareText(before, after map[string]any) string {
+	if len(before) == 0 && len(after) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString("**状态变更**\n")
+
+	// 收集所有 key
+	keys := make(map[string]bool)
+	for k := range before {
+		keys[k] = true
+	}
+	for k := range after {
+		keys[k] = true
+	}
+
+	count := 0
+	for k := range keys {
+		if count >= 6 {
+			sb.WriteString("... 等更多字段\n")
+			break
+		}
+		bVal := fmt.Sprintf("%v", before[k])
+		aVal := fmt.Sprintf("%v", after[k])
+		if bVal == aVal {
+			continue
+		}
+		if bVal == "" {
+			sb.WriteString(fmt.Sprintf("• `%s`: — → `%s`\n", k, truncateStr(aVal, 60)))
+		} else if aVal == "" {
+			sb.WriteString(fmt.Sprintf("• `%s`: `%s` → —\n", k, truncateStr(bVal, 60)))
+		} else {
+			sb.WriteString(fmt.Sprintf("• `%s`: `%s` → `%s`\n", k, truncateStr(bVal, 60), truncateStr(aVal, 60)))
+		}
+		count++
+	}
+	return sb.String()
+}
+
+// buildMetadataText 构建元数据文本。
+func buildMetadataText(metadata map[string]any) string {
+	if len(metadata) == 0 {
+		return ""
+	}
+	// 只显示关键元数据
+	interesting := []string{"image", "version", "replicas", "replicas_before", "replicas_after", "commit", "branch", "pipeline_url"}
+	var sb strings.Builder
+	showed := 0
+	for _, key := range interesting {
+		if val, ok := metadata[key]; ok {
+			if showed == 0 {
+				sb.WriteString("**附加信息**\n")
+			}
+			if showed >= 5 {
+				break
+			}
+			sb.WriteString(fmt.Sprintf("• `%s`: %s\n", key, truncateStr(fmt.Sprintf("%v", val), 80)))
+			showed++
+		}
+	}
+	return sb.String()
+}
+
+func truncateStr(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }
