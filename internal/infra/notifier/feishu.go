@@ -288,47 +288,32 @@ func (n *FeishuNotifier) buildCard(event *protocol.ChangeEvent) *feishuCard {
 
 	elements := []feishuElement{}
 
-	// 摘要 — 唯一的视觉重心
+	// 摘要
 	elements = append(elements, feishuElement{
 		Tag:  "div",
 		Text: &feishuText{Tag: "lark_md", Content: event.Summary},
 	})
 
-	// 信息网格 — 所有元数据放一起，紧凑整齐
-	var infoLines []string
-	infoLines = append(infoLines, fmt.Sprintf("**环境**　%s", event.Env))
-	infoLines = append(infoLines, fmt.Sprintf("**风险**　%s %s", emoji, strings.ToUpper(event.RiskLevel)))
-	infoLines = append(infoLines, fmt.Sprintf("**来源**　%s", event.Source))
-	if event.Operator != "" {
-		infoLines = append(infoLines, fmt.Sprintf("**操作人**　%s", event.Operator))
+	// 变更内容 — 用人话描述，不用 diff 代码块
+	changes := n.buildChangeSummary(event)
+	if changes != "" {
+		elements = append(elements, feishuElement{
+			Tag:  "div",
+			Text: &feishuText{Tag: "lark_md", Content: changes},
+		})
 	}
-	if event.Cluster != "" {
-		infoLines = append(infoLines, fmt.Sprintf("**集群**　%s", event.Cluster))
+
+	// 元数据行 — 一行搞定
+	var meta []string
+	meta = append(meta, fmt.Sprintf("**环境** %s", event.Env))
+	meta = append(meta, fmt.Sprintf("**风险** %s %s", emoji, strings.ToUpper(event.RiskLevel)))
+	if event.Operator != "" {
+		meta = append(meta, fmt.Sprintf("**操作人** %s", event.Operator))
 	}
 	elements = append(elements, feishuElement{
 		Tag:  "div",
-		Text: &feishuText{Tag: "lark_md", Content: strings.Join(infoLines, "\n")},
+		Text: &feishuText{Tag: "lark_md", Content: strings.Join(meta, "　·　")},
 	})
-
-	// 变更详情
-	if event.Diff != "" || len(event.Before) > 0 || len(event.After) > 0 {
-		elements = append(elements, feishuElement{Tag: "hr"})
-	}
-	if event.Diff != "" {
-		diff := event.Diff
-		if len(diff) > 400 {
-			diff = diff[:400] + "\n..."
-		}
-		elements = append(elements, feishuElement{
-			Tag:  "div",
-			Text: &feishuText{Tag: "lark_md", Content: fmt.Sprintf("```diff\n%s\n```", diff)},
-		})
-	} else if text := buildCompareText(event.Before, event.After); text != "" {
-		elements = append(elements, feishuElement{
-			Tag:  "div",
-			Text: &feishuText{Tag: "lark_md", Content: text},
-		})
-	}
 
 	// 操作按钮
 	if n.baseURL != "" {
@@ -350,7 +335,7 @@ func (n *FeishuNotifier) buildCard(event *protocol.ChangeEvent) *feishuCard {
 		})
 	}
 
-	// 底部备注
+	// 底部
 	elements = append(elements, feishuElement{
 		Tag: "note",
 		Elements: []feishuNoteElement{
@@ -370,15 +355,87 @@ func (n *FeishuNotifier) buildCard(event *protocol.ChangeEvent) *feishuCard {
 	}
 }
 
-// buildCompareText 构建 Before/After 对比文本。
-func buildCompareText(before, after map[string]any) string {
-	if len(before) == 0 && len(after) == 0 {
-		return ""
+// buildChangeSummary 把变更数据翻译成人话。
+func (n *FeishuNotifier) buildChangeSummary(event *protocol.ChangeEvent) string {
+	// 有 diff 时，尝试解析成可读描述
+	if event.Diff != "" {
+		return n.summarizeDiff(event.Diff)
 	}
-	var sb strings.Builder
-	sb.WriteString("**状态变更**\n")
+	// 没有 diff，用 Before/After 对比
+	if len(event.Before) > 0 || len(event.After) > 0 {
+		return summarizeBeforeAfter(event.Before, event.After)
+	}
+	return ""
+}
 
-	// 收集所有 key
+// summarizeDiff 把 diff 文本翻译成人类可读的变更列表。
+func (n *FeishuNotifier) summarizeDiff(diff string) string {
+	lines := strings.Split(diff, "\n")
+	type change struct {
+		key   string
+		old   string
+		new   string
+	}
+	var changes []change
+	// 跟踪当前 key
+	currentKey := ""
+	currentOld := ""
+	currentNew := ""
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---") {
+			val := strings.TrimSpace(strings.TrimPrefix(line, "-"))
+			if idx := strings.Index(val, ":"); idx > 0 {
+				currentKey = strings.TrimSpace(val[:idx])
+				currentOld = strings.TrimSpace(val[idx+1:])
+			} else {
+				currentOld = val
+			}
+		} else if strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++") {
+			val := strings.TrimSpace(strings.TrimPrefix(line, "+"))
+			if idx := strings.Index(val, ":"); idx > 0 {
+				if currentKey == "" {
+					currentKey = strings.TrimSpace(val[:idx])
+				}
+				currentNew = strings.TrimSpace(val[idx+1:])
+			} else {
+				currentNew = val
+			}
+			if currentKey != "" || currentNew != "" {
+				changes = append(changes, change{key: currentKey, old: currentOld, new: currentNew})
+				currentKey = ""
+				currentOld = ""
+				currentNew = ""
+			}
+		} else {
+			// 非 diff 行，重置
+			currentKey = ""
+			currentOld = ""
+			currentNew = ""
+		}
+	}
+
+	if len(changes) == 0 {
+		// 无法解析，回退到原始 diff（截断）
+		if len(diff) > 200 {
+			diff = diff[:200] + "..."
+		}
+		return fmt.Sprintf("```\n%s\n```", diff)
+	}
+
+	var sb strings.Builder
+	for _, c := range changes {
+		if c.key != "" {
+			sb.WriteString(fmt.Sprintf("· **%s** `%s` → `%s`\n", c.key, c.old, c.new))
+		} else {
+			sb.WriteString(fmt.Sprintf("· `%s` → `%s`\n", c.old, c.new))
+		}
+	}
+	return sb.String()
+}
+
+// summarizeBeforeAfter 把 Before/After map 翻译成可读描述。
+func summarizeBeforeAfter(before, after map[string]any) string {
 	keys := make(map[string]bool)
 	for k := range before {
 		keys[k] = true
@@ -387,49 +444,27 @@ func buildCompareText(before, after map[string]any) string {
 		keys[k] = true
 	}
 
+	var sb strings.Builder
 	count := 0
 	for k := range keys {
-		if count >= 6 {
-			sb.WriteString("... 等更多字段\n")
+		if count >= 5 {
 			break
 		}
 		bVal := fmt.Sprintf("%v", before[k])
 		aVal := fmt.Sprintf("%v", after[k])
-		if bVal == aVal {
+		if bVal == aVal || (bVal == "" && aVal == "") {
 			continue
 		}
 		if bVal == "" {
-			sb.WriteString(fmt.Sprintf("• `%s`: — → `%s`\n", k, truncateStr(aVal, 60)))
+			sb.WriteString(fmt.Sprintf("· **%s** 新增 `%s`\n", k, truncateStr(aVal, 50)))
 		} else if aVal == "" {
-			sb.WriteString(fmt.Sprintf("• `%s`: `%s` → —\n", k, truncateStr(bVal, 60)))
+			sb.WriteString(fmt.Sprintf("· **%s** 移除 `%s`\n", k, truncateStr(bVal, 50)))
 		} else {
-			sb.WriteString(fmt.Sprintf("• `%s`: `%s` → `%s`\n", k, truncateStr(bVal, 60), truncateStr(aVal, 60)))
+			sb.WriteString(fmt.Sprintf("· **%s** `%s` → `%s`\n", k, truncateStr(bVal, 50), truncateStr(aVal, 50)))
 		}
 		count++
 	}
 	return sb.String()
-}
-
-// buildMetadataLine 构建紧凑的元数据单行文本。
-func buildMetadataLine(metadata map[string]any) string {
-	if len(metadata) == 0 {
-		return ""
-	}
-	interesting := []string{"commit", "branch", "version", "pipeline_url"}
-	var parts []string
-	for _, key := range interesting {
-		if val, ok := metadata[key]; ok {
-			s := fmt.Sprintf("%v", val)
-			if len(s) > 40 {
-				s = s[:40] + "..."
-			}
-			parts = append(parts, fmt.Sprintf("**%s** `%s`", key, s))
-		}
-	}
-	if len(parts) == 0 {
-		return ""
-	}
-	return strings.Join(parts, "  ·  ")
 }
 
 func truncateStr(s string, maxLen int) string {
