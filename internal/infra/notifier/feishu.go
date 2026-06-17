@@ -276,7 +276,6 @@ type feishuAction struct {
 }
 
 // buildCard 构建飞书交互式卡片消息。
-// 设计原则：一个视觉锚点（标题）→ 一个核心信息（摘要）→ 支持细节 → 操作入口
 func (n *FeishuNotifier) buildCard(event *protocol.ChangeEvent) *feishuCard {
 	emoji := n.riskLevelEmoji[event.RiskLevel]
 	color := n.riskLevelColors[event.RiskLevel]
@@ -285,31 +284,36 @@ func (n *FeishuNotifier) buildCard(event *protocol.ChangeEvent) *feishuCard {
 		eventTypeName = event.EventType
 	}
 
-	title := fmt.Sprintf("%s %s", emoji, eventTypeName)
-	subtitle := fmt.Sprintf("%s · %s", event.Service, strings.ToUpper(event.Env))
+	title := fmt.Sprintf("%s %s · %s", emoji, eventTypeName, event.Service)
 
 	elements := []feishuElement{}
 
-	// 区块 1：核心信息 — 两列，只放最关键的数据
-	elements = append(elements, feishuElement{
-		Tag: "div",
-		Fields: []feishuField{
-			{IsShort: true, Text: feishuText{Tag: "lark_md", Content: fmt.Sprintf("**环境**\n%s", event.Env)}},
-			{IsShort: true, Text: feishuText{Tag: "lark_md", Content: fmt.Sprintf("**风险**\n%s %s", emoji, strings.ToUpper(event.RiskLevel))}},
-		},
-	})
-
-	// 区块 2：摘要 — 视觉锚点，用大号文字
+	// 摘要 — 唯一的视觉重心
 	elements = append(elements, feishuElement{
 		Tag:  "div",
 		Text: &feishuText{Tag: "lark_md", Content: event.Summary},
 	})
 
-	// 区块 3：变更详情 — 有则展示，用分隔线隔开
+	// 信息网格 — 所有元数据放一起，紧凑整齐
+	var infoLines []string
+	infoLines = append(infoLines, fmt.Sprintf("**环境**　%s", event.Env))
+	infoLines = append(infoLines, fmt.Sprintf("**风险**　%s %s", emoji, strings.ToUpper(event.RiskLevel)))
+	infoLines = append(infoLines, fmt.Sprintf("**来源**　%s", event.Source))
+	if event.Operator != "" {
+		infoLines = append(infoLines, fmt.Sprintf("**操作人**　%s", event.Operator))
+	}
+	if event.Cluster != "" {
+		infoLines = append(infoLines, fmt.Sprintf("**集群**　%s", event.Cluster))
+	}
+	elements = append(elements, feishuElement{
+		Tag:  "div",
+		Text: &feishuText{Tag: "lark_md", Content: strings.Join(infoLines, "\n")},
+	})
+
+	// 变更详情
 	if event.Diff != "" || len(event.Before) > 0 || len(event.After) > 0 {
 		elements = append(elements, feishuElement{Tag: "hr"})
 	}
-
 	if event.Diff != "" {
 		diff := event.Diff
 		if len(diff) > 400 {
@@ -326,9 +330,8 @@ func (n *FeishuNotifier) buildCard(event *protocol.ChangeEvent) *feishuCard {
 		})
 	}
 
-	// 区块 4：操作按钮 — 唯一的交互入口
+	// 操作按钮
 	if n.baseURL != "" {
-		elements = append(elements, feishuElement{Tag: "hr"})
 		elements = append(elements, feishuElement{
 			Tag: "action",
 			Actions: []feishuAction{
@@ -347,17 +350,11 @@ func (n *FeishuNotifier) buildCard(event *protocol.ChangeEvent) *feishuCard {
 		})
 	}
 
-	// 底部备注 — 最小化，不抢注意力
-	parts := []string{}
-	if event.Operator != "" {
-		parts = append(parts, event.Operator)
-	}
-	parts = append(parts, event.StartedAt.Format("01-02 15:04"))
-	parts = append(parts, event.EventID[:8])
+	// 底部备注
 	elements = append(elements, feishuElement{
 		Tag: "note",
 		Elements: []feishuNoteElement{
-			{Tag: "plain_text", Content: strings.Join(parts, "  ·  ")},
+			{Tag: "plain_text", Content: event.StartedAt.Format("2006-01-02 15:04:05")},
 		},
 	})
 
@@ -366,7 +363,6 @@ func (n *FeishuNotifier) buildCard(event *protocol.ChangeEvent) *feishuCard {
 		Card: feishuInner{
 			Header: feishuHeader{
 				Title:    feishuText{Tag: "plain_text", Content: title},
-				Subtitle: feishuText{Tag: "plain_text", Content: subtitle},
 				Template: color,
 			},
 			Elements: elements,
