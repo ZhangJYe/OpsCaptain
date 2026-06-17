@@ -251,10 +251,16 @@ type feishuText struct {
 }
 
 type feishuElement struct {
-	Tag      string         `json:"tag"`
-	Text     *feishuText    `json:"text,omitempty"`
-	Fields   []feishuField  `json:"fields,omitempty"`
-	Actions  []feishuAction `json:"actions,omitempty"`
+	Tag      string              `json:"tag"`
+	Text     *feishuText         `json:"text,omitempty"`
+	Fields   []feishuField       `json:"fields,omitempty"`
+	Actions  []feishuAction      `json:"actions,omitempty"`
+	Elements []feishuNoteElement `json:"elements,omitempty"`
+}
+
+type feishuNoteElement struct {
+	Tag     string `json:"tag"`
+	Content string `json:"content"`
 }
 
 type feishuField struct {
@@ -283,32 +289,34 @@ func (n *FeishuNotifier) buildCard(event *protocol.ChangeEvent) *feishuCard {
 
 	elements := []feishuElement{}
 
-	// 核心信息：两列布局
-	coreFields := []feishuField{
-		{IsShort: true, Text: feishuText{Tag: "lark_md", Content: fmt.Sprintf("**风险等级**\n%s %s", emoji, strings.ToUpper(event.RiskLevel))}},
-		{IsShort: true, Text: feishuText{Tag: "lark_md", Content: fmt.Sprintf("**来源**\n%s", event.Source)}},
-	}
-	if event.Operator != "" {
-		coreFields = append(coreFields, feishuField{IsShort: true, Text: feishuText{Tag: "lark_md", Content: fmt.Sprintf("**操作人**\n%s", event.Operator)}})
-	}
-	if event.Cluster != "" {
-		coreFields = append(coreFields, feishuField{IsShort: true, Text: feishuText{Tag: "lark_md", Content: fmt.Sprintf("**集群**\n%s", event.Cluster)}})
-	}
-	elements = append(elements, feishuElement{Tag: "div", Fields: coreFields})
-
-	// 摘要
+	// 第一区：核心信息（两列）
 	elements = append(elements, feishuElement{
-		Tag:  "div",
-		Text: &feishuText{Tag: "lark_md", Content: fmt.Sprintf("> %s", event.Summary)},
+		Tag: "div",
+		Fields: []feishuField{
+			{IsShort: true, Text: feishuText{Tag: "lark_md", Content: fmt.Sprintf("**风险等级**\n%s %s", emoji, strings.ToUpper(event.RiskLevel))}},
+			{IsShort: true, Text: feishuText{Tag: "lark_md", Content: fmt.Sprintf("**来源**\n%s", event.Source)}},
+			{IsShort: true, Text: feishuText{Tag: "lark_md", Content: fmt.Sprintf("**操作人**\n%s", orDefault(event.Operator, "—"))}},
+			{IsShort: true, Text: feishuText{Tag: "lark_md", Content: fmt.Sprintf("**环境**\n%s", event.Env)}},
+		},
 	})
 
-	// 变更详情（优先展示 diff，没有 diff 则展示 Before/After）
+	// 第二区：摘要（醒目展示）
+	elements = append(elements, feishuElement{
+		Tag:  "div",
+		Text: &feishuText{Tag: "lark_md", Content: fmt.Sprintf("**📋 摘要**\n%s", event.Summary)},
+	})
+
+	// 第三区：变更详情
+	hasDetails := event.Diff != "" || len(event.Before) > 0 || len(event.After) > 0
+	if hasDetails {
+		elements = append(elements, feishuElement{Tag: "hr"})
+	}
+
 	if event.Diff != "" {
 		diff := event.Diff
-		if len(diff) > 600 {
-			diff = diff[:600] + "\n..."
+		if len(diff) > 500 {
+			diff = diff[:500] + "\n..."
 		}
-		elements = append(elements, feishuElement{Tag: "hr"})
 		elements = append(elements, feishuElement{
 			Tag:  "div",
 			Text: &feishuText{Tag: "lark_md", Content: fmt.Sprintf("**变更详情**\n```diff\n%s\n```", diff)},
@@ -316,7 +324,6 @@ func (n *FeishuNotifier) buildCard(event *protocol.ChangeEvent) *feishuCard {
 	} else if len(event.Before) > 0 || len(event.After) > 0 {
 		compareText := buildCompareText(event.Before, event.After)
 		if compareText != "" {
-			elements = append(elements, feishuElement{Tag: "hr"})
 			elements = append(elements, feishuElement{
 				Tag:  "div",
 				Text: &feishuText{Tag: "lark_md", Content: compareText},
@@ -324,7 +331,7 @@ func (n *FeishuNotifier) buildCard(event *protocol.ChangeEvent) *feishuCard {
 		}
 	}
 
-	// 附加信息（紧凑单行）
+	// 第四区：附加信息（紧凑一行）
 	if metaLine := buildMetadataLine(event.Metadata); metaLine != "" {
 		elements = append(elements, feishuElement{
 			Tag:  "div",
@@ -332,13 +339,7 @@ func (n *FeishuNotifier) buildCard(event *protocol.ChangeEvent) *feishuCard {
 		})
 	}
 
-	// 底部：时间和事件 ID
-	elements = append(elements, feishuElement{
-		Tag: "div",
-		Text: &feishuText{Tag: "lark_md", Content: fmt.Sprintf("`%s`  ·  `%s`", event.StartedAt.Format("01-02 15:04"), event.EventID[:8])},
-	})
-
-	// 操作按钮
+	// 第五区：操作按钮
 	if n.baseURL != "" {
 		elements = append(elements, feishuElement{Tag: "hr"})
 		elements = append(elements, feishuElement{
@@ -346,18 +347,26 @@ func (n *FeishuNotifier) buildCard(event *protocol.ChangeEvent) *feishuCard {
 			Actions: []feishuAction{
 				{
 					Tag:  "button",
-					Text: feishuText{Tag: "plain_text", Content: "查看详情"},
+					Text: feishuText{Tag: "plain_text", Content: "📋 查看详情"},
 					URL:  fmt.Sprintf("%s/?event_id=%s", n.baseURL, event.EventID),
 					Type: "primary",
 				},
 				{
 					Tag:  "button",
-					Text: feishuText{Tag: "plain_text", Content: "查询关联告警"},
+					Text: feishuText{Tag: "plain_text", Content: "🔍 查询关联告警"},
 					URL:  fmt.Sprintf("%s/?q=关联告警+%s+%s", n.baseURL, event.Service, event.Env),
 				},
 			},
 		})
 	}
+
+	// 底部备注：时间 + 事件 ID
+	elements = append(elements, feishuElement{
+		Tag: "note",
+		Elements: []feishuNoteElement{
+			{Tag: "plain_text", Content: fmt.Sprintf("⏰ %s  ·  事件 %s", event.StartedAt.Format("2006-01-02 15:04:05"), event.EventID[:8])},
+		},
+	})
 
 	return &feishuCard{
 		MsgType: "interactive",
@@ -370,6 +379,13 @@ func (n *FeishuNotifier) buildCard(event *protocol.ChangeEvent) *feishuCard {
 			Elements: elements,
 		},
 	}
+}
+
+func orDefault(val, def string) string {
+	if strings.TrimSpace(val) == "" {
+		return def
+	}
+	return val
 }
 
 // buildCompareText 构建 Before/After 对比文本。
