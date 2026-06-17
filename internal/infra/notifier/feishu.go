@@ -276,6 +276,7 @@ type feishuAction struct {
 }
 
 // buildCard 构建飞书交互式卡片消息。
+// 设计原则：一个视觉锚点（标题）→ 一个核心信息（摘要）→ 支持细节 → 操作入口
 func (n *FeishuNotifier) buildCard(event *protocol.ChangeEvent) *feishuCard {
 	emoji := n.riskLevelEmoji[event.RiskLevel]
 	color := n.riskLevelColors[event.RiskLevel]
@@ -289,57 +290,43 @@ func (n *FeishuNotifier) buildCard(event *protocol.ChangeEvent) *feishuCard {
 
 	elements := []feishuElement{}
 
-	// 第一区：核心信息（两列）
+	// 区块 1：核心信息 — 两列，只放最关键的数据
 	elements = append(elements, feishuElement{
 		Tag: "div",
 		Fields: []feishuField{
-			{IsShort: true, Text: feishuText{Tag: "lark_md", Content: fmt.Sprintf("**风险等级**\n%s %s", emoji, strings.ToUpper(event.RiskLevel))}},
-			{IsShort: true, Text: feishuText{Tag: "lark_md", Content: fmt.Sprintf("**来源**\n%s", event.Source)}},
-			{IsShort: true, Text: feishuText{Tag: "lark_md", Content: fmt.Sprintf("**操作人**\n%s", orDefault(event.Operator, "—"))}},
 			{IsShort: true, Text: feishuText{Tag: "lark_md", Content: fmt.Sprintf("**环境**\n%s", event.Env)}},
+			{IsShort: true, Text: feishuText{Tag: "lark_md", Content: fmt.Sprintf("**风险**\n%s %s", emoji, strings.ToUpper(event.RiskLevel))}},
 		},
 	})
 
-	// 第二区：摘要（醒目展示）
+	// 区块 2：摘要 — 视觉锚点，用大号文字
 	elements = append(elements, feishuElement{
 		Tag:  "div",
-		Text: &feishuText{Tag: "lark_md", Content: fmt.Sprintf("**📋 摘要**\n%s", event.Summary)},
+		Text: &feishuText{Tag: "lark_md", Content: event.Summary},
 	})
 
-	// 第三区：变更详情
-	hasDetails := event.Diff != "" || len(event.Before) > 0 || len(event.After) > 0
-	if hasDetails {
+	// 区块 3：变更详情 — 有则展示，用分隔线隔开
+	if event.Diff != "" || len(event.Before) > 0 || len(event.After) > 0 {
 		elements = append(elements, feishuElement{Tag: "hr"})
 	}
 
 	if event.Diff != "" {
 		diff := event.Diff
-		if len(diff) > 500 {
-			diff = diff[:500] + "\n..."
+		if len(diff) > 400 {
+			diff = diff[:400] + "\n..."
 		}
 		elements = append(elements, feishuElement{
 			Tag:  "div",
-			Text: &feishuText{Tag: "lark_md", Content: fmt.Sprintf("**变更详情**\n```diff\n%s\n```", diff)},
+			Text: &feishuText{Tag: "lark_md", Content: fmt.Sprintf("```diff\n%s\n```", diff)},
 		})
-	} else if len(event.Before) > 0 || len(event.After) > 0 {
-		compareText := buildCompareText(event.Before, event.After)
-		if compareText != "" {
-			elements = append(elements, feishuElement{
-				Tag:  "div",
-				Text: &feishuText{Tag: "lark_md", Content: compareText},
-			})
-		}
-	}
-
-	// 第四区：附加信息（紧凑一行）
-	if metaLine := buildMetadataLine(event.Metadata); metaLine != "" {
+	} else if text := buildCompareText(event.Before, event.After); text != "" {
 		elements = append(elements, feishuElement{
 			Tag:  "div",
-			Text: &feishuText{Tag: "lark_md", Content: metaLine},
+			Text: &feishuText{Tag: "lark_md", Content: text},
 		})
 	}
 
-	// 第五区：操作按钮
+	// 区块 4：操作按钮 — 唯一的交互入口
 	if n.baseURL != "" {
 		elements = append(elements, feishuElement{Tag: "hr"})
 		elements = append(elements, feishuElement{
@@ -347,24 +334,30 @@ func (n *FeishuNotifier) buildCard(event *protocol.ChangeEvent) *feishuCard {
 			Actions: []feishuAction{
 				{
 					Tag:  "button",
-					Text: feishuText{Tag: "plain_text", Content: "📋 查看详情"},
+					Text: feishuText{Tag: "plain_text", Content: "查看详情"},
 					URL:  fmt.Sprintf("%s/?event_id=%s", n.baseURL, event.EventID),
 					Type: "primary",
 				},
 				{
 					Tag:  "button",
-					Text: feishuText{Tag: "plain_text", Content: "🔍 查询关联告警"},
+					Text: feishuText{Tag: "plain_text", Content: "查询关联告警"},
 					URL:  fmt.Sprintf("%s/?q=关联告警+%s+%s", n.baseURL, event.Service, event.Env),
 				},
 			},
 		})
 	}
 
-	// 底部备注：时间 + 事件 ID
+	// 底部备注 — 最小化，不抢注意力
+	parts := []string{}
+	if event.Operator != "" {
+		parts = append(parts, event.Operator)
+	}
+	parts = append(parts, event.StartedAt.Format("01-02 15:04"))
+	parts = append(parts, event.EventID[:8])
 	elements = append(elements, feishuElement{
 		Tag: "note",
 		Elements: []feishuNoteElement{
-			{Tag: "plain_text", Content: fmt.Sprintf("⏰ %s  ·  事件 %s", event.StartedAt.Format("2006-01-02 15:04:05"), event.EventID[:8])},
+			{Tag: "plain_text", Content: strings.Join(parts, "  ·  ")},
 		},
 	})
 
@@ -379,13 +372,6 @@ func (n *FeishuNotifier) buildCard(event *protocol.ChangeEvent) *feishuCard {
 			Elements: elements,
 		},
 	}
-}
-
-func orDefault(val, def string) string {
-	if strings.TrimSpace(val) == "" {
-		return def
-	}
-	return val
 }
 
 // buildCompareText 构建 Before/After 对比文本。
