@@ -292,6 +292,10 @@ func configureChangeEvents(ctx context.Context, aiopsApp *app.AIOpsApp) (*app.Ch
 	if configBool(ctx, "change_events.indexing.enabled", true) {
 		changeEventBus.Register(changeevent.NewChangeRAGIndexer(configString(ctx, "change_events.indexing.source_prefix", "change_event")))
 	}
+
+	// 分析跟踪器：ProactiveAnalyzer 存 trace_id，FeishuAnalysisNotifier 读取并跟进
+	analysisTracker := changeevent.NewAnalysisTracker(500)
+
 	if configBool(ctx, "change_events.proactive.enabled", true) {
 		proactiveCfg := changeevent.DefaultProactiveAnalyzerConfig()
 		proactiveCfg.Enabled = true
@@ -300,18 +304,30 @@ func configureChangeEvents(ctx context.Context, aiopsApp *app.AIOpsApp) (*app.Ch
 		proactiveCfg.RequireRiskLevel = configString(ctx, "change_events.proactive.require_risk_level", proactiveCfg.RequireRiskLevel)
 		proactiveCfg.RequireEventTypes = configStringSlice(ctx, "change_events.proactive.require_event_types", proactiveCfg.RequireEventTypes)
 		proactiveCfg.InspectionTimeout = configInt(ctx, "change_events.proactive.inspection_timeout_ms", proactiveCfg.InspectionTimeout)
-		changeEventBus.Register(changeevent.NewProactiveAnalyzer(app.NewChangeEventAIOpsRunner(aiopsApp, ""), proactiveCfg))
+		pa := changeevent.NewProactiveAnalyzer(app.NewChangeEventAIOpsRunner(aiopsApp, ""), proactiveCfg)
+		pa.SetTracker(analysisTracker)
+		changeEventBus.Register(pa)
 	}
 	if configBool(ctx, "change_events.notifier.feishu.enabled", false) {
-		feishuCfg := notifier.FeishuNotifierConfig{
-			WebhookURL:   common.ResolveEnv(configString(ctx, "change_events.notifier.feishu.webhook_url", "")),
-			MinRiskLevel: configString(ctx, "change_events.notifier.feishu.min_risk_level", "medium"),
-			Services:     configStringSlice(ctx, "change_events.notifier.feishu.services", nil),
-			TimeoutMs:    configInt(ctx, "change_events.notifier.feishu.timeout_ms", 5000),
-		}
-		if feishuCfg.WebhookURL != "" {
-			changeEventBus.Register(notifier.NewFeishuNotifier(feishuCfg))
-			g.Log().Info(ctx, "[change_event] feishu notifier registered")
+		feishuURL := common.ResolveEnv(configString(ctx, "change_events.notifier.feishu.webhook_url", ""))
+		baseURL := common.ResolveEnv(configString(ctx, "change_events.notifier.feishu.base_url", ""))
+		if feishuURL != "" {
+			changeEventBus.Register(notifier.NewFeishuNotifier(notifier.FeishuNotifierConfig{
+				WebhookURL:   feishuURL,
+				MinRiskLevel: configString(ctx, "change_events.notifier.feishu.min_risk_level", "medium"),
+				Services:     configStringSlice(ctx, "change_events.notifier.feishu.services", nil),
+				TimeoutMs:    configInt(ctx, "change_events.notifier.feishu.timeout_ms", 5000),
+				BaseURL:      baseURL,
+			}))
+			// 注册分析结论跟进通知器
+			changeEventBus.Register(notifier.NewFeishuAnalysisNotifier(notifier.FeishuAnalysisNotifierConfig{
+				Tracker:    analysisTracker,
+				Getter:     aiservice.GetAIOpsResult,
+				WebhookURL: feishuURL,
+				BaseURL:    baseURL,
+				TimeoutMs:  5000,
+			}))
+			g.Log().Info(ctx, "[change_event] feishu notifier + analysis follow-up registered")
 		} else {
 			g.Log().Warning(ctx, "[change_event] feishu notifier enabled but webhook_url is empty, skipping")
 		}

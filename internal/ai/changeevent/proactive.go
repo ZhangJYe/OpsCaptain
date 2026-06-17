@@ -57,9 +57,10 @@ func DefaultProactiveAnalyzerConfig() ProactiveAnalyzerConfig {
 
 // ProactiveAnalyzer 在高风险变更事件到达后触发主动巡检分析。
 type ProactiveAnalyzer struct {
-	runner   AIOpsRunner
-	config   ProactiveAnalyzerConfig
-	debounce *DebounceTracker
+	runner      AIOpsRunner
+	config      ProactiveAnalyzerConfig
+	debounce    *DebounceTracker
+	tracker     *AnalysisTracker
 }
 
 // NewProactiveAnalyzer 创建主动巡检分析器。
@@ -69,6 +70,11 @@ func NewProactiveAnalyzer(runner AIOpsRunner, config ProactiveAnalyzerConfig) *P
 		config:   config,
 		debounce: NewDebounceTracker(time.Duration(config.DebounceSeconds) * time.Second),
 	}
+}
+
+// SetTracker 设置分析跟踪器，用于向下游 handler 传递 trace_id。
+func (pa *ProactiveAnalyzer) SetTracker(tracker *AnalysisTracker) {
+	pa.tracker = tracker
 }
 
 // Name 实现 ChangeEventHandler 接口。
@@ -121,6 +127,19 @@ func (pa *ProactiveAnalyzer) Handle(ctx context.Context, event *protocol.ChangeE
 
 	g.Log().Infof(ctx, "[change_event] proactive analysis started: trace_id=%s service=%s",
 		runInfo.TraceID, event.Service)
+
+	// 存入 tracker，供下游 handler（如飞书分析跟进通知）获取 trace_id
+	if pa.tracker != nil && runInfo.TraceID != "" {
+		pa.tracker.Store(event.EventID, &AnalysisRecord{
+			TraceID:   runInfo.TraceID,
+			TaskID:    runInfo.TaskID,
+			Service:   event.Service,
+			EventType: event.EventType,
+			Summary:   event.Summary,
+			StartedAt: time.Now(),
+		})
+	}
+
 	return nil
 }
 
