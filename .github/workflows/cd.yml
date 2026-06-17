@@ -41,6 +41,8 @@ jobs:
       SECRET_DOMAIN_NAME: ${{ secrets.DOMAIN_NAME }}
       SECRET_MILVUS_ADDRESS: ${{ secrets.MILVUS_ADDRESS }}
       SECRET_TLS_EMAIL: ${{ secrets.TLS_EMAIL }}
+      SECRET_FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+      SECRET_OPS_CAPTION_BASE_URL: ${{ secrets.OPS_CAPTION_BASE_URL }}
 
     steps:
       - name: Checkout repository
@@ -241,6 +243,8 @@ jobs:
           set_env_value_if_missing MCP_LOG_URL http://host.docker.internal:18088/sse
           set_env_value_if_missing MCP_LOG_HTTP_URL http://host.docker.internal:18088/tools/query_logs
           set_env_value_if_missing TLS_EMAIL "$SECRET_TLS_EMAIL"
+          set_env_value_if_missing FEISHU_WEBHOOK_URL "$SECRET_FEISHU_WEBHOOK_URL"
+          set_env_value_if_missing OPS_CAPTION_BASE_URL "$SECRET_OPS_CAPTION_BASE_URL"
 
           milvus_collection="$(normalize_optional_env_value MILVUS_COLLECTION opscaption_knowledge_v2)"
           if [ "$milvus_collection" = "biz" ]; then

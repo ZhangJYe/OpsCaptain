@@ -238,3 +238,46 @@ redis:
     address: "${REDIS_ADDRESS}"
     db: 0
     pass: "${REDIS_PASSWORD}"
+
+change_events:
+  enabled: true
+  store_backend: "redis"
+  max_events: 10000
+  recent_buffer_size: 200
+  retention_hours: 720
+  webhook:
+    enabled: true
+    json_enabled: true
+    sources:
+      github:
+        enabled: false
+      gitlab:
+        enabled: false
+      argocd:
+        enabled: false
+  proactive:
+    enabled: true
+    debounce_seconds: 300
+    inspection_timeout_ms: 120000
+    require_env: "prod"
+    require_risk_level: "medium"
+    require_event_types:
+      - "deploy"
+      - "rollback"
+      - "config_update"
+      - "scale"
+  indexing:
+    enabled: true
+    source_prefix: "change_event"
+  cluster_broadcast:
+    enabled: true
+    channel: "change_events"
+    prefix: "opscaption"
+  notifier:
+    feishu:
+      enabled: true
+      webhook_url: "${FEISHU_WEBHOOK_URL}"
+      min_risk_level: "low"
+      services: []
+      timeout_ms: 5000
+      base_url: "${OPS_CAPTION_BASE_URL}"
