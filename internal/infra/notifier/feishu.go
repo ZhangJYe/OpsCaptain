@@ -241,6 +241,7 @@ type feishuInner struct {
 
 type feishuHeader struct {
 	Title    feishuText `json:"title"`
+	Subtitle feishuText `json:"subtitle,omitempty"`
 	Template string     `json:"template"`
 }
 
@@ -277,34 +278,45 @@ func (n *FeishuNotifier) buildCard(event *protocol.ChangeEvent) *feishuCard {
 		eventTypeName = event.EventType
 	}
 
-	title := fmt.Sprintf("%s 变更通知 — %s", emoji, eventTypeName)
+	title := fmt.Sprintf("%s %s", emoji, eventTypeName)
+	subtitle := fmt.Sprintf("%s · %s", event.Service, strings.ToUpper(event.Env))
 
-	fields := []feishuField{
-		{IsShort: true, Text: feishuText{Tag: "lark_md", Content: fmt.Sprintf("**服务**\n%s", event.Service)}},
-		{IsShort: true, Text: feishuText{Tag: "lark_md", Content: fmt.Sprintf("**环境**\n%s", event.Env)}},
+	elements := []feishuElement{}
+
+	// 核心信息：两列布局
+	coreFields := []feishuField{
 		{IsShort: true, Text: feishuText{Tag: "lark_md", Content: fmt.Sprintf("**风险等级**\n%s %s", emoji, strings.ToUpper(event.RiskLevel))}},
 		{IsShort: true, Text: feishuText{Tag: "lark_md", Content: fmt.Sprintf("**来源**\n%s", event.Source)}},
 	}
 	if event.Operator != "" {
-		fields = append(fields, feishuField{IsShort: true, Text: feishuText{Tag: "lark_md", Content: fmt.Sprintf("**操作人**\n%s", event.Operator)}})
+		coreFields = append(coreFields, feishuField{IsShort: true, Text: feishuText{Tag: "lark_md", Content: fmt.Sprintf("**操作人**\n%s", event.Operator)}})
 	}
 	if event.Cluster != "" {
-		fields = append(fields, feishuField{IsShort: true, Text: feishuText{Tag: "lark_md", Content: fmt.Sprintf("**集群**\n%s", event.Cluster)}})
+		coreFields = append(coreFields, feishuField{IsShort: true, Text: feishuText{Tag: "lark_md", Content: fmt.Sprintf("**集群**\n%s", event.Cluster)}})
 	}
-	if event.Namespace != "" {
-		fields = append(fields, feishuField{IsShort: true, Text: feishuText{Tag: "lark_md", Content: fmt.Sprintf("**命名空间**\n%s", event.Namespace)}})
-	}
+	elements = append(elements, feishuElement{Tag: "div", Fields: coreFields})
 
-	elements := []feishuElement{
-		{Tag: "div", Fields: fields},
-		{Tag: "hr"},
-		{Tag: "div", Text: &feishuText{Tag: "lark_md", Content: fmt.Sprintf("**摘要**\n%s", event.Summary)}},
-	}
+	// 摘要
+	elements = append(elements, feishuElement{
+		Tag:  "div",
+		Text: &feishuText{Tag: "lark_md", Content: fmt.Sprintf("> %s", event.Summary)},
+	})
 
-	// Before/After 状态对比
-	if len(event.Before) > 0 || len(event.After) > 0 {
+	// 变更详情（优先展示 diff，没有 diff 则展示 Before/After）
+	if event.Diff != "" {
+		diff := event.Diff
+		if len(diff) > 600 {
+			diff = diff[:600] + "\n..."
+		}
+		elements = append(elements, feishuElement{Tag: "hr"})
+		elements = append(elements, feishuElement{
+			Tag:  "div",
+			Text: &feishuText{Tag: "lark_md", Content: fmt.Sprintf("**变更详情**\n```diff\n%s\n```", diff)},
+		})
+	} else if len(event.Before) > 0 || len(event.After) > 0 {
 		compareText := buildCompareText(event.Before, event.After)
 		if compareText != "" {
+			elements = append(elements, feishuElement{Tag: "hr"})
 			elements = append(elements, feishuElement{
 				Tag:  "div",
 				Text: &feishuText{Tag: "lark_md", Content: compareText},
@@ -312,30 +324,18 @@ func (n *FeishuNotifier) buildCard(event *protocol.ChangeEvent) *feishuCard {
 		}
 	}
 
-	// Diff 详情
-	if event.Diff != "" {
-		diff := event.Diff
-		if len(diff) > 800 {
-			diff = diff[:800] + "\n... (已截断)"
-		}
+	// 附加信息（紧凑单行）
+	if metaLine := buildMetadataLine(event.Metadata); metaLine != "" {
 		elements = append(elements, feishuElement{
 			Tag:  "div",
-			Text: &feishuText{Tag: "lark_md", Content: fmt.Sprintf("**变更详情**\n```diff\n%s\n```", diff)},
+			Text: &feishuText{Tag: "lark_md", Content: metaLine},
 		})
 	}
 
-	// 元数据（如果有额外信息）
-	if metaText := buildMetadataText(event.Metadata); metaText != "" {
-		elements = append(elements, feishuElement{
-			Tag:  "div",
-			Text: &feishuText{Tag: "lark_md", Content: metaText},
-		})
-	}
-
-	// 时间和事件 ID
+	// 底部：时间和事件 ID
 	elements = append(elements, feishuElement{
 		Tag: "div",
-		Text: &feishuText{Tag: "lark_md", Content: fmt.Sprintf("⏰ %s  ·  `%s`", event.StartedAt.Format("2006-01-02 15:04:05"), event.EventID[:8])},
+		Text: &feishuText{Tag: "lark_md", Content: fmt.Sprintf("`%s`  ·  `%s`", event.StartedAt.Format("01-02 15:04"), event.EventID[:8])},
 	})
 
 	// 操作按钮
@@ -346,13 +346,13 @@ func (n *FeishuNotifier) buildCard(event *protocol.ChangeEvent) *feishuCard {
 			Actions: []feishuAction{
 				{
 					Tag:  "button",
-					Text: feishuText{Tag: "plain_text", Content: "📋 查看详情"},
+					Text: feishuText{Tag: "plain_text", Content: "查看详情"},
 					URL:  fmt.Sprintf("%s/?event_id=%s", n.baseURL, event.EventID),
 					Type: "primary",
 				},
 				{
 					Tag:  "button",
-					Text: feishuText{Tag: "plain_text", Content: "🔍 查询关联告警"},
+					Text: feishuText{Tag: "plain_text", Content: "查询关联告警"},
 					URL:  fmt.Sprintf("%s/?q=关联告警+%s+%s", n.baseURL, event.Service, event.Env),
 				},
 			},
@@ -364,6 +364,7 @@ func (n *FeishuNotifier) buildCard(event *protocol.ChangeEvent) *feishuCard {
 		Card: feishuInner{
 			Header: feishuHeader{
 				Title:    feishuText{Tag: "plain_text", Content: title},
+				Subtitle: feishuText{Tag: "plain_text", Content: subtitle},
 				Template: color,
 			},
 			Elements: elements,
@@ -411,28 +412,26 @@ func buildCompareText(before, after map[string]any) string {
 	return sb.String()
 }
 
-// buildMetadataText 构建元数据文本。
-func buildMetadataText(metadata map[string]any) string {
+// buildMetadataLine 构建紧凑的元数据单行文本。
+func buildMetadataLine(metadata map[string]any) string {
 	if len(metadata) == 0 {
 		return ""
 	}
-	// 只显示关键元数据
-	interesting := []string{"image", "version", "replicas", "replicas_before", "replicas_after", "commit", "branch", "pipeline_url"}
-	var sb strings.Builder
-	showed := 0
+	interesting := []string{"commit", "branch", "version", "pipeline_url"}
+	var parts []string
 	for _, key := range interesting {
 		if val, ok := metadata[key]; ok {
-			if showed == 0 {
-				sb.WriteString("**附加信息**\n")
+			s := fmt.Sprintf("%v", val)
+			if len(s) > 40 {
+				s = s[:40] + "..."
 			}
-			if showed >= 5 {
-				break
-			}
-			sb.WriteString(fmt.Sprintf("• `%s`: %s\n", key, truncateStr(fmt.Sprintf("%v", val), 80)))
-			showed++
+			parts = append(parts, fmt.Sprintf("**%s** `%s`", key, s))
 		}
 	}
-	return sb.String()
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, "  ·  ")
 }
 
 func truncateStr(s string, maxLen int) string {
