@@ -276,8 +276,8 @@ change_events:
   notifier:
     feishu:
       enabled: true
-      webhook_url: "${FEISHU_WEBHOOK_URL}"
+      webhook_url: "https://open.feishu.cn/open-apis/bot/v2/hook/6f9ab083-1d7d-427f-84d2-924406bd17ef"
       min_risk_level: "low"
       services: []
       timeout_ms: 5000
-      base_url: "${OPS_CAPTION_BASE_URL}"
+      base_url: "http://124.222.57.178"
