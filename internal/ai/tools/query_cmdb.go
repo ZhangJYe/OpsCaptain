@@ -1,0 +1,261 @@
+package tools
+
+import (
+	"SuperBizAgent/internal/ai/cmdb"
+	"context"
+	"encoding/json"
+	"fmt"
+
+	"github.com/cloudwego/eino/components/tool"
+	"github.com/cloudwego/eino/components/tool/utils"
+)
+
+type QueryCMDBInput struct {
+	Action      string `json:"action" jsonschema:"description=查询动作：get_service(查单个服务), search(模糊搜索), list_by_cluster(集群查询), list_by_team(团队查询), get_dependencies(查依赖), list_all(列全部)"`
+	ServiceName string `json:"service_name,omitempty" jsonschema:"description=服务名称，用于 get_service / get_dependencies"`
+	Cluster     string `json:"cluster,omitempty" jsonschema:"description=集群名称，用于 list_by_cluster"`
+	Team        string `json:"team,omitempty" jsonschema:"description=团队名称，用于 list_by_team"`
+	Keyword     string `json:"keyword,omitempty" jsonschema:"description=搜索关键词，用于 search"`
+	Limit       int    `json:"limit,omitempty" jsonschema:"description=返回结果数量上限，默认 10"`
+}
+
+type QueryCMDBOutput struct {
+	Success    bool              `json:"success"`
+	Degraded   bool              `json:"degraded,omitempty"`
+	Action     string            `json:"action"`
+	Services   []cmdb.ServiceInfo `json:"services,omitempty"`
+	Service    *cmdb.ServiceInfo  `json:"service,omitempty"`
+	Upstream   []string          `json:"upstream,omitempty"`
+	Downstream []string          `json:"downstream,omitempty"`
+	Message    string            `json:"message,omitempty"`
+	Error      string            `json:"error,omitempty"`
+}
+
+func NewQueryCMDBTool(repo cmdb.ServiceRepository) tool.InvokableTool {
+	t, err := utils.InferOptionableTool(
+		"query_cmdb",
+		"Query CMDB (Configuration Management Database) for service information. Use this tool to look up service details, search for services, list services by cluster or team, check service dependencies, or list all registered services.",
+		func(ctx context.Context, input *QueryCMDBInput, opts ...tool.Option) (output string, err error) {
+			if repo == nil {
+				out := QueryCMDBOutput{
+					Success:  false,
+					Degraded: true,
+					Action:   input.Action,
+					Error:    "CMDB repository is not configured",
+					Message:  "CMDB service is unavailable. The repository may not be configured or initialized.",
+				}
+				jsonBytes, _ := json.MarshalIndent(out, "", "  ")
+				return string(jsonBytes), nil
+			}
+
+			if input.Limit <= 0 {
+				input.Limit = 10
+			}
+
+			switch input.Action {
+			case "get_service":
+				return handleGetService(repo, input)
+			case "search":
+				return handleSearch(repo, input)
+			case "list_by_cluster":
+				return handleListByCluster(repo, input)
+			case "list_by_team":
+				return handleListByTeam(repo, input)
+			case "get_dependencies":
+				return handleGetDependencies(repo, input)
+			case "list_all":
+				return handleListAll(repo, input)
+			default:
+				out := QueryCMDBOutput{
+					Success:  false,
+					Degraded: true,
+					Action:   input.Action,
+					Error:    fmt.Sprintf("unknown action: %s", input.Action),
+					Message:  "Supported actions: get_service, search, list_by_cluster, list_by_team, get_dependencies, list_all",
+				}
+				jsonBytes, _ := json.MarshalIndent(out, "", "  ")
+				return string(jsonBytes), nil
+			}
+		})
+	if err != nil {
+		return nil
+	}
+	return t
+}
+
+func handleGetService(repo cmdb.ServiceRepository, input *QueryCMDBInput) (string, error) {
+	if input.ServiceName == "" {
+		out := QueryCMDBOutput{
+			Success:  false,
+			Degraded: true,
+			Action:   "get_service",
+			Error:    "service_name is required",
+			Message:  "Please provide service_name parameter.",
+		}
+		jsonBytes, _ := json.MarshalIndent(out, "", "  ")
+		return string(jsonBytes), nil
+	}
+
+	svc, ok := repo.GetService(input.ServiceName)
+	if !ok {
+		out := QueryCMDBOutput{
+			Success:  false,
+			Degraded: true,
+			Action:   "get_service",
+			Error:    fmt.Sprintf("service %q not found", input.ServiceName),
+			Message:  fmt.Sprintf("Service %q does not exist in CMDB.", input.ServiceName),
+		}
+		jsonBytes, _ := json.MarshalIndent(out, "", "  ")
+		return string(jsonBytes), nil
+	}
+
+	out := QueryCMDBOutput{
+		Success: true,
+		Action:  "get_service",
+		Service: svc,
+		Message: fmt.Sprintf("Successfully retrieved service %q", input.ServiceName),
+	}
+	jsonBytes, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(jsonBytes), nil
+}
+
+func handleSearch(repo cmdb.ServiceRepository, input *QueryCMDBInput) (string, error) {
+	if input.Keyword == "" {
+		out := QueryCMDBOutput{
+			Success:  false,
+			Degraded: true,
+			Action:   "search",
+			Error:    "keyword is required",
+			Message:  "Please provide keyword parameter.",
+		}
+		jsonBytes, _ := json.MarshalIndent(out, "", "  ")
+		return string(jsonBytes), nil
+	}
+
+	services := repo.SearchServices(input.Keyword, input.Limit)
+	out := QueryCMDBOutput{
+		Success:  true,
+		Action:   "search",
+		Services: services,
+		Message:  fmt.Sprintf("Found %d services matching %q", len(services), input.Keyword),
+	}
+	jsonBytes, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(jsonBytes), nil
+}
+
+func handleListByCluster(repo cmdb.ServiceRepository, input *QueryCMDBInput) (string, error) {
+	if input.Cluster == "" {
+		out := QueryCMDBOutput{
+			Success:  false,
+			Degraded: true,
+			Action:   "list_by_cluster",
+			Error:    "cluster is required",
+			Message:  "Please provide cluster parameter.",
+		}
+		jsonBytes, _ := json.MarshalIndent(out, "", "  ")
+		return string(jsonBytes), nil
+	}
+
+	services := repo.ListServicesByCluster(input.Cluster)
+	out := QueryCMDBOutput{
+		Success:  true,
+		Action:   "list_by_cluster",
+		Services: services,
+		Message:  fmt.Sprintf("Found %d services in cluster %q", len(services), input.Cluster),
+	}
+	jsonBytes, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(jsonBytes), nil
+}
+
+func handleListByTeam(repo cmdb.ServiceRepository, input *QueryCMDBInput) (string, error) {
+	if input.Team == "" {
+		out := QueryCMDBOutput{
+			Success:  false,
+			Degraded: true,
+			Action:   "list_by_team",
+			Error:    "team is required",
+			Message:  "Please provide team parameter.",
+		}
+		jsonBytes, _ := json.MarshalIndent(out, "", "  ")
+		return string(jsonBytes), nil
+	}
+
+	services := repo.ListServicesByTeam(input.Team)
+	out := QueryCMDBOutput{
+		Success:  true,
+		Action:   "list_by_team",
+		Services: services,
+		Message:  fmt.Sprintf("Found %d services owned by team %q", len(services), input.Team),
+	}
+	jsonBytes, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(jsonBytes), nil
+}
+
+func handleGetDependencies(repo cmdb.ServiceRepository, input *QueryCMDBInput) (string, error) {
+	if input.ServiceName == "" {
+		out := QueryCMDBOutput{
+			Success:  false,
+			Degraded: true,
+			Action:   "get_dependencies",
+			Error:    "service_name is required",
+			Message:  "Please provide service_name parameter.",
+		}
+		jsonBytes, _ := json.MarshalIndent(out, "", "  ")
+		return string(jsonBytes), nil
+	}
+
+	svc, ok := repo.GetService(input.ServiceName)
+	if !ok {
+		out := QueryCMDBOutput{
+			Success:  false,
+			Degraded: true,
+			Action:   "get_dependencies",
+			Error:    fmt.Sprintf("service %q not found", input.ServiceName),
+			Message:  fmt.Sprintf("Service %q does not exist in CMDB.", input.ServiceName),
+		}
+		jsonBytes, _ := json.MarshalIndent(out, "", "  ")
+		return string(jsonBytes), nil
+	}
+
+	downstream := repo.GetDependents(input.ServiceName)
+	out := QueryCMDBOutput{
+		Success:    true,
+		Action:     "get_dependencies",
+		Service:    svc,
+		Upstream:   svc.Dependencies,
+		Downstream: downstream,
+		Message:    fmt.Sprintf("Retrieved dependencies for %q", input.ServiceName),
+	}
+	jsonBytes, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(jsonBytes), nil
+}
+
+func handleListAll(repo cmdb.ServiceRepository, input *QueryCMDBInput) (string, error) {
+	services := repo.ListAll()
+	out := QueryCMDBOutput{
+		Success:  true,
+		Action:   "list_all",
+		Services: services,
+		Message:  fmt.Sprintf("Listed all %d services", len(services)),
+	}
+	jsonBytes, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(jsonBytes), nil
+}
