@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Loader2, Network, RefreshCw } from 'lucide-react'
-import { useTopology, type TopologyData, type TopologyEdge, type TopologyNode } from '../../hooks/useTopology'
+import { useTopology, type TopologyNode } from '../../hooks/useTopology'
 
 interface Props {
   onBack: () => void
@@ -97,19 +97,12 @@ export function TopologyView({ onBack }: Props) {
     return Array.from(set).sort()
   }, [data])
 
-  const filteredData = useMemo<TopologyData | null>(() => {
-    if (!data) return null
-    if (!clusterFilter) return data
-    const nodeIds = new Set(data.nodes.filter((n) => n.cluster === clusterFilter).map((n) => n.id))
-    const filteredNodes = data.nodes.filter((n) => nodeIds.has(n.id))
-    const filteredEdges = data.edges.filter((e) => nodeIds.has(e.source) || nodeIds.has(e.target))
-    return { nodes: filteredNodes, edges: filteredEdges }
-  }, [data, clusterFilter])
+  const displayData = data
 
   const positions = useMemo(() => {
-    if (!filteredData?.nodes) return new Map()
-    return layoutGrid(filteredData.nodes, svgWidth, svgHeight)
-  }, [filteredData])
+    if (!displayData?.nodes) return new Map()
+    return layoutGrid(displayData.nodes, svgWidth, svgHeight)
+  }, [displayData])
 
   const handleNodeHover = useCallback((node: TopologyNode, e: React.MouseEvent) => {
     setHoveredNode(node)
@@ -166,17 +159,17 @@ export function TopologyView({ onBack }: Props) {
           </div>
         )}
 
-        {!isLoading && !error && filteredData && filteredData.nodes.length === 0 && (
+        {!isLoading && !error && displayData && displayData.nodes.length === 0 && (
           <div className="flex h-full items-center justify-center">
             <p className="text-sm text-zinc-500">暂无拓扑数据</p>
           </div>
         )}
 
-        {filteredData && filteredData.nodes.length > 0 && (
+        {displayData && displayData.nodes.length > 0 && (
           <div className="rounded-xl border border-white/60 bg-white/70 p-4 backdrop-blur-2xl dark:border-zinc-800/60 dark:bg-zinc-900/60">
             <div className="mb-3 flex items-center gap-4 text-xs text-zinc-500 dark:text-zinc-400">
-              <span>{filteredData.nodes.length} 个服务</span>
-              <span>{filteredData.edges.length} 条依赖</span>
+              <span>{displayData.nodes.length} 个服务</span>
+              <span>{displayData.edges.length} 条依赖</span>
               {clusterFilter && <span>集群: {clusterFilter}</span>}
             </div>
 
@@ -188,7 +181,7 @@ export function TopologyView({ onBack }: Props) {
             >
               <SvgArrowMarker />
 
-              {filteredData.edges.map((edge, i) => {
+              {displayData.edges.map((edge, i) => {
                 const from = positions.get(edge.source)
                 const to = positions.get(edge.target)
                 if (!from || !to) return null
@@ -218,7 +211,7 @@ export function TopologyView({ onBack }: Props) {
                 )
               })}
 
-              {filteredData.nodes.map((node) => {
+              {displayData.nodes.map((node) => {
                 const pos = positions.get(node.id)
                 if (!pos) return null
                 const colors = getClusterColor(node.cluster)
