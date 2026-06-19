@@ -21,7 +21,7 @@
 | 10 | **不要重新接回 `chat_multi_agent`** 路由 | 已废弃架构 |
 | 11 | 修改 RAG / Agent / ContextEngine 后，**必须跑对应 package 测试** | 局部改动可能破坏上游 |
 | 12 | **每次 push 前必须先 pull 最新远端代码** | 避免推送失败 |
-| 13 | 修改 `Dockerfile` / `docker-compose` / `deploy/` 后，必须实际 `docker build` 并启动容器验证健康检查 | CI build 过了也可能 CD 启动失败 |
+| 13 | 修改 `Dockerfile` / `docker-compose` / `deploy/` 后，**不得用本地 Docker/Compose 结果替代部署验证**；必须按 `CLAUDE.md` / 部署手册到云服务器真实部署环境验证，未获授权时明确标记“部署未验证” | 本地环境与服务器 volume/env/域名/网关不同，容易给出错误结论 |
 | 14 | **开始编码、review、部署分析前必须先读取 `CLAUDE.md`**，并以其中的命令、部署口径、多实例说明为当前项目权威上下文 | 避免误用本地假设覆盖真实部署方式 |
 
 ---
@@ -113,7 +113,7 @@ utility/    → internal/                ❌
 - [ ] `go build ./...` 通过
 - [ ] `go test ./...` 通过
 - [ ] `npm run build` 通过（如有前端改动）
-- [ ] 如修改镜像 / Compose / 部署脚本，必须先读 `CLAUDE.md` 和部署手册，确认真实部署口径；再运行对应镜像的 `docker build`，并按项目部署方式（优先 `docker compose -f deploy/docker-compose.prod.yml up -d`，除非用户明确要求本地单容器验证）验证容器能启动、健康检查能通过
+- [ ] 如修改镜像 / Compose / 部署脚本，必须先读 `CLAUDE.md` 和部署手册，确认真实部署口径；Docker/Compose 构建、启动、健康检查必须在云服务器真实部署环境执行（当前为 `/opt/opscaptain` + `release.env` + `.env.production` + `docker-compose.prod.yml`）。未获用户明确授权连接服务器时，不得在本地运行 Docker/Compose 充当验证，只能说明“部署未验证”。
 - [ ] 注释聚焦复杂逻辑、边界条件或外部协议
 - [ ] 没有创建不必要的新文件
 - [ ] commit message 是中文
@@ -132,6 +132,7 @@ utility/    → internal/                ❌
 - **不暴露 secrets** — 不要日志记录 API keys、tokens、内部 IP。
 - **push 前必须测试 + pull rebase** — CI 会挂，远端更新会冲突。
 - **先读 `CLAUDE.md` 再动手** — 其中包含当前项目命令、部署方式、多实例限制；不要用本地单容器假设替代服务器/Compose 真实环境。
+- **本地 Docker 不等于部署验证** — 本地只做代码级验证（如 `go test`、`npm run build`、静态检查）；涉及镜像、Compose、部署健康检查，必须在云服务器真实部署环境执行或明确声明未验证。
 - **不要随意给官方 nginx 镜像加 `USER nginx`** — nginx 启动阶段需要写 `/var/cache/nginx/*` 等运行时目录；只跑 `npm run build` 或镜像 build 不够，必须实际启动容器并请求 `/healthz` 或 `/`。
 
 ---
