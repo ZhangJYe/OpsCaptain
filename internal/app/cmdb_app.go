@@ -193,3 +193,71 @@ func (a *CMDBApp) DeleteHost(name string) map[string]interface{} {
 	}
 	return map[string]interface{}{"success": true, "message": "host deleted"}
 }
+
+func (a *CMDBApp) GetTopology(cluster string, service string) map[string]interface{} {
+	if a.repo == nil {
+		return map[string]interface{}{"success": false, "error": "CMDB repository not configured"}
+	}
+
+	var services []cmdb.ServiceInfo
+	if service != "" {
+		svc, found := a.repo.GetService(service)
+		if !found {
+			return map[string]interface{}{"success": false, "error": "service not found"}
+		}
+		services = []cmdb.ServiceInfo{*svc}
+	} else if cluster != "" {
+		services = a.repo.ListServicesByCluster(cluster)
+	} else {
+		services = a.repo.ListAll()
+	}
+
+	nodeSet := make(map[string]bool)
+	var nodes []map[string]interface{}
+	var edges []map[string]interface{}
+
+	for _, svc := range services {
+		if !nodeSet[svc.Name] {
+			nodeSet[svc.Name] = true
+			nodes = append(nodes, map[string]interface{}{
+				"id":      svc.Name,
+				"label":   svc.DisplayName,
+				"type":    "service",
+				"cluster": svc.Cluster,
+				"owner":   svc.Owner,
+			})
+		}
+		for _, dep := range svc.Dependencies {
+			if !nodeSet[dep] {
+				nodeSet[dep] = true
+				depSvc, found := a.repo.GetService(dep)
+				if found {
+					nodes = append(nodes, map[string]interface{}{
+						"id":      dep,
+						"label":   depSvc.DisplayName,
+						"type":    "service",
+						"cluster": depSvc.Cluster,
+						"owner":   depSvc.Owner,
+					})
+				} else {
+					nodes = append(nodes, map[string]interface{}{
+						"id":    dep,
+						"label": dep,
+						"type":  "service",
+					})
+				}
+			}
+			edges = append(edges, map[string]interface{}{
+				"source": svc.Name,
+				"target": dep,
+				"type":   "depends_on",
+			})
+		}
+	}
+
+	return map[string]interface{}{
+		"success": true,
+		"nodes":   nodes,
+		"edges":   edges,
+	}
+}

@@ -6,6 +6,7 @@ import { MainLayout } from './components/layout/MainLayout'
 import { AgentWorkbenchView } from './components/workbench/AgentWorkbenchView'
 import { IncidentView } from './components/incident/IncidentView'
 import { SettingsView } from './components/settings/SettingsView'
+import { TopologyView } from './components/topology/TopologyView'
 import { saveSession } from './lib/storage'
 import type { AIOpsEngine, ChatSession, WorkbenchMode } from './types/chat'
 
@@ -40,7 +41,8 @@ export default function App() {
   const [workbenchMode, setWorkbenchMode] = useState<WorkbenchMode>(() => {
     if (typeof window === 'undefined') return 'aiops'
     const raw = localStorage.getItem(WORKBENCH_MODE_STORAGE_KEY)
-    return raw === 'chat' ? 'chat' : 'aiops'
+    if (raw === 'chat' || raw === 'aiops' || raw === 'topology') return raw
+    return 'aiops'
   })
   const [petEnabled, setPetEnabled] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true
@@ -175,6 +177,8 @@ export default function App() {
     >
       {workbenchMode === 'settings' ? (
         <SettingsView onBack={() => setWorkbenchMode('chat')} />
+      ) : workbenchMode === 'topology' ? (
+        <TopologyView onBack={() => setWorkbenchMode('chat')} />
       ) : workbenchMode === 'aiops' ? (
         <IncidentView
           incident={incidents.incident}

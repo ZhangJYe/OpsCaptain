@@ -19,25 +19,27 @@ const (
 )
 
 type QueryCMDBInput struct {
-	Action      string `json:"action" jsonschema:"description=查询动作：get_service(查单个服务), search(模糊搜索), list_by_cluster(集群查询), list_by_team(团队查询), get_dependencies(查依赖), list_all(列全部)"`
-	ServiceName string `json:"service_name,omitempty" jsonschema:"description=服务名称，用于 get_service / get_dependencies"`
-	Cluster     string `json:"cluster,omitempty" jsonschema:"description=集群名称，用于 list_by_cluster"`
+	Action      string `json:"action" jsonschema:"description=查询动作：get_service(查单个服务), search(模糊搜索), list_by_cluster(集群查询), list_by_team(团队查询), get_dependencies(查依赖), list_all(列全部), get_topology(服务拓扑图)"`
+	ServiceName string `json:"service_name,omitempty" jsonschema:"description=服务名称，用于 get_service / get_dependencies / get_topology"`
+	Cluster     string `json:"cluster,omitempty" jsonschema:"description=集群名称，用于 list_by_cluster / get_topology"`
 	Team        string `json:"team,omitempty" jsonschema:"description=团队名称，用于 list_by_team"`
 	Keyword     string `json:"keyword,omitempty" jsonschema:"description=搜索关键词，用于 search"`
 	Limit       int    `json:"limit,omitempty" jsonschema:"description=返回结果数量上限，默认 10"`
 }
 
 type QueryCMDBOutput struct {
-	Success      bool               `json:"success"`
-	Degraded     bool               `json:"degraded,omitempty"`
-	Action       string             `json:"action"`
-	Services     []cmdb.ServiceInfo `json:"services,omitempty"`
-	Service      *cmdb.ServiceInfo  `json:"service,omitempty"`
-	Upstream     []string           `json:"upstream,omitempty"`
-	Downstream   []string           `json:"downstream,omitempty"`
-	ServiceHosts []cmdb.HostInfo    `json:"service_hosts,omitempty"`
-	Message      string             `json:"message,omitempty"`
-	Error        string             `json:"error,omitempty"`
+	Success       bool                     `json:"success"`
+	Degraded      bool                     `json:"degraded,omitempty"`
+	Action        string                   `json:"action"`
+	Services      []cmdb.ServiceInfo       `json:"services,omitempty"`
+	Service       *cmdb.ServiceInfo        `json:"service,omitempty"`
+	Upstream      []string                 `json:"upstream,omitempty"`
+	Downstream    []string                 `json:"downstream,omitempty"`
+	ServiceHosts  []cmdb.HostInfo          `json:"service_hosts,omitempty"`
+	TopologyNodes []map[string]interface{} `json:"topology_nodes,omitempty"`
+	TopologyEdges []map[string]interface{} `json:"topology_edges,omitempty"`
+	Message       string                   `json:"message,omitempty"`
+	Error         string                   `json:"error,omitempty"`
 }
 
 // UnavailableRepository implements ServiceRepository with empty results.
@@ -164,13 +166,15 @@ func runCMDBAction(repo cmdb.ServiceRepository, input *QueryCMDBInput) (string, 
 		return handleListAll(repo, input)
 	case "get_service_hosts":
 		return handleGetServiceHosts(repo, input)
+	case "get_topology":
+		return handleGetTopology(repo, input)
 	default:
 		out := QueryCMDBOutput{
 			Success:  false,
 			Degraded: true,
 			Action:   input.Action,
 			Error:    fmt.Sprintf("unknown action: %s", input.Action),
-			Message:  "Supported actions: get_service, search, list_by_cluster, list_by_team, get_dependencies, list_all",
+			Message:  "Supported actions: get_service, search, list_by_cluster, list_by_team, get_dependencies, list_all, get_topology",
 		}
 		jsonBytes, _ := json.MarshalIndent(out, "", "  ")
 		return string(jsonBytes), nil
@@ -408,6 +412,85 @@ func handleGetServiceHosts(repo cmdb.ServiceRepository, input *QueryCMDBInput) (
 		Message:      fmt.Sprintf("Found %d hosts for service %q", len(hosts), input.ServiceName),
 	}
 	jsonBytes, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(jsonBytes), nil
+}
+
+func handleGetTopology(repo cmdb.ServiceRepository, input *QueryCMDBInput) (string, error) {
+	var services []cmdb.ServiceInfo
+	if input.ServiceName != "" {
+		svc, ok := repo.GetService(input.ServiceName)
+		if !ok {
+			out := QueryCMDBOutput{
+				Success:  false,
+				Degraded: true,
+				Action:   "get_topology",
+				Error:    fmt.Sprintf("service %q not found", input.ServiceName),
+				Message:  fmt.Sprintf("Service %q does not exist in CMDB.", input.ServiceName),
+			}
+			jsonBytes, _ := json.MarshalIndent(out, "", "  ")
+			return string(jsonBytes), nil
+		}
+		services = []cmdb.ServiceInfo{*svc}
+	} else if input.Cluster != "" {
+		services = repo.ListServicesByCluster(input.Cluster)
+	} else {
+		services = repo.ListAll()
+	}
+
+	nodeSet := make(map[string]bool)
+	var nodes []map[string]interface{}
+	var edges []map[string]interface{}
+
+	for _, svc := range services {
+		if !nodeSet[svc.Name] {
+			nodeSet[svc.Name] = true
+			nodes = append(nodes, map[string]interface{}{
+				"id":      svc.Name,
+				"label":   svc.DisplayName,
+				"type":    "service",
+				"cluster": svc.Cluster,
+				"owner":   svc.Owner,
+			})
+		}
+		for _, dep := range svc.Dependencies {
+			if !nodeSet[dep] {
+				nodeSet[dep] = true
+				depSvc, found := repo.GetService(dep)
+				if found {
+					nodes = append(nodes, map[string]interface{}{
+						"id":      dep,
+						"label":   depSvc.DisplayName,
+						"type":    "service",
+						"cluster": depSvc.Cluster,
+						"owner":   depSvc.Owner,
+					})
+				} else {
+					nodes = append(nodes, map[string]interface{}{
+						"id":    dep,
+						"label": dep,
+						"type":  "service",
+					})
+				}
+			}
+			edges = append(edges, map[string]interface{}{
+				"source": svc.Name,
+				"target": dep,
+				"type":   "depends_on",
+			})
+		}
+	}
+
+	topoOut := QueryCMDBOutput{
+		Success:       true,
+		Action:        "get_topology",
+		TopologyNodes: nodes,
+		TopologyEdges: edges,
+		Message:       fmt.Sprintf("Topology: %d nodes, %d edges", len(nodes), len(edges)),
+	}
+	jsonBytes, err := json.MarshalIndent(topoOut, "", "  ")
 	if err != nil {
 		return "", err
 	}

@@ -235,3 +235,17 @@ type CMDBHostDeleteRes struct {
 	Error   string `json:"error,omitempty"`
 	Message string `json:"message,omitempty"`
 }
+
+type CMDBTopologyReq struct {
+	g.Meta  `path:"/cmdb/topology" method:"get" summary:"获取服务拓扑图"`
+	Cluster string `json:"cluster,omitempty"`
+	Service string `json:"service,omitempty"`
+}
+
+type CMDBTopologyRes struct {
+	Success bool        `json:"success"`
+	Nodes   interface{} `json:"nodes,omitempty"`
+	Edges   interface{} `json:"edges,omitempty"`
+	Error   string      `json:"error,omitempty"`
+	Message string      `json:"message,omitempty"`
+}

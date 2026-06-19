@@ -219,6 +219,17 @@ func (c *ControllerV1) CMDBHostDelete(ctx context.Context, req *v1.CMDBHostDelet
 	}, nil
 }
 
+func (c *ControllerV1) CMDBTopology(ctx context.Context, req *v1.CMDBTopologyReq) (res *v1.CMDBTopologyRes, err error) {
+	result := c.cmdbApp.GetTopology(req.Cluster, req.Service)
+	return &v1.CMDBTopologyRes{
+		Success: result["success"].(bool),
+		Nodes:   result["nodes"],
+		Edges:   result["edges"],
+		Error:   getString(result, "error"),
+		Message: getString(result, "message"),
+	}, nil
+}
+
 func getString(m map[string]interface{}, key string) string {
 	if v, ok := m[key]; ok {
 		if s, ok := v.(string); ok {

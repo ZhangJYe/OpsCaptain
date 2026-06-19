@@ -17,6 +17,7 @@ interface Props {
 const WORKBENCH_MODES: { id: WorkbenchMode; label: string; icon: typeof Activity }[] = [
   { id: 'chat', label: '问答', icon: MessageSquare },
   { id: 'aiops', label: '事故排障', icon: Activity },
+  { id: 'topology', label: '服务拓扑', icon: Network },
 ]
 
 const MODES: { id: ChatMode; label: string; icon: typeof Zap }[] = [
