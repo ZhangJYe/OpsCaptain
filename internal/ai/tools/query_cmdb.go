@@ -62,6 +62,15 @@ func (u *UnavailableRepository) GetDependents(name string) []string {
 func (u *UnavailableRepository) ListAll() []cmdb.ServiceInfo {
 	return nil
 }
+func (u *UnavailableRepository) CreateService(svc cmdb.ServiceInfo) error {
+	return fmt.Errorf("CMDB is not available")
+}
+func (u *UnavailableRepository) UpdateService(name string, svc cmdb.ServiceInfo) error {
+	return fmt.Errorf("CMDB is not available")
+}
+func (u *UnavailableRepository) DeleteService(name string) error {
+	return fmt.Errorf("CMDB is not available")
+}
 
 func NewQueryCMDBTool(repo cmdb.ServiceRepository) tool.InvokableTool {
 	t, err := utils.InferOptionableTool(

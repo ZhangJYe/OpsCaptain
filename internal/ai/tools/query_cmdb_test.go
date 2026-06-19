@@ -4,6 +4,7 @@ import (
 	"SuperBizAgent/internal/ai/cmdb"
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -64,6 +65,31 @@ func (f *fakeCMDBRepo) ListAll() []cmdb.ServiceInfo {
 		result = append(result, *s)
 	}
 	return result
+}
+
+func (f *fakeCMDBRepo) CreateService(svc cmdb.ServiceInfo) error {
+	if _, ok := f.services[svc.Name]; ok {
+		return fmt.Errorf("service %q already exists", svc.Name)
+	}
+	f.services[svc.Name] = &svc
+	return nil
+}
+
+func (f *fakeCMDBRepo) UpdateService(name string, svc cmdb.ServiceInfo) error {
+	if _, ok := f.services[name]; !ok {
+		return fmt.Errorf("service %q not found", name)
+	}
+	svc.Name = name
+	f.services[name] = &svc
+	return nil
+}
+
+func (f *fakeCMDBRepo) DeleteService(name string) error {
+	if _, ok := f.services[name]; !ok {
+		return fmt.Errorf("service %q not found", name)
+	}
+	delete(f.services, name)
+	return nil
 }
 
 type slowCMDBRepo struct {

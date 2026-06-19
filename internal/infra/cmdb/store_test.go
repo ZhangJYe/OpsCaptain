@@ -277,3 +277,181 @@ func TestYAMLLoader_Reload(t *testing.T) {
 		t.Errorf("after reload ListAll len = %d, want 0", len(all))
 	}
 }
+
+func TestYAMLLoader_CreateService(t *testing.T) {
+	path := writeTestYAML(t)
+	loader, err := NewYAMLLoader(path)
+	if err != nil {
+		t.Fatalf("NewYAMLLoader: %v", err)
+	}
+
+	newSvc := CMDBServiceDTO{
+		Name:    "orderservice",
+		Owner:   "赵六",
+		Team:    "订单团队",
+		Cluster: "prod-cluster-01",
+		Env:     "production",
+	}
+	if err := loader.CreateService(newSvc); err != nil {
+		t.Fatalf("CreateService: %v", err)
+	}
+
+	svc, ok := loader.GetService("orderservice")
+	if !ok {
+		t.Fatal("expected to find orderservice after create")
+	}
+	if svc.Owner != "赵六" {
+		t.Errorf("Owner = %q, want 赵六", svc.Owner)
+	}
+
+	all := loader.ListAll()
+	if len(all) != 4 {
+		t.Errorf("ListAll len = %d, want 4", len(all))
+	}
+
+	// Verify persist: reload from disk
+	loader2, err := NewYAMLLoader(path)
+	if err != nil {
+		t.Fatalf("NewYAMLLoader for reload: %v", err)
+	}
+	svc2, ok := loader2.GetService("orderservice")
+	if !ok {
+		t.Fatal("expected to find orderservice after reload")
+	}
+	if svc2.Owner != "赵六" {
+		t.Errorf("after reload Owner = %q, want 赵六", svc2.Owner)
+	}
+}
+
+func TestYAMLLoader_CreateDuplicate(t *testing.T) {
+	path := writeTestYAML(t)
+	loader, err := NewYAMLLoader(path)
+	if err != nil {
+		t.Fatalf("NewYAMLLoader: %v", err)
+	}
+
+	dup := CMDBServiceDTO{
+		Name:    "paymentservice",
+		Owner:   "test",
+		Team:    "test",
+		Cluster: "test",
+		Env:     "test",
+	}
+	if err := loader.CreateService(dup); err == nil {
+		t.Error("expected error for duplicate service")
+	}
+
+	all := loader.ListAll()
+	if len(all) != 3 {
+		t.Errorf("ListAll len = %d, want 3 (no change)", len(all))
+	}
+}
+
+func TestYAMLLoader_UpdateService(t *testing.T) {
+	path := writeTestYAML(t)
+	loader, err := NewYAMLLoader(path)
+	if err != nil {
+		t.Fatalf("NewYAMLLoader: %v", err)
+	}
+
+	updated := CMDBServiceDTO{
+		Name:         "paymentservice",
+		DisplayName:  "支付系统",
+		Owner:        "新负责人",
+		Team:         "支付团队",
+		Cluster:      "prod-cluster-01",
+		Env:          "production",
+		Dependencies: []string{"userservice"},
+	}
+	if err := loader.UpdateService("paymentservice", updated); err != nil {
+		t.Fatalf("UpdateService: %v", err)
+	}
+
+	svc, ok := loader.GetService("paymentservice")
+	if !ok {
+		t.Fatal("expected to find paymentservice after update")
+	}
+	if svc.Owner != "新负责人" {
+		t.Errorf("Owner = %q, want 新负责人", svc.Owner)
+	}
+	if svc.DisplayName != "支付系统" {
+		t.Errorf("DisplayName = %q, want 支付系统", svc.DisplayName)
+	}
+
+	// Verify persist
+	loader2, err := NewYAMLLoader(path)
+	if err != nil {
+		t.Fatalf("NewYAMLLoader for reload: %v", err)
+	}
+	svc2, _ := loader2.GetService("paymentservice")
+	if svc2.Owner != "新负责人" {
+		t.Errorf("after reload Owner = %q, want 新负责人", svc2.Owner)
+	}
+}
+
+func TestYAMLLoader_UpdateNotFound(t *testing.T) {
+	path := writeTestYAML(t)
+	loader, err := NewYAMLLoader(path)
+	if err != nil {
+		t.Fatalf("NewYAMLLoader: %v", err)
+	}
+
+	svc := CMDBServiceDTO{Name: "ghost", Owner: "x", Team: "x", Cluster: "x", Env: "x"}
+	if err := loader.UpdateService("ghost", svc); err == nil {
+		t.Error("expected error for updating nonexistent service")
+	}
+}
+
+func TestYAMLLoader_DeleteService(t *testing.T) {
+	path := writeTestYAML(t)
+	loader, err := NewYAMLLoader(path)
+	if err != nil {
+		t.Fatalf("NewYAMLLoader: %v", err)
+	}
+
+	if err := loader.DeleteService("cartservice"); err != nil {
+		t.Fatalf("DeleteService: %v", err)
+	}
+
+	_, ok := loader.GetService("cartservice")
+	if ok {
+		t.Error("expected cartservice to be deleted")
+	}
+
+	all := loader.ListAll()
+	if len(all) != 2 {
+		t.Errorf("ListAll len = %d, want 2", len(all))
+	}
+
+	// Verify reverse deps rebuilt: paymentservice no longer depends on cartservice
+	deps := loader.GetDependents("userservice")
+	depMap := make(map[string]bool)
+	for _, d := range deps {
+		depMap[d] = true
+	}
+	if depMap["cartservice"] {
+		t.Error("cartservice should not appear in dependents after deletion")
+	}
+
+	// Verify persist
+	loader2, err := NewYAMLLoader(path)
+	if err != nil {
+		t.Fatalf("NewYAMLLoader for reload: %v", err)
+	}
+	_, ok = loader2.GetService("cartservice")
+	if ok {
+		t.Error("expected cartservice to be deleted after reload")
+	}
+}
+
+func TestYAMLLoader_DeleteNotFound(t *testing.T) {
+	path := writeTestYAML(t)
+	loader, err := NewYAMLLoader(path)
+	if err != nil {
+		t.Fatalf("NewYAMLLoader: %v", err)
+	}
+
+	if err := loader.DeleteService("ghost"); err == nil {
+		t.Error("expected error for deleting nonexistent service")
+	}
+}

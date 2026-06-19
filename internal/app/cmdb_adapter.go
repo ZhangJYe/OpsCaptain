@@ -75,3 +75,34 @@ func dtosToInfos(dtos []infracmdb.CMDBServiceDTO, loader *infracmdb.YAMLLoader) 
 	}
 	return result
 }
+
+func infoToDTO(info cmdb.ServiceInfo) infracmdb.CMDBServiceDTO {
+	return infracmdb.CMDBServiceDTO{
+		Name:         info.Name,
+		DisplayName:  info.DisplayName,
+		Owner:        info.Owner,
+		Team:         info.Team,
+		Cluster:      info.Cluster,
+		Env:          info.Env,
+		Region:       info.Region,
+		Language:     info.Language,
+		Port:         info.Port,
+		Dependencies: info.Dependencies,
+		Description:  info.Description,
+		OnCall:       info.OnCall,
+		LastDeploy:   info.LastDeploy,
+		Tags:         info.Tags,
+	}
+}
+
+func (a *CMDBAdapter) CreateService(svc cmdb.ServiceInfo) error {
+	return a.loader.CreateService(infoToDTO(svc))
+}
+
+func (a *CMDBAdapter) UpdateService(name string, svc cmdb.ServiceInfo) error {
+	return a.loader.UpdateService(name, infoToDTO(svc))
+}
+
+func (a *CMDBAdapter) DeleteService(name string) error {
+	return a.loader.DeleteService(name)
+}

@@ -2,6 +2,7 @@ package chat
 
 import (
 	v1 "SuperBizAgent/api/chat/v1"
+	"SuperBizAgent/internal/ai/cmdb"
 	"context"
 )
 
@@ -60,6 +61,67 @@ func (c *ControllerV1) CMDBServiceByTeam(ctx context.Context, req *v1.CMDBServic
 	result := c.cmdbApp.ListByTeam(req.Team)
 	return &v1.CMDBServiceByTeamRes{
 		Items:   result["items"],
+		Success: result["success"].(bool),
+		Error:   getString(result, "error"),
+		Message: getString(result, "message"),
+	}, nil
+}
+
+func (c *ControllerV1) CMDBServiceCreate(ctx context.Context, req *v1.CMDBServiceCreateReq) (res *v1.CMDBServiceCreateRes, err error) {
+	svc := cmdb.ServiceInfo{
+		Name:         req.Name,
+		DisplayName:  req.DisplayName,
+		Owner:        req.Owner,
+		Team:         req.Team,
+		Cluster:      req.Cluster,
+		Env:          req.Env,
+		Region:       req.Region,
+		Language:     req.Language,
+		Port:         req.Port,
+		Dependencies: req.Dependencies,
+		Description:  req.Description,
+		OnCall:       req.OnCall,
+		LastDeploy:   req.LastDeploy,
+		Tags:         req.Tags,
+	}
+	result := c.cmdbApp.CreateService(svc)
+	return &v1.CMDBServiceCreateRes{
+		Success: result["success"].(bool),
+		Service: result["service"],
+		Error:   getString(result, "error"),
+		Message: getString(result, "message"),
+	}, nil
+}
+
+func (c *ControllerV1) CMDBServiceUpdate(ctx context.Context, req *v1.CMDBServiceUpdateReq) (res *v1.CMDBServiceUpdateRes, err error) {
+	svc := cmdb.ServiceInfo{
+		Name:         req.Name,
+		DisplayName:  req.DisplayName,
+		Owner:        req.Owner,
+		Team:         req.Team,
+		Cluster:      req.Cluster,
+		Env:          req.Env,
+		Region:       req.Region,
+		Language:     req.Language,
+		Port:         req.Port,
+		Dependencies: req.Dependencies,
+		Description:  req.Description,
+		OnCall:       req.OnCall,
+		LastDeploy:   req.LastDeploy,
+		Tags:         req.Tags,
+	}
+	result := c.cmdbApp.UpdateService(req.Name, svc)
+	return &v1.CMDBServiceUpdateRes{
+		Success: result["success"].(bool),
+		Service: result["service"],
+		Error:   getString(result, "error"),
+		Message: getString(result, "message"),
+	}, nil
+}
+
+func (c *ControllerV1) CMDBServiceDelete(ctx context.Context, req *v1.CMDBServiceDeleteReq) (res *v1.CMDBServiceDeleteRes, err error) {
+	result := c.cmdbApp.DeleteService(req.Name)
+	return &v1.CMDBServiceDeleteRes{
 		Success: result["success"].(bool),
 		Error:   getString(result, "error"),
 		Message: getString(result, "message"),

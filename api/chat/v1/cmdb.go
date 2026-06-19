@@ -76,3 +76,64 @@ type CMDBServiceByTeamRes struct {
 	Error    string      `json:"error,omitempty"`
 	Message  string      `json:"message,omitempty"`
 }
+
+type CMDBServiceCreateReq struct {
+	g.Meta       `path:"/cmdb/services" method:"post" summary:"新增服务"`
+	Name         string   `json:"name" v:"required"`
+	DisplayName  string   `json:"display_name,omitempty"`
+	Owner        string   `json:"owner" v:"required"`
+	Team         string   `json:"team" v:"required"`
+	Cluster      string   `json:"cluster" v:"required"`
+	Env          string   `json:"env" v:"required"`
+	Region       string   `json:"region,omitempty"`
+	Language     string   `json:"language,omitempty"`
+	Port         int      `json:"port,omitempty"`
+	Dependencies []string `json:"dependencies,omitempty"`
+	Description  string   `json:"description,omitempty"`
+	OnCall       string   `json:"on_call,omitempty"`
+	LastDeploy   string   `json:"last_deploy,omitempty"`
+	Tags         []string `json:"tags,omitempty"`
+}
+
+type CMDBServiceCreateRes struct {
+	Success bool        `json:"success"`
+	Service interface{} `json:"service,omitempty"`
+	Error   string      `json:"error,omitempty"`
+	Message string      `json:"message,omitempty"`
+}
+
+type CMDBServiceUpdateReq struct {
+	g.Meta       `path:"/cmdb/services/{name}" method:"put" summary:"更新服务"`
+	Name         string   `json:"name" v:"required"`
+	DisplayName  string   `json:"display_name,omitempty"`
+	Owner        string   `json:"owner" v:"required"`
+	Team         string   `json:"team" v:"required"`
+	Cluster      string   `json:"cluster" v:"required"`
+	Env          string   `json:"env" v:"required"`
+	Region       string   `json:"region,omitempty"`
+	Language     string   `json:"language,omitempty"`
+	Port         int      `json:"port,omitempty"`
+	Dependencies []string `json:"dependencies,omitempty"`
+	Description  string   `json:"description,omitempty"`
+	OnCall       string   `json:"on_call,omitempty"`
+	LastDeploy   string   `json:"last_deploy,omitempty"`
+	Tags         []string `json:"tags,omitempty"`
+}
+
+type CMDBServiceUpdateRes struct {
+	Success bool        `json:"success"`
+	Service interface{} `json:"service,omitempty"`
+	Error   string      `json:"error,omitempty"`
+	Message string      `json:"message,omitempty"`
+}
+
+type CMDBServiceDeleteReq struct {
+	g.Meta `path:"/cmdb/services/{name}" method:"delete" summary:"删除服务"`
+	Name   string `json:"name" v:"required"`
+}
+
+type CMDBServiceDeleteRes struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
+	Message string `json:"message,omitempty"`
+}

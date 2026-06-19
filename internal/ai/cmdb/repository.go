@@ -28,4 +28,7 @@ type ServiceRepository interface {
 	ListServicesByTeam(team string) []ServiceInfo
 	GetDependents(name string) []string
 	ListAll() []ServiceInfo
+	CreateService(svc ServiceInfo) error
+	UpdateService(name string, svc ServiceInfo) error
+	DeleteService(name string) error
 }

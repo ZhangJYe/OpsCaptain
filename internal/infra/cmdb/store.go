@@ -10,10 +10,11 @@ import (
 )
 
 type YAMLLoader struct {
-	path     string
-	mu       sync.RWMutex
-	services []CMDBServiceDTO
-	index    map[string]int
+	path        string
+	mu          sync.RWMutex
+	writeMu     sync.Mutex
+	services    []CMDBServiceDTO
+	index       map[string]int
 	reverseDeps map[string][]string
 }
 
@@ -140,4 +141,92 @@ func (l *YAMLLoader) GetDependents(name string) []string {
 	defer l.mu.RUnlock()
 
 	return l.reverseDeps[name]
+}
+
+func (l *YAMLLoader) save() error {
+	data, err := yaml.Marshal(cmdbFile{Services: l.services})
+	if err != nil {
+		return fmt.Errorf("marshal cmdb yaml: %w", err)
+	}
+
+	tmpPath := l.path + ".tmp"
+	if err := os.WriteFile(tmpPath, data, 0644); err != nil {
+		return fmt.Errorf("write cmdb tmp: %w", err)
+	}
+
+	f, err := os.Open(tmpPath)
+	if err != nil {
+		return fmt.Errorf("open cmdb tmp: %w", err)
+	}
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return fmt.Errorf("fsync cmdb: %w", err)
+	}
+	f.Close()
+
+	if err := os.Rename(tmpPath, l.path); err != nil {
+		return fmt.Errorf("rename cmdb: %w", err)
+	}
+	return nil
+}
+
+func (l *YAMLLoader) rebuildIndex() {
+	l.index = make(map[string]int, len(l.services))
+	for i, svc := range l.services {
+		l.index[svc.Name] = i
+	}
+	l.reverseDeps = make(map[string][]string)
+	for _, svc := range l.services {
+		for _, dep := range svc.Dependencies {
+			l.reverseDeps[dep] = append(l.reverseDeps[dep], svc.Name)
+		}
+	}
+}
+
+func (l *YAMLLoader) CreateService(svc CMDBServiceDTO) error {
+	l.writeMu.Lock()
+	defer l.writeMu.Unlock()
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if _, exists := l.index[svc.Name]; exists {
+		return fmt.Errorf("service %q already exists", svc.Name)
+	}
+	l.services = append(l.services, svc)
+	l.rebuildIndex()
+	return l.save()
+}
+
+func (l *YAMLLoader) UpdateService(name string, svc CMDBServiceDTO) error {
+	l.writeMu.Lock()
+	defer l.writeMu.Unlock()
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	idx, exists := l.index[name]
+	if !exists {
+		return fmt.Errorf("service %q not found", name)
+	}
+	svc.Name = name
+	l.services[idx] = svc
+	l.rebuildIndex()
+	return l.save()
+}
+
+func (l *YAMLLoader) DeleteService(name string) error {
+	l.writeMu.Lock()
+	defer l.writeMu.Unlock()
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	idx, exists := l.index[name]
+	if !exists {
+		return fmt.Errorf("service %q not found", name)
+	}
+	l.services = append(l.services[:idx], l.services[idx+1:]...)
+	l.rebuildIndex()
+	return l.save()
 }

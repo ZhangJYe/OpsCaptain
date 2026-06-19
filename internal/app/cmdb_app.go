@@ -77,3 +77,41 @@ func (a *CMDBApp) ListByTeam(team string) map[string]interface{} {
 	items := a.repo.ListServicesByTeam(team)
 	return map[string]interface{}{"success": true, "items": items}
 }
+
+func (a *CMDBApp) CreateService(svc cmdb.ServiceInfo) map[string]interface{} {
+	if a.repo == nil {
+		return map[string]interface{}{"success": false, "error": "CMDB repository not configured"}
+	}
+	if err := validateService(svc); err != nil {
+		return map[string]interface{}{"success": false, "error": err.Error()}
+	}
+	if err := a.repo.CreateService(svc); err != nil {
+		return map[string]interface{}{"success": false, "error": err.Error()}
+	}
+	created, _ := a.repo.GetService(svc.Name)
+	return map[string]interface{}{"success": true, "service": created, "message": "service created"}
+}
+
+func (a *CMDBApp) UpdateService(name string, svc cmdb.ServiceInfo) map[string]interface{} {
+	if a.repo == nil {
+		return map[string]interface{}{"success": false, "error": "CMDB repository not configured"}
+	}
+	if err := validateService(svc); err != nil {
+		return map[string]interface{}{"success": false, "error": err.Error()}
+	}
+	if err := a.repo.UpdateService(name, svc); err != nil {
+		return map[string]interface{}{"success": false, "error": err.Error()}
+	}
+	updated, _ := a.repo.GetService(name)
+	return map[string]interface{}{"success": true, "service": updated, "message": "service updated"}
+}
+
+func (a *CMDBApp) DeleteService(name string) map[string]interface{} {
+	if a.repo == nil {
+		return map[string]interface{}{"success": false, "error": "CMDB repository not configured"}
+	}
+	if err := a.repo.DeleteService(name); err != nil {
+		return map[string]interface{}{"success": false, "error": err.Error()}
+	}
+	return map[string]interface{}{"success": true, "message": "service deleted"}
+}
