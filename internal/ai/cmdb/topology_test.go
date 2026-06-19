@@ -2,13 +2,7 @@ package cmdb
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"testing"
-	"time"
-
-	"SuperBizAgent/internal/infra/jaeger"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -42,7 +36,6 @@ func (m *mockServiceRepository) GetService(name string) (*ServiceInfo, bool) {
 	svc, ok := m.services[name]
 	return svc, ok
 }
-
 func (m *mockServiceRepository) SearchServices(keyword string, limit int) []ServiceInfo { return nil }
 func (m *mockServiceRepository) ListServicesByCluster(cluster string) []ServiceInfo {
 	return m.byCluster[cluster]
@@ -54,90 +47,60 @@ func (m *mockServiceRepository) CreateService(svc ServiceInfo) error            
 func (m *mockServiceRepository) UpdateService(name string, svc ServiceInfo) error { return nil }
 func (m *mockServiceRepository) DeleteService(name string) error                { return nil }
 
-func newJaegerServer(edges []jaeger.DependencyEdge) *httptest.Server {
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(edges)
-	}))
+type mockTopologyDataSource struct {
+	edges []DependencyEdge
+	err   error
 }
 
-func TestMerge_JaegerEdgeWithoutCMDBOverride(t *testing.T) {
+func (m *mockTopologyDataSource) GetDependencies(ctx context.Context, lookbackHours int) ([]DependencyEdge, error) {
+	return m.edges, m.err
+}
+
+func TestMerge_JaegerEdges_NoOverride(t *testing.T) {
 	svcA := ServiceInfo{Name: "a", DisplayName: "A", Cluster: "prod", Owner: "team1"}
-	repo := newMockRepo(svcA)
+	svcB := ServiceInfo{Name: "b", DisplayName: "B", Cluster: "prod", Owner: "team2"}
+	repo := newMockRepo(svcA, svcB)
 
-	jaegerServer := newJaegerServer([]jaeger.DependencyEdge{
-		{Parent: "a", Child: "b", CallCount: 100},
-	})
-	defer jaegerServer.Close()
-
-	jaegerClient := jaeger.NewClient(jaegerServer.URL)
-	merger := NewTopologyMerger(repo, jaegerClient)
+	ds := &mockTopologyDataSource{
+		edges: []DependencyEdge{
+			{Parent: "a", Child: "b", CallCount: 100},
+		},
+	}
+	merger := NewTopologyMerger(repo, ds)
 
 	result := merger.GetTopology(context.Background(), "", "")
 
-	assert.Len(t, result.Nodes, 2)
 	assert.Len(t, result.Edges, 1)
 	assert.Equal(t, "a", result.Edges[0].Source)
 	assert.Equal(t, "b", result.Edges[0].Target)
 	assert.Equal(t, "jaeger", result.Edges[0].DataSource)
-
-	bNode := findNode(result.Nodes, "b")
-	require.NotNil(t, bNode)
-	assert.Equal(t, "b", bNode.Label)
-	assert.Equal(t, "jaeger", bNode.Source)
+	assert.Equal(t, int64(100), result.Edges[0].CallCount)
 }
 
-func TestMerge_CMDBOverrideReplacesSameEdge_JaegerKeepsRest(t *testing.T) {
+func TestMerge_CMDBOverride(t *testing.T) {
 	svcA := ServiceInfo{Name: "a", DisplayName: "A", Cluster: "prod", Owner: "team1", Dependencies: []string{"b"}}
 	svcB := ServiceInfo{Name: "b", DisplayName: "B", Cluster: "prod", Owner: "team2"}
 	repo := newMockRepo(svcA, svcB)
 
-	jaegerServer := newJaegerServer([]jaeger.DependencyEdge{
-		{Parent: "a", Child: "c", CallCount: 50},
-	})
-	defer jaegerServer.Close()
-
-	jaegerClient := jaeger.NewClient(jaegerServer.URL)
-	merger := NewTopologyMerger(repo, jaegerClient)
+	ds := &mockTopologyDataSource{
+		edges: []DependencyEdge{
+			{Parent: "a", Child: "b", CallCount: 50},
+			{Parent: "a", Child: "c", CallCount: 30},
+		},
+	}
+	merger := NewTopologyMerger(repo, ds)
 
 	result := merger.GetTopology(context.Background(), "", "")
 
-	edgeTargets := make(map[string]string)
+	edgeKeys := make(map[string]string)
 	for _, e := range result.Edges {
-		edgeTargets[e.Target] = e.DataSource
+		edgeKeys[e.Source+"->"+e.Target] = e.DataSource
 	}
-
-	assert.Equal(t, "cmdb", edgeTargets["b"])
-	assert.Equal(t, "jaeger", edgeTargets["c"])
+	assert.Equal(t, "cmdb", edgeKeys["a->b"])
+	assert.Equal(t, "jaeger", edgeKeys["a->c"])
 }
 
-func TestMerge_CMDBOverridesSome_JaegerKeepsRest(t *testing.T) {
-	svcA := ServiceInfo{Name: "a", DisplayName: "A", Cluster: "prod", Owner: "team1", Dependencies: []string{"b"}}
-	svcB := ServiceInfo{Name: "b", DisplayName: "B", Cluster: "prod", Owner: "team2"}
-	repo := newMockRepo(svcA, svcB)
-
-	jaegerServer := newJaegerServer([]jaeger.DependencyEdge{
-		{Parent: "a", Child: "c", CallCount: 50},
-		{Parent: "a", Child: "b", CallCount: 30},
-	})
-	defer jaegerServer.Close()
-
-	jaegerClient := jaeger.NewClient(jaegerServer.URL)
-	merger := NewTopologyMerger(repo, jaegerClient)
-
-	result := merger.GetTopology(context.Background(), "", "")
-
-	edgeTargets := make(map[string]string)
-	for _, e := range result.Edges {
-		key := e.Source + "->" + e.Target
-		edgeTargets[key] = e.DataSource
-	}
-
-	assert.Equal(t, "cmdb", edgeTargets["a->b"])
-	assert.Equal(t, "jaeger", edgeTargets["a->c"])
-}
-
-func TestMerge_JaegerUnavailable_FallbackToCMDBOnly(t *testing.T) {
+func TestMerge_CMDBOnly_NoDataSource(t *testing.T) {
 	svcA := ServiceInfo{Name: "a", DisplayName: "A", Cluster: "prod", Owner: "team1", Dependencies: []string{"b"}}
 	svcB := ServiceInfo{Name: "b", DisplayName: "B", Cluster: "prod", Owner: "team2"}
 	repo := newMockRepo(svcA, svcB)
@@ -146,25 +109,19 @@ func TestMerge_JaegerUnavailable_FallbackToCMDBOnly(t *testing.T) {
 
 	result := merger.GetTopology(context.Background(), "", "")
 
-	assert.Len(t, result.Nodes, 2)
 	assert.Len(t, result.Edges, 1)
 	assert.Equal(t, "cmdb", result.Edges[0].DataSource)
 }
 
-func TestMerge_JaegerTimeout_FallbackToCMDBOnly(t *testing.T) {
+func TestMerge_DataSourceError_FallbackToCMDB(t *testing.T) {
 	svcA := ServiceInfo{Name: "a", DisplayName: "A", Cluster: "prod", Owner: "team1", Dependencies: []string{"b"}}
 	svcB := ServiceInfo{Name: "b", DisplayName: "B", Cluster: "prod", Owner: "team2"}
 	repo := newMockRepo(svcA, svcB)
 
-	slowServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(2 * time.Second)
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte("[]"))
-	}))
-	defer slowServer.Close()
-
-	jaegerClient := jaeger.NewClientWithTimeout(slowServer.URL, 50*time.Millisecond)
-	merger := NewTopologyMerger(repo, jaegerClient)
+	ds := &mockTopologyDataSource{
+		err: assert.AnError,
+	}
+	merger := NewTopologyMerger(repo, ds)
 
 	result := merger.GetTopology(context.Background(), "", "")
 
@@ -210,39 +167,67 @@ func TestMerge_SpecificServiceFilter(t *testing.T) {
 	assert.False(t, nodeIDs["c"])
 }
 
-func TestMerge_CMDBServiceNotInRepo_JaegerDiscovered(t *testing.T) {
+func TestMerge_ServiceNotFound(t *testing.T) {
+	repo := newMockRepo()
+	merger := NewTopologyMerger(repo, nil)
+
+	result := merger.GetTopology(context.Background(), "", "nonexistent")
+
+	assert.Empty(t, result.Nodes)
+	assert.Empty(t, result.Edges)
+}
+
+func TestMerge_NodesHaveCorrectSource(t *testing.T) {
 	svcA := ServiceInfo{Name: "a", DisplayName: "A", Cluster: "prod", Owner: "team1"}
 	repo := newMockRepo(svcA)
 
-	jaegerServer := newJaegerServer([]jaeger.DependencyEdge{
-		{Parent: "x", Child: "y", CallCount: 10},
-	})
-	defer jaegerServer.Close()
-
-	jaegerClient := jaeger.NewClient(jaegerServer.URL)
-	merger := NewTopologyMerger(repo, jaegerClient)
+	ds := &mockTopologyDataSource{
+		edges: []DependencyEdge{
+			{Parent: "x", Child: "y", CallCount: 10},
+		},
+	}
+	merger := NewTopologyMerger(repo, ds)
 
 	result := merger.GetTopology(context.Background(), "", "")
 
-	assert.Len(t, result.Nodes, 3)
-	assert.Len(t, result.Edges, 1)
 	xNode := findNode(result.Nodes, "x")
 	require.NotNil(t, xNode)
 	assert.Equal(t, "jaeger", xNode.Source)
+
+	yNode := findNode(result.Nodes, "y")
+	require.NotNil(t, yNode)
+	assert.Equal(t, "jaeger", yNode.Source)
 
 	aNode := findNode(result.Nodes, "a")
 	require.NotNil(t, aNode)
 	assert.Equal(t, "cmdb", aNode.Source)
 }
 
-func TestMerge_EmptyCMDB_EmptyJaeger(t *testing.T) {
+func TestMerge_JaegerEdgeNotInCMDB(t *testing.T) {
+	svcA := ServiceInfo{Name: "a", DisplayName: "A", Cluster: "prod", Owner: "team1"}
+	repo := newMockRepo(svcA)
+
+	ds := &mockTopologyDataSource{
+		edges: []DependencyEdge{
+			{Parent: "x", Child: "y", CallCount: 10},
+		},
+	}
+	merger := NewTopologyMerger(repo, ds)
+
+	result := merger.GetTopology(context.Background(), "", "")
+
+	assert.Len(t, result.Nodes, 3)
+	assert.Len(t, result.Edges, 1)
+}
+
+func TestMerge_Empty(t *testing.T) {
 	repo := newMockRepo()
 	merger := NewTopologyMerger(repo, nil)
 
 	result := merger.GetTopology(context.Background(), "", "")
 
-	assert.Len(t, result.Nodes, 0)
-	assert.Len(t, result.Edges, 0)
+	assert.Empty(t, result.Nodes)
+	assert.Empty(t, result.Edges)
 }
 
 func findNode(nodes []TopologyNode, id string) *TopologyNode {

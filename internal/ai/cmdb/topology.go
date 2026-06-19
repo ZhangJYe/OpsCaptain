@@ -1,10 +1,19 @@
 package cmdb
 
-import (
-	"context"
+import "context"
 
-	"SuperBizAgent/internal/infra/jaeger"
-)
+// DependencyEdge represents a caller→callee relationship from an external source.
+type DependencyEdge struct {
+	Parent    string
+	Child     string
+	CallCount int64
+}
+
+// TopologyDataSource provides service dependency data from external sources.
+// Defined in ai/cmdb so infra implementations can satisfy it without circular imports.
+type TopologyDataSource interface {
+	GetDependencies(ctx context.Context, lookbackHours int) ([]DependencyEdge, error)
+}
 
 type TopologyNode struct {
 	ID      string `json:"id"`
@@ -16,10 +25,10 @@ type TopologyNode struct {
 }
 
 type TopologyEdge struct {
-	Source    string `json:"source"`
-	Target    string `json:"target"`
-	Type      string `json:"type"`
-	CallCount int64  `json:"call_count,omitempty"`
+	Source     string `json:"source"`
+	Target     string `json:"target"`
+	Type       string `json:"type"`
+	CallCount  int64  `json:"call_count,omitempty"`
 	DataSource string `json:"data_source,omitempty"`
 }
 
@@ -29,14 +38,14 @@ type TopologyResult struct {
 }
 
 type TopologyMerger struct {
-	repo   ServiceRepository
-	jaeger *jaeger.Client
+	repo       ServiceRepository
+	dataSource TopologyDataSource
 }
 
-func NewTopologyMerger(repo ServiceRepository, jaegerClient *jaeger.Client) *TopologyMerger {
+func NewTopologyMerger(repo ServiceRepository, ds TopologyDataSource) *TopologyMerger {
 	return &TopologyMerger{
-		repo:   repo,
-		jaeger: jaegerClient,
+		repo:       repo,
+		dataSource: ds,
 	}
 }
 
@@ -73,18 +82,19 @@ func (m *TopologyMerger) GetTopology(ctx context.Context, cluster string, servic
 		}
 	}
 
-	var jaegerEdges []jaeger.DependencyEdge
-	if m.jaeger != nil {
+	var externalEdges []DependencyEdge
+	if m.dataSource != nil {
 		var err error
-		jaegerEdges, err = m.jaeger.GetDependencies(ctx, 24)
+		externalEdges, err = m.dataSource.GetDependencies(ctx, 24)
 		if err != nil {
-			jaegerEdges = nil
+			externalEdges = nil
 		}
 	}
 
 	edgeSet := make(map[string]bool)
 	var resultEdges []TopologyEdge
-	for _, edge := range jaegerEdges {
+
+	for _, edge := range externalEdges {
 		overridden := false
 		if deps, ok := cmdbOverrideDeps[edge.Parent]; ok {
 			for _, d := range deps {
