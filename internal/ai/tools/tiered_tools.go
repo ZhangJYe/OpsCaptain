@@ -1,12 +1,19 @@
 package tools
 
 import (
+	"SuperBizAgent/internal/ai/cmdb"
 	"SuperBizAgent/internal/ai/skills"
 	"context"
 
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/gogf/gf/v2/frame/g"
 )
+
+var cmdbRepository cmdb.ServiceRepository
+
+func SetCMDBRepository(repo cmdb.ServiceRepository) {
+	cmdbRepository = repo
+}
 
 func BuildTieredTools(ctx context.Context, userToolStore skills.UserSkillStore, dynamicMCPReg *DynamicMCPRegistry) []skills.TieredTool {
 	if ctx == nil {
@@ -84,6 +91,16 @@ func BuildTieredTools(ctx context.Context, userToolStore skills.UserSkillStore, 
 		}
 	} else {
 		g.Log().Warningf(ctx, "progressive disclosure: mysql tool disabled because mysql.allowed_tables is empty")
+	}
+
+	if cmdbRepository != nil {
+		if t := NewQueryCMDBTool(cmdbRepository); t != nil {
+			tiered = append(tiered, skills.TieredTool{
+				Tool:    t,
+				Tier:    skills.TierSkillGate,
+				Domains: []string{"metrics", "logs", "knowledge"},
+			})
+		}
 	}
 
 	// Append approved user-defined MCP tools

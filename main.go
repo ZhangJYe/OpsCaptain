@@ -220,15 +220,18 @@ func main() {
 	mcpToolApp := app.NewMCPToolApp(userSkillStore, dynamicMCPReg)
 	userSkillApp := app.NewUserSkillApp(userSkillStore, userSkillLoader)
 
-	cmdbPath := g.Cfg().MustGet(ctx, "cmdb.file_path").String()
+	cmdbEnabled, _ := g.Cfg().Get(ctx, "cmdb.enabled")
+	cmdbPath := g.Cfg().MustGet(ctx, "cmdb.store_path").String()
 	var cmdbApp *app.CMDBApp
-	if cmdbPath != "" {
+	if cmdbEnabled.Bool() && cmdbPath != "" {
 		loader, loadErr := infracmdb.NewYAMLLoader(cmdbPath)
 		if loadErr != nil {
 			g.Log().Warningf(ctx, "load cmdb: %v", loadErr)
 			cmdbApp = app.NewCMDBApp(nil)
 		} else {
-			cmdbApp = app.NewCMDBApp(infracmdb.NewCMDBAdapter(loader))
+			adapter := infracmdb.NewCMDBAdapter(loader)
+			cmdbApp = app.NewCMDBApp(adapter)
+			tools.SetCMDBRepository(adapter)
 		}
 	} else {
 		cmdbApp = app.NewCMDBApp(nil)

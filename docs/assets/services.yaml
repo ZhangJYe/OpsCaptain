@@ -1,0 +1,65 @@
+services:
+  - name: paymentservice
+    display_name: "支付服务"
+    owner: "张三"
+    team: "支付团队"
+    cluster: "prod-cluster-01"
+    env: "production"
+    region: "cn-shanghai"
+    language: "go"
+    port: 8080
+    dependencies:
+      - userservice
+      - cartservice
+    description: "处理支付、退款、对账"
+    on_call: "张三"
+    last_deploy: "2026-06-17"
+    tags:
+      - critical
+      - payment
+      - core
+  - name: userservice
+    display_name: "用户服务"
+    owner: "李四"
+    team: "用户团队"
+    cluster: "prod-cluster-01"
+    env: "production"
+    region: "cn-shanghai"
+    language: "go"
+    port: 8081
+    description: "用户注册、登录、权限管理"
+    on_call: "李四"
+    tags:
+      - core
+  - name: cartservice
+    display_name: "购物车服务"
+    owner: "王五"
+    team: "交易团队"
+    cluster: "prod-cluster-02"
+    env: "production"
+    region: "cn-shanghai"
+    language: "java"
+    port: 8082
+    dependencies:
+      - userservice
+    description: "购物车增删改查"
+    on_call: "王五"
+    tags:
+      - core
+  - name: gateway
+    display_name: "API 网关"
+    owner: "赵六"
+    team: "基础架构"
+    cluster: "prod-cluster-01"
+    env: "production"
+    language: "go"
+    port: 443
+    dependencies:
+      - paymentservice
+      - userservice
+      - cartservice
+    description: "统一入口、鉴权、限流"
+    on_call: "赵六"
+    tags:
+      - critical
+      - infra

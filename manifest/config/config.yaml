@@ -431,6 +431,15 @@ rabbitmq:
   memory_extract_dedup_ttl_ms: 600000
   memory_extract_dedup_max_entries: 20000
 
+cmdb:
+  enabled: true
+  store_path: "docs/assets/services.yaml"
+  cache_ttl_seconds: 60
+  search:
+    max_results: 10
+  tool:
+    timeout_ms: 3000
+
 redis:
   default:
     address: "127.0.0.1:6379"
