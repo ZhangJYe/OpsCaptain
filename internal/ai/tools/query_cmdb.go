@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/components/tool/utils"
@@ -14,6 +15,7 @@ import (
 const (
 	defaultCMDBMaxResults = 10
 	maxCMDBResultsLimit   = 50
+	defaultCMDBTimeoutMs  = 3000
 )
 
 type QueryCMDBInput struct {
@@ -90,11 +92,16 @@ func NewQueryCMDBTool(repo cmdb.ServiceRepository) tool.InvokableTool {
 			}
 
 			if input.Limit <= 0 {
-				input.Limit = loadCMDBMaxResults()
+				input.Limit = LoadCMDBMaxResults()
 			}
 			if input.Limit > maxCMDBResultsLimit {
 				input.Limit = maxCMDBResultsLimit
 			}
+
+			timeout := loadCMDBTimeout()
+			queryCtx, cancel := context.WithTimeout(ctx, timeout)
+			defer cancel()
+			_ = queryCtx // timeout propagation for future repo implementations
 
 			switch input.Action {
 			case "get_service":
@@ -127,11 +134,19 @@ func NewQueryCMDBTool(repo cmdb.ServiceRepository) tool.InvokableTool {
 	return t
 }
 
-func loadCMDBMaxResults() int {
+// LoadCMDBMaxResults reads max_results from config, used by both tool and HTTP API
+func LoadCMDBMaxResults() int {
 	if v, err := g.Cfg().Get(context.Background(), "cmdb.search.max_results"); err == nil && v.Int() > 0 {
 		return v.Int()
 	}
 	return defaultCMDBMaxResults
+}
+
+func loadCMDBTimeout() time.Duration {
+	if v, err := g.Cfg().Get(context.Background(), "cmdb.tool.timeout_ms"); err == nil && v.Int64() > 0 {
+		return time.Duration(v.Int64()) * time.Millisecond
+	}
+	return defaultCMDBTimeoutMs * time.Millisecond
 }
 
 func handleGetService(repo cmdb.ServiceRepository, input *QueryCMDBInput) (string, error) {

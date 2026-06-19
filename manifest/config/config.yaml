@@ -434,7 +434,6 @@ rabbitmq:
 cmdb:
   enabled: true
   store_path: "docs/assets/services.yaml"
-  cache_ttl_seconds: 60
   search:
     max_results: 10
   tool:
