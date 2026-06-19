@@ -285,7 +285,7 @@ change_events:
 
 cmdb:
   enabled: true
-  store_path: "docs/assets/services.yaml"
+  store_path: "var/runtime/cmdb/services.yaml"
   search:
     max_results: 10
   tool:

@@ -20,12 +20,14 @@ RUN apk add --no-cache ca-certificates tzdata && \
 
 WORKDIR /app
 
+RUN mkdir -p /app/manifest/config /app/manifest/cmdb /app/docs/knowledge /app/docs/knowledge/quarantine /app/var/runtime
+
 COPY --from=builder /build/superbizagent .
 COPY --from=builder /build/knowledge-indexer .
 COPY --from=builder /build/manifest/config/config.yaml manifest/config/config.yaml
+COPY docs/assets/services.yaml manifest/cmdb/services.yaml
 
-RUN mkdir -p /app/docs/knowledge /app/docs/knowledge/quarantine /app/var/runtime && \
-    chown -R appuser:appuser /app
+RUN chown -R appuser:appuser /app
 
 USER appuser
 

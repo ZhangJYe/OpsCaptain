@@ -6,7 +6,9 @@ StartFromZero
 bin
 build
 dist
-docs
+docs/*
+!docs/assets
+!docs/assets/services.yaml
 hack
 todo
 var
@@ -17,4 +19,3 @@ coverage.out
 REVIEW_AIOPS.md
 frontend
 manifest/docker
-

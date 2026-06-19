@@ -4,6 +4,8 @@ import (
 	chat_pipeline "SuperBizAgent/internal/ai/agent/chat_pipeline"
 	"SuperBizAgent/internal/ai/agent/knowledge_index_pipeline"
 	"SuperBizAgent/internal/ai/changeevent"
+	aicmdb "SuperBizAgent/internal/ai/cmdb"
+	"SuperBizAgent/internal/ai/contextengine"
 	"SuperBizAgent/internal/ai/events"
 	"SuperBizAgent/internal/ai/indexer"
 	"SuperBizAgent/internal/ai/memory"
@@ -13,13 +15,11 @@ import (
 	aiservice "SuperBizAgent/internal/ai/service"
 	"SuperBizAgent/internal/ai/skills"
 	"SuperBizAgent/internal/ai/tools"
-	aicmdb "SuperBizAgent/internal/ai/cmdb"
 	"SuperBizAgent/internal/app"
 	"SuperBizAgent/internal/controller/chat"
-	"SuperBizAgent/internal/ai/contextengine"
+	infracmdb "SuperBizAgent/internal/infra/cmdb"
 	infrafs "SuperBizAgent/internal/infra/filestore"
 	inframv "SuperBizAgent/internal/infra/milvus"
-	infracmdb "SuperBizAgent/internal/infra/cmdb"
 	"SuperBizAgent/internal/infra/notifier"
 	"SuperBizAgent/internal/infra/rabbitmq"
 	"SuperBizAgent/utility/auth"
@@ -37,6 +37,7 @@ import (
 	"net/http/pprof"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -223,7 +224,7 @@ func main() {
 	userSkillApp := app.NewUserSkillApp(userSkillStore, userSkillLoader)
 
 	cmdbEnabled, _ := g.Cfg().Get(ctx, "cmdb.enabled")
-	cmdbPath := g.Cfg().MustGet(ctx, "cmdb.store_path").String()
+	cmdbPath := resolveCMDBStorePath(g.Cfg().MustGet(ctx, "cmdb.store_path").String())
 	var cmdbApp *app.CMDBApp
 	if cmdbEnabled.Bool() && cmdbPath != "" {
 		loader, loadErr := infracmdb.NewYAMLLoader(cmdbPath)
@@ -290,6 +291,28 @@ func main() {
 	}
 
 	waitForShutdown(ctx, s, &shuttingDown, pprofServer, traceShutdown, memoryPipelineShutdown, chatTaskPipelineShutdown, healthReportingShutdown, changeEventShutdown)
+}
+
+func resolveCMDBStorePath(configuredPath string) string {
+	path := strings.TrimSpace(configuredPath)
+	if path == "" {
+		return ""
+	}
+	if info, err := os.Stat(path); err == nil && !info.IsDir() {
+		return path
+	}
+	fallback := filepath.Join("manifest", "cmdb", filepath.Base(path))
+	if info, err := os.Stat(fallback); err == nil && !info.IsDir() {
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err == nil {
+			if data, readErr := os.ReadFile(fallback); readErr == nil {
+				if writeErr := os.WriteFile(path, data, 0644); writeErr == nil {
+					return path
+				}
+			}
+		}
+		return fallback
+	}
+	return path
 }
 
 func configureChangeEvents(ctx context.Context, aiopsApp *app.AIOpsApp) (*app.ChangeEventApp, func()) {

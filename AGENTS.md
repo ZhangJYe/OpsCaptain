@@ -22,6 +22,7 @@
 | 11 | 修改 RAG / Agent / ContextEngine 后，**必须跑对应 package 测试** | 局部改动可能破坏上游 |
 | 12 | **每次 push 前必须先 pull 最新远端代码** | 避免推送失败 |
 | 13 | 修改 `Dockerfile` / `docker-compose` / `deploy/` 后，必须实际 `docker build` 并启动容器验证健康检查 | CI build 过了也可能 CD 启动失败 |
+| 14 | **开始编码、review、部署分析前必须先读取 `CLAUDE.md`**，并以其中的命令、部署口径、多实例说明为当前项目权威上下文 | 避免误用本地假设覆盖真实部署方式 |
 
 ---
 
@@ -112,7 +113,7 @@ utility/    → internal/                ❌
 - [ ] `go build ./...` 通过
 - [ ] `go test ./...` 通过
 - [ ] `npm run build` 通过（如有前端改动）
-- [ ] 如修改镜像 / Compose / 部署脚本，必须运行对应镜像的 `docker build`，并用 `docker run` / `docker compose up` 验证容器能启动、健康检查能通过
+- [ ] 如修改镜像 / Compose / 部署脚本，必须先读 `CLAUDE.md` 和部署手册，确认真实部署口径；再运行对应镜像的 `docker build`，并按项目部署方式（优先 `docker compose -f deploy/docker-compose.prod.yml up -d`，除非用户明确要求本地单容器验证）验证容器能启动、健康检查能通过
 - [ ] 注释聚焦复杂逻辑、边界条件或外部协议
 - [ ] 没有创建不必要的新文件
 - [ ] commit message 是中文
@@ -130,6 +131,7 @@ utility/    → internal/                ❌
 - **RAG 先看 baseline / holdout** — 不能拿全量数据自证效果。
 - **不暴露 secrets** — 不要日志记录 API keys、tokens、内部 IP。
 - **push 前必须测试 + pull rebase** — CI 会挂，远端更新会冲突。
+- **先读 `CLAUDE.md` 再动手** — 其中包含当前项目命令、部署方式、多实例限制；不要用本地单容器假设替代服务器/Compose 真实环境。
 - **不要随意给官方 nginx 镜像加 `USER nginx`** — nginx 启动阶段需要写 `/var/cache/nginx/*` 等运行时目录；只跑 `npm run build` 或镜像 build 不够，必须实际启动容器并请求 `/healthz` 或 `/`。
 
 ---
@@ -138,6 +140,7 @@ utility/    → internal/                ❌
 
 | 文档 | 内容 |
 |------|------|
+| [Claude 项目指引](./CLAUDE.md) | 当前项目命令、架构、部署口径、多实例限制；任何编码 / review / 部署分析前必须先读 |
 | [系统架构导览](./Learn/system/01-system-architecture-guide.md) | 五层模型、import 规则、主链路、关键模块、设计决策 |
 | [代码导读地图](./Learn/system/03-code-map.md) | 技术栈、目录结构、按文件的阅读顺序 |
 | [部署手册](./Learn/system/deployment-runbook.md) | 线上环境信息、验证命令 |
