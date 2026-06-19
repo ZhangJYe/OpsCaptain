@@ -8,6 +8,12 @@ import (
 
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/components/tool/utils"
+	"github.com/gogf/gf/v2/frame/g"
+)
+
+const (
+	defaultCMDBMaxResults = 10
+	maxCMDBResultsLimit   = 50
 )
 
 type QueryCMDBInput struct {
@@ -31,11 +37,46 @@ type QueryCMDBOutput struct {
 	Error      string            `json:"error,omitempty"`
 }
 
+// UnavailableRepository implements ServiceRepository with empty results.
+// Used when CMDB is disabled or YAML fails to load, so the tool is still
+// registered and can return degraded responses instead of being invisible.
+type UnavailableRepository struct{}
+
+func (u *UnavailableRepository) GetService(name string) (*cmdb.ServiceInfo, bool) {
+	return nil, false
+}
+func (u *UnavailableRepository) SearchServices(keyword string, limit int) []cmdb.ServiceInfo {
+	return nil
+}
+func (u *UnavailableRepository) ListServicesByCluster(cluster string) []cmdb.ServiceInfo {
+	return nil
+}
+func (u *UnavailableRepository) ListServicesByTeam(team string) []cmdb.ServiceInfo {
+	return nil
+}
+func (u *UnavailableRepository) GetDependents(name string) []string {
+	return nil
+}
+func (u *UnavailableRepository) ListAll() []cmdb.ServiceInfo {
+	return nil
+}
+
 func NewQueryCMDBTool(repo cmdb.ServiceRepository) tool.InvokableTool {
 	t, err := utils.InferOptionableTool(
 		"query_cmdb",
 		"Query CMDB (Configuration Management Database) for service information. Use this tool to look up service details, search for services, list services by cluster or team, check service dependencies, or list all registered services.",
 		func(ctx context.Context, input *QueryCMDBInput, opts ...tool.Option) (output string, err error) {
+			if _, unavailable := repo.(*UnavailableRepository); unavailable {
+				out := QueryCMDBOutput{
+					Success:  false,
+					Degraded: true,
+					Action:   input.Action,
+					Error:    "CMDB is not available (disabled or failed to load)",
+					Message:  "CMDB 未启用或数据加载失败，无法查询服务资产信息。",
+				}
+				jsonBytes, _ := json.Marshal(out)
+				return string(jsonBytes), nil
+			}
 			if repo == nil {
 				out := QueryCMDBOutput{
 					Success:  false,
@@ -49,7 +90,10 @@ func NewQueryCMDBTool(repo cmdb.ServiceRepository) tool.InvokableTool {
 			}
 
 			if input.Limit <= 0 {
-				input.Limit = 10
+				input.Limit = loadCMDBMaxResults()
+			}
+			if input.Limit > maxCMDBResultsLimit {
+				input.Limit = maxCMDBResultsLimit
 			}
 
 			switch input.Action {
@@ -81,6 +125,13 @@ func NewQueryCMDBTool(repo cmdb.ServiceRepository) tool.InvokableTool {
 		return nil
 	}
 	return t
+}
+
+func loadCMDBMaxResults() int {
+	if v, err := g.Cfg().Get(context.Background(), "cmdb.search.max_results"); err == nil && v.Int() > 0 {
+		return v.Int()
+	}
+	return defaultCMDBMaxResults
 }
 
 func handleGetService(repo cmdb.ServiceRepository, input *QueryCMDBInput) (string, error) {

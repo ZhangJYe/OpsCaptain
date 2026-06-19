@@ -1,17 +1,17 @@
-package cmdb
+package app
 
 import (
 	"SuperBizAgent/internal/ai/cmdb"
+	infracmdb "SuperBizAgent/internal/infra/cmdb"
 )
 
-// CMDBAdapter 实现 ai/cmdb.ServiceRepository interface
-// 内部做 DTO → Info 转换，不泄露 infra 细节
+// CMDBAdapter wraps infra YAMLLoader and implements ai/cmdb.ServiceRepository
+// Lives in app/ (not infra/) so infra/ doesn't import ai/
 type CMDBAdapter struct {
-	loader *YAMLLoader
+	loader *infracmdb.YAMLLoader
 }
 
-// NewCMDBAdapter 创建 adapter
-func NewCMDBAdapter(loader *YAMLLoader) *CMDBAdapter {
+func NewCMDBAdapter(loader *infracmdb.YAMLLoader) *CMDBAdapter {
 	return &CMDBAdapter{loader: loader}
 }
 
@@ -48,7 +48,7 @@ func (a *CMDBAdapter) ListAll() []cmdb.ServiceInfo {
 	return dtosToInfos(dtos, a.loader)
 }
 
-func dtoToInfo(dto cmdbServiceDTO, loader *YAMLLoader) cmdb.ServiceInfo {
+func dtoToInfo(dto infracmdb.CMDBServiceDTO, loader *infracmdb.YAMLLoader) cmdb.ServiceInfo {
 	return cmdb.ServiceInfo{
 		Name:         dto.Name,
 		DisplayName:  dto.DisplayName,
@@ -68,7 +68,7 @@ func dtoToInfo(dto cmdbServiceDTO, loader *YAMLLoader) cmdb.ServiceInfo {
 	}
 }
 
-func dtosToInfos(dtos []cmdbServiceDTO, loader *YAMLLoader) []cmdb.ServiceInfo {
+func dtosToInfos(dtos []infracmdb.CMDBServiceDTO, loader *infracmdb.YAMLLoader) []cmdb.ServiceInfo {
 	result := make([]cmdb.ServiceInfo, 0, len(dtos))
 	for _, dto := range dtos {
 		result = append(result, dtoToInfo(dto, loader))

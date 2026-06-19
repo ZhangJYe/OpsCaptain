@@ -52,7 +52,10 @@ func (a *CMDBApp) Search(keyword string, limit int) map[string]interface{} {
 		return map[string]interface{}{"success": false, "error": "CMDB repository not configured"}
 	}
 	if limit <= 0 {
-		limit = 20
+		limit = 10
+	}
+	if limit > 50 {
+		limit = 50
 	}
 	items := a.repo.SearchServices(keyword, limit)
 	return map[string]interface{}{"success": true, "items": items}

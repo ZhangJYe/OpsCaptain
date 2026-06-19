@@ -1,7 +1,8 @@
 package cmdb
 
-// cmdbServiceDTO infra 自有 YAML 数据结构，不 import ai/cmdb
-type cmdbServiceDTO struct {
+// CMDBServiceDTO infra 自有 YAML 数据结构，不 import ai/cmdb
+// Exported so app/cmdb_adapter.go can access fields for DTO→Info conversion
+type CMDBServiceDTO struct {
 	Name         string   `yaml:"name"`
 	DisplayName  string   `yaml:"display_name,omitempty"`
 	Owner        string   `yaml:"owner"`
@@ -19,5 +20,5 @@ type cmdbServiceDTO struct {
 }
 
 type cmdbFile struct {
-	Services []cmdbServiceDTO `yaml:"services"`
+	Services []CMDBServiceDTO `yaml:"services"`
 }

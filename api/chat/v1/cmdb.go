@@ -11,6 +11,8 @@ type CMDBServiceListReq struct {
 type CMDBServiceListRes struct {
 	Items    interface{} `json:"items"`
 	Success  bool        `json:"success"`
+	Error    string      `json:"error,omitempty"`
+	Message  string      `json:"message,omitempty"`
 }
 
 type CMDBServiceSearchReq struct {
@@ -22,6 +24,8 @@ type CMDBServiceSearchReq struct {
 type CMDBServiceSearchRes struct {
 	Items    interface{} `json:"items"`
 	Success  bool        `json:"success"`
+	Error    string      `json:"error,omitempty"`
+	Message  string      `json:"message,omitempty"`
 }
 
 type CMDBServiceGetReq struct {
@@ -32,6 +36,8 @@ type CMDBServiceGetReq struct {
 type CMDBServiceGetRes struct {
 	Service  interface{} `json:"service,omitempty"`
 	Success  bool        `json:"success"`
+	Error    string      `json:"error,omitempty"`
+	Message  string      `json:"message,omitempty"`
 }
 
 type CMDBServiceDepsReq struct {
@@ -43,6 +49,8 @@ type CMDBServiceDepsRes struct {
 	Dependencies interface{} `json:"dependencies,omitempty"`
 	Dependents   interface{} `json:"dependents,omitempty"`
 	Success      bool        `json:"success"`
+	Error        string      `json:"error,omitempty"`
+	Message      string      `json:"message,omitempty"`
 }
 
 type CMDBServiceByClusterReq struct {
@@ -53,6 +61,8 @@ type CMDBServiceByClusterReq struct {
 type CMDBServiceByClusterRes struct {
 	Items    interface{} `json:"items"`
 	Success  bool        `json:"success"`
+	Error    string      `json:"error,omitempty"`
+	Message  string      `json:"message,omitempty"`
 }
 
 type CMDBServiceByTeamReq struct {
@@ -63,4 +73,6 @@ type CMDBServiceByTeamReq struct {
 type CMDBServiceByTeamRes struct {
 	Items    interface{} `json:"items"`
 	Success  bool        `json:"success"`
+	Error    string      `json:"error,omitempty"`
+	Message  string      `json:"message,omitempty"`
 }

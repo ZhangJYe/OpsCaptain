@@ -150,6 +150,7 @@ rag:
     max_total_tokens: 8000
 
 aiops:
+  enabled: true
   engine: "plan_execute_replan"
   plan:
     model_path: "chat_model_fast"
@@ -281,3 +282,12 @@ change_events:
       services: []
       timeout_ms: 5000
       base_url: "http://124.222.57.178"
+
+cmdb:
+  enabled: true
+  store_path: "docs/assets/services.yaml"
+  cache_ttl_seconds: 60
+  search:
+    max_results: 10
+  tool:
+    timeout_ms: 3000

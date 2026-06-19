@@ -12,7 +12,7 @@ import (
 type YAMLLoader struct {
 	path     string
 	mu       sync.RWMutex
-	services []cmdbServiceDTO
+	services []CMDBServiceDTO
 	index    map[string]int
 	reverseDeps map[string][]string
 }
@@ -60,32 +60,32 @@ func (l *YAMLLoader) Reload() error {
 	return l.load()
 }
 
-func (l *YAMLLoader) GetService(name string) (cmdbServiceDTO, bool) {
+func (l *YAMLLoader) GetService(name string) (CMDBServiceDTO, bool) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
 	idx, ok := l.index[name]
 	if !ok {
-		return cmdbServiceDTO{}, false
+		return CMDBServiceDTO{}, false
 	}
 	return l.services[idx], true
 }
 
-func (l *YAMLLoader) ListAll() []cmdbServiceDTO {
+func (l *YAMLLoader) ListAll() []CMDBServiceDTO {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
-	result := make([]cmdbServiceDTO, len(l.services))
+	result := make([]CMDBServiceDTO, len(l.services))
 	copy(result, l.services)
 	return result
 }
 
-func (l *YAMLLoader) SearchServices(keyword string, limit int) []cmdbServiceDTO {
+func (l *YAMLLoader) SearchServices(keyword string, limit int) []CMDBServiceDTO {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
 	keyword = strings.ToLower(keyword)
-	var results []cmdbServiceDTO
+	var results []CMDBServiceDTO
 	for _, svc := range l.services {
 		if strings.Contains(strings.ToLower(svc.Name), keyword) ||
 			strings.Contains(strings.ToLower(svc.DisplayName), keyword) ||
@@ -109,11 +109,11 @@ func (l *YAMLLoader) SearchServices(keyword string, limit int) []cmdbServiceDTO 
 	return results
 }
 
-func (l *YAMLLoader) ListServicesByCluster(cluster string) []cmdbServiceDTO {
+func (l *YAMLLoader) ListServicesByCluster(cluster string) []CMDBServiceDTO {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
-	var results []cmdbServiceDTO
+	var results []CMDBServiceDTO
 	for _, svc := range l.services {
 		if svc.Cluster == cluster {
 			results = append(results, svc)
@@ -122,11 +122,11 @@ func (l *YAMLLoader) ListServicesByCluster(cluster string) []cmdbServiceDTO {
 	return results
 }
 
-func (l *YAMLLoader) ListServicesByTeam(team string) []cmdbServiceDTO {
+func (l *YAMLLoader) ListServicesByTeam(team string) []CMDBServiceDTO {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
-	var results []cmdbServiceDTO
+	var results []CMDBServiceDTO
 	for _, svc := range l.services {
 		if svc.Team == team {
 			results = append(results, svc)

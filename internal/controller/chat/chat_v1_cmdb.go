@@ -10,6 +10,8 @@ func (c *ControllerV1) CMDBServiceList(ctx context.Context, req *v1.CMDBServiceL
 	return &v1.CMDBServiceListRes{
 		Items:   result["items"],
 		Success: result["success"].(bool),
+		Error:   getString(result, "error"),
+		Message: getString(result, "message"),
 	}, nil
 }
 
@@ -18,6 +20,8 @@ func (c *ControllerV1) CMDBServiceSearch(ctx context.Context, req *v1.CMDBServic
 	return &v1.CMDBServiceSearchRes{
 		Items:   result["items"],
 		Success: result["success"].(bool),
+		Error:   getString(result, "error"),
+		Message: getString(result, "message"),
 	}, nil
 }
 
@@ -26,6 +30,8 @@ func (c *ControllerV1) CMDBServiceGet(ctx context.Context, req *v1.CMDBServiceGe
 	return &v1.CMDBServiceGetRes{
 		Service: result["service"],
 		Success: result["success"].(bool),
+		Error:   getString(result, "error"),
+		Message: getString(result, "message"),
 	}, nil
 }
 
@@ -35,6 +41,8 @@ func (c *ControllerV1) CMDBServiceDeps(ctx context.Context, req *v1.CMDBServiceD
 		Dependencies: result["dependencies"],
 		Dependents:   result["dependents"],
 		Success:      result["success"].(bool),
+		Error:        getString(result, "error"),
+		Message:      getString(result, "message"),
 	}, nil
 }
 
@@ -43,6 +51,8 @@ func (c *ControllerV1) CMDBServiceByCluster(ctx context.Context, req *v1.CMDBSer
 	return &v1.CMDBServiceByClusterRes{
 		Items:   result["items"],
 		Success: result["success"].(bool),
+		Error:   getString(result, "error"),
+		Message: getString(result, "message"),
 	}, nil
 }
 
@@ -51,5 +61,16 @@ func (c *ControllerV1) CMDBServiceByTeam(ctx context.Context, req *v1.CMDBServic
 	return &v1.CMDBServiceByTeamRes{
 		Items:   result["items"],
 		Success: result["success"].(bool),
+		Error:   getString(result, "error"),
+		Message: getString(result, "message"),
 	}, nil
+}
+
+func getString(m map[string]interface{}, key string) string {
+	if v, ok := m[key]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
 }

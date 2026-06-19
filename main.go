@@ -226,15 +226,17 @@ func main() {
 	if cmdbEnabled.Bool() && cmdbPath != "" {
 		loader, loadErr := infracmdb.NewYAMLLoader(cmdbPath)
 		if loadErr != nil {
-			g.Log().Warningf(ctx, "load cmdb: %v", loadErr)
+			g.Log().Warningf(ctx, "cmdb: load failed, tool will return degraded: %v", loadErr)
 			cmdbApp = app.NewCMDBApp(nil)
+			tools.SetCMDBRepository(&tools.UnavailableRepository{})
 		} else {
-			adapter := infracmdb.NewCMDBAdapter(loader)
+			adapter := app.NewCMDBAdapter(loader)
 			cmdbApp = app.NewCMDBApp(adapter)
 			tools.SetCMDBRepository(adapter)
 		}
 	} else {
 		cmdbApp = app.NewCMDBApp(nil)
+		tools.SetCMDBRepository(&tools.UnavailableRepository{})
 	}
 
 	// Wire user tool dependencies into chat pipeline for progressive disclosure
