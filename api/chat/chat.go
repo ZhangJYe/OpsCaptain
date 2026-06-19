@@ -37,4 +37,10 @@ type IChatV1 interface {
 	ChangeEventWebhook(ctx context.Context, req *v1.ChangeEventWebhookReq) (res *v1.ChangeEventWebhookRes, err error)
 	NotificationConfig(ctx context.Context, req *v1.NotificationConfigReq) (res *v1.NotificationConfigRes, err error)
 	NotificationTest(ctx context.Context, req *v1.NotificationTestReq) (res *v1.NotificationTestRes, err error)
+	CMDBServiceList(ctx context.Context, req *v1.CMDBServiceListReq) (res *v1.CMDBServiceListRes, err error)
+	CMDBServiceSearch(ctx context.Context, req *v1.CMDBServiceSearchReq) (res *v1.CMDBServiceSearchRes, err error)
+	CMDBServiceGet(ctx context.Context, req *v1.CMDBServiceGetReq) (res *v1.CMDBServiceGetRes, err error)
+	CMDBServiceDeps(ctx context.Context, req *v1.CMDBServiceDepsReq) (res *v1.CMDBServiceDepsRes, err error)
+	CMDBServiceByCluster(ctx context.Context, req *v1.CMDBServiceByClusterReq) (res *v1.CMDBServiceByClusterRes, err error)
+	CMDBServiceByTeam(ctx context.Context, req *v1.CMDBServiceByTeamReq) (res *v1.CMDBServiceByTeamRes, err error)
 }

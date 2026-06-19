@@ -18,11 +18,12 @@ type ControllerV1 struct {
 	changeEventApp *app.ChangeEventApp
 	mcpToolApp     *app.MCPToolApp
 	userSkillApp   *app.UserSkillApp
+	cmdbApp        *app.CMDBApp
 }
 
 func NewV1(chatApp *app.ChatApp, knowledgeApp *app.KnowledgeApp, aiopsApp *app.AIOpsApp,
 	changeEventApp *app.ChangeEventApp,
-	mcpToolApp *app.MCPToolApp, userSkillApp *app.UserSkillApp) chat.IChatV1 {
+	mcpToolApp *app.MCPToolApp, userSkillApp *app.UserSkillApp, cmdbApp *app.CMDBApp) chat.IChatV1 {
 	return &ControllerV1{
 		service:        sse.New(),
 		chatApp:        chatApp,
@@ -31,5 +32,6 @@ func NewV1(chatApp *app.ChatApp, knowledgeApp *app.KnowledgeApp, aiopsApp *app.A
 		changeEventApp: changeEventApp,
 		mcpToolApp:     mcpToolApp,
 		userSkillApp:   userSkillApp,
+		cmdbApp:        cmdbApp,
 	}
 }

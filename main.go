@@ -17,6 +17,7 @@ import (
 	"SuperBizAgent/internal/controller/chat"
 	infrafs "SuperBizAgent/internal/infra/filestore"
 	inframv "SuperBizAgent/internal/infra/milvus"
+	infracmdb "SuperBizAgent/internal/infra/cmdb"
 	"SuperBizAgent/internal/infra/notifier"
 	"SuperBizAgent/internal/infra/rabbitmq"
 	"SuperBizAgent/utility/auth"
@@ -219,6 +220,20 @@ func main() {
 	mcpToolApp := app.NewMCPToolApp(userSkillStore, dynamicMCPReg)
 	userSkillApp := app.NewUserSkillApp(userSkillStore, userSkillLoader)
 
+	cmdbPath := g.Cfg().MustGet(ctx, "cmdb.file_path").String()
+	var cmdbApp *app.CMDBApp
+	if cmdbPath != "" {
+		loader, loadErr := infracmdb.NewYAMLLoader(cmdbPath)
+		if loadErr != nil {
+			g.Log().Warningf(ctx, "load cmdb: %v", loadErr)
+			cmdbApp = app.NewCMDBApp(nil)
+		} else {
+			cmdbApp = app.NewCMDBApp(infracmdb.NewCMDBAdapter(loader))
+		}
+	} else {
+		cmdbApp = app.NewCMDBApp(nil)
+	}
+
 	// Wire user tool dependencies into chat pipeline for progressive disclosure
 	chat_pipeline.SetUserToolDeps(userSkillStore, dynamicMCPReg)
 
@@ -257,7 +272,7 @@ func main() {
 		group.Middleware(middleware.AuthMiddleware)
 		group.Middleware(middleware.RateLimitMiddleware)
 		group.Middleware(middleware.ResponseMiddleware)
-		group.Bind(chat.NewV1(chatApp, knowledgeApp, aiopsApp, changeEventApp, mcpToolApp, userSkillApp))
+		group.Bind(chat.NewV1(chatApp, knowledgeApp, aiopsApp, changeEventApp, mcpToolApp, userSkillApp, cmdbApp))
 	})
 
 	if err := s.Start(); err != nil {
