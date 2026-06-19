@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 )
 
 type fakeCMDBRepo struct {
@@ -65,6 +66,16 @@ func (f *fakeCMDBRepo) ListAll() []cmdb.ServiceInfo {
 	return result
 }
 
+type slowCMDBRepo struct {
+	*fakeCMDBRepo
+	delay time.Duration
+}
+
+func (s *slowCMDBRepo) GetService(name string) (*cmdb.ServiceInfo, bool) {
+	time.Sleep(s.delay)
+	return s.fakeCMDBRepo.GetService(name)
+}
+
 func contains(s, sub string) bool {
 	return len(sub) > 0 && len(s) >= len(sub) && (s == sub || len(s) > 0 && len(sub) > 0 && containsSubstring(s, sub))
 }
@@ -82,11 +93,11 @@ func TestQueryCMDBTool_GetService(t *testing.T) {
 	repo := &fakeCMDBRepo{
 		services: map[string]*cmdb.ServiceInfo{
 			"order-service": {
-				Name:        "order-service",
-				DisplayName: "Order Service",
-				Team:        "platform",
-				Cluster:     "prod-cluster",
-				Env:         "production",
+				Name:         "order-service",
+				DisplayName:  "Order Service",
+				Team:         "platform",
+				Cluster:      "prod-cluster",
+				Env:          "production",
 				Dependencies: []string{"payment-service", "inventory-service"},
 				Dependents:   []string{"gateway-service"},
 			},
@@ -146,5 +157,51 @@ func TestQueryCMDBTool_NilRepo(t *testing.T) {
 	}
 	if result.Error == "" {
 		t.Fatal("expected error message for nil repo")
+	}
+}
+
+func TestQueryCMDBTool_RespectsContextTimeout(t *testing.T) {
+	repo := &slowCMDBRepo{
+		fakeCMDBRepo: &fakeCMDBRepo{
+			services: map[string]*cmdb.ServiceInfo{
+				"order-service": {
+					Name:    "order-service",
+					Team:    "platform",
+					Cluster: "prod-cluster",
+					Env:     "production",
+				},
+			},
+		},
+		delay: 100 * time.Millisecond,
+	}
+	tool := NewQueryCMDBTool(repo)
+	if tool == nil {
+		t.Fatal("expected non-nil tool")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	output, err := tool.InvokableRun(ctx, `{"action":"get_service","service_name":"order-service"}`)
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if elapsed >= 80*time.Millisecond {
+		t.Fatalf("expected timeout response before slow repo completes, elapsed=%s", elapsed)
+	}
+
+	var result QueryCMDBOutput
+	if err := json.Unmarshal([]byte(output), &result); err != nil {
+		t.Fatalf("failed to parse output: %v", err)
+	}
+	if result.Success {
+		t.Fatal("expected success=false for timeout")
+	}
+	if !result.Degraded {
+		t.Fatal("expected degraded=true for timeout")
+	}
+	if result.Error != "query timeout" {
+		t.Fatalf("expected query timeout error, got %q", result.Error)
 	}
 }

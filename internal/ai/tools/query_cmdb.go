@@ -28,15 +28,15 @@ type QueryCMDBInput struct {
 }
 
 type QueryCMDBOutput struct {
-	Success    bool              `json:"success"`
-	Degraded   bool              `json:"degraded,omitempty"`
-	Action     string            `json:"action"`
+	Success    bool               `json:"success"`
+	Degraded   bool               `json:"degraded,omitempty"`
+	Action     string             `json:"action"`
 	Services   []cmdb.ServiceInfo `json:"services,omitempty"`
 	Service    *cmdb.ServiceInfo  `json:"service,omitempty"`
-	Upstream   []string          `json:"upstream,omitempty"`
-	Downstream []string          `json:"downstream,omitempty"`
-	Message    string            `json:"message,omitempty"`
-	Error      string            `json:"error,omitempty"`
+	Upstream   []string           `json:"upstream,omitempty"`
+	Downstream []string           `json:"downstream,omitempty"`
+	Message    string             `json:"message,omitempty"`
+	Error      string             `json:"error,omitempty"`
 }
 
 // UnavailableRepository implements ServiceRepository with empty results.
@@ -101,37 +101,68 @@ func NewQueryCMDBTool(repo cmdb.ServiceRepository) tool.InvokableTool {
 			timeout := loadCMDBTimeout()
 			queryCtx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
-			_ = queryCtx // timeout propagation for future repo implementations
 
-			switch input.Action {
-			case "get_service":
-				return handleGetService(repo, input)
-			case "search":
-				return handleSearch(repo, input)
-			case "list_by_cluster":
-				return handleListByCluster(repo, input)
-			case "list_by_team":
-				return handleListByTeam(repo, input)
-			case "get_dependencies":
-				return handleGetDependencies(repo, input)
-			case "list_all":
-				return handleListAll(repo, input)
-			default:
-				out := QueryCMDBOutput{
-					Success:  false,
-					Degraded: true,
-					Action:   input.Action,
-					Error:    fmt.Sprintf("unknown action: %s", input.Action),
-					Message:  "Supported actions: get_service, search, list_by_cluster, list_by_team, get_dependencies, list_all",
-				}
-				jsonBytes, _ := json.MarshalIndent(out, "", "  ")
-				return string(jsonBytes), nil
-			}
+			return runCMDBActionWithTimeout(queryCtx, repo, input)
 		})
 	if err != nil {
 		return nil
 	}
 	return t
+}
+
+type cmdbActionResult struct {
+	output string
+	err    error
+}
+
+func runCMDBActionWithTimeout(ctx context.Context, repo cmdb.ServiceRepository, input *QueryCMDBInput) (string, error) {
+	resultCh := make(chan cmdbActionResult, 1)
+	go func() {
+		output, err := runCMDBAction(repo, input)
+		resultCh <- cmdbActionResult{output: output, err: err}
+	}()
+
+	select {
+	case result := <-resultCh:
+		return result.output, result.err
+	case <-ctx.Done():
+		out := QueryCMDBOutput{
+			Success:  false,
+			Degraded: true,
+			Action:   input.Action,
+			Error:    "query timeout",
+			Message:  "CMDB 查询超时，请稍后重试或检查 CMDB 数据源状态。",
+		}
+		jsonBytes, _ := json.Marshal(out)
+		return string(jsonBytes), nil
+	}
+}
+
+func runCMDBAction(repo cmdb.ServiceRepository, input *QueryCMDBInput) (string, error) {
+	switch input.Action {
+	case "get_service":
+		return handleGetService(repo, input)
+	case "search":
+		return handleSearch(repo, input)
+	case "list_by_cluster":
+		return handleListByCluster(repo, input)
+	case "list_by_team":
+		return handleListByTeam(repo, input)
+	case "get_dependencies":
+		return handleGetDependencies(repo, input)
+	case "list_all":
+		return handleListAll(repo, input)
+	default:
+		out := QueryCMDBOutput{
+			Success:  false,
+			Degraded: true,
+			Action:   input.Action,
+			Error:    fmt.Sprintf("unknown action: %s", input.Action),
+			Message:  "Supported actions: get_service, search, list_by_cluster, list_by_team, get_dependencies, list_all",
+		}
+		jsonBytes, _ := json.MarshalIndent(out, "", "  ")
+		return string(jsonBytes), nil
+	}
 }
 
 // LoadCMDBMaxResults reads max_results from config, used by both tool and HTTP API
