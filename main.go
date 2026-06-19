@@ -22,6 +22,7 @@ import (
 	inframv "SuperBizAgent/internal/infra/milvus"
 	"SuperBizAgent/internal/infra/notifier"
 	"SuperBizAgent/internal/infra/rabbitmq"
+	infrajaeger "SuperBizAgent/internal/infra/jaeger"
 	"SuperBizAgent/utility/auth"
 	"SuperBizAgent/utility/clusterbus"
 	"SuperBizAgent/utility/common"
@@ -234,7 +235,20 @@ func main() {
 			tools.SetCMDBRepository(&tools.UnavailableRepository{})
 		} else {
 			adapter := app.NewCMDBAdapter(loader)
-			cmdbApp = app.NewCMDBAppWithHost(adapter, adapter)
+
+			jaegerEnabled, _ := g.Cfg().Get(ctx, "cmdb.jaeger.enabled")
+			var jaegerClient *infrajaeger.Client
+			if jaegerEnabled.Bool() {
+				jaegerURL := configString(ctx, "cmdb.jaeger.url", "http://127.0.0.1:16686")
+				jaegerTimeoutMs := configInt(ctx, "cmdb.jaeger.timeout_ms", 5000)
+				lookbackHours := configInt(ctx, "cmdb.jaeger.lookback_hours", 24)
+				_ = lookbackHours
+				jaegerClient = infrajaeger.NewClientWithTimeout(jaegerURL, time.Duration(jaegerTimeoutMs)*time.Millisecond)
+				g.Log().Infof(ctx, "cmdb: jaeger topology discovery enabled (url=%s)", jaegerURL)
+			}
+
+			topologyMerger := aicmdb.NewTopologyMerger(adapter, jaegerClient)
+			cmdbApp = app.NewCMDBAppWithTopology(adapter, adapter, topologyMerger)
 			tools.SetCMDBRepository(adapter)
 			tools.SetCMDBHostRepository(adapter)
 			enricher := aicmdb.NewCMDBEnricher(adapter)

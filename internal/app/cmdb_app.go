@@ -1,13 +1,16 @@
 package app
 
 import (
+	"context"
+
 	"SuperBizAgent/internal/ai/cmdb"
 	"SuperBizAgent/internal/ai/tools"
 )
 
 type CMDBApp struct {
-	repo     cmdb.ServiceRepository
-	hostRepo cmdb.HostRepository
+	repo            cmdb.ServiceRepository
+	hostRepo        cmdb.HostRepository
+	topologyMerger  *cmdb.TopologyMerger
 }
 
 func NewCMDBApp(repo cmdb.ServiceRepository) *CMDBApp {
@@ -16,6 +19,10 @@ func NewCMDBApp(repo cmdb.ServiceRepository) *CMDBApp {
 
 func NewCMDBAppWithHost(repo cmdb.ServiceRepository, hostRepo cmdb.HostRepository) *CMDBApp {
 	return &CMDBApp{repo: repo, hostRepo: hostRepo}
+}
+
+func NewCMDBAppWithTopology(repo cmdb.ServiceRepository, hostRepo cmdb.HostRepository, merger *cmdb.TopologyMerger) *CMDBApp {
+	return &CMDBApp{repo: repo, hostRepo: hostRepo, topologyMerger: merger}
 }
 
 func (a *CMDBApp) ListAll() map[string]interface{} {
@@ -214,9 +221,51 @@ func (a *CMDBApp) DeleteHost(name string) map[string]interface{} {
 	return map[string]interface{}{"success": true, "message": "host deleted"}
 }
 
-func (a *CMDBApp) GetTopology(cluster string, service string) map[string]interface{} {
+func (a *CMDBApp) GetTopology(ctx context.Context, cluster string, service string) map[string]interface{} {
 	if a.repo == nil {
 		return map[string]interface{}{"success": false, "error": "CMDB repository not configured"}
+	}
+
+	if a.topologyMerger != nil {
+		result := a.topologyMerger.GetTopology(ctx, cluster, service)
+		nodes := make([]map[string]interface{}, 0, len(result.Nodes))
+		for _, n := range result.Nodes {
+			node := map[string]interface{}{
+				"id":      n.ID,
+				"label":   n.Label,
+				"type":    n.Type,
+			}
+			if n.Cluster != "" {
+				node["cluster"] = n.Cluster
+			}
+			if n.Owner != "" {
+				node["owner"] = n.Owner
+			}
+			if n.Source != "" {
+				node["source"] = n.Source
+			}
+			nodes = append(nodes, node)
+		}
+		edges := make([]map[string]interface{}, 0, len(result.Edges))
+		for _, e := range result.Edges {
+			edge := map[string]interface{}{
+				"source": e.Source,
+				"target": e.Target,
+				"type":   e.Type,
+			}
+			if e.CallCount > 0 {
+				edge["call_count"] = e.CallCount
+			}
+			if e.DataSource != "" {
+				edge["data_source"] = e.DataSource
+			}
+			edges = append(edges, edge)
+		}
+		return map[string]interface{}{
+			"success": true,
+			"nodes":   nodes,
+			"edges":   edges,
+		}
 	}
 
 	var services []cmdb.ServiceInfo

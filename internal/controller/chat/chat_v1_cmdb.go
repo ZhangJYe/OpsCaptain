@@ -220,7 +220,7 @@ func (c *ControllerV1) CMDBHostDelete(ctx context.Context, req *v1.CMDBHostDelet
 }
 
 func (c *ControllerV1) CMDBTopology(ctx context.Context, req *v1.CMDBTopologyReq) (res *v1.CMDBTopologyRes, err error) {
-	result := c.cmdbApp.GetTopology(req.Cluster, req.Service)
+	result := c.cmdbApp.GetTopology(ctx, req.Cluster, req.Service)
 	return &v1.CMDBTopologyRes{
 		Success: result["success"].(bool),
 		Nodes:   result["nodes"],

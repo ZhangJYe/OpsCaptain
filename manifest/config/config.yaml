@@ -438,6 +438,11 @@ cmdb:
     max_results: 10
   tool:
     timeout_ms: 3000
+  jaeger:
+    enabled: true
+    url: "http://127.0.0.1:16686"
+    lookback_hours: 24
+    timeout_ms: 5000
 
 redis:
   default:
