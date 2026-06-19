@@ -165,7 +165,7 @@ func (a *Assembler) Assemble(ctx context.Context, req ContextRequest, history []
 
 	if profile.AllowDocs {
 		docResult := selectDocuments(ctx, req.Query, profile)
-		pkg.DocumentItems = docResult.selected
+		pkg.DocumentItems = append(docResult.selected, pkg.DocumentItems...)
 		trace.SourcesConsidered += len(docResult.selected) + len(docResult.dropped)
 		trace.SourcesSelected += len(docResult.selected)
 		trace.DroppedItems = append(trace.DroppedItems, docResult.dropped...)

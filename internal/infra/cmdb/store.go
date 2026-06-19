@@ -152,7 +152,11 @@ func (l *YAMLLoader) GetDependents(name string) []string {
 }
 
 func (l *YAMLLoader) save() error {
-	data, err := yaml.Marshal(cmdbFile{Services: l.services, Hosts: l.hosts})
+	return l.saveTo(l.services, l.hosts)
+}
+
+func (l *YAMLLoader) saveTo(services []CMDBServiceDTO, hosts []HostDTO) error {
+	data, err := yaml.Marshal(cmdbFile{Services: services, Hosts: hosts})
 	if err != nil {
 		return fmt.Errorf("marshal cmdb yaml: %w", err)
 	}
@@ -205,9 +209,16 @@ func (l *YAMLLoader) CreateService(svc CMDBServiceDTO) error {
 	if _, exists := l.index[svc.Name]; exists {
 		return fmt.Errorf("service %q already exists", svc.Name)
 	}
-	l.services = append(l.services, svc)
+	// Work on copy to avoid memory/disk inconsistency
+	newServices := make([]CMDBServiceDTO, len(l.services), len(l.services)+1)
+	copy(newServices, l.services)
+	newServices = append(newServices, svc)
+	if err := l.saveTo(newServices, l.hosts); err != nil {
+		return err
+	}
+	l.services = newServices
 	l.rebuildIndex()
-	return l.save()
+	return nil
 }
 
 func (l *YAMLLoader) UpdateService(name string, svc CMDBServiceDTO) error {
@@ -222,9 +233,15 @@ func (l *YAMLLoader) UpdateService(name string, svc CMDBServiceDTO) error {
 		return fmt.Errorf("service %q not found", name)
 	}
 	svc.Name = name
-	l.services[idx] = svc
+	newServices := make([]CMDBServiceDTO, len(l.services))
+	copy(newServices, l.services)
+	newServices[idx] = svc
+	if err := l.saveTo(newServices, l.hosts); err != nil {
+		return err
+	}
+	l.services = newServices
 	l.rebuildIndex()
-	return l.save()
+	return nil
 }
 
 func (l *YAMLLoader) DeleteService(name string) error {
@@ -238,9 +255,15 @@ func (l *YAMLLoader) DeleteService(name string) error {
 	if !exists {
 		return fmt.Errorf("service %q not found", name)
 	}
-	l.services = append(l.services[:idx], l.services[idx+1:]...)
+	newServices := make([]CMDBServiceDTO, 0, len(l.services)-1)
+	newServices = append(newServices, l.services[:idx]...)
+	newServices = append(newServices, l.services[idx+1:]...)
+	if err := l.saveTo(newServices, l.hosts); err != nil {
+		return err
+	}
+	l.services = newServices
 	l.rebuildIndex()
-	return l.save()
+	return nil
 }
 
 func (l *YAMLLoader) GetHost(name string) (HostDTO, bool) {
@@ -299,9 +322,15 @@ func (l *YAMLLoader) CreateHost(host HostDTO) error {
 	if _, exists := l.hostIndex[host.Name]; exists {
 		return fmt.Errorf("host %q already exists", host.Name)
 	}
-	l.hosts = append(l.hosts, host)
+	newHosts := make([]HostDTO, len(l.hosts), len(l.hosts)+1)
+	copy(newHosts, l.hosts)
+	newHosts = append(newHosts, host)
+	if err := l.saveTo(l.services, newHosts); err != nil {
+		return err
+	}
+	l.hosts = newHosts
 	l.rebuildIndex()
-	return l.save()
+	return nil
 }
 
 func (l *YAMLLoader) UpdateHost(name string, host HostDTO) error {
@@ -316,9 +345,15 @@ func (l *YAMLLoader) UpdateHost(name string, host HostDTO) error {
 		return fmt.Errorf("host %q not found", name)
 	}
 	host.Name = name
-	l.hosts[idx] = host
+	newHosts := make([]HostDTO, len(l.hosts))
+	copy(newHosts, l.hosts)
+	newHosts[idx] = host
+	if err := l.saveTo(l.services, newHosts); err != nil {
+		return err
+	}
+	l.hosts = newHosts
 	l.rebuildIndex()
-	return l.save()
+	return nil
 }
 
 func (l *YAMLLoader) DeleteHost(name string) error {
@@ -332,7 +367,13 @@ func (l *YAMLLoader) DeleteHost(name string) error {
 	if !exists {
 		return fmt.Errorf("host %q not found", name)
 	}
-	l.hosts = append(l.hosts[:idx], l.hosts[idx+1:]...)
+	newHosts := make([]HostDTO, 0, len(l.hosts)-1)
+	newHosts = append(newHosts, l.hosts[:idx]...)
+	newHosts = append(newHosts, l.hosts[idx+1:]...)
+	if err := l.saveTo(l.services, newHosts); err != nil {
+		return err
+	}
+	l.hosts = newHosts
 	l.rebuildIndex()
-	return l.save()
+	return nil
 }

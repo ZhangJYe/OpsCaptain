@@ -19,7 +19,7 @@ const (
 )
 
 type QueryCMDBInput struct {
-	Action      string `json:"action" jsonschema:"description=查询动作：get_service(查单个服务), search(模糊搜索), list_by_cluster(集群查询), list_by_team(团队查询), get_dependencies(查依赖), list_all(列全部), get_topology(服务拓扑图)"`
+	Action      string `json:"action" jsonschema:"description=查询动作：get_service(查单个服务), search(模糊搜索), list_by_cluster(集群查询), list_by_team(团队查询), get_dependencies(查依赖), list_all(列全部), get_service_hosts(查服务实例), get_topology(服务拓扑图)"`
 	ServiceName string `json:"service_name,omitempty" jsonschema:"description=服务名称，用于 get_service / get_dependencies / get_topology"`
 	Cluster     string `json:"cluster,omitempty" jsonschema:"description=集群名称，用于 list_by_cluster / get_topology"`
 	Team        string `json:"team,omitempty" jsonschema:"description=团队名称，用于 list_by_team"`
@@ -174,7 +174,7 @@ func runCMDBAction(repo cmdb.ServiceRepository, input *QueryCMDBInput) (string, 
 			Degraded: true,
 			Action:   input.Action,
 			Error:    fmt.Sprintf("unknown action: %s", input.Action),
-			Message:  "Supported actions: get_service, search, list_by_cluster, list_by_team, get_dependencies, list_all, get_topology",
+			Message:  "Supported actions: get_service, search, list_by_cluster, list_by_team, get_dependencies, list_all, get_service_hosts, get_topology",
 		}
 		jsonBytes, _ := json.MarshalIndent(out, "", "  ")
 		return string(jsonBytes), nil

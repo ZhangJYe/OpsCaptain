@@ -90,6 +90,10 @@ func (a *CMDBApp) CreateService(svc cmdb.ServiceInfo) map[string]interface{} {
 	if err := validateService(svc); err != nil {
 		return map[string]interface{}{"success": false, "error": err.Error()}
 	}
+	existing := a.repo.ListAll()
+	if err := validateServiceDeps(svc, existing); err != nil {
+		return map[string]interface{}{"success": false, "error": err.Error()}
+	}
 	if err := a.repo.CreateService(svc); err != nil {
 		return map[string]interface{}{"success": false, "error": err.Error()}
 	}
@@ -102,6 +106,10 @@ func (a *CMDBApp) UpdateService(name string, svc cmdb.ServiceInfo) map[string]in
 		return map[string]interface{}{"success": false, "error": "CMDB repository not configured"}
 	}
 	if err := validateService(svc); err != nil {
+		return map[string]interface{}{"success": false, "error": err.Error()}
+	}
+	existing := a.repo.ListAll()
+	if err := validateServiceDeps(svc, existing); err != nil {
 		return map[string]interface{}{"success": false, "error": err.Error()}
 	}
 	if err := a.repo.UpdateService(name, svc); err != nil {
@@ -163,6 +171,12 @@ func (a *CMDBApp) CreateHost(host cmdb.HostInfo) map[string]interface{} {
 	if err := validateHost(host); err != nil {
 		return map[string]interface{}{"success": false, "error": err.Error()}
 	}
+	if a.repo != nil {
+		existing := a.repo.ListAll()
+		if err := validateHostService(host, existing); err != nil {
+			return map[string]interface{}{"success": false, "error": err.Error()}
+		}
+	}
 	if err := a.hostRepo.CreateHost(host); err != nil {
 		return map[string]interface{}{"success": false, "error": err.Error()}
 	}
@@ -176,6 +190,12 @@ func (a *CMDBApp) UpdateHost(name string, host cmdb.HostInfo) map[string]interfa
 	}
 	if err := validateHost(host); err != nil {
 		return map[string]interface{}{"success": false, "error": err.Error()}
+	}
+	if a.repo != nil {
+		existing := a.repo.ListAll()
+		if err := validateHostService(host, existing); err != nil {
+			return map[string]interface{}{"success": false, "error": err.Error()}
+		}
 	}
 	if err := a.hostRepo.UpdateHost(name, host); err != nil {
 		return map[string]interface{}{"success": false, "error": err.Error()}

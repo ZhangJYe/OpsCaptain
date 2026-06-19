@@ -5,16 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/components/tool/utils"
-)
-
-const (
-	defaultHostCMDBMaxResults = 10
-	maxHostCMDBResultsLimit   = 50
-	defaultHostCMDBTimeoutMs  = 3000
 )
 
 type QueryCMDBHostInput struct {
@@ -53,13 +46,13 @@ func NewQueryCMDBHostTool(repo cmdb.HostRepository) tool.InvokableTool {
 			}
 
 			if input.Limit <= 0 {
-				input.Limit = defaultHostCMDBMaxResults
+				input.Limit = LoadCMDBMaxResults()
 			}
-			if input.Limit > maxHostCMDBResultsLimit {
-				input.Limit = maxHostCMDBResultsLimit
+			if input.Limit > maxCMDBResultsLimit {
+				input.Limit = maxCMDBResultsLimit
 			}
 
-			timeout := time.Duration(defaultHostCMDBTimeoutMs) * time.Millisecond
+			timeout := loadCMDBTimeout()
 			queryCtx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
 
