@@ -63,3 +63,53 @@ services:
     tags:
       - critical
       - infra
+
+hosts:
+  - name: pay-node-01
+    service: paymentservice
+    ip: "10.0.1.10"
+    node: "pay-node-01"
+    cluster: "prod-cluster-01"
+    env: "production"
+    status: "running"
+    last_restart: "2026-06-18"
+    tags:
+      - critical
+  - name: pay-node-02
+    service: paymentservice
+    ip: "10.0.1.11"
+    node: "pay-node-02"
+    cluster: "prod-cluster-01"
+    env: "production"
+    status: "running"
+    last_restart: "2026-06-18"
+    tags:
+      - critical
+  - name: user-node-01
+    service: userservice
+    ip: "10.0.1.20"
+    node: "user-node-01"
+    cluster: "prod-cluster-01"
+    env: "production"
+    status: "running"
+    tags:
+      - core
+  - name: cart-node-01
+    service: cartservice
+    ip: "10.0.2.10"
+    node: "cart-node-01"
+    cluster: "prod-cluster-02"
+    env: "production"
+    status: "running"
+    tags:
+      - core
+  - name: gw-node-01
+    service: gateway
+    ip: "10.0.1.1"
+    node: "gw-node-01"
+    cluster: "prod-cluster-01"
+    env: "production"
+    status: "running"
+    tags:
+      - critical
+      - infra

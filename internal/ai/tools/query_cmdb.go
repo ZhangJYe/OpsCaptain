@@ -28,15 +28,16 @@ type QueryCMDBInput struct {
 }
 
 type QueryCMDBOutput struct {
-	Success    bool               `json:"success"`
-	Degraded   bool               `json:"degraded,omitempty"`
-	Action     string             `json:"action"`
-	Services   []cmdb.ServiceInfo `json:"services,omitempty"`
-	Service    *cmdb.ServiceInfo  `json:"service,omitempty"`
-	Upstream   []string           `json:"upstream,omitempty"`
-	Downstream []string           `json:"downstream,omitempty"`
-	Message    string             `json:"message,omitempty"`
-	Error      string             `json:"error,omitempty"`
+	Success      bool               `json:"success"`
+	Degraded     bool               `json:"degraded,omitempty"`
+	Action       string             `json:"action"`
+	Services     []cmdb.ServiceInfo `json:"services,omitempty"`
+	Service      *cmdb.ServiceInfo  `json:"service,omitempty"`
+	Upstream     []string           `json:"upstream,omitempty"`
+	Downstream   []string           `json:"downstream,omitempty"`
+	ServiceHosts []cmdb.HostInfo    `json:"service_hosts,omitempty"`
+	Message      string             `json:"message,omitempty"`
+	Error        string             `json:"error,omitempty"`
 }
 
 // UnavailableRepository implements ServiceRepository with empty results.
@@ -161,6 +162,8 @@ func runCMDBAction(repo cmdb.ServiceRepository, input *QueryCMDBInput) (string, 
 		return handleGetDependencies(repo, input)
 	case "list_all":
 		return handleListAll(repo, input)
+	case "get_service_hosts":
+		return handleGetServiceHosts(repo, input)
 	default:
 		out := QueryCMDBOutput{
 			Success:  false,
@@ -358,6 +361,51 @@ func handleListAll(repo cmdb.ServiceRepository, input *QueryCMDBInput) (string, 
 		Action:   "list_all",
 		Services: services,
 		Message:  fmt.Sprintf("Listed all %d services", len(services)),
+	}
+	jsonBytes, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(jsonBytes), nil
+}
+
+func handleGetServiceHosts(repo cmdb.ServiceRepository, input *QueryCMDBInput) (string, error) {
+	if input.ServiceName == "" {
+		out := QueryCMDBOutput{
+			Success:  false,
+			Degraded: true,
+			Action:   "get_service_hosts",
+			Error:    "service_name is required",
+			Message:  "Please provide service_name parameter.",
+		}
+		jsonBytes, _ := json.MarshalIndent(out, "", "  ")
+		return string(jsonBytes), nil
+	}
+
+	svc, ok := repo.GetService(input.ServiceName)
+	if !ok {
+		out := QueryCMDBOutput{
+			Success:  false,
+			Degraded: true,
+			Action:   "get_service_hosts",
+			Error:    fmt.Sprintf("service %q not found", input.ServiceName),
+			Message:  fmt.Sprintf("Service %q does not exist in CMDB.", input.ServiceName),
+		}
+		jsonBytes, _ := json.MarshalIndent(out, "", "  ")
+		return string(jsonBytes), nil
+	}
+
+	var hosts []cmdb.HostInfo
+	if cmdbHostRepository != nil {
+		hosts = cmdbHostRepository.ListHostsByService(input.ServiceName)
+	}
+
+	out := QueryCMDBOutput{
+		Success:      true,
+		Action:       "get_service_hosts",
+		Service:      svc,
+		ServiceHosts: hosts,
+		Message:      fmt.Sprintf("Found %d hosts for service %q", len(hosts), input.ServiceName),
 	}
 	jsonBytes, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {

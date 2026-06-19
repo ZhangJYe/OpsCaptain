@@ -128,6 +128,97 @@ func (c *ControllerV1) CMDBServiceDelete(ctx context.Context, req *v1.CMDBServic
 	}, nil
 }
 
+func (c *ControllerV1) CMDBHostList(ctx context.Context, req *v1.CMDBHostListReq) (res *v1.CMDBHostListRes, err error) {
+	result := c.cmdbApp.ListAllHosts()
+	return &v1.CMDBHostListRes{
+		Items:   result["items"],
+		Success: result["success"].(bool),
+		Error:   getString(result, "error"),
+		Message: getString(result, "message"),
+	}, nil
+}
+
+func (c *ControllerV1) CMDBHostGet(ctx context.Context, req *v1.CMDBHostGetReq) (res *v1.CMDBHostGetRes, err error) {
+	result := c.cmdbApp.GetHost(req.Name)
+	return &v1.CMDBHostGetRes{
+		Host:    result["host"],
+		Success: result["success"].(bool),
+		Error:   getString(result, "error"),
+		Message: getString(result, "message"),
+	}, nil
+}
+
+func (c *ControllerV1) CMDBHostByService(ctx context.Context, req *v1.CMDBHostByServiceReq) (res *v1.CMDBHostByServiceRes, err error) {
+	result := c.cmdbApp.ListHostsByService(req.Service)
+	return &v1.CMDBHostByServiceRes{
+		Items:   result["items"],
+		Success: result["success"].(bool),
+		Error:   getString(result, "error"),
+		Message: getString(result, "message"),
+	}, nil
+}
+
+func (c *ControllerV1) CMDBHostByCluster(ctx context.Context, req *v1.CMDBHostByClusterReq) (res *v1.CMDBHostByClusterRes, err error) {
+	result := c.cmdbApp.ListHostsByCluster(req.Cluster)
+	return &v1.CMDBHostByClusterRes{
+		Items:   result["items"],
+		Success: result["success"].(bool),
+		Error:   getString(result, "error"),
+		Message: getString(result, "message"),
+	}, nil
+}
+
+func (c *ControllerV1) CMDBHostCreate(ctx context.Context, req *v1.CMDBHostCreateReq) (res *v1.CMDBHostCreateRes, err error) {
+	host := cmdb.HostInfo{
+		Name:        req.Name,
+		Service:     req.Service,
+		IP:          req.IP,
+		Node:        req.Node,
+		Cluster:     req.Cluster,
+		Env:         req.Env,
+		Status:      req.Status,
+		LastRestart: req.LastRestart,
+		Tags:        req.Tags,
+	}
+	result := c.cmdbApp.CreateHost(host)
+	return &v1.CMDBHostCreateRes{
+		Success: result["success"].(bool),
+		Host:    result["host"],
+		Error:   getString(result, "error"),
+		Message: getString(result, "message"),
+	}, nil
+}
+
+func (c *ControllerV1) CMDBHostUpdate(ctx context.Context, req *v1.CMDBHostUpdateReq) (res *v1.CMDBHostUpdateRes, err error) {
+	host := cmdb.HostInfo{
+		Name:        req.Name,
+		Service:     req.Service,
+		IP:          req.IP,
+		Node:        req.Node,
+		Cluster:     req.Cluster,
+		Env:         req.Env,
+		Status:      req.Status,
+		LastRestart: req.LastRestart,
+		Tags:        req.Tags,
+	}
+	result := c.cmdbApp.UpdateHost(req.Name, host)
+	return &v1.CMDBHostUpdateRes{
+		Success: result["success"].(bool),
+		Host:    result["host"],
+		Error:   getString(result, "error"),
+		Message: getString(result, "message"),
+	}, nil
+}
+
+func (c *ControllerV1) CMDBHostDelete(ctx context.Context, req *v1.CMDBHostDeleteReq) (res *v1.CMDBHostDeleteRes, err error) {
+	result := c.cmdbApp.DeleteHost(req.Name)
+	return &v1.CMDBHostDeleteRes{
+		Success: result["success"].(bool),
+		Error:   getString(result, "error"),
+		Message: getString(result, "message"),
+	}, nil
+}
+
 func getString(m map[string]interface{}, key string) string {
 	if v, ok := m[key]; ok {
 		if s, ok := v.(string); ok {

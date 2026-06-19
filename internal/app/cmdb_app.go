@@ -6,11 +6,16 @@ import (
 )
 
 type CMDBApp struct {
-	repo cmdb.ServiceRepository
+	repo     cmdb.ServiceRepository
+	hostRepo cmdb.HostRepository
 }
 
 func NewCMDBApp(repo cmdb.ServiceRepository) *CMDBApp {
 	return &CMDBApp{repo: repo}
+}
+
+func NewCMDBAppWithHost(repo cmdb.ServiceRepository, hostRepo cmdb.HostRepository) *CMDBApp {
+	return &CMDBApp{repo: repo, hostRepo: hostRepo}
 }
 
 func (a *CMDBApp) ListAll() map[string]interface{} {
@@ -114,4 +119,77 @@ func (a *CMDBApp) DeleteService(name string) map[string]interface{} {
 		return map[string]interface{}{"success": false, "error": err.Error()}
 	}
 	return map[string]interface{}{"success": true, "message": "service deleted"}
+}
+
+func (a *CMDBApp) GetHost(name string) map[string]interface{} {
+	if a.hostRepo == nil {
+		return map[string]interface{}{"success": false, "error": "host repository not configured"}
+	}
+	host, found := a.hostRepo.GetHost(name)
+	if !found {
+		return map[string]interface{}{"success": false, "error": "host not found"}
+	}
+	return map[string]interface{}{"success": true, "host": host}
+}
+
+func (a *CMDBApp) ListHostsByService(service string) map[string]interface{} {
+	if a.hostRepo == nil {
+		return map[string]interface{}{"success": false, "error": "host repository not configured"}
+	}
+	items := a.hostRepo.ListHostsByService(service)
+	return map[string]interface{}{"success": true, "items": items}
+}
+
+func (a *CMDBApp) ListHostsByCluster(cluster string) map[string]interface{} {
+	if a.hostRepo == nil {
+		return map[string]interface{}{"success": false, "error": "host repository not configured"}
+	}
+	items := a.hostRepo.ListHostsByCluster(cluster)
+	return map[string]interface{}{"success": true, "items": items}
+}
+
+func (a *CMDBApp) ListAllHosts() map[string]interface{} {
+	if a.hostRepo == nil {
+		return map[string]interface{}{"success": false, "error": "host repository not configured"}
+	}
+	items := a.hostRepo.ListAllHosts()
+	return map[string]interface{}{"success": true, "items": items}
+}
+
+func (a *CMDBApp) CreateHost(host cmdb.HostInfo) map[string]interface{} {
+	if a.hostRepo == nil {
+		return map[string]interface{}{"success": false, "error": "host repository not configured"}
+	}
+	if err := validateHost(host); err != nil {
+		return map[string]interface{}{"success": false, "error": err.Error()}
+	}
+	if err := a.hostRepo.CreateHost(host); err != nil {
+		return map[string]interface{}{"success": false, "error": err.Error()}
+	}
+	created, _ := a.hostRepo.GetHost(host.Name)
+	return map[string]interface{}{"success": true, "host": created, "message": "host created"}
+}
+
+func (a *CMDBApp) UpdateHost(name string, host cmdb.HostInfo) map[string]interface{} {
+	if a.hostRepo == nil {
+		return map[string]interface{}{"success": false, "error": "host repository not configured"}
+	}
+	if err := validateHost(host); err != nil {
+		return map[string]interface{}{"success": false, "error": err.Error()}
+	}
+	if err := a.hostRepo.UpdateHost(name, host); err != nil {
+		return map[string]interface{}{"success": false, "error": err.Error()}
+	}
+	updated, _ := a.hostRepo.GetHost(name)
+	return map[string]interface{}{"success": true, "host": updated, "message": "host updated"}
+}
+
+func (a *CMDBApp) DeleteHost(name string) map[string]interface{} {
+	if a.hostRepo == nil {
+		return map[string]interface{}{"success": false, "error": "host repository not configured"}
+	}
+	if err := a.hostRepo.DeleteHost(name); err != nil {
+		return map[string]interface{}{"success": false, "error": err.Error()}
+	}
+	return map[string]interface{}{"success": true, "message": "host deleted"}
 }

@@ -10,9 +10,14 @@ import (
 )
 
 var cmdbRepository cmdb.ServiceRepository
+var cmdbHostRepository cmdb.HostRepository
 
 func SetCMDBRepository(repo cmdb.ServiceRepository) {
 	cmdbRepository = repo
+}
+
+func SetCMDBHostRepository(repo cmdb.HostRepository) {
+	cmdbHostRepository = repo
 }
 
 func BuildTieredTools(ctx context.Context, userToolStore skills.UserSkillStore, dynamicMCPReg *DynamicMCPRegistry) []skills.TieredTool {
@@ -95,6 +100,16 @@ func BuildTieredTools(ctx context.Context, userToolStore skills.UserSkillStore, 
 
 	if cmdbRepository != nil {
 		if t := NewQueryCMDBTool(cmdbRepository); t != nil {
+			tiered = append(tiered, skills.TieredTool{
+				Tool:    t,
+				Tier:    skills.TierSkillGate,
+				Domains: []string{"metrics", "logs", "knowledge"},
+			})
+		}
+	}
+
+	if cmdbHostRepository != nil {
+		if t := NewQueryCMDBHostTool(cmdbHostRepository); t != nil {
 			tiered = append(tiered, skills.TieredTool{
 				Tool:    t,
 				Tier:    skills.TierSkillGate,

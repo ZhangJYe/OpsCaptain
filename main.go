@@ -13,8 +13,10 @@ import (
 	aiservice "SuperBizAgent/internal/ai/service"
 	"SuperBizAgent/internal/ai/skills"
 	"SuperBizAgent/internal/ai/tools"
+	aicmdb "SuperBizAgent/internal/ai/cmdb"
 	"SuperBizAgent/internal/app"
 	"SuperBizAgent/internal/controller/chat"
+	"SuperBizAgent/internal/ai/contextengine"
 	infrafs "SuperBizAgent/internal/infra/filestore"
 	inframv "SuperBizAgent/internal/infra/milvus"
 	infracmdb "SuperBizAgent/internal/infra/cmdb"
@@ -231,8 +233,11 @@ func main() {
 			tools.SetCMDBRepository(&tools.UnavailableRepository{})
 		} else {
 			adapter := app.NewCMDBAdapter(loader)
-			cmdbApp = app.NewCMDBApp(adapter)
+			cmdbApp = app.NewCMDBAppWithHost(adapter, adapter)
 			tools.SetCMDBRepository(adapter)
+			tools.SetCMDBHostRepository(adapter)
+			enricher := aicmdb.NewCMDBEnricher(adapter)
+			contextengine.SetGlobalCMDBEnricher(enricher)
 		}
 	} else {
 		cmdbApp = app.NewCMDBApp(nil)

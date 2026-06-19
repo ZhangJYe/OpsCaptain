@@ -80,7 +80,7 @@ var (
 
 func NewMemoryService() *MemoryService {
 	return &MemoryService{
-		assembler: contextengine.NewAssembler(),
+		assembler: contextengine.NewAssemblerWithGlobal(),
 	}
 }
 

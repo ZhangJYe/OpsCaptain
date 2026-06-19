@@ -19,6 +19,19 @@ type CMDBServiceDTO struct {
 	Tags         []string `yaml:"tags,omitempty"`
 }
 
+type HostDTO struct {
+	Name        string   `yaml:"name"`
+	Service     string   `yaml:"service"`
+	IP          string   `yaml:"ip"`
+	Node        string   `yaml:"node,omitempty"`
+	Cluster     string   `yaml:"cluster"`
+	Env         string   `yaml:"env"`
+	Status      string   `yaml:"status"`
+	LastRestart string   `yaml:"last_restart,omitempty"`
+	Tags        []string `yaml:"tags,omitempty"`
+}
+
 type cmdbFile struct {
 	Services []CMDBServiceDTO `yaml:"services"`
+	Hosts    []HostDTO        `yaml:"hosts,omitempty"`
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"SuperBizAgent/internal/ai/contextcompression"
@@ -12,13 +13,36 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
+var (
+	cmdbEnricherMu sync.RWMutex
+	globalCMDBEnricher CMDBEnricher
+)
+
+func SetGlobalCMDBEnricher(e CMDBEnricher) {
+	cmdbEnricherMu.Lock()
+	defer cmdbEnricherMu.Unlock()
+	globalCMDBEnricher = e
+}
+
+func NewAssemblerWithGlobal() *Assembler {
+	a := NewAssembler()
+	cmdbEnricherMu.RLock()
+	e := globalCMDBEnricher
+	cmdbEnricherMu.RUnlock()
+	if e != nil {
+		a.WithCMDBEnricher(e)
+	}
+	return a
+}
+
 type Assembler struct {
-	resolver     *PolicyResolver
-	now          func() time.Time
-	historyRec   *HistoryRecaller
-	toolRec      *ToolRecaller
-	toolReranker *ToolReranker
-	intentRec    *IntentRecognizer
+	resolver      *PolicyResolver
+	now           func() time.Time
+	historyRec    *HistoryRecaller
+	toolRec       *ToolRecaller
+	toolReranker  *ToolReranker
+	intentRec     *IntentRecognizer
+	cmdbEnricher  CMDBEnricher
 }
 
 func NewAssembler() *Assembler {
@@ -37,6 +61,11 @@ func (a *Assembler) WithToolReranker(r *ToolReranker) *Assembler {
 
 func (a *Assembler) WithIntentRecognizer(r *IntentRecognizer) *Assembler {
 	a.intentRec = r
+	return a
+}
+
+func (a *Assembler) WithCMDBEnricher(e CMDBEnricher) *Assembler {
+	a.cmdbEnricher = e
 	return a
 }
 
@@ -118,6 +147,20 @@ func (a *Assembler) Assemble(ctx context.Context, req ContextRequest, history []
 			DroppedCount:  len(droppedMemory),
 			Notes:         memoryNotes,
 		})
+	}
+
+	if a.cmdbEnricher != nil {
+		cmdbItems := a.cmdbEnricher.Enrich(ctx, req.Query)
+		if len(cmdbItems) > 0 {
+			pkg.DocumentItems = append(pkg.DocumentItems, cmdbItems...)
+			trace.SourcesConsidered += len(cmdbItems)
+			trace.SourcesSelected += len(cmdbItems)
+			trace.Stages = append(trace.Stages, StageTrace{
+				Name:          "cmdb",
+				SelectedCount: len(cmdbItems),
+				Notes:         []string{fmt.Sprintf("enriched %d CMDB items", len(cmdbItems))},
+			})
+		}
 	}
 
 	if profile.AllowDocs {

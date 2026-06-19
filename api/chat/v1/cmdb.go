@@ -137,3 +137,101 @@ type CMDBServiceDeleteRes struct {
 	Error   string `json:"error,omitempty"`
 	Message string `json:"message,omitempty"`
 }
+
+type CMDBHostListReq struct {
+	g.Meta `path:"/cmdb/hosts" method:"get" summary:"查询所有主机"`
+}
+
+type CMDBHostListRes struct {
+	Items    interface{} `json:"items"`
+	Success  bool        `json:"success"`
+	Error    string      `json:"error,omitempty"`
+	Message  string      `json:"message,omitempty"`
+}
+
+type CMDBHostGetReq struct {
+	g.Meta `path:"/cmdb/hosts/{name}" method:"get" summary:"获取单个主机"`
+	Name   string `json:"name" v:"required|max-length:128#主机名不能为空|主机名长度不能超过128"`
+}
+
+type CMDBHostGetRes struct {
+	Host    interface{} `json:"host,omitempty"`
+	Success bool        `json:"success"`
+	Error   string      `json:"error,omitempty"`
+	Message string      `json:"message,omitempty"`
+}
+
+type CMDBHostByServiceReq struct {
+	g.Meta  `path:"/cmdb/hosts/service/{service}" method:"get" summary:"按服务查询主机"`
+	Service string `json:"service" v:"required|max-length:128#服务名不能为空|服务名长度不能超过128"`
+}
+
+type CMDBHostByServiceRes struct {
+	Items    interface{} `json:"items"`
+	Success  bool        `json:"success"`
+	Error    string      `json:"error,omitempty"`
+	Message  string      `json:"message,omitempty"`
+}
+
+type CMDBHostByClusterReq struct {
+	g.Meta  `path:"/cmdb/hosts/cluster/{cluster}" method:"get" summary:"按集群查询主机"`
+	Cluster string `json:"cluster" v:"required|max-length:128#集群名不能为空|集群名长度不能超过128"`
+}
+
+type CMDBHostByClusterRes struct {
+	Items    interface{} `json:"items"`
+	Success  bool        `json:"success"`
+	Error    string      `json:"error,omitempty"`
+	Message  string      `json:"message,omitempty"`
+}
+
+type CMDBHostCreateReq struct {
+	g.Meta       `path:"/cmdb/hosts" method:"post" summary:"新增主机"`
+	Name         string   `json:"name" v:"required"`
+	Service      string   `json:"service" v:"required"`
+	IP           string   `json:"ip" v:"required"`
+	Node         string   `json:"node,omitempty"`
+	Cluster      string   `json:"cluster" v:"required"`
+	Env          string   `json:"env" v:"required"`
+	Status       string   `json:"status" v:"required"`
+	LastRestart  string   `json:"last_restart,omitempty"`
+	Tags         []string `json:"tags,omitempty"`
+}
+
+type CMDBHostCreateRes struct {
+	Success bool        `json:"success"`
+	Host    interface{} `json:"host,omitempty"`
+	Error   string      `json:"error,omitempty"`
+	Message string      `json:"message,omitempty"`
+}
+
+type CMDBHostUpdateReq struct {
+	g.Meta       `path:"/cmdb/hosts/{name}" method:"put" summary:"更新主机"`
+	Name         string   `json:"name" v:"required"`
+	Service      string   `json:"service" v:"required"`
+	IP           string   `json:"ip" v:"required"`
+	Node         string   `json:"node,omitempty"`
+	Cluster      string   `json:"cluster" v:"required"`
+	Env          string   `json:"env" v:"required"`
+	Status       string   `json:"status" v:"required"`
+	LastRestart  string   `json:"last_restart,omitempty"`
+	Tags         []string `json:"tags,omitempty"`
+}
+
+type CMDBHostUpdateRes struct {
+	Success bool        `json:"success"`
+	Host    interface{} `json:"host,omitempty"`
+	Error   string      `json:"error,omitempty"`
+	Message string      `json:"message,omitempty"`
+}
+
+type CMDBHostDeleteReq struct {
+	g.Meta `path:"/cmdb/hosts/{name}" method:"delete" summary:"删除主机"`
+	Name   string `json:"name" v:"required"`
+}
+
+type CMDBHostDeleteRes struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
+	Message string `json:"message,omitempty"`
+}

@@ -32,3 +32,25 @@ type ServiceRepository interface {
 	UpdateService(name string, svc ServiceInfo) error
 	DeleteService(name string) error
 }
+
+type HostInfo struct {
+	Name        string   `json:"name"`
+	Service     string   `json:"service"`
+	IP          string   `json:"ip"`
+	Node        string   `json:"node,omitempty"`
+	Cluster     string   `json:"cluster"`
+	Env         string   `json:"env"`
+	Status      string   `json:"status"`
+	LastRestart string   `json:"last_restart,omitempty"`
+	Tags        []string `json:"tags,omitempty"`
+}
+
+type HostRepository interface {
+	GetHost(name string) (*HostInfo, bool)
+	ListHostsByService(service string) []HostInfo
+	ListHostsByCluster(cluster string) []HostInfo
+	ListAllHosts() []HostInfo
+	CreateHost(host HostInfo) error
+	UpdateHost(name string, host HostInfo) error
+	DeleteHost(name string) error
+}

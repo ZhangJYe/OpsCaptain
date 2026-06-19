@@ -106,3 +106,79 @@ func (a *CMDBAdapter) UpdateService(name string, svc cmdb.ServiceInfo) error {
 func (a *CMDBAdapter) DeleteService(name string) error {
 	return a.loader.DeleteService(name)
 }
+
+func hostDTOToInfo(dto infracmdb.HostDTO) cmdb.HostInfo {
+	return cmdb.HostInfo{
+		Name:        dto.Name,
+		Service:     dto.Service,
+		IP:          dto.IP,
+		Node:        dto.Node,
+		Cluster:     dto.Cluster,
+		Env:         dto.Env,
+		Status:      dto.Status,
+		LastRestart: dto.LastRestart,
+		Tags:        dto.Tags,
+	}
+}
+
+func hostInfoToDTO(info cmdb.HostInfo) infracmdb.HostDTO {
+	return infracmdb.HostDTO{
+		Name:        info.Name,
+		Service:     info.Service,
+		IP:          info.IP,
+		Node:        info.Node,
+		Cluster:     info.Cluster,
+		Env:         info.Env,
+		Status:      info.Status,
+		LastRestart: info.LastRestart,
+		Tags:        info.Tags,
+	}
+}
+
+func (a *CMDBAdapter) GetHost(name string) (*cmdb.HostInfo, bool) {
+	dto, ok := a.loader.GetHost(name)
+	if !ok {
+		return nil, false
+	}
+	info := hostDTOToInfo(dto)
+	return &info, true
+}
+
+func (a *CMDBAdapter) ListHostsByService(service string) []cmdb.HostInfo {
+	dtos := a.loader.ListHostsByService(service)
+	result := make([]cmdb.HostInfo, 0, len(dtos))
+	for _, dto := range dtos {
+		result = append(result, hostDTOToInfo(dto))
+	}
+	return result
+}
+
+func (a *CMDBAdapter) ListHostsByCluster(cluster string) []cmdb.HostInfo {
+	dtos := a.loader.ListHostsByCluster(cluster)
+	result := make([]cmdb.HostInfo, 0, len(dtos))
+	for _, dto := range dtos {
+		result = append(result, hostDTOToInfo(dto))
+	}
+	return result
+}
+
+func (a *CMDBAdapter) ListAllHosts() []cmdb.HostInfo {
+	dtos := a.loader.ListAllHosts()
+	result := make([]cmdb.HostInfo, 0, len(dtos))
+	for _, dto := range dtos {
+		result = append(result, hostDTOToInfo(dto))
+	}
+	return result
+}
+
+func (a *CMDBAdapter) CreateHost(host cmdb.HostInfo) error {
+	return a.loader.CreateHost(hostInfoToDTO(host))
+}
+
+func (a *CMDBAdapter) UpdateHost(name string, host cmdb.HostInfo) error {
+	return a.loader.UpdateHost(name, hostInfoToDTO(host))
+}
+
+func (a *CMDBAdapter) DeleteHost(name string) error {
+	return a.loader.DeleteHost(name)
+}

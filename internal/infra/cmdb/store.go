@@ -16,6 +16,8 @@ type YAMLLoader struct {
 	services    []CMDBServiceDTO
 	index       map[string]int
 	reverseDeps map[string][]string
+	hosts       []HostDTO
+	hostIndex   map[string]int
 }
 
 func NewYAMLLoader(path string) (*YAMLLoader, error) {
@@ -53,6 +55,12 @@ func (l *YAMLLoader) load() error {
 		for _, dep := range svc.Dependencies {
 			l.reverseDeps[dep] = append(l.reverseDeps[dep], svc.Name)
 		}
+	}
+
+	l.hosts = file.Hosts
+	l.hostIndex = make(map[string]int, len(l.hosts))
+	for i, h := range l.hosts {
+		l.hostIndex[h.Name] = i
 	}
 	return nil
 }
@@ -144,7 +152,7 @@ func (l *YAMLLoader) GetDependents(name string) []string {
 }
 
 func (l *YAMLLoader) save() error {
-	data, err := yaml.Marshal(cmdbFile{Services: l.services})
+	data, err := yaml.Marshal(cmdbFile{Services: l.services, Hosts: l.hosts})
 	if err != nil {
 		return fmt.Errorf("marshal cmdb yaml: %w", err)
 	}
@@ -180,6 +188,10 @@ func (l *YAMLLoader) rebuildIndex() {
 		for _, dep := range svc.Dependencies {
 			l.reverseDeps[dep] = append(l.reverseDeps[dep], svc.Name)
 		}
+	}
+	l.hostIndex = make(map[string]int, len(l.hosts))
+	for i, h := range l.hosts {
+		l.hostIndex[h.Name] = i
 	}
 }
 
@@ -227,6 +239,100 @@ func (l *YAMLLoader) DeleteService(name string) error {
 		return fmt.Errorf("service %q not found", name)
 	}
 	l.services = append(l.services[:idx], l.services[idx+1:]...)
+	l.rebuildIndex()
+	return l.save()
+}
+
+func (l *YAMLLoader) GetHost(name string) (HostDTO, bool) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
+	idx, ok := l.hostIndex[name]
+	if !ok {
+		return HostDTO{}, false
+	}
+	return l.hosts[idx], true
+}
+
+func (l *YAMLLoader) ListHostsByService(service string) []HostDTO {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
+	var results []HostDTO
+	for _, h := range l.hosts {
+		if h.Service == service {
+			results = append(results, h)
+		}
+	}
+	return results
+}
+
+func (l *YAMLLoader) ListHostsByCluster(cluster string) []HostDTO {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
+	var results []HostDTO
+	for _, h := range l.hosts {
+		if h.Cluster == cluster {
+			results = append(results, h)
+		}
+	}
+	return results
+}
+
+func (l *YAMLLoader) ListAllHosts() []HostDTO {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
+	result := make([]HostDTO, len(l.hosts))
+	copy(result, l.hosts)
+	return result
+}
+
+func (l *YAMLLoader) CreateHost(host HostDTO) error {
+	l.writeMu.Lock()
+	defer l.writeMu.Unlock()
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if _, exists := l.hostIndex[host.Name]; exists {
+		return fmt.Errorf("host %q already exists", host.Name)
+	}
+	l.hosts = append(l.hosts, host)
+	l.rebuildIndex()
+	return l.save()
+}
+
+func (l *YAMLLoader) UpdateHost(name string, host HostDTO) error {
+	l.writeMu.Lock()
+	defer l.writeMu.Unlock()
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	idx, exists := l.hostIndex[name]
+	if !exists {
+		return fmt.Errorf("host %q not found", name)
+	}
+	host.Name = name
+	l.hosts[idx] = host
+	l.rebuildIndex()
+	return l.save()
+}
+
+func (l *YAMLLoader) DeleteHost(name string) error {
+	l.writeMu.Lock()
+	defer l.writeMu.Unlock()
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	idx, exists := l.hostIndex[name]
+	if !exists {
+		return fmt.Errorf("host %q not found", name)
+	}
+	l.hosts = append(l.hosts[:idx], l.hosts[idx+1:]...)
 	l.rebuildIndex()
 	return l.save()
 }

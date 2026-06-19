@@ -34,3 +34,31 @@ func validateService(svc cmdb.ServiceInfo) error {
 	}
 	return nil
 }
+
+var validHostStatuses = map[string]bool{
+	"running":   true,
+	"stopped":   true,
+	"unhealthy": true,
+}
+
+func validateHost(host cmdb.HostInfo) error {
+	if strings.TrimSpace(host.Name) == "" {
+		return fmt.Errorf("name is required")
+	}
+	if strings.TrimSpace(host.Service) == "" {
+		return fmt.Errorf("service is required")
+	}
+	if strings.TrimSpace(host.IP) == "" {
+		return fmt.Errorf("ip is required")
+	}
+	if strings.TrimSpace(host.Cluster) == "" {
+		return fmt.Errorf("cluster is required")
+	}
+	if strings.TrimSpace(host.Env) == "" {
+		return fmt.Errorf("env is required")
+	}
+	if host.Status != "" && !validHostStatuses[host.Status] {
+		return fmt.Errorf("status must be one of: running, stopped, unhealthy")
+	}
+	return nil
+}
