@@ -367,3 +367,32 @@ type MemoryPromoteReq struct {
 type MemoryActionRes struct {
 	Success bool `json:"success"`
 }
+
+type IncidentLifecycleUpdateReq struct {
+	g.Meta  `path:"/ai_ops/incidents/{incident_id}/lifecycle" method:"put" summary:"更新事件生命周期"`
+	IncidentID      string `json:"incident_id" v:"required"`
+	Status          string `json:"status,omitempty"`
+	Severity        string `json:"severity,omitempty"`
+	AffectedServices []string `json:"affected_services,omitempty"`
+	ImpactSummary   string `json:"impact_summary,omitempty"`
+}
+
+type IncidentLifecycleUpdateRes struct {
+	Success bool        `json:"success"`
+	Incident interface{} `json:"incident,omitempty"`
+	Error   string      `json:"error,omitempty"`
+	Message string      `json:"message,omitempty"`
+}
+
+type IncidentPostmortemReq struct {
+	g.Meta  `path:"/ai_ops/incidents/{incident_id}/postmortem" method:"get" summary:"生成事件 Postmortem"`
+	IncidentID string `json:"incident_id" v:"required"`
+}
+
+type IncidentPostmortemRes struct {
+	Success    bool        `json:"success"`
+	Postmortem interface{} `json:"postmortem,omitempty"`
+	Markdown   string      `json:"markdown,omitempty"`
+	Error      string      `json:"error,omitempty"`
+	Message    string      `json:"message,omitempty"`
+}

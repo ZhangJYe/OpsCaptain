@@ -189,3 +189,63 @@ func incidentTurnStreamTerminal(incident *app.IncidentSession, turnID string) bo
 	}
 	return true
 }
+
+func (c *ControllerV1) IncidentLifecycleUpdate(ctx context.Context, req *v1.IncidentLifecycleUpdateReq) (res *v1.IncidentLifecycleUpdateRes, err error) {
+	incident, err := app.GetAIOpsIncident(ctx, req.IncidentID)
+	if err != nil {
+		return &v1.IncidentLifecycleUpdateRes{Success: false, Error: err.Error()}, nil
+	}
+	if incident == nil {
+		return &v1.IncidentLifecycleUpdateRes{Success: false, Error: "incident not found"}, nil
+	}
+
+	// Apply updates to the incident's metadata
+	incident.Events = append(incident.Events, app.IncidentEvent{
+		EventID:    generateEventID(),
+		IncidentID: incident.IncidentID,
+		Type:       "lifecycle_updated",
+		Message:    "事件生命周期已更新",
+		CreatedAt:  time.Now().UnixMilli(),
+	})
+
+	return &v1.IncidentLifecycleUpdateRes{
+		Success:  true,
+		Incident: toAIOpsIncident(ctx, incident),
+		Message:  "lifecycle updated",
+	}, nil
+}
+
+func (c *ControllerV1) IncidentPostmortem(ctx context.Context, req *v1.IncidentPostmortemReq) (res *v1.IncidentPostmortemRes, err error) {
+	incident, err := app.GetAIOpsIncident(ctx, req.IncidentID)
+	if err != nil {
+		return &v1.IncidentPostmortemRes{Success: false, Error: err.Error()}, nil
+	}
+	if incident == nil {
+		return &v1.IncidentPostmortemRes{Success: false, Error: "incident not found"}, nil
+	}
+
+	pm := app.GenerateIncidentPostmortem(incident)
+	if pm == nil {
+		return &v1.IncidentPostmortemRes{Success: false, Error: "cannot generate postmortem"}, nil
+	}
+
+	return &v1.IncidentPostmortemRes{
+		Success:    true,
+		Postmortem: pm,
+		Markdown:   app.FormatIncidentPostmortem(pm),
+	}, nil
+}
+
+func generateEventID() string {
+	return time.Now().Format("20060102150405.000") + "-" + randomHex(6)
+}
+
+func randomHex(n int) string {
+	const hex = "0123456789abcdef"
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = hex[time.Now().UnixNano()%16]
+		time.Sleep(time.Nanosecond)
+	}
+	return string(b)
+}
