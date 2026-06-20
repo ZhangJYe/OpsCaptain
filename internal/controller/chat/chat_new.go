@@ -23,7 +23,7 @@ type ControllerV1 struct {
 	mcpToolApp         *app.MCPToolApp
 	userSkillApp       *app.UserSkillApp
 	cmdbApp            *app.CMDBApp
-	feedbackStore      *feedback.Store
+	feedbackStore      feedback.StoreInterface
 	analyticsCollector *analytics.Collector
 	shareStore         *collaboration.ShareStore
 	feishuSender       *chatops.FeishuSender
@@ -32,7 +32,7 @@ type ControllerV1 struct {
 func NewV1(chatApp *app.ChatApp, knowledgeApp *app.KnowledgeApp, aiopsApp *app.AIOpsApp,
 	changeEventApp *app.ChangeEventApp,
 	mcpToolApp *app.MCPToolApp, userSkillApp *app.UserSkillApp, cmdbApp *app.CMDBApp,
-	feedbackStore *feedback.Store, analyticsCollector *analytics.Collector,
+	feedbackStore feedback.StoreInterface, analyticsCollector *analytics.Collector,
 	shareStore *collaboration.ShareStore, feishuSender *chatops.FeishuSender) chat.IChatV1 {
 	return &ControllerV1{
 		service:            sse.New(),

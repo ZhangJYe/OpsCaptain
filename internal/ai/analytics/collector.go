@@ -15,12 +15,13 @@ type queryRecord struct {
 }
 
 type Collector struct {
-	mu         sync.RWMutex
-	queries    []queryRecord
-	toolCalls  map[string]int
-	modelCalls map[string]int
-	totalMs    int64
-	totalCount int
+	mu            sync.RWMutex
+	queries       []queryRecord
+	toolCalls     map[string]int
+	modelCalls    map[string]int
+	totalMs       int64
+	totalCount    int
+	feedbackScore float64
 }
 
 var defaultCollector *Collector
@@ -57,6 +58,12 @@ func (c *Collector) RecordQuery(query, model string, tools []string, durationMs 
 	}
 	c.totalMs += durationMs
 	c.totalCount++
+}
+
+func (c *Collector) SetFeedbackScore(score float64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.feedbackScore = score
 }
 
 func (c *Collector) Stats() DashboardStats {
@@ -106,6 +113,7 @@ func (c *Collector) Stats() DashboardStats {
 		ToolUsage:     toolUsage,
 		ModelUsage:    modelUsage,
 		AvgResponseMs: avgMs,
+		FeedbackScore: c.feedbackScore,
 		TopQueries:    topQueries,
 		QueryTrend:    queryTrend,
 	}

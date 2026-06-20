@@ -307,7 +307,20 @@ func main() {
 		metrics.Handler().ServeHTTP(r.Response.RawWriter(), r.Request)
 	})
 
-	feedbackStore := feedback.NewStore()
+	// Feedback store: try Redis first, fall back to in-memory
+	var feedbackStore feedback.StoreInterface
+	func() {
+		defer func() { _ = recover() }()
+		redis := g.Redis()
+		if redis != nil {
+			feedbackStore = feedback.NewRedisStore()
+			g.Log().Info(ctx, "[feedback] using Redis store")
+		}
+	}()
+	if feedbackStore == nil {
+		feedbackStore = feedback.NewStore()
+		g.Log().Info(ctx, "[feedback] using in-memory store (Redis unavailable)")
+	}
 	analyticsCollector := analytics.NewCollector()
 	shareStore := collaboration.NewShareStore()
 

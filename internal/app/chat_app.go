@@ -247,3 +247,24 @@ func chatTimeout(ctx context.Context) time.Duration {
 	}
 	return 0
 }
+
+// GetSessionMessages returns the chat messages for a session (used by share feature).
+func (a *ChatApp) GetSessionMessages(ctx context.Context, sessionID string) ([]map[string]interface{}, error) {
+	if sessionID == "" {
+		return nil, nil
+	}
+	// Get messages from global memory service
+	mem := memory.GetSimpleMemory(sessionID)
+	if mem == nil {
+		return nil, nil
+	}
+	msgs := mem.GetMessages()
+	var result []map[string]interface{}
+	for _, m := range msgs {
+		result = append(result, map[string]interface{}{
+			"role":    string(m.Role),
+			"content": m.Content,
+		})
+	}
+	return result, nil
+}

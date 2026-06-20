@@ -8,6 +8,13 @@ import (
 	"github.com/gogf/gf/v2/frame/g"
 )
 
+// StoreInterface defines the feedback store contract.
+type StoreInterface interface {
+	Submit(entry *FeedbackEntry) error
+	GetBySession(sessionID string) []FeedbackEntry
+	Stats() FeedbackStats
+}
+
 type Store struct {
 	mu      sync.RWMutex
 	entries map[string]*FeedbackEntry

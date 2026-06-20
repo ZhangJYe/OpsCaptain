@@ -6,11 +6,13 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/gogf/gf/v2/frame/g"
 )
 
 func (c *ControllerV1) Chat(ctx context.Context, req *v1.ChatReq) (res *v1.ChatRes, err error) {
+	startMs := time.Now().UnixMilli()
 	result, err := c.chatApp.HandleChat(ctx, &app.ChatInput{
 		SessionID: req.Id,
 		Question:  req.Question,
@@ -30,6 +32,11 @@ func (c *ControllerV1) Chat(ctx context.Context, req *v1.ChatReq) (res *v1.ChatR
 		if r := g.RequestFromCtx(ctx); r != nil {
 			r.Response.WriteStatus(result.HTTPStatus)
 		}
+	}
+	// Record analytics
+	if c.analyticsCollector != nil {
+		durationMs := time.Now().UnixMilli() - startMs
+		c.analyticsCollector.RecordQuery(req.Question, result.Mode, nil, durationMs)
 	}
 	return &v1.ChatRes{
 		Answer:            result.Answer,

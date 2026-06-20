@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gogf/gf/v2/frame/g"
 )
@@ -58,6 +59,7 @@ func (s *sseStreamSink) SendEvent(eventType, data string) {
 }
 
 func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (res *v1.ChatStreamRes, err error) {
+	startMs := time.Now().UnixMilli()
 	if err := c.chatApp.ValidateChatInput(ctx, req.Id, req.Question); err != nil {
 		var rejected *app.PromptRejectedError
 		if errors.As(err, &rejected) {
@@ -81,6 +83,11 @@ func (c *ControllerV1) ChatStream(ctx context.Context, req *v1.ChatStreamReq) (r
 	}, sink)
 	if err != nil {
 		return nil, err
+	}
+	// Record analytics
+	if c.analyticsCollector != nil {
+		durationMs := time.Now().UnixMilli() - startMs
+		c.analyticsCollector.RecordQuery(req.Question, "stream", nil, durationMs)
 	}
 	_ = result
 	return &v1.ChatStreamRes{}, nil

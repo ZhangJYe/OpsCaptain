@@ -28,6 +28,16 @@ func (c *ControllerV1) ShareGet(ctx context.Context, req *v1.ShareGetReq) (res *
 			Error:   "share link not found or expired",
 		}, nil
 	}
+
+	// Fetch actual session messages
+	var messages interface{}
+	if c.chatApp != nil {
+		msgs, _ := c.chatApp.GetSessionMessages(ctx, link.SessionID)
+		if msgs != nil {
+			messages = msgs
+		}
+	}
+
 	return &v1.ShareGetRes{
 		Success: true,
 		Session: map[string]interface{}{
@@ -35,6 +45,7 @@ func (c *ControllerV1) ShareGet(ctx context.Context, req *v1.ShareGetReq) (res *
 			"created_by": link.CreatedBy,
 			"created_at": link.CreatedAt,
 			"expires_at": link.ExpiresAt,
+			"messages":   messages,
 		},
 	}, nil
 }
