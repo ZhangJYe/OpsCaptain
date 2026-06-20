@@ -46,4 +46,7 @@ type IChatV1 interface {
 	FeedbackSubmit(ctx context.Context, req *v1.FeedbackSubmitReq) (res *v1.FeedbackSubmitRes, err error)
 	FeedbackStats(ctx context.Context, req *v1.FeedbackStatsReq) (res *v1.FeedbackStatsRes, err error)
 	DashboardStats(ctx context.Context, req *v1.DashboardStatsReq) (res *v1.DashboardStatsRes, err error)
+	ShareCreate(ctx context.Context, req *v1.ShareCreateReq) (res *v1.ShareCreateRes, err error)
+	ShareGet(ctx context.Context, req *v1.ShareGetReq) (res *v1.ShareGetRes, err error)
+	ShareRevoke(ctx context.Context, req *v1.ShareRevokeReq) (res *v1.ShareRevokeRes, err error)
 }
