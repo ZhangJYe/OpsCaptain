@@ -113,7 +113,17 @@ func BuildTieredTools(ctx context.Context, userToolStore skills.UserSkillStore, 
 			tiered = append(tiered, skills.TieredTool{
 				Tool:    t,
 				Tier:    skills.TierSkillGate,
-				Domains: []string{"metrics", "logs", "knowledge"},
+				Domains: []string{"metrics", "logs"},
+			})
+		}
+	}
+
+	if cmdbRepository != nil {
+		if t := NewCorrelateAlertsTool(cmdbRepository); t != nil {
+			tiered = append(tiered, skills.TieredTool{
+				Tool:    t,
+				Tier:    skills.TierSkillGate,
+				Domains: []string{"metrics"},
 			})
 		}
 	}
