@@ -8,6 +8,7 @@ import (
 	"SuperBizAgent/internal/ai/actionexecutor"
 	"SuperBizAgent/internal/ai/contextengine"
 	"SuperBizAgent/internal/ai/events"
+	"SuperBizAgent/internal/ai/feedback"
 	"SuperBizAgent/internal/ai/indexer"
 	"SuperBizAgent/internal/ai/memory"
 	"SuperBizAgent/internal/ai/models"
@@ -303,12 +304,14 @@ func main() {
 		metrics.Handler().ServeHTTP(r.Response.RawWriter(), r.Request)
 	})
 
+	feedbackStore := feedback.NewStore()
+
 	s.Group("/api", func(group *ghttp.RouterGroup) {
 		group.Middleware(middleware.CORSMiddleware)
 		group.Middleware(middleware.AuthMiddleware)
 		group.Middleware(middleware.RateLimitMiddleware)
 		group.Middleware(middleware.ResponseMiddleware)
-		group.Bind(chat.NewV1(chatApp, knowledgeApp, aiopsApp, changeEventApp, mcpToolApp, userSkillApp, cmdbApp))
+		group.Bind(chat.NewV1(chatApp, knowledgeApp, aiopsApp, changeEventApp, mcpToolApp, userSkillApp, cmdbApp, feedbackStore))
 	})
 
 	if err := s.Start(); err != nil {

@@ -6,6 +6,7 @@ package chat
 
 import (
 	"SuperBizAgent/api/chat"
+	"SuperBizAgent/internal/ai/feedback"
 	"SuperBizAgent/internal/app"
 	"SuperBizAgent/internal/logic/sse"
 )
@@ -19,11 +20,13 @@ type ControllerV1 struct {
 	mcpToolApp     *app.MCPToolApp
 	userSkillApp   *app.UserSkillApp
 	cmdbApp        *app.CMDBApp
+	feedbackStore  *feedback.Store
 }
 
 func NewV1(chatApp *app.ChatApp, knowledgeApp *app.KnowledgeApp, aiopsApp *app.AIOpsApp,
 	changeEventApp *app.ChangeEventApp,
-	mcpToolApp *app.MCPToolApp, userSkillApp *app.UserSkillApp, cmdbApp *app.CMDBApp) chat.IChatV1 {
+	mcpToolApp *app.MCPToolApp, userSkillApp *app.UserSkillApp, cmdbApp *app.CMDBApp,
+	feedbackStore *feedback.Store) chat.IChatV1 {
 	return &ControllerV1{
 		service:        sse.New(),
 		chatApp:        chatApp,
@@ -33,5 +36,6 @@ func NewV1(chatApp *app.ChatApp, knowledgeApp *app.KnowledgeApp, aiopsApp *app.A
 		mcpToolApp:     mcpToolApp,
 		userSkillApp:   userSkillApp,
 		cmdbApp:        cmdbApp,
+		feedbackStore:  feedbackStore,
 	}
 }
