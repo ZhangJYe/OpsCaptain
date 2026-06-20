@@ -45,4 +45,5 @@ type IChatV1 interface {
 	CMDBServiceByTeam(ctx context.Context, req *v1.CMDBServiceByTeamReq) (res *v1.CMDBServiceByTeamRes, err error)
 	FeedbackSubmit(ctx context.Context, req *v1.FeedbackSubmitReq) (res *v1.FeedbackSubmitRes, err error)
 	FeedbackStats(ctx context.Context, req *v1.FeedbackStatsReq) (res *v1.FeedbackStatsRes, err error)
+	DashboardStats(ctx context.Context, req *v1.DashboardStatsReq) (res *v1.DashboardStatsRes, err error)
 }

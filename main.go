@@ -8,6 +8,7 @@ import (
 	"SuperBizAgent/internal/ai/actionexecutor"
 	"SuperBizAgent/internal/ai/contextengine"
 	"SuperBizAgent/internal/ai/events"
+	"SuperBizAgent/internal/ai/analytics"
 	"SuperBizAgent/internal/ai/feedback"
 	"SuperBizAgent/internal/ai/indexer"
 	"SuperBizAgent/internal/ai/memory"
@@ -305,13 +306,14 @@ func main() {
 	})
 
 	feedbackStore := feedback.NewStore()
+	analyticsCollector := analytics.NewCollector()
 
 	s.Group("/api", func(group *ghttp.RouterGroup) {
 		group.Middleware(middleware.CORSMiddleware)
 		group.Middleware(middleware.AuthMiddleware)
 		group.Middleware(middleware.RateLimitMiddleware)
 		group.Middleware(middleware.ResponseMiddleware)
-		group.Bind(chat.NewV1(chatApp, knowledgeApp, aiopsApp, changeEventApp, mcpToolApp, userSkillApp, cmdbApp, feedbackStore))
+		group.Bind(chat.NewV1(chatApp, knowledgeApp, aiopsApp, changeEventApp, mcpToolApp, userSkillApp, cmdbApp, feedbackStore, analyticsCollector))
 	})
 
 	if err := s.Start(); err != nil {
