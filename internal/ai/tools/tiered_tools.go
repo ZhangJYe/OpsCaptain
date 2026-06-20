@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"SuperBizAgent/internal/ai/actionexecutor"
 	"SuperBizAgent/internal/ai/cmdb"
 	"SuperBizAgent/internal/ai/skills"
 	"context"
@@ -10,14 +11,21 @@ import (
 )
 
 var cmdbRepository cmdb.ServiceRepository
-var cmdbHostRepository cmdb.HostRepository
 
 func SetCMDBRepository(repo cmdb.ServiceRepository) {
 	cmdbRepository = repo
 }
 
+var cmdbHostRepository cmdb.HostRepository
+
 func SetCMDBHostRepository(repo cmdb.HostRepository) {
 	cmdbHostRepository = repo
+}
+
+var actionRegistry *actionexecutor.Registry
+
+func SetActionRegistry(registry *actionexecutor.Registry) {
+	actionRegistry = registry
 }
 
 func BuildTieredTools(ctx context.Context, userToolStore skills.UserSkillStore, dynamicMCPReg *DynamicMCPRegistry) []skills.TieredTool {
@@ -124,6 +132,16 @@ func BuildTieredTools(ctx context.Context, userToolStore skills.UserSkillStore, 
 				Tool:    t,
 				Tier:    skills.TierSkillGate,
 				Domains: []string{"metrics"},
+			})
+		}
+	}
+
+	if actionRegistry != nil {
+		if t := NewExecuteActionTool(actionRegistry); t != nil {
+			tiered = append(tiered, skills.TieredTool{
+				Tool:    t,
+				Tier:    skills.TierSkillGate,
+				Domains: []string{"metrics", "logs"},
 			})
 		}
 	}
