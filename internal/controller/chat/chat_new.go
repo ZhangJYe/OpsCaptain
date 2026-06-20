@@ -7,6 +7,7 @@ package chat
 import (
 	"SuperBizAgent/api/chat"
 	"SuperBizAgent/internal/ai/analytics"
+	"SuperBizAgent/internal/ai/chatops"
 	"SuperBizAgent/internal/ai/collaboration"
 	"SuperBizAgent/internal/ai/feedback"
 	"SuperBizAgent/internal/app"
@@ -25,13 +26,14 @@ type ControllerV1 struct {
 	feedbackStore      *feedback.Store
 	analyticsCollector *analytics.Collector
 	shareStore         *collaboration.ShareStore
+	feishuSender       *chatops.FeishuSender
 }
 
 func NewV1(chatApp *app.ChatApp, knowledgeApp *app.KnowledgeApp, aiopsApp *app.AIOpsApp,
 	changeEventApp *app.ChangeEventApp,
 	mcpToolApp *app.MCPToolApp, userSkillApp *app.UserSkillApp, cmdbApp *app.CMDBApp,
 	feedbackStore *feedback.Store, analyticsCollector *analytics.Collector,
-	shareStore *collaboration.ShareStore) chat.IChatV1 {
+	shareStore *collaboration.ShareStore, feishuSender *chatops.FeishuSender) chat.IChatV1 {
 	return &ControllerV1{
 		service:            sse.New(),
 		chatApp:            chatApp,
@@ -44,5 +46,6 @@ func NewV1(chatApp *app.ChatApp, knowledgeApp *app.KnowledgeApp, aiopsApp *app.A
 		feedbackStore:      feedbackStore,
 		analyticsCollector: analyticsCollector,
 		shareStore:         shareStore,
+		feishuSender:       feishuSender,
 	}
 }

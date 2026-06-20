@@ -212,6 +212,12 @@ chat_async:
   execute_timeout_ms: 120000
   redis_key_prefix: "opscaptionai:chat_task"
 
+chatops:
+  feishu:
+    enabled: false
+    webhook_url: "${FEISHU_CHATOPS_WEBHOOK_URL}"
+    timeout_ms: 5000
+
 chat:
   react:
     max_step: 25

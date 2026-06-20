@@ -20,6 +20,7 @@ import (
 	"SuperBizAgent/internal/ai/skills"
 	"SuperBizAgent/internal/ai/tools"
 	"SuperBizAgent/internal/app"
+	"SuperBizAgent/internal/ai/chatops"
 	"SuperBizAgent/internal/controller/chat"
 	infracmdb "SuperBizAgent/internal/infra/cmdb"
 	infrafs "SuperBizAgent/internal/infra/filestore"
@@ -310,12 +311,20 @@ func main() {
 	analyticsCollector := analytics.NewCollector()
 	shareStore := collaboration.NewShareStore()
 
+	var feishuSender *chatops.FeishuSender
+	if configBool(ctx, "chatops.feishu.enabled", false) {
+		if chatopsURL := common.ResolveEnv(configString(ctx, "chatops.feishu.webhook_url", "")); chatopsURL != "" {
+			feishuSender = chatops.NewFeishuSender(chatopsURL, configInt(ctx, "chatops.feishu.timeout_ms", 5000))
+			g.Log().Info(ctx, "[chatops] feishu sender initialized")
+		}
+	}
+
 	s.Group("/api", func(group *ghttp.RouterGroup) {
 		group.Middleware(middleware.CORSMiddleware)
 		group.Middleware(middleware.AuthMiddleware)
 		group.Middleware(middleware.RateLimitMiddleware)
 		group.Middleware(middleware.ResponseMiddleware)
-		group.Bind(chat.NewV1(chatApp, knowledgeApp, aiopsApp, changeEventApp, mcpToolApp, userSkillApp, cmdbApp, feedbackStore, analyticsCollector, shareStore))
+		group.Bind(chat.NewV1(chatApp, knowledgeApp, aiopsApp, changeEventApp, mcpToolApp, userSkillApp, cmdbApp, feedbackStore, analyticsCollector, shareStore, feishuSender))
 	})
 
 	if err := s.Start(); err != nil {

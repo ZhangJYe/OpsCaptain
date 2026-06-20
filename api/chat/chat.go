@@ -49,4 +49,5 @@ type IChatV1 interface {
 	ShareCreate(ctx context.Context, req *v1.ShareCreateReq) (res *v1.ShareCreateRes, err error)
 	ShareGet(ctx context.Context, req *v1.ShareGetReq) (res *v1.ShareGetRes, err error)
 	ShareRevoke(ctx context.Context, req *v1.ShareRevokeReq) (res *v1.ShareRevokeRes, err error)
+	ChatOpsSend(ctx context.Context, req *v1.ChatOpsSendReq) (res *v1.ChatOpsSendRes, err error)
 }
