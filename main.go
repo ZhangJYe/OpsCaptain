@@ -5,6 +5,7 @@ import (
 	"SuperBizAgent/internal/ai/agent/knowledge_index_pipeline"
 	"SuperBizAgent/internal/ai/changeevent"
 	aicmdb "SuperBizAgent/internal/ai/cmdb"
+	"SuperBizAgent/internal/ai/actionexecutor"
 	"SuperBizAgent/internal/ai/contextengine"
 	"SuperBizAgent/internal/ai/events"
 	"SuperBizAgent/internal/ai/indexer"
@@ -264,6 +265,10 @@ func main() {
 		cmdbApp = app.NewCMDBApp(nil)
 		tools.SetCMDBRepository(&tools.UnavailableRepository{})
 	}
+
+	// Initialize ActionExecutor registry
+	actionRegistry := actionexecutor.NewDefaultRegistry()
+	tools.SetActionRegistry(actionRegistry)
 
 	// Wire user tool dependencies into chat pipeline for progressive disclosure
 	chat_pipeline.SetUserToolDeps(userSkillStore, dynamicMCPReg)
