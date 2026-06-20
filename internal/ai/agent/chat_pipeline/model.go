@@ -14,3 +14,13 @@ func newChatModel(ctx context.Context) (cm model.ToolCallingChatModel, err error
 	}
 	return cm, nil
 }
+
+func newChatModelWithQuery(ctx context.Context, query string) (cm model.ToolCallingChatModel, err error) {
+	router := models.NewModelRouterFromConfig(ctx)
+	modelKey, _ := router.Route(ctx, query)
+	cm, err = models.OpenAIChatModelFactory(modelKey)(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return cm, nil
+}

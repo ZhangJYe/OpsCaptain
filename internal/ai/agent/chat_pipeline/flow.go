@@ -114,7 +114,7 @@ func newReactAgentLambdaWithQuery(ctx context.Context, query string) (lba *compo
 		ToolReturnDirectly:    map[string]struct{}{},
 		StreamToolCallChecker: fullStreamToolCallChecker,
 	}
-	chatModelIns11, err := newChatModel(ctx)
+	chatModelIns11, err := newChatModelWithQuery(ctx, query)
 	if err != nil {
 		return nil, err
 	}

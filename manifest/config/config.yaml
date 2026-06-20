@@ -173,6 +173,12 @@ chat_model_fast:
   api_key: "${DEEPSEEK_API_KEY}"
   base_url: "https://api.deepseek.com"
 
+model_routing:
+  enabled: true
+  fast_model: "chat_model_fast"
+  pro_model: "chat_model"
+  complexity_threshold: 0.6
+
 llm:
   max_concurrent_calls: 10
   concurrent_wait_timeout_ms: 5000
