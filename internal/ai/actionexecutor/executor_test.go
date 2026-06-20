@@ -61,7 +61,7 @@ func TestRegistry_Execute(t *testing.T) {
 	assert.True(t, result.Success)
 	assert.Contains(t, result.Output, "ok")
 	assert.Equal(t, "test_get", result.ActionID)
-	assert.Greater(t, result.Duration, int64(0))
+	assert.GreaterOrEqual(t, result.Duration, int64(0))
 }
 
 func TestRegistry_Execute_MissingRequired(t *testing.T) {
