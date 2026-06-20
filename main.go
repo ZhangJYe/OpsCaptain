@@ -238,15 +238,22 @@ func main() {
 
 			jaegerEnabled, _ := g.Cfg().Get(ctx, "cmdb.jaeger.enabled")
 			var topologyDS aicmdb.TopologyDataSource
+			var refreshInterval time.Duration
+			lookbackHours := configInt(ctx, "cmdb.jaeger.lookback_hours", 24)
 			if jaegerEnabled.Bool() {
 				jaegerURL := configString(ctx, "cmdb.jaeger.url", "http://127.0.0.1:16686")
 				jaegerTimeoutMs := configInt(ctx, "cmdb.jaeger.timeout_ms", 5000)
 				jaegerClient := infrajaeger.NewClientWithTimeout(jaegerURL, time.Duration(jaegerTimeoutMs)*time.Millisecond)
 				topologyDS = app.NewJaegerTopologyAdapter(jaegerClient)
-				g.Log().Infof(ctx, "cmdb: jaeger topology discovery enabled (url=%s)", jaegerURL)
+				refreshSec := configInt(ctx, "cmdb.jaeger.refresh_seconds", 300)
+				if refreshSec > 0 {
+					refreshInterval = time.Duration(refreshSec) * time.Second
+				}
+				g.Log().Infof(ctx, "cmdb: jaeger topology discovery enabled (url=%s, refresh=%ds)", jaegerURL, refreshSec)
 			}
 
-			topologyMerger := aicmdb.NewTopologyMerger(adapter, topologyDS)
+			topologyMerger := aicmdb.NewTopologyMerger(adapter, topologyDS, refreshInterval, lookbackHours)
+			topologyMerger.StartRefresh(ctx)
 			cmdbApp = app.NewCMDBAppWithTopology(adapter, adapter, topologyMerger)
 			tools.SetCMDBRepository(adapter)
 			tools.SetCMDBHostRepository(adapter)

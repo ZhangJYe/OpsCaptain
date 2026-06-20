@@ -443,6 +443,7 @@ cmdb:
     url: "http://127.0.0.1:16686"
     lookback_hours: 24
     timeout_ms: 5000
+    refresh_seconds: 300
 
 redis:
   default:

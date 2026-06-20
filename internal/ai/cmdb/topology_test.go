@@ -66,7 +66,7 @@ func TestMerge_JaegerEdges_NoOverride(t *testing.T) {
 			{Parent: "a", Child: "b", CallCount: 100},
 		},
 	}
-	merger := NewTopologyMerger(repo, ds)
+	merger := NewTopologyMerger(repo, ds, 0, 24)
 
 	result := merger.GetTopology(context.Background(), "", "")
 
@@ -88,7 +88,7 @@ func TestMerge_CMDBOverride(t *testing.T) {
 			{Parent: "a", Child: "c", CallCount: 30},
 		},
 	}
-	merger := NewTopologyMerger(repo, ds)
+	merger := NewTopologyMerger(repo, ds, 0, 24)
 
 	result := merger.GetTopology(context.Background(), "", "")
 
@@ -105,7 +105,7 @@ func TestMerge_CMDBOnly_NoDataSource(t *testing.T) {
 	svcB := ServiceInfo{Name: "b", DisplayName: "B", Cluster: "prod", Owner: "team2"}
 	repo := newMockRepo(svcA, svcB)
 
-	merger := NewTopologyMerger(repo, nil)
+	merger := NewTopologyMerger(repo, nil, 0, 24)
 
 	result := merger.GetTopology(context.Background(), "", "")
 
@@ -121,7 +121,7 @@ func TestMerge_DataSourceError_FallbackToCMDB(t *testing.T) {
 	ds := &mockTopologyDataSource{
 		err: assert.AnError,
 	}
-	merger := NewTopologyMerger(repo, ds)
+	merger := NewTopologyMerger(repo, ds, 0, 24)
 
 	result := merger.GetTopology(context.Background(), "", "")
 
@@ -135,7 +135,7 @@ func TestMerge_ClusterFilter(t *testing.T) {
 	svcC := ServiceInfo{Name: "c", DisplayName: "C", Cluster: "staging", Owner: "team3"}
 	repo := newMockRepo(svcA, svcB, svcC)
 
-	merger := NewTopologyMerger(repo, nil)
+	merger := NewTopologyMerger(repo, nil, 0, 24)
 
 	result := merger.GetTopology(context.Background(), "prod", "")
 
@@ -154,7 +154,7 @@ func TestMerge_SpecificServiceFilter(t *testing.T) {
 	svcC := ServiceInfo{Name: "c", DisplayName: "C", Cluster: "prod", Owner: "team3"}
 	repo := newMockRepo(svcA, svcB, svcC)
 
-	merger := NewTopologyMerger(repo, nil)
+	merger := NewTopologyMerger(repo, nil, 0, 24)
 
 	result := merger.GetTopology(context.Background(), "", "a")
 
@@ -169,7 +169,7 @@ func TestMerge_SpecificServiceFilter(t *testing.T) {
 
 func TestMerge_ServiceNotFound(t *testing.T) {
 	repo := newMockRepo()
-	merger := NewTopologyMerger(repo, nil)
+	merger := NewTopologyMerger(repo, nil, 0, 24)
 
 	result := merger.GetTopology(context.Background(), "", "nonexistent")
 
@@ -186,7 +186,7 @@ func TestMerge_NodesHaveCorrectSource(t *testing.T) {
 			{Parent: "x", Child: "y", CallCount: 10},
 		},
 	}
-	merger := NewTopologyMerger(repo, ds)
+	merger := NewTopologyMerger(repo, ds, 0, 24)
 
 	result := merger.GetTopology(context.Background(), "", "")
 
@@ -212,7 +212,7 @@ func TestMerge_JaegerEdgeNotInCMDB(t *testing.T) {
 			{Parent: "x", Child: "y", CallCount: 10},
 		},
 	}
-	merger := NewTopologyMerger(repo, ds)
+	merger := NewTopologyMerger(repo, ds, 0, 24)
 
 	result := merger.GetTopology(context.Background(), "", "")
 
@@ -222,12 +222,105 @@ func TestMerge_JaegerEdgeNotInCMDB(t *testing.T) {
 
 func TestMerge_Empty(t *testing.T) {
 	repo := newMockRepo()
-	merger := NewTopologyMerger(repo, nil)
+	merger := NewTopologyMerger(repo, nil, 0, 24)
 
 	result := merger.GetTopology(context.Background(), "", "")
 
 	assert.Empty(t, result.Nodes)
 	assert.Empty(t, result.Edges)
+}
+
+func TestCache_HitOnSecondCall(t *testing.T) {
+	svcA := ServiceInfo{Name: "a", DisplayName: "A", Cluster: "prod", Owner: "team1", Dependencies: []string{"b"}}
+	svcB := ServiceInfo{Name: "b", DisplayName: "B", Cluster: "prod", Owner: "team2"}
+	repo := newMockRepo(svcA, svcB)
+
+	callCount := 0
+	ds := &countingDataSource{
+		edges: []DependencyEdge{{Parent: "a", Child: "b", CallCount: 100}},
+		count: &callCount,
+	}
+	merger := NewTopologyMerger(repo, ds, 0, 24)
+
+	// First call — on-demand merge, calls data source
+	merger.GetTopology(context.Background(), "", "")
+	assert.Equal(t, 1, callCount)
+
+	// Second call — no cache (no background refresh), calls data source again
+	merger.GetTopology(context.Background(), "", "")
+	assert.Equal(t, 2, callCount)
+}
+
+func TestCache_PopulatedByRefresh(t *testing.T) {
+	svcA := ServiceInfo{Name: "a", DisplayName: "A", Cluster: "prod", Owner: "team1", Dependencies: []string{"b"}}
+	svcB := ServiceInfo{Name: "b", DisplayName: "B", Cluster: "prod", Owner: "team2"}
+	repo := newMockRepo(svcA, svcB)
+
+	callCount := 0
+	ds := &countingDataSource{
+		edges: []DependencyEdge{{Parent: "a", Child: "b", CallCount: 100}},
+		count: &callCount,
+	}
+	merger := NewTopologyMerger(repo, ds, 0, 24)
+
+	// Manual refresh populates cache
+	merger.GetTopologyWithForce(context.Background(), "", "")
+	assert.Equal(t, 1, callCount)
+
+	// Now cache is populated, subsequent calls use cache
+	merger.GetTopology(context.Background(), "", "")
+	assert.Equal(t, 1, callCount) // still 1, not 2
+
+	// Cache info
+	exists, _, nodes, edges := merger.CacheInfo()
+	assert.True(t, exists)
+	assert.Equal(t, 2, nodes)
+	assert.Equal(t, 1, edges)
+}
+
+func TestCache_NoDataSource(t *testing.T) {
+	svcA := ServiceInfo{Name: "a", DisplayName: "A", Cluster: "prod", Owner: "team1", Dependencies: []string{"b"}}
+	svcB := ServiceInfo{Name: "b", DisplayName: "B", Cluster: "prod", Owner: "team2"}
+	repo := newMockRepo(svcA, svcB)
+
+	merger := NewTopologyMerger(repo, nil, 0, 24)
+
+	result := merger.GetTopology(context.Background(), "", "")
+	assert.Len(t, result.Edges, 1)
+
+	exists, _, _, _ := merger.CacheInfo()
+	assert.False(t, exists)
+}
+
+func TestFilter_ServiceFilter(t *testing.T) {
+	svcA := ServiceInfo{Name: "a", DisplayName: "A", Cluster: "prod", Owner: "team1", Dependencies: []string{"b", "c"}}
+	svcB := ServiceInfo{Name: "b", DisplayName: "B", Cluster: "prod", Owner: "team2"}
+	svcC := ServiceInfo{Name: "c", DisplayName: "C", Cluster: "prod", Owner: "team3"}
+	svcD := ServiceInfo{Name: "d", DisplayName: "D", Cluster: "prod", Owner: "team4"}
+	repo := newMockRepo(svcA, svcB, svcC, svcD)
+
+	merger := NewTopologyMerger(repo, nil, 0, 24)
+
+	result := merger.GetTopology(context.Background(), "", "a")
+
+	nodeIDs := make(map[string]bool)
+	for _, n := range result.Nodes {
+		nodeIDs[n.ID] = true
+	}
+	assert.True(t, nodeIDs["a"])
+	assert.True(t, nodeIDs["b"])
+	assert.True(t, nodeIDs["c"])
+	assert.False(t, nodeIDs["d"])
+}
+
+type countingDataSource struct {
+	edges []DependencyEdge
+	count *int
+}
+
+func (c *countingDataSource) GetDependencies(ctx context.Context, lookbackHours int) ([]DependencyEdge, error) {
+	*c.count++
+	return c.edges, nil
 }
 
 func findNode(nodes []TopologyNode, id string) *TopologyNode {
