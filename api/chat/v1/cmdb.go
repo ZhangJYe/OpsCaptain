@@ -249,3 +249,16 @@ type CMDBTopologyRes struct {
 	Error   string      `json:"error,omitempty"`
 	Message string      `json:"message,omitempty"`
 }
+
+type AlertCorrelationReq struct {
+	g.Meta          `path:"/cmdb/alert_correlation" method:"get" summary:"告警关联分析"`
+	LookbackMinutes int    `json:"lookback_minutes,omitempty" d:"60"`
+	Cluster         string `json:"cluster,omitempty"`
+}
+
+type AlertCorrelationRes struct {
+	Success bool        `json:"success"`
+	Result  interface{} `json:"result,omitempty"`
+	Error   string      `json:"error,omitempty"`
+	Message string      `json:"message,omitempty"`
+}

@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 
 	"SuperBizAgent/internal/ai/cmdb"
 	"SuperBizAgent/internal/ai/tools"
@@ -329,4 +331,27 @@ func (a *CMDBApp) GetTopology(ctx context.Context, cluster string, service strin
 		"nodes":   nodes,
 		"edges":   edges,
 	}
+}
+
+func (a *CMDBApp) CorrelateAlerts(ctx context.Context, lookbackMinutes int, cluster string) map[string]interface{} {
+	if a.repo == nil {
+		return map[string]interface{}{"success": false, "error": "CMDB repository not configured"}
+	}
+
+	tool := tools.NewCorrelateAlertsTool(a.repo)
+	if tool == nil {
+		return map[string]interface{}{"success": false, "error": "correlate_alerts tool not available"}
+	}
+
+	input := fmt.Sprintf(`{"lookback_minutes":%d,"cluster":"%s"}`, lookbackMinutes, cluster)
+	result, err := tool.InvokableRun(ctx, input)
+	if err != nil {
+		return map[string]interface{}{"success": false, "error": err.Error()}
+	}
+
+	var output map[string]interface{}
+	if err := json.Unmarshal([]byte(result), &output); err != nil {
+		return map[string]interface{}{"success": false, "error": "failed to parse result"}
+	}
+	return output
 }

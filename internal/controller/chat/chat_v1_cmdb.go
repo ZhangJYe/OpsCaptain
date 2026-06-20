@@ -230,6 +230,16 @@ func (c *ControllerV1) CMDBTopology(ctx context.Context, req *v1.CMDBTopologyReq
 	}, nil
 }
 
+func (c *ControllerV1) AlertCorrelation(ctx context.Context, req *v1.AlertCorrelationReq) (res *v1.AlertCorrelationRes, err error) {
+	result := c.cmdbApp.CorrelateAlerts(ctx, req.LookbackMinutes, req.Cluster)
+	return &v1.AlertCorrelationRes{
+		Success: result["success"].(bool),
+		Result:  result["result"],
+		Error:   getString(result, "error"),
+		Message: getString(result, "message"),
+	}, nil
+}
+
 func getString(m map[string]interface{}, key string) string {
 	if v, ok := m[key]; ok {
 		if s, ok := v.(string); ok {
