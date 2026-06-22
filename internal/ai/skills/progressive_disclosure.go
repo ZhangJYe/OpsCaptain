@@ -91,12 +91,45 @@ func (pd *ProgressiveDisclosure) ResolveSelectedSkills(selectedSkillIDs []string
 		return nil
 	}
 	selected := make([]SelectedSkill, 0, len(selectedSkillIDs))
+	used := make(map[string]bool)
+
+	// 第一轮: 按原 ID 查 built-in registries
 	for _, id := range selectedSkillIDs {
 		for _, reg := range pd.registries {
 			if reg == nil {
 				continue
 			}
 			skill := reg.SkillByName(id)
+			if skill == nil {
+				continue
+			}
+			if used[id] {
+				break
+			}
+			used[id] = true
+			selected = append(selected, SelectedSkill{
+				Name:        skill.Name(),
+				Domain:      reg.Domain(),
+				Description: skill.Description(),
+			})
+			break
+		}
+	}
+
+	// 第二轮: user-skill:* 前缀兜底
+	for _, id := range selectedSkillIDs {
+		if used[id] {
+			continue
+		}
+		name := id
+		if strings.HasPrefix(id, "user-skill:") {
+			name = strings.TrimPrefix(id, "user-skill:")
+		}
+		for _, reg := range pd.registries {
+			if reg == nil {
+				continue
+			}
+			skill := reg.SkillByName(name)
 			if skill == nil {
 				continue
 			}
@@ -108,6 +141,7 @@ func (pd *ProgressiveDisclosure) ResolveSelectedSkills(selectedSkillIDs []string
 			break
 		}
 	}
+
 	return selected
 }
 
