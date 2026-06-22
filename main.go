@@ -18,6 +18,9 @@ import (
 	"SuperBizAgent/internal/ai/retriever"
 	aiservice "SuperBizAgent/internal/ai/service"
 	"SuperBizAgent/internal/ai/skills"
+	"SuperBizAgent/internal/ai/skills/domains/knowledge"
+	"SuperBizAgent/internal/ai/skills/domains/logs"
+	domainmetrics "SuperBizAgent/internal/ai/skills/domains/metrics"
 	"SuperBizAgent/internal/ai/tools"
 	"SuperBizAgent/internal/app"
 	"SuperBizAgent/internal/ai/chatops"
@@ -219,9 +222,12 @@ func main() {
 		dynamicMCPReg, _ = tools.NewDynamicMCPRegistry(nil, timeoutMs)
 	}
 
-	// Create user skill loader; domain registries are managed by AIOps runtime, pass nil for now
+	// Create user skill loader with shared domain registries
+	logsR := logs.SkillRegistry()
+	metricsR := domainmetrics.SkillRegistry()
+	knowledgeR := knowledge.SkillRegistry()
 	customReg, _ := skills.NewRegistry("custom", nil)
-	userSkillLoader := skills.NewUserSkillLoader(userSkillStore, dynamicMCPReg, nil, nil, nil, customReg)
+	userSkillLoader := skills.NewUserSkillLoader(userSkillStore, dynamicMCPReg, metricsR, logsR, knowledgeR, customReg)
 	if reloadErr := userSkillLoader.Reload(ctx); reloadErr != nil {
 		g.Log().Warningf(ctx, "load user skills: %v", reloadErr)
 	}
