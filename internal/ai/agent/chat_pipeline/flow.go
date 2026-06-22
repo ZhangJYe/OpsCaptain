@@ -3,9 +3,6 @@ package chat_pipeline
 import (
 	"SuperBizAgent/internal/ai/events"
 	"SuperBizAgent/internal/ai/skills"
-	"SuperBizAgent/internal/ai/skills/domains/knowledge"
-	"SuperBizAgent/internal/ai/skills/domains/logs"
-	"SuperBizAgent/internal/ai/skills/domains/metrics"
 	"SuperBizAgent/internal/ai/tools"
 	"SuperBizAgent/internal/consts"
 	"context"
@@ -25,6 +22,8 @@ var (
 	// Lazy-initialized user tools dependencies; set via SetUserToolDeps before first chat.
 	userToolStoreDeps skills.UserSkillStore
 	dynamicMCPRegDeps *tools.DynamicMCPRegistry
+
+	sharedRegistries []*skills.Registry
 )
 
 // SetUserToolDeps configures user tool dependencies for progressive disclosure.
@@ -34,14 +33,15 @@ func SetUserToolDeps(store skills.UserSkillStore, reg *tools.DynamicMCPRegistry)
 	dynamicMCPRegDeps = reg
 }
 
+// SetSharedRegistries 在启动时调用，设置共享 registry 实例
+func SetSharedRegistries(registries []*skills.Registry) {
+	sharedRegistries = registries
+}
+
 func getChatDisclosure() *skills.ProgressiveDisclosure {
 	chatDisclosureOnce.Do(func() {
 		chatDisclosureIns = skills.NewProgressiveDisclosure(
-			[]*skills.Registry{
-				logs.SkillRegistry(),
-				metrics.SkillRegistry(),
-				knowledge.SkillRegistry(),
-			},
+			sharedRegistries,
 			tools.BuildTieredTools(context.Background(), userToolStoreDeps, dynamicMCPRegDeps),
 		)
 	})
