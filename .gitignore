@@ -75,6 +75,8 @@ Learn/*.base
 # Learning drafts (personal study notes)
 Learn/review/
 Learn/design/*.progress.md
+Learn/kratos/
+
 
 # Private interview retrospectives and personal notes
 docs/private/
