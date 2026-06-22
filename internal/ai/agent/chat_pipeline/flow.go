@@ -3,6 +3,9 @@ package chat_pipeline
 import (
 	"SuperBizAgent/internal/ai/events"
 	"SuperBizAgent/internal/ai/skills"
+	"SuperBizAgent/internal/ai/skills/domains/knowledge"
+	"SuperBizAgent/internal/ai/skills/domains/logs"
+	"SuperBizAgent/internal/ai/skills/domains/metrics"
 	"SuperBizAgent/internal/ai/tools"
 	"SuperBizAgent/internal/consts"
 	"context"
@@ -40,8 +43,16 @@ func SetSharedRegistries(registries []*skills.Registry) {
 
 func getChatDisclosure() *skills.ProgressiveDisclosure {
 	chatDisclosureOnce.Do(func() {
+		registries := sharedRegistries
+		if len(registries) == 0 {
+			registries = []*skills.Registry{
+				logs.SkillRegistry(),
+				metrics.SkillRegistry(),
+				knowledge.SkillRegistry(),
+			}
+		}
 		chatDisclosureIns = skills.NewProgressiveDisclosure(
-			sharedRegistries,
+			registries,
 			tools.BuildTieredTools(context.Background(), userToolStoreDeps, dynamicMCPRegDeps),
 		)
 	})
