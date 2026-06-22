@@ -80,7 +80,7 @@ export function Sidebar({
           lockedAIOpsEngine={currentIncidentEngine}
           onAIOpsEngineChange={onAIOpsEngineChange}
         />
-        {workbenchMode === 'chat' && <SkillPanel selectedSkillIds={selectedSkillIds} onChange={onSelectedSkillIdsChange} />}
+        <SkillPanel selectedSkillIds={selectedSkillIds} onChange={onSelectedSkillIdsChange} />
         <ObservabilityPanel />
         <HistoryPanel
           onSelect={onLoadSession}
