@@ -46,9 +46,6 @@ func NewRegistry(domain string, skills []Skill, opts ...RegistryOption) (*Regist
 			return nil, err
 		}
 	}
-	if len(r.skills) == 0 {
-		return nil, fmt.Errorf("skills registry %q has no skills", domain)
-	}
 	return r, nil
 }
 
