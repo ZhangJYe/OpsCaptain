@@ -109,6 +109,14 @@ func RunAIOpsMultiAgent(ctx context.Context, query string) (ExecutionResponse, e
 		g.Log().Infof(ctx, "[AIOps] skill focus injected: %d hints", len(hints))
 	}
 
+	// 用户显式选择的 skills focus hints
+	if selectedSkillIDs := skills.SelectedSkillIDsFromContext(ctx); len(selectedSkillIDs) > 0 {
+		if selectedHints := skillFocusCollector.ResolveSelected(selectedSkillIDs); len(selectedHints) > 0 {
+			enrichedQuery += "\n\n用户指定的分析方向：\n" + skills.FormatFocusHints(selectedHints)
+			g.Log().Infof(ctx, "[AIOps] selected skills focus injected: %d hints", len(selectedHints))
+		}
+	}
+
 	rt, err := getOrCreateAIOpsRuntime(ctx)
 	if err != nil {
 		return ExecutionResponse{
