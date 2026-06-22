@@ -283,6 +283,7 @@ func main() {
 	// Wire user tool dependencies into chat pipeline for progressive disclosure
 	chat_pipeline.SetUserToolDeps(userSkillStore, dynamicMCPReg)
 	chat_pipeline.SetSharedRegistries([]*skills.Registry{metricsR, logsR, knowledgeR, customReg})
+	aiservice.SetSharedAIOpsRegistries([]*skills.Registry{metricsR, logsR, knowledgeR, customReg})
 
 	chatTaskPipelineShutdown := func(context.Context) error { return nil }
 	if shutdownFn, startErr := aiservice.StartChatTaskPipeline(ctx); startErr != nil {

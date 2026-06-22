@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gogf/gf/v2/frame/g"
@@ -35,11 +36,7 @@ var (
 		return newApprovalQueue().MarkExecuted(ctx, requestID, traceID)
 	}
 
-	skillFocusCollector = skills.NewFocusCollector(
-		logs.SkillRegistry(),
-		metrics.SkillRegistry(),
-		knowledge.SkillRegistry(),
-	)
+	sharedAIOpsRegistries []*skills.Registry
 	multiAgentConfigBool = func(ctx context.Context, key string) (bool, bool) {
 		v, err := g.Cfg().Get(ctx, key)
 		if err != nil || strings.TrimSpace(v.String()) == "" {
@@ -48,6 +45,32 @@ var (
 		return v.Bool(), true
 	}
 )
+
+// SetSharedAIOpsRegistries sets shared skill registries for the AIOps skillFocusCollector.
+// Must be called before any RunAIOps* functions.
+func SetSharedAIOpsRegistries(registries []*skills.Registry) {
+	sharedAIOpsRegistries = registries
+}
+
+var (
+	skillFocusCollectorOnce sync.Once
+	skillFocusCollectorIns  *skills.FocusCollector
+)
+
+func getSkillFocusCollector() *skills.FocusCollector {
+	skillFocusCollectorOnce.Do(func() {
+		registries := sharedAIOpsRegistries
+		if len(registries) == 0 {
+			registries = []*skills.Registry{
+				logs.SkillRegistry(),
+				metrics.SkillRegistry(),
+				knowledge.SkillRegistry(),
+			}
+		}
+		skillFocusCollectorIns = skills.NewFocusCollector(registries...)
+	})
+	return skillFocusCollectorIns
+}
 
 func RunAIOpsMultiAgent(ctx context.Context, query string) (ExecutionResponse, error) {
 	agentName, agentAvailable, unavailableReason := resolveAIOpsAgentName(ctx)
@@ -104,14 +127,14 @@ func RunAIOpsMultiAgent(ctx context.Context, query string) (ExecutionResponse, e
 		enrichedQuery = enrichedQuery + "\n\n当前事故排障会话：\n" + incidentContext
 	}
 
-	if hints := skillFocusCollector.Collect(query); len(hints) > 0 {
+	if hints := getSkillFocusCollector().Collect(query); len(hints) > 0 {
 		enrichedQuery = enrichedQuery + "\n\n场景分析方向（基于 Skill 匹配）：\n" + skills.FormatFocusHints(hints)
 		g.Log().Infof(ctx, "[AIOps] skill focus injected: %d hints", len(hints))
 	}
 
 	// 用户显式选择的 skills focus hints
 	if selectedSkillIDs := skills.SelectedSkillIDsFromContext(ctx); len(selectedSkillIDs) > 0 {
-		if selectedHints := skillFocusCollector.ResolveSelected(selectedSkillIDs); len(selectedHints) > 0 {
+		if selectedHints := getSkillFocusCollector().ResolveSelected(selectedSkillIDs); len(selectedHints) > 0 {
 			enrichedQuery += "\n\n用户指定的分析方向：\n" + skills.FormatFocusHints(selectedHints)
 			g.Log().Infof(ctx, "[AIOps] selected skills focus injected: %d hints", len(selectedHints))
 		}
@@ -228,7 +251,7 @@ func RunAIOpsAsync(ctx context.Context, query string) (*AIOpsRunInfo, error) {
 		enrichedQuery += changeCtx
 	}
 
-	if hints := skillFocusCollector.Collect(query); len(hints) > 0 {
+	if hints := getSkillFocusCollector().Collect(query); len(hints) > 0 {
 		enrichedQuery = enrichedQuery + "\n\n场景分析方向（基于 Skill 匹配）：\n" + skills.FormatFocusHints(hints)
 	}
 

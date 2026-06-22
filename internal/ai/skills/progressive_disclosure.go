@@ -129,16 +129,17 @@ func (pd *ProgressiveDisclosure) ResolveSelectedSkills(selectedSkillIDs []string
 			if reg == nil {
 				continue
 			}
-			skill := reg.SkillByName(name)
-			if skill == nil {
-				continue
-			}
-			selected = append(selected, SelectedSkill{
-				Name:        skill.Name(),
-				Domain:      reg.Domain(),
-				Description: skill.Description(),
-			})
-			break
+		skill := reg.SkillByName(name)
+		if skill == nil {
+			continue
+		}
+		used[id] = true
+		selected = append(selected, SelectedSkill{
+			Name:        skill.Name(),
+			Domain:      reg.Domain(),
+			Description: skill.Description(),
+		})
+		break
 		}
 	}
 
