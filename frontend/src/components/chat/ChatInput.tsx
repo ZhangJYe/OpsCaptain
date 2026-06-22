@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { FileIcon, GitBranch, Loader2, Paperclip, Send, Square, X, Zap } from 'lucide-react'
 import type { AIOpsEngine, ChatMode, WorkbenchMode } from '../../types/chat'
-import { formatFileSize, formatSelectedSkillSummary } from '../../lib/utils'
+import { formatFileSize, formatSelectedSkillSummary, getSkillLabelById } from '../../lib/utils'
 import { useFileUpload } from '../../hooks/useFileUpload'
 import { getEngineViewModel } from '../../lib/engineViewModel'
 
@@ -14,6 +14,7 @@ interface Props {
   workbenchMode: WorkbenchMode
   aiOpsEngine: AIOpsEngine
   selectedSkillIds: string[]
+  onSelectedSkillIdsChange?: (ids: string[]) => void
   onModeChange: (mode: ChatMode) => void
   embedded?: boolean
 }
@@ -37,6 +38,7 @@ export function ChatInput({
   workbenchMode,
   aiOpsEngine,
   selectedSkillIds,
+  onSelectedSkillIdsChange,
   onModeChange,
   embedded,
 }: Props) {
@@ -106,6 +108,20 @@ export function ChatInput({
               ? 'border-sky-400/50 bg-white/80 dark:border-sky-400/30 dark:bg-slate-800/70'
               : 'border-white/60 bg-white/60 dark:border-white/10 dark:bg-slate-800/50'
           }`}>
+            {selectedSkillIds && selectedSkillIds.length > 0 && onSelectedSkillIdsChange && (
+              <div className="flex flex-wrap gap-1.5 px-3 pt-2">
+                {selectedSkillIds.map((id) => (
+                  <span
+                    key={id}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-sky-100 text-sky-700 rounded-full text-xs cursor-pointer hover:bg-sky-200 transition-colors"
+                    onClick={() => onSelectedSkillIdsChange(selectedSkillIds.filter((s) => s !== id))}
+                  >
+                    {getSkillLabelById(id)}
+                    <span className="text-sky-400 hover:text-sky-600">×</span>
+                  </span>
+                ))}
+              </div>
+            )}
             <textarea
               ref={textareaRef}
               value={input}

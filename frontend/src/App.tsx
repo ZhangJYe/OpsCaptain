@@ -202,6 +202,7 @@ export default function App() {
           mode={chat.mode}
           workbenchMode="chat"
           selectedSkillIds={selectedSkillIds}
+          onSelectedSkillIdsChange={setSelectedSkillIds}
           petEnabled={petEnabled}
           aiOpsEngine={aiOpsEngine}
           onSend={handleSendChat}
