@@ -226,15 +226,17 @@ type AIOpsIncident struct {
 }
 
 type AIOpsIncidentCreateReq struct {
-	g.Meta `path:"/ai_ops/incidents" method:"post" summary:"创建事故排障会话"`
-	Query  string `json:"query" v:"required|max-length:8000#事故现象不能为空|事故现象长度不能超过8000"`
-	Engine string `json:"engine,omitempty" v:"in:plan_execute_replan,gos_engine,gos#AIOps引擎不合法"`
+	g.Meta            `path:"/ai_ops/incidents" method:"post" summary:"创建事故排障会话"`
+	Query             string   `json:"query" v:"required|max-length:8000#事故现象不能为空|事故现象长度不能超过8000"`
+	Engine            string   `json:"engine,omitempty" v:"in:plan_execute_replan,gos_engine,gos#AIOps引擎不合法"`
+	SelectedSkillIds  []string `json:"selected_skill_ids,omitempty"`
 }
 
 type AIOpsIncidentTurnReq struct {
-	g.Meta     `path:"/ai_ops/incidents/{incident_id}/turns" method:"post" summary:"追加事故排障轮次"`
-	IncidentID string `json:"incident_id" v:"required|max-length:128#事故ID不能为空|事故ID长度不能超过128"`
-	Query      string `json:"query" v:"required|max-length:8000#追加现象不能为空|追加现象长度不能超过8000"`
+	g.Meta            `path:"/ai_ops/incidents/{incident_id}/turns" method:"post" summary:"追加事故排障轮次"`
+	IncidentID        string   `json:"incident_id" v:"required|max-length:128#事故ID不能为空|事故ID长度不能超过128"`
+	Query             string   `json:"query" v:"required|max-length:8000#追加现象不能为空|追加现象长度不能超过8000"`
+	SelectedSkillIds  []string `json:"selected_skill_ids,omitempty"`
 }
 
 type AIOpsIncidentListReq struct {
