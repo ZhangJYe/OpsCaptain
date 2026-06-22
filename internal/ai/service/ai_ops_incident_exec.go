@@ -7,6 +7,7 @@ import (
 
 	"SuperBizAgent/internal/ai/protocol"
 	"SuperBizAgent/internal/ai/runtime"
+	"SuperBizAgent/internal/ai/skills"
 	"SuperBizAgent/internal/consts"
 
 	"github.com/google/uuid"
@@ -38,6 +39,7 @@ func executeIncidentTurn(ctx context.Context, incidentID, turnID string) {
 	runCtx = WithAIOpsEngine(runCtx, incident.EngineStrategy)
 	runCtx = WithAIOpsIncidentContext(runCtx, incidentContext(ctx, incident, turnID))
 	runCtx = withIncidentEventSink(runCtx, store, incidentID, turnID)
+	runCtx = skills.WithSelectedSkillIDs(runCtx, incident.SelectedSkillIds)
 	response, runErr := runIncidentAIOps(runCtx, turn.UserQuery)
 	_, _ = store.Update(context.Background(), incidentID, func(current *IncidentSession) error {
 		currentTurn, ok := incidentTurnPointer(current, turnID)
