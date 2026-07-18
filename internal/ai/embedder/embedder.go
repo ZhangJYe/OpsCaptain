@@ -17,46 +17,25 @@ import (
 )
 
 func DoubaoEmbedding(ctx context.Context) (eb embedding.Embedder, err error) {
-	modelName, err := readEmbeddingConfig(ctx, "embedding_model.model", "doubao_embedding_model.model")
+	settings, err := common.LoadEmbeddingModelConfig(ctx)
 	if err != nil {
 		return nil, err
 	}
-	apiKey, err := readEmbeddingConfig(ctx, "embedding_model.api_key", "doubao_embedding_model.api_key")
-	if err != nil {
-		return nil, err
-	}
-	baseURL, err := readEmbeddingConfig(ctx, "embedding_model.base_url", "doubao_embedding_model.base_url")
-	if err != nil {
-		return nil, err
-	}
-	resolvedModel, ok := common.ResolveOptionalEnv(modelName)
-	if !ok {
-		return nil, fmt.Errorf("embedding model name is empty or unresolved")
-	}
-	resolvedAPIKey, ok := common.ResolveOptionalEnv(apiKey)
-	if !ok {
-		return nil, fmt.Errorf("embedding model api_key is empty or unresolved")
-	}
-	resolvedBaseURL, ok := common.ResolveOptionalEnv(baseURL)
-	if !ok {
-		return nil, fmt.Errorf("embedding model base_url is empty or unresolved")
-	}
-	if strings.Contains(resolvedModel, "embedding-vision") {
+	if strings.Contains(settings.Model, "embedding-vision") {
 		return &doubaoMultimodalEmbedder{
-			model:   resolvedModel,
-			apiKey:  resolvedAPIKey,
-			baseURL: strings.TrimRight(resolvedBaseURL, "/"),
+			model:   settings.Model,
+			apiKey:  settings.APIKey,
+			baseURL: settings.BaseURL,
 			httpClient: &http.Client{
 				Timeout: 30 * time.Second,
 			},
 		}, nil
 	}
-	dim := common.GetVectorDimension(ctx)
 	embedder, err := openai.NewEmbedder(ctx, &openai.EmbeddingConfig{
-		Model:      resolvedModel,
-		APIKey:     resolvedAPIKey,
-		BaseURL:    resolvedBaseURL,
-		Dimensions: &dim,
+		Model:      settings.Model,
+		APIKey:     settings.APIKey,
+		BaseURL:    settings.BaseURL,
+		Dimensions: &settings.Dimension,
 	})
 	if err != nil {
 		g.Log().Errorf(ctx, "new embedder error: %v", err)
@@ -156,28 +135,4 @@ type doubaoMultimodalEmbeddingResponse struct {
 	Data struct {
 		Embedding []float64 `json:"embedding"`
 	} `json:"data"`
-}
-
-func readEmbeddingConfig(ctx context.Context, paths ...string) (string, error) {
-	var lastErr error
-	var foundEmpty bool
-	for _, path := range paths {
-		v, err := g.Cfg().Get(ctx, path)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		s := v.String()
-		if s != "" {
-			return s, nil
-		}
-		foundEmpty = true
-	}
-	if foundEmpty {
-		return "", nil
-	}
-	if lastErr != nil {
-		return "", lastErr
-	}
-	return "", fmt.Errorf("embedding config not found")
 }

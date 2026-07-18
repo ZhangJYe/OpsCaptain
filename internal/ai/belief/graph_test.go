@@ -1,6 +1,7 @@
 package belief
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -130,10 +131,164 @@ func TestBeliefGraph_Snapshots(t *testing.T) {
 	g.AddEvidence("Evidence", nil)
 	g.AddHypothesis("Hypothesis", 0.8, 1, "Why")
 
-	assert.Len(t, g.Snapshots, 3)
+	assert.Len(t, g.Snapshots, 1)
+	assert.Len(t, g.Deltas, 2)
 	assert.Equal(t, "add_node", g.Snapshots[0].Action)
-	assert.Equal(t, "add_node", g.Snapshots[1].Action)
-	assert.Equal(t, "add_node", g.Snapshots[2].Action)
+	assert.Equal(t, "add_node", g.Deltas[0].Action)
+	assert.Equal(t, "add_node", g.Deltas[1].Action)
+	assert.Len(t, g.Deltas[0].UpsertNodes, 1)
+	assert.Len(t, g.Deltas[1].UpsertNodes, 1)
+}
+
+func TestBeliefGraph_CheckpointAndDeltaHistoryIsBounded(t *testing.T) {
+	g := NewBeliefGraphWithPolicy(GraphPolicy{
+		CheckpointInterval: 3,
+		MaxNodes:           20,
+		MaxEdges:           20,
+		MaxDepth:           3,
+		MaxSnapshots:       3,
+		MaxDeltas:          2,
+	})
+
+	g.AddSignal("alert")
+	g.AddHypothesis("h1", 0.8, 1, "first")
+	g.AddHypothesis("h2", 0.5, 1, "second")
+	g.UpdateNode("node-2", 0.9, "updated")
+	g.AddEvidence("metric", nil)
+
+	stats := g.ResourceStats()
+	assert.Equal(t, 2, stats.Snapshots)
+	assert.Equal(t, 1, stats.Deltas)
+	assert.Positive(t, stats.HistoryBytes)
+	assert.NoError(t, g.ValidateResources())
+}
+
+func TestBeliefGraph_CopyOnWriteRejectsResourceLimitWithoutMutation(t *testing.T) {
+	g := NewBeliefGraphWithPolicy(GraphPolicy{
+		CheckpointInterval: 10,
+		MaxNodes:           2,
+		MaxEdges:           2,
+		MaxDepth:           1,
+		MaxSnapshots:       2,
+		MaxDeltas:          10,
+	})
+	g.AddSignal("alert")
+
+	result := g.UpdateCopyOnWrite(func(cp *BeliefGraph) error {
+		cp.AddHypothesisCopy("h1", 0.8, 1, "first")
+		cp.AddHypothesisCopy("h2", 0.7, 1, "second")
+		return nil
+	})
+
+	require.False(t, result.Committed)
+	var limitErr *GraphResourceLimitError
+	require.ErrorAs(t, result.Error, &limitErr)
+	assert.Equal(t, "nodes", limitErr.Resource)
+	assert.Len(t, g.Nodes, 1)
+}
+
+func TestBeliefGraph_CopyOnWriteRejectsDepthLimit(t *testing.T) {
+	g := NewBeliefGraphWithPolicy(GraphPolicy{
+		CheckpointInterval: 10,
+		MaxNodes:           4,
+		MaxEdges:           4,
+		MaxDepth:           1,
+		MaxSnapshots:       2,
+		MaxDeltas:          10,
+	})
+	g.AddSignal("alert")
+
+	result := g.UpdateCopyOnWrite(func(cp *BeliefGraph) error {
+		cp.AddHypothesisCopy("too deep", 0.8, 2, "invalid depth")
+		return nil
+	})
+
+	require.False(t, result.Committed)
+	var limitErr *GraphResourceLimitError
+	require.ErrorAs(t, result.Error, &limitErr)
+	assert.Equal(t, "depth", limitErr.Resource)
+	assert.Len(t, g.Nodes, 1)
+}
+
+func TestBeliefGraph_CopyOnWriteRejectsSnapshotLimit(t *testing.T) {
+	g := NewBeliefGraphWithPolicy(GraphPolicy{
+		CheckpointInterval: 1,
+		MaxNodes:           4,
+		MaxEdges:           4,
+		MaxDepth:           2,
+		MaxSnapshots:       1,
+		MaxDeltas:          1,
+	})
+	g.AddSignal("alert")
+
+	result := g.UpdateCopyOnWrite(func(cp *BeliefGraph) error {
+		cp.AddHypothesisCopy("h1", 0.8, 1, "first")
+		return nil
+	})
+
+	require.False(t, result.Committed)
+	var limitErr *GraphResourceLimitError
+	require.ErrorAs(t, result.Error, &limitErr)
+	assert.Equal(t, "snapshots", limitErr.Resource)
+	assert.Len(t, g.Nodes, 1)
+	assert.Len(t, g.Snapshots, 1)
+}
+
+func TestBeliefGraph_DirectMutationDoesNotPartiallyApplyAtHistoryLimit(t *testing.T) {
+	g := NewBeliefGraphWithPolicy(GraphPolicy{
+		CheckpointInterval: 1,
+		MaxNodes:           4,
+		MaxEdges:           4,
+		MaxDepth:           2,
+		MaxSnapshots:       1,
+		MaxDeltas:          1,
+	})
+	require.NotEmpty(t, g.AddSignal("alert"))
+
+	assert.Empty(t, g.AddHypothesis("not committed", 0.8, 1, "snapshot cap"))
+	assert.Len(t, g.Nodes, 1)
+	var limitErr *GraphResourceLimitError
+	require.ErrorAs(t, g.ValidateResources(), &limitErr)
+	assert.Equal(t, "snapshots", limitErr.Resource)
+}
+
+func TestBeliefGraph_TargetScaleHistoryRemainsBounded(t *testing.T) {
+	g := NewBeliefGraphWithPolicy(GraphPolicy{
+		CheckpointInterval: 10,
+		MaxNodes:           128,
+		MaxEdges:           256,
+		MaxDepth:           3,
+		MaxSnapshots:       32,
+		MaxDeltas:          10,
+	})
+	ids := make([]string, 0, 100)
+	legacyFullSnapshotBytes := 0
+	for index := 0; index < 100; index++ {
+		ids = append(ids, g.AddHypothesis("hypothesis", 0.5, 1, "target scale"))
+		legacyFullSnapshotBytes += serializedGraphStateBytes(g)
+	}
+	for index := 1; index < len(ids); index++ {
+		g.AddEdge(ids[index-1], ids[index], EdgeCausal, 0.5, "target_scale_test")
+		legacyFullSnapshotBytes += serializedGraphStateBytes(g)
+	}
+
+	stats := g.ResourceStats()
+	assert.Equal(t, 100, stats.Nodes)
+	assert.Equal(t, 99, stats.Edges)
+	assert.LessOrEqual(t, stats.Snapshots, g.Policy.MaxSnapshots)
+	assert.LessOrEqual(t, stats.Deltas, g.Policy.MaxDeltas)
+	assert.Less(t, stats.HistoryBytes, 4*1024*1024)
+	assert.Less(t, stats.HistoryBytes, legacyFullSnapshotBytes/2)
+	t.Logf("checkpoint+delta history=%d bytes, per-mutation full snapshots=%d bytes", stats.HistoryBytes, legacyFullSnapshotBytes)
+	assert.NoError(t, g.ValidateResources())
+}
+
+func serializedGraphStateBytes(g *BeliefGraph) int {
+	encoded, _ := json.Marshal(struct {
+		Nodes map[string]*Node `json:"nodes"`
+		Edges map[string]*Edge `json:"edges"`
+	}{Nodes: g.Nodes, Edges: g.Edges})
+	return len(encoded)
 }
 
 func TestBeliefGraph_DeepCopy_Independence(t *testing.T) {
@@ -188,6 +343,21 @@ func TestBeliefFSM_DrillDown(t *testing.T) {
 	fsm.DrillDown("go deeper")
 	assert.Equal(t, 2, fsm.CurrentLevel)
 	assert.Equal(t, StateDrilling, fsm.State)
+	require.Len(t, fsm.History, 1)
+	assert.Equal(t, 1, fsm.History[0].FromLevel)
+	assert.Equal(t, 2, fsm.History[0].ToLevel)
+}
+
+func TestBeliefFSM_BacktrackTo(t *testing.T) {
+	fsm := NewBeliefFSM(FSMThresholds{})
+	fsm.DrillDown("go deeper")
+
+	require.NoError(t, fsm.BacktrackTo(1, "ancestor changed"))
+	assert.Equal(t, 1, fsm.CurrentLevel)
+	require.Len(t, fsm.History, 2)
+	assert.Equal(t, 2, fsm.History[1].FromLevel)
+	assert.Equal(t, 1, fsm.History[1].ToLevel)
+	assert.Error(t, fsm.BacktrackTo(1, "invalid"))
 }
 
 func TestBeliefFSM_MarkDone(t *testing.T) {

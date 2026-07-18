@@ -1,0 +1,14 @@
+groups:
+  - name: opscaptain-local-synthetic
+    rules:
+      - alert: CheckoutSyntheticSeriesSpike
+        expr: count({job="synthetic-checkout"}) > 300
+        for: 0m
+        labels:
+          severity: warning
+          service: checkout
+          environment: local
+          incident: payment-timeout
+        annotations:
+          summary: Checkout synthetic metric series spike
+          description: Local checkout metrics exceeded the synthetic series threshold for the payment-timeout scenario.

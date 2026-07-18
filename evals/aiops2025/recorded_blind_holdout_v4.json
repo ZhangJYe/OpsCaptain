@@ -1,0 +1,181 @@
+{
+  "schema_version": "aiops2025-recorded-eval-v1",
+  "generated_at": "2026-07-16T06:00:28.880211+00:00",
+  "git_commit": "33478b7fb10ddc014faf32ce2baf0b02135ff7b8",
+  "case_role": "holdout",
+  "provenance_profile": "recorded_blind",
+  "evaluation_eligibility": "development_only",
+  "target_selection": "input_time_window_only",
+  "manifest_path": "/Users/zhangjinye/workspace/Agent/OpsCaptain/evals/aiops2025/recorded_split_v4.json",
+  "manifest_sha256": "94e24153784d775d1190012535bbf9a6bc31c52e90597481617e228bb6164e76",
+  "summary_sha256": "ae35d8310211606c15d3e61d8095f0fac54ad017d6cbb88a2e9314c695cd72f9",
+  "metadata_sha256": "4e9d90a3e8fbe48eab3d24bc011780d8be77c43a265b4222c5d95a79ee0c7627",
+  "builder_sha256": "7eefa0557bdaa68bcdb6fda37237dbce677ac2832a0169385e125d8b39368634",
+  "evaluator_sha256": "16b083c89b41010dcd1d6b17678f9868a2cccdbf49a02d2b6e541c4e371036b2",
+  "extraction_config": {
+    "extraction_profile": "blind",
+    "max_metric_signals": 16,
+    "case_manifest": "/Users/zhangjinye/workspace/Agent/OpsCaptain/evals/aiops2025/recorded_split_v4.json",
+    "case_role": "holdout"
+  },
+  "metrics": {
+    "cases": 18,
+    "empty_cases": 0,
+    "exact_entity_hits": 16,
+    "subsystem_hits": 18,
+    "key_metric_case_hits": 12,
+    "key_metric_matches": 23,
+    "key_metric_total": 69,
+    "anti_leak_contract": true,
+    "exact_entity_recall": 0.8888888888888888,
+    "subsystem_recall": 1.0,
+    "key_metric_case_recall": 0.6666666666666666,
+    "key_metric_coverage": 0.3333333333333333
+  },
+  "cases": [
+    {
+      "case_id": "8e7a3965-336",
+      "empty": false,
+      "exact_entity_hit": false,
+      "subsystem_hit": true,
+      "key_metric_matches": 4,
+      "key_metric_total": 5
+    },
+    {
+      "case_id": "b9319370-341",
+      "empty": false,
+      "exact_entity_hit": true,
+      "subsystem_hit": true,
+      "key_metric_matches": 0,
+      "key_metric_total": 1
+    },
+    {
+      "case_id": "c3377c5c-337",
+      "empty": false,
+      "exact_entity_hit": true,
+      "subsystem_hit": true,
+      "key_metric_matches": 2,
+      "key_metric_total": 8
+    },
+    {
+      "case_id": "b9539d8e-345",
+      "empty": false,
+      "exact_entity_hit": true,
+      "subsystem_hit": true,
+      "key_metric_matches": 2,
+      "key_metric_total": 3
+    },
+    {
+      "case_id": "8c61bc09-338",
+      "empty": false,
+      "exact_entity_hit": true,
+      "subsystem_hit": true,
+      "key_metric_matches": 0,
+      "key_metric_total": 1
+    },
+    {
+      "case_id": "fb20d6d2-350",
+      "empty": false,
+      "exact_entity_hit": true,
+      "subsystem_hit": true,
+      "key_metric_matches": 0,
+      "key_metric_total": 3
+    },
+    {
+      "case_id": "0b81a605-339",
+      "empty": false,
+      "exact_entity_hit": true,
+      "subsystem_hit": true,
+      "key_metric_matches": 1,
+      "key_metric_total": 1
+    },
+    {
+      "case_id": "1d868f8e-347",
+      "empty": false,
+      "exact_entity_hit": true,
+      "subsystem_hit": true,
+      "key_metric_matches": 0,
+      "key_metric_total": 4
+    },
+    {
+      "case_id": "09b7c00b-344",
+      "empty": false,
+      "exact_entity_hit": true,
+      "subsystem_hit": true,
+      "key_metric_matches": 0,
+      "key_metric_total": 1
+    },
+    {
+      "case_id": "81a145a5-394",
+      "empty": false,
+      "exact_entity_hit": true,
+      "subsystem_hit": true,
+      "key_metric_matches": 1,
+      "key_metric_total": 3
+    },
+    {
+      "case_id": "cd049902-400",
+      "empty": false,
+      "exact_entity_hit": true,
+      "subsystem_hit": true,
+      "key_metric_matches": 1,
+      "key_metric_total": 2
+    },
+    {
+      "case_id": "a7ed866b-406",
+      "empty": false,
+      "exact_entity_hit": true,
+      "subsystem_hit": true,
+      "key_metric_matches": 2,
+      "key_metric_total": 3
+    },
+    {
+      "case_id": "4153e4c6-397",
+      "empty": false,
+      "exact_entity_hit": true,
+      "subsystem_hit": true,
+      "key_metric_matches": 3,
+      "key_metric_total": 8
+    },
+    {
+      "case_id": "9b0004fb-390",
+      "empty": false,
+      "exact_entity_hit": true,
+      "subsystem_hit": true,
+      "key_metric_matches": 3,
+      "key_metric_total": 8
+    },
+    {
+      "case_id": "9f49250a-383",
+      "empty": false,
+      "exact_entity_hit": true,
+      "subsystem_hit": true,
+      "key_metric_matches": 1,
+      "key_metric_total": 3
+    },
+    {
+      "case_id": "5028909d-391",
+      "empty": false,
+      "exact_entity_hit": true,
+      "subsystem_hit": true,
+      "key_metric_matches": 2,
+      "key_metric_total": 7
+    },
+    {
+      "case_id": "ec746a17-395",
+      "empty": false,
+      "exact_entity_hit": false,
+      "subsystem_hit": true,
+      "key_metric_matches": 0,
+      "key_metric_total": 4
+    },
+    {
+      "case_id": "c1e38e2e-399",
+      "empty": false,
+      "exact_entity_hit": true,
+      "subsystem_hit": true,
+      "key_metric_matches": 1,
+      "key_metric_total": 4
+    }
+  ]
+}

@@ -16,9 +16,10 @@ import (
 )
 
 type GoSEngine struct {
-	cfg     *Config
-	experts map[string]experts.ExpertAgent
-	logger  Logger
+	cfg                *Config
+	experts            map[string]experts.ExpertAgent
+	logger             Logger
+	structuredGenerate StructuredGenerateFunc
 }
 
 type Logger interface {
@@ -33,17 +34,35 @@ type ActResult struct {
 }
 
 type RunStats struct {
-	LLMCalls  int
-	ToolCalls int
-	RAGCalls  int
-	Steps     int
+	LLMCalls         int
+	ToolCalls        int
+	RAGCalls         int
+	Steps            int
+	ExpertDegraded   int
+	ExpertFailed     int
+	NoProgressRounds int
+	RemainingBudget  PlanBudgetConfig
+	PhaseLatencyMs   map[string]int64
+	FrontierChanges  int
+	BacktrackCount   int
+	NewEvidenceCount int
+	ConfidenceDelta  float64
+	Graph            belief.GraphResourceStats
 }
 
 func NewGoSEngine(cfg *Config, logger Logger) *GoSEngine {
+	if cfg == nil {
+		cfg = DefaultConfig()
+	}
+	generate := cfg.StructuredGenerate
+	if generate == nil && cfg.StructuredCognition.Enabled {
+		generate = newStructuredGenerate(cfg)
+	}
 	return &GoSEngine{
-		experts: make(map[string]experts.ExpertAgent),
-		cfg:     cfg,
-		logger:  logger,
+		experts:            make(map[string]experts.ExpertAgent),
+		cfg:                cfg,
+		logger:             logger,
+		structuredGenerate: generate,
 	}
 }
 
@@ -66,19 +85,52 @@ func (e *GoSEngine) emit(ctx context.Context, message string, detail string, pay
 	e.cfg.Emit(ctx, detail, payload)
 }
 
-func (e *GoSEngine) Run(ctx context.Context, symptom string) *protocol.TaskResult {
-	startedAt := time.Now()
-	stats := &RunStats{}
+func (e *GoSEngine) emitUserState(ctx context.Context, stateKind string, detail string, payload map[string]any) {
+	if payload == nil {
+		payload = make(map[string]any)
+	}
+	payload["state_kind"] = stateKind
+	e.emit(ctx, "state_transition", detail, payload)
+}
 
-	graph := belief.NewBeliefGraph()
+func (e *GoSEngine) Run(ctx context.Context, symptom string) (result *protocol.TaskResult) {
+	startedAt := time.Now()
+	stats := newRunStats()
+	graph := belief.NewBeliefGraphWithPolicy(e.cfg.ToGraphPolicy())
 	fsm := belief.NewBeliefFSM(e.cfg.ToFSMThresholds())
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			result = e.degradedResult(graph, fsm, startedAt, stats, "panic_recovered", fmt.Errorf("GoS recovered panic: %v", recovered), nil, false)
+		}
+	}()
+	if err := e.cfg.ValidateGraphConfig(); err != nil {
+		return e.degradedResult(graph, fsm, startedAt, stats, "graph_config_invalid", err, nil, false)
+	}
+
+	planningHistory := NewPlanningHistory()
+	sessionBudgetFactor := e.cfg.SessionMaxSteps * e.cfg.StructuredCognition.MaxPlanItems
+	if sessionBudgetFactor <= 0 {
+		sessionBudgetFactor = 1
+	}
+	planningHistory.RemainingBudget = scalePlanBudget(e.cfg.StructuredCognition.PlanBudget, sessionBudgetFactor)
+	stats.RemainingBudget = planningHistory.RemainingBudget
+	noProgressRounds := 0
 
 	e.emit(ctx, "ingest", "解析症状并建立候选假设", nil)
-	if err := e.ingest(ctx, graph, symptom); err != nil {
-		return e.degradedResult(graph, fsm, startedAt, stats, "ingest_failed", err, nil, false)
+	phaseStartedAt := time.Now()
+	ingestOutcome, err := e.ingest(ctx, graph, symptom)
+	stats.addPhaseLatency("ingest", time.Since(phaseStartedAt))
+	stats.LLMCalls += ingestOutcome.LLMCalls
+	if err != nil {
+		return e.degradedResult(graph, fsm, startedAt, stats, graphFailureReason("ingest_failed", err), err, nil, false)
 	}
+	stats.observeGraph(graph)
 	e.emit(ctx, "ingest_done", fmt.Sprintf("已抽取 %d 个候选节点", len(graph.Nodes)), map[string]any{
-		"node_count": len(graph.Nodes),
+		"node_count":        len(graph.Nodes),
+		"observation_count": ingestOutcome.ObservationCount,
+		"hypothesis_count":  ingestOutcome.HypothesisCount,
+		"mode":              ingestOutcome.Mode,
+		"fallback_reason":   ingestOutcome.FallbackReason,
 	})
 
 	for {
@@ -91,16 +143,37 @@ func (e *GoSEngine) Run(ctx context.Context, symptom string) *protocol.TaskResul
 			fsm.MarkDone("no frontier")
 			break
 		}
+		progressBefore := captureGraphProgress(graph, frontier)
 
 		e.emit(ctx, "frontier_selected", fmt.Sprintf("选中 frontier: %s (score=%.2f)", frontier.Label, frontier.Score), map[string]any{
 			"frontier_label": frontier.Label,
 			"frontier_score": frontier.Score,
 			"fsm_level":      fsm.GetCurrentLevel(),
 		})
+		e.emitUserState(ctx, "explore", "探索当前最优候选", map[string]any{
+			"frontier_id": frontier.NodeID,
+			"level":       frontier.Level,
+		})
 
-		plan, err := e.plan(ctx, frontier)
+		phaseStartedAt = time.Now()
+		planOutcome, err := e.plan(ctx, graph, frontier, planningHistory)
+		stats.addPhaseLatency("plan", time.Since(phaseStartedAt))
+		stats.LLMCalls += planOutcome.LLMCalls
 		if err != nil {
 			return e.degradedResult(graph, fsm, startedAt, stats, "plan_failed", err, nil, false)
+		}
+		plan := planOutcome.Items
+		reservedBudget := PlanBudgetConfig{}
+		for _, item := range plan {
+			reservedBudget = addPlanBudgets(reservedBudget, item.Budget)
+		}
+		planningHistory.RemainingBudget, err = subtractPlanBudget(planningHistory.RemainingBudget, reservedBudget)
+		if err != nil {
+			return e.degradedResult(graph, fsm, startedAt, stats, "plan_budget_failed", err, nil, false)
+		}
+		stats.RemainingBudget = planningHistory.RemainingBudget
+		for _, item := range plan {
+			planningHistory.CalledGoalKeys[planGoalKey(item)] = struct{}{}
 		}
 
 		expertNames := make([]string, 0, len(plan))
@@ -108,17 +181,41 @@ func (e *GoSEngine) Run(ctx context.Context, symptom string) *protocol.TaskResul
 			expertNames = append(expertNames, p.ExpertName)
 		}
 		e.emit(ctx, "expert_planned", fmt.Sprintf("调度 %d 位专家: %v", len(plan), expertNames), map[string]any{
-			"expert_count": len(plan),
-			"expert_names": expertNames,
+			"expert_count":    len(plan),
+			"expert_names":    expertNames,
+			"plan_items":      plan,
+			"mode":            planOutcome.Mode,
+			"fallback_reason": planOutcome.FallbackReason,
+			"fallback_detail": planOutcome.FallbackDetail,
 		})
 
+		phaseStartedAt = time.Now()
 		actRes, err := e.act(ctx, plan, frontier, graph, stats)
+		stats.addPhaseLatency("act", time.Since(phaseStartedAt))
+		if actRes != nil {
+			stats.ExpertDegraded += actRes.DegradedCount
+			stats.ExpertFailed += actRes.FailedCount
+		}
 
 		alreadyUpdated := false
 		if actRes != nil && len(actRes.Analyses) > 0 {
-			if res := e.updateGraph(ctx, graph, actRes.Analyses, frontier); res.Committed {
-				alreadyUpdated = true
+			for _, analysis := range actRes.Analyses {
+				if analysis == nil {
+					continue
+				}
+				for _, toolErr := range analysis.ToolErrors {
+					if strings.TrimSpace(toolErr.ToolName) != "" {
+						planningHistory.FailedTools[toolErr.ToolName] = struct{}{}
+					}
+				}
 			}
+			phaseStartedAt = time.Now()
+			res := e.updateGraph(ctx, graph, actRes.Analyses, frontier)
+			stats.addPhaseLatency("update", time.Since(phaseStartedAt))
+			if !res.Committed {
+				return e.degradedResult(graph, fsm, startedAt, stats, graphFailureReason("update_failed", res.Error), res.Error, actRes, false)
+			}
+			alreadyUpdated = true
 			e.emit(ctx, "evidence_attached", fmt.Sprintf("挂载 %d 条证据, %d 失败", len(actRes.Analyses), actRes.FailedCount), map[string]any{
 				"evidence_count": len(actRes.Analyses),
 				"failed_count":   actRes.FailedCount,
@@ -128,6 +225,24 @@ func (e *GoSEngine) Run(ctx context.Context, symptom string) *protocol.TaskResul
 
 		if err != nil {
 			return e.degradedResult(graph, fsm, startedAt, stats, "act_failed", err, actRes, alreadyUpdated)
+		}
+
+		progressAfter := captureGraphProgress(graph, graph.ExtractFrontier(fsm.GetCurrentLevel()))
+		stats.observeProgress(progressBefore, progressAfter)
+		stats.observeGraph(graph)
+		if progressAfter.progressedFrom(progressBefore) {
+			noProgressRounds = 0
+			stats.NoProgressRounds = 0
+		} else {
+			noProgressRounds++
+			stats.NoProgressRounds = noProgressRounds
+			e.emit(ctx, "no_progress", fmt.Sprintf("连续 %d 轮没有新增节点、有效证据或 frontier 变化", noProgressRounds), map[string]any{
+				"rounds": noProgressRounds,
+				"limit":  e.cfg.Execution.NoProgressRoundLimit,
+			})
+			if e.cfg.Execution.NoProgressRoundLimit > 0 && noProgressRounds >= e.cfg.Execution.NoProgressRoundLimit {
+				return e.degradedResult(graph, fsm, startedAt, stats, "no_progress_loop", fmt.Errorf("no graph progress for %d consecutive rounds", noProgressRounds), actRes, true)
+			}
 		}
 
 		graph.GenerateBeliefText()
@@ -141,6 +256,46 @@ func (e *GoSEngine) Run(ctx context.Context, symptom string) *protocol.TaskResul
 				"supports":   updatedFrontier.Supports,
 				"steps":      stats.Steps,
 			})
+		}
+
+		if e.cfg.StateConversion.Enabled {
+			phaseStartedAt = time.Now()
+			converter := NewStateConverter(e.cfg)
+			decision := converter.Decide(graph, fsm, ConversionBudget{
+				UsedSteps: stats.Steps,
+				MaxSteps:  e.cfg.SessionMaxSteps,
+			})
+			e.emit(ctx, "state_decision", fmt.Sprintf("StateConverter 决策: %s", decision.Action), map[string]any{
+				"action":      decision.Action,
+				"reason_code": decision.ReasonCode,
+				"reason":      decision.Reason,
+				"from_level":  decision.FromLevel,
+				"to_level":    decision.ToLevel,
+				"frontier_id": decision.FrontierID,
+				"total_steps": fsm.TotalSteps,
+			})
+			if err := converter.Apply(graph, fsm, decision); err != nil {
+				stats.addPhaseLatency("state_conversion", time.Since(phaseStartedAt))
+				return e.degradedResult(graph, fsm, startedAt, stats, graphFailureReason("state_conversion_failed", err), err, nil, true)
+			}
+			stats.addPhaseLatency("state_conversion", time.Since(phaseStartedAt))
+			switch decision.Action {
+			case DecisionRefine:
+				e.emitUserState(ctx, "drill_down", "进入更细粒度的根因候选", map[string]any{"from_level": decision.FromLevel, "to_level": decision.ToLevel, "frontier_id": decision.FrontierID})
+			case DecisionBacktrack:
+				stats.BacktrackCount++
+				e.emitUserState(ctx, "backtrack", "证据变化触发路径回溯", map[string]any{"from_level": decision.FromLevel, "to_level": decision.ToLevel, "frontier_id": decision.FrontierID})
+			}
+			switch decision.Action {
+			case DecisionReport:
+				goto DONE
+			case DecisionDegraded:
+				return e.degradedResult(graph, fsm, startedAt, stats, decision.ReasonCode, fmt.Errorf("%s", decision.Reason), nil, true)
+			case DecisionContinue, DecisionRefine, DecisionBacktrack:
+				continue
+			default:
+				return e.degradedResult(graph, fsm, startedAt, stats, "unknown_state_decision", fmt.Errorf("unsupported action %q", decision.Action), nil, true)
+			}
 		}
 
 		decision := fsm.Decide(graph)
@@ -157,6 +312,7 @@ func (e *GoSEngine) Run(ctx context.Context, symptom string) *protocol.TaskResul
 				fsm.MarkDone("sufficient granularity")
 				goto DONE
 			}
+			e.emitUserState(ctx, "drill_down", "当前候选仍需继续钻取", map[string]any{"from_level": fsm.CurrentLevel, "to_level": fsm.CurrentLevel + 1})
 			fsm.DrillDown(fmt.Sprintf("drill to level %d", fsm.CurrentLevel+1))
 		case "done":
 			goto DONE
@@ -169,6 +325,7 @@ func (e *GoSEngine) Run(ctx context.Context, symptom string) *protocol.TaskResul
 	}
 
 DONE:
+	e.emitUserState(ctx, "report", "生成证据化诊断报告", map[string]any{"total_steps": stats.Steps})
 	e.emit(ctx, "report", "生成信念报告", map[string]any{
 		"total_steps": stats.Steps,
 		"llm_calls":   stats.LLMCalls,
@@ -178,14 +335,62 @@ DONE:
 	return e.generateReport(ctx, graph, fsm, startedAt, stats)
 }
 
-func (e *GoSEngine) ingest(ctx context.Context, graph *belief.BeliefGraph, symptom string) error {
-	ingestor := NewIngestor(graph, e.logger)
-	return ingestor.Ingest(ctx, symptom)
+type graphProgress struct {
+	activeNodes    int
+	activeEvidence int
+	frontierID     string
+	frontierScore  float64
+	supports       int
+	refutes        int
 }
 
-func (e *GoSEngine) plan(ctx context.Context, frontier *belief.Frontier) ([]PlanItem, error) {
-	planner := NewPlanner(e.experts, e.cfg, e.logger)
-	return planner.Plan(ctx, frontier)
+func captureGraphProgress(graph *belief.BeliefGraph, frontier *belief.Frontier) graphProgress {
+	progress := graphProgress{}
+	if graph != nil {
+		for _, node := range graph.GetActiveNodeCopies() {
+			progress.activeNodes++
+			if node.Type == belief.NodeEvidence {
+				progress.activeEvidence++
+			}
+		}
+	}
+	if frontier != nil {
+		progress.frontierID = frontier.NodeID
+		progress.frontierScore = frontier.Score
+		progress.supports = frontier.Supports
+		progress.refutes = frontier.Refutes
+	}
+	return progress
+}
+
+func (p graphProgress) progressedFrom(before graphProgress) bool {
+	return p.activeNodes > before.activeNodes ||
+		p.activeEvidence > before.activeEvidence ||
+		p.frontierID != before.frontierID ||
+		p.frontierScore != before.frontierScore ||
+		p.supports != before.supports ||
+		p.refutes != before.refutes
+}
+
+func (e *GoSEngine) ingest(ctx context.Context, graph *belief.BeliefGraph, symptom string) (IngestOutcome, error) {
+	ingestor := NewStructuredIngestor(graph, e.cfg, e.logger, e.structuredGenerate)
+	return ingestor.IngestWithOutcome(ctx, symptom)
+}
+
+func (e *GoSEngine) plan(ctx context.Context, graph *belief.BeliefGraph, frontier *belief.Frontier, history *PlanningHistory) (PlanOutcome, error) {
+	planner := NewStructuredPlanner(e.experts, e.cfg, e.logger, e.structuredGenerate)
+	outcome, err := planner.PlanWithContext(ctx, PlanningContext{
+		Frontier:                     frontier,
+		Graph:                        graph,
+		CalledGoalKeys:               history.CalledGoalKeys,
+		FailedTools:                  history.FailedTools,
+		RemainingBudget:              history.RemainingBudget,
+		StructuredGenerationDisabled: history.StructuredGenerationDisabled,
+	})
+	if outcome.FallbackReason == "structured_generation_failed" {
+		history.StructuredGenerationDisabled = true
+	}
+	return outcome, err
 }
 
 func (e *GoSEngine) act(ctx context.Context, plan []PlanItem, frontier *belief.Frontier, graph *belief.BeliefGraph, stats *RunStats) (*ActResult, error) {
@@ -193,7 +398,11 @@ func (e *GoSEngine) act(ctx context.Context, plan []PlanItem, frontier *belief.F
 	var mu sync.Mutex
 
 	g, gCtx := errgroup.WithContext(ctx)
-	g.SetLimit(3)
+	concurrency := e.cfg.Execution.MaxConcurrentExperts
+	if concurrency <= 0 {
+		concurrency = 1
+	}
+	g.SetLimit(concurrency)
 
 	for i, item := range plan {
 		i, item := i, item
@@ -208,9 +417,7 @@ func (e *GoSEngine) act(ctx context.Context, plan []PlanItem, frontier *belief.F
 				return nil
 			}
 
-			// Call Run directly within the errgroup goroutine.
-			// agent.Run must respect context cancellation to avoid goroutine leaks.
-			analysis := agent.Run(gCtx, frontier, graph)
+			analysis := e.runExpertSafely(gCtx, agent, item, frontier, graph)
 			if analysis == nil {
 				analysis = &experts.ExpertAnalysis{
 					ExpertName:        item.ExpertName,
@@ -240,66 +447,171 @@ func (e *GoSEngine) act(ctx context.Context, plan []PlanItem, frontier *belief.F
 
 	result := &ActResult{Analyses: analyses}
 	for _, a := range analyses {
+		if a == nil {
+			continue
+		}
 		switch a.Status {
 		case "degraded":
 			result.DegradedCount++
 		case "failed":
 			result.FailedCount++
 		}
+		if e.logger != nil {
+			supports, refutes, neutral := 0, 0, 0
+			for _, evidence := range a.Evidence {
+				switch evidence.Relation {
+				case experts.EvidenceRelationSupport:
+					supports++
+				case experts.EvidenceRelationRefute:
+					refutes++
+				default:
+					neutral++
+				}
+			}
+			e.logger.Info("expert completed",
+				"expert", a.ExpertName,
+				"status", a.Status,
+				"degradation_reason", a.DegradationReason,
+				"evidence_count", len(a.Evidence),
+				"support_count", supports,
+				"refute_count", refutes,
+				"neutral_count", neutral,
+				"refinement_count", len(a.Refinements),
+				"tool_error_count", len(a.ToolErrors),
+			)
+		}
 	}
 
-	if result.FailedCount+result.DegradedCount == len(plan) {
+	if result.FailedCount == len(plan) || result.FailedCount+result.DegradedCount == len(plan) && !hasUsablePartialEvidence(analyses) {
 		return result, fmt.Errorf("all experts failed or degraded (%d failed, %d degraded)", result.FailedCount, result.DegradedCount)
 	}
 
 	return result, nil
 }
 
-func (e *GoSEngine) updateGraph(ctx context.Context, graph *belief.BeliefGraph, analyses []*experts.ExpertAnalysis, frontier *belief.Frontier) *belief.GraphUpdateResult {
-	return graph.UpdateCopyOnWrite(func(cp *belief.BeliefGraph) error {
-		bestAnalysis := ""
-		bestConfidence := 0.0
-		for _, a := range analyses {
-			for _, ev := range a.Evidence {
-				src := &belief.EvidenceSource{
-					SourceType:     ev.SourceType,
-					SourceID:       ev.SourceID,
-					SummarySnippet: ev.Snippet,
-				}
-				attrs := map[string]interface{}{
-					"score": ev.Score,
-				}
-				eid := cp.AddNodeCopy(belief.NodeEvidence, ev.Title, ev.Score, 0, attrs, src)
-
-				edgeType := belief.EdgeSupport
-				if a.Confidence < 0.5 {
-					edgeType = belief.EdgeRefute
-				}
-				cp.AddEdgeCopy(eid, frontier.NodeID, edgeType, ev.Score, "expert_analysis")
-			}
-			if a.Confidence > bestConfidence {
-				bestConfidence = a.Confidence
-				bestAnalysis = a.Analysis
+func (e *GoSEngine) runExpertSafely(
+	ctx context.Context,
+	agent experts.ExpertAgent,
+	item PlanItem,
+	frontier *belief.Frontier,
+	graph *belief.BeliefGraph,
+) (analysis *experts.ExpertAnalysis) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			analysis = &experts.ExpertAnalysis{
+				ExpertName:        item.ExpertName,
+				Status:            "failed",
+				DegradationReason: "expert_panic_recovered",
+				ToolErrors: []experts.ToolError{{
+					ToolName: "expert",
+					Action:   "panic_recovery",
+					Error:    fmt.Sprintf("expert panic recovered: %v", recovered),
+				}},
 			}
 		}
+	}()
+	if planned, ok := agent.(experts.PlannedExpertAgent); ok {
+		frontierCopy := *frontier
+		return planned.RunPlanned(ctx, experts.ExpertTask{
+			Frontier:         &frontierCopy,
+			Graph:            buildExpertGraphView(graph, frontier),
+			ExpectedEvidence: append([]string(nil), item.ExpectedEvidence...),
+			AllowedTools:     append([]string(nil), item.AllowedTools...),
+			StopConditions:   append([]string(nil), item.StopConditions...),
+			Budget:           toExpertExecutionBudget(item.Budget),
+		})
+	}
+	return agent.Run(ctx, frontier, graph)
+}
 
-		if bestConfidence > 0 {
-			node := cp.Nodes[frontier.NodeID]
-			if node != nil {
-				if node.Attrs == nil {
-					node.Attrs = make(map[string]interface{})
-				}
-				node.Attrs["analysis"] = bestAnalysis
-				node.Attrs["confidence"] = bestConfidence
-				node.Attrs["why"] = bestAnalysis
-				if bestConfidence > node.Score {
-					node.Score = bestConfidence
+func toExpertExecutionBudget(budget PlanBudgetConfig) experts.ExecutionBudget {
+	return experts.ExecutionBudget{
+		LLMCalls:          budget.LLMCalls,
+		ToolCalls:         budget.ToolCalls,
+		RAGCalls:          budget.RAGCalls,
+		Timeout:           time.Duration(budget.TimeoutMs) * time.Millisecond,
+		MaxRetrievalSteps: budget.MaxRetrievalSteps,
+		MaxOutputTokens:   budget.MaxOutputTokens,
+	}
+}
+
+func hasUsablePartialEvidence(analyses []*experts.ExpertAnalysis) bool {
+	for _, analysis := range analyses {
+		if analysis == nil {
+			continue
+		}
+		for _, evidence := range analysis.Evidence {
+			if strings.TrimSpace(evidence.SourceType) != "" && strings.TrimSpace(evidence.SourceID) != "" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func buildExpertGraphView(graph *belief.BeliefGraph, frontier *belief.Frontier) *belief.BeliefGraph {
+	view := belief.NewBeliefGraph()
+	if graph == nil || frontier == nil {
+		return view
+	}
+	nodes := graph.GetActiveNodeCopies()
+	edges := graph.GetActiveEdgeCopies()
+	byID := make(map[string]belief.Node, len(nodes))
+	for _, node := range nodes {
+		byID[node.ID] = node
+	}
+	included := map[string]struct{}{frontier.NodeID: {}}
+	if graph.StartSignalID != "" {
+		included[graph.StartSignalID] = struct{}{}
+	}
+	changed := true
+	for changed {
+		changed = false
+		for _, edge := range edges {
+			_, dstIncluded := included[edge.Dst]
+			if dstIncluded && (edge.Type == belief.EdgeRefines || edge.Type == belief.EdgeCausal) {
+				if _, exists := included[edge.Src]; !exists {
+					included[edge.Src] = struct{}{}
+					changed = true
 				}
 			}
 		}
-
-		return nil
-	})
+		for _, node := range nodes {
+			if node.Type != belief.NodeEvidence || node.Source == nil {
+				continue
+			}
+			if _, targetIncluded := included[node.Source.TargetHypothesisID]; targetIncluded {
+				if _, exists := included[node.ID]; !exists {
+					included[node.ID] = struct{}{}
+					changed = true
+				}
+			}
+		}
+	}
+	for nodeID := range included {
+		node, exists := byID[nodeID]
+		if !exists {
+			continue
+		}
+		copied := node
+		view.Nodes[nodeID] = &copied
+	}
+	for _, edge := range edges {
+		if _, ok := view.Nodes[edge.Src]; !ok {
+			continue
+		}
+		if _, ok := view.Nodes[edge.Dst]; !ok {
+			continue
+		}
+		copied := edge
+		view.Edges[edge.Src+"->"+edge.Dst] = &copied
+	}
+	if _, ok := view.Nodes[graph.StartSignalID]; ok {
+		view.StartSignalID = graph.StartSignalID
+	}
+	view.Belief = graph.Belief
+	view.CurrentStep = graph.CurrentStep
+	return view
 }
 
 func (e *GoSEngine) shouldReport(frontier *belief.Frontier) bool {
@@ -307,33 +619,44 @@ func (e *GoSEngine) shouldReport(frontier *belief.Frontier) bool {
 }
 
 func (e *GoSEngine) degradedResult(graph *belief.BeliefGraph, fsm *belief.BeliefFSM, startedAt time.Time, stats *RunStats, reason string, err error, actRes *ActResult, alreadyUpdated bool) *protocol.TaskResult {
+	e.emitUserState(context.Background(), "degraded", "诊断进入降级路径", map[string]any{"reason_code": reason})
 	if !alreadyUpdated && actRes != nil && len(actRes.Analyses) > 0 {
 		if f := graph.ExtractFrontier(fsm.GetCurrentLevel()); f != nil {
 			e.updateGraph(context.Background(), graph, actRes.Analyses, f)
 		}
 	}
-	summary, confidence := e.degradedSummary(reason, err, actRes)
+	degradedDetail, _ := e.degradedSummary(reason, err, actRes)
+	frontier := selectReportFrontier(graph, fsm)
+	report := e.buildEvidenceReport(graph, frontier, stats, "执行降级："+degradedDetail)
 
-	return &protocol.TaskResult{
+	result := &protocol.TaskResult{
 		TaskID:            uuid.NewString(),
 		Agent:             "gos_engine",
 		Status:            protocol.ResultStatusDegraded,
-		Summary:           summary,
-		Confidence:        confidence,
+		Summary:           formatEvidenceReport(report),
+		Confidence:        report.Confidence,
 		DegradationReason: fmt.Sprintf("%s: %v", reason, err),
-		Evidence:          e.collectEvidence(graph),
+		Evidence:          report.protocolEvidence(),
+		NextActions:       report.NextActions,
 		Metadata: map[string]any{
-			"belief_graph": graph.ToDict(),
-			"fsm_history":  fsm.History,
-			"error_phase":  reason,
-			"llm_calls":    stats.LLMCalls,
-			"tool_calls":   stats.ToolCalls,
-			"rag_calls":    stats.RAGCalls,
-			"steps":        stats.Steps,
+			"belief_graph":          graph.ToDict(),
+			"fsm_history":           fsm.History,
+			"graph_valid":           validateBeliefGraph(graph) == nil,
+			"error_phase":           reason,
+			"llm_calls":             stats.LLMCalls,
+			"tool_calls":            stats.ToolCalls,
+			"rag_calls":             stats.RAGCalls,
+			"steps":                 stats.Steps,
+			"expert_degraded_count": stats.ExpertDegraded,
+			"expert_failed_count":   stats.ExpertFailed,
+			"no_progress_rounds":    stats.NoProgressRounds,
+			"remaining_budget":      stats.RemainingBudget,
+			"evidence_report":       report,
 		},
 		StartedAt:  startedAt.UnixMilli(),
 		FinishedAt: time.Now().UnixMilli(),
 	}
+	return e.finalizeResult(result, graph, startedAt, stats)
 }
 
 func (e *GoSEngine) degradedSummary(reason string, err error, actRes *ActResult) (string, float64) {
@@ -403,87 +726,63 @@ func compactStrings(items []string, limit int) []string {
 }
 
 func (e *GoSEngine) generateReport(ctx context.Context, graph *belief.BeliefGraph, fsm *belief.BeliefFSM, startedAt time.Time, stats *RunStats) *protocol.TaskResult {
-	frontier := graph.ExtractFrontier(fsm.GetCurrentLevel())
-	if frontier == nil {
-		for lvl := fsm.GetCurrentLevel() - 1; lvl >= 0; lvl-- {
-			frontier = graph.ExtractFrontier(lvl)
-			if frontier != nil {
-				break
-			}
-		}
+	reportStartedAt := time.Now()
+	if err := validateBeliefGraph(graph); err != nil {
+		stats.addPhaseLatency("report", time.Since(reportStartedAt))
+		return e.degradedResult(graph, fsm, startedAt, stats, "graph_invalid", err, nil, true)
 	}
+	frontier := selectReportFrontier(graph, fsm)
 	if frontier == nil {
+		stats.addPhaseLatency("report", time.Since(reportStartedAt))
 		return e.degradedResult(graph, fsm, startedAt, stats, "no_frontier", fmt.Errorf("no frontier found"), nil, false)
 	}
-
-	summary := frontier.Label
-	confidence := frontier.Score
-
-	analysisText := ""
-	if attrs := graph.Nodes[frontier.NodeID].Attrs; attrs != nil {
-		if a, ok := attrs["analysis"].(string); ok {
-			analysisText = a
-		}
-	}
-	if analysisText != "" {
-		summary = analysisText
+	report := e.buildEvidenceReport(graph, frontier, stats)
+	status := protocol.ResultStatusSucceeded
+	degradationReason := ""
+	if !report.Sufficient {
+		status = protocol.ResultStatusDegraded
+		degradationReason = "evidence_report_insufficient: " + strings.Join(report.ReasonCodes, ",")
+		e.emitUserState(ctx, "degraded", "证据不足或存在关键冲突，报告已降级", map[string]any{"reason_codes": report.ReasonCodes})
 	}
 
-	if attrs := graph.Nodes[frontier.NodeID].Attrs; attrs != nil {
-		if c, ok := attrs["confidence"].(float64); ok {
-			confidence = c
-		}
-	}
-
-	return &protocol.TaskResult{
-		TaskID:     uuid.NewString(),
-		Agent:      "gos_engine",
-		Status:     protocol.ResultStatusSucceeded,
-		Summary:    summary,
-		Confidence: confidence,
-		Evidence:   e.collectEvidence(graph),
+	result := &protocol.TaskResult{
+		TaskID:            uuid.NewString(),
+		Agent:             "gos_engine",
+		Status:            status,
+		Summary:           formatEvidenceReport(report),
+		Confidence:        report.Confidence,
+		DegradationReason: degradationReason,
+		Evidence:          report.protocolEvidence(),
+		NextActions:       report.NextActions,
 		Metadata: map[string]any{
-			"belief_graph": graph.ToDict(),
-			"fsm_history":  fsm.History,
-			"frontier":     frontier,
-			"llm_calls":    stats.LLMCalls,
-			"tool_calls":   stats.ToolCalls,
-			"rag_calls":    stats.RAGCalls,
-			"steps":        stats.Steps,
+			"belief_graph":          graph.ToDict(),
+			"fsm_history":           fsm.History,
+			"graph_valid":           true,
+			"frontier":              frontier,
+			"llm_calls":             stats.LLMCalls,
+			"tool_calls":            stats.ToolCalls,
+			"rag_calls":             stats.RAGCalls,
+			"steps":                 stats.Steps,
+			"expert_degraded_count": stats.ExpertDegraded,
+			"expert_failed_count":   stats.ExpertFailed,
+			"no_progress_rounds":    stats.NoProgressRounds,
+			"remaining_budget":      stats.RemainingBudget,
+			"evidence_report":       report,
 		},
 		StartedAt:  startedAt.UnixMilli(),
 		FinishedAt: time.Now().UnixMilli(),
 	}
-}
-
-func (e *GoSEngine) collectEvidence(graph *belief.BeliefGraph) []protocol.EvidenceItem {
-	var evidence []protocol.EvidenceItem
-	for _, n := range graph.GetActiveNodeCopies() {
-		if n.Type == belief.NodeEvidence {
-			if n.Source == nil {
-				continue
-			}
-			item := protocol.EvidenceItem{
-				SourceType: "graph",
-				Title:      n.Label,
-				Snippet:    n.Label,
-				Score:      n.Score,
-			}
-			if n.Source != nil {
-				item.SourceType = n.Source.SourceType
-				item.SourceID = n.Source.SourceID
-				item.Snippet = n.Source.SummarySnippet
-			}
-			if score, ok := n.Attrs["score"].(float64); ok {
-				item.Score = score
-			}
-			evidence = append(evidence, item)
-		}
-	}
-	return evidence
+	stats.addPhaseLatency("report", time.Since(reportStartedAt))
+	return e.finalizeResult(result, graph, startedAt, stats)
 }
 
 type PlanItem struct {
-	ExpertName string
-	Reason     string
+	ExpertName         string           `json:"expert_name"`
+	TargetHypothesisID string           `json:"target_hypothesis_id,omitempty"`
+	Reason             string           `json:"reason"`
+	ExpectedEvidence   []string         `json:"expected_evidence"`
+	AllowedTools       []string         `json:"allowed_tools"`
+	StopConditions     []string         `json:"stop_conditions"`
+	Budget             PlanBudgetConfig `json:"budget"`
+	FallbackReason     string           `json:"fallback_reason,omitempty"`
 }

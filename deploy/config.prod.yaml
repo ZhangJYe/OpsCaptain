@@ -69,11 +69,13 @@ milvus:
     ef_construction: 200
 
 chat_model:
+  provider: "deepseek"
   model: "deepseek-v4-pro"
   api_key: "${DEEPSEEK_API_KEY}"
   base_url: "https://api.deepseek.com"
 
 chat_model_fast:
+  provider: "deepseek"
   model: "deepseek-v4-flash"
   api_key: "${DEEPSEEK_API_KEY}"
   base_url: "https://api.deepseek.com"
@@ -83,6 +85,7 @@ llm:
   concurrent_wait_timeout_ms: 5000
 
 embedding_model:
+  provider: "doubao"
   model: "doubao-embedding-vision-251215"
   api_key: "${ARK_API_KEY}"
   base_url: "https://ark.cn-beijing.volces.com/api/v3"
@@ -152,22 +155,99 @@ rag:
 aiops:
   enabled: true
   engine: "plan_execute_replan"
+  ledger:
+    backend: "redis" # 多实例共享 task/result/trace；artifact 仍使用独立共享存储
+    prefix: "opscaption:ai:"
+    retention_hours: 24
+    max_tasks: 20000
+    max_results: 20000
   plan:
     model_path: "chat_model_fast"
     report_timeout_ms: 45000
   gos:
-    enabled: true
+    enabled: false
+    evaluation:
+      telemetry_profile: "unverified" # 真实环境完成遥测来源核验后才可改为 real
     model_path: "chat_model_fast"
     temperature: 0.8
     max_tokens: 4096
+    evidence_max_chars: 8192
     session_max_steps: 5
     max_retrieval_steps: 3
-    call_timeout_ms: 15000
+    call_timeout_ms: 30000
     fsm:
       gap_delta: 0.3
       min_support: 2
       max_steps: 3
       min_confidence: 0.7
+    confidence:
+      support_weight: 0.25
+      refute_weight: 0.35
+      deduplicate: true
+    graph:
+      checkpoint_interval: 10
+      max_nodes: 256
+      max_edges: 512
+      max_depth: 4
+      max_snapshots: 32
+      max_deltas: 10
+    structured_cognition:
+      enabled: false
+      call_timeout_ms: 30000
+      max_hypotheses: 4
+      max_observations: 8
+      max_plan_items: 2
+      plan_budget:
+        llm_calls: 3
+        tool_calls: 2
+        rag_calls: 1
+        timeout_ms: 30000
+        max_retrieval_steps: 2
+        max_output_tokens: 1024
+    execution:
+      max_concurrent_experts: 3
+      no_progress_round_limit: 2
+    report:
+      conflict_strength_threshold: 0.5
+      max_evidence_items: 8
+      evidence_snippet_max_chars: 512
+      max_next_actions: 3
+    experts:
+      - name: "linux_sre"
+        description: "Linux SRE 专家"
+        tools: ["query_logs", "query_prometheus_instant", "query_prometheus_alerts", "query_internal_docs"]
+        max_retrieval_steps: 3
+        budget: {llm_calls: 3, tool_calls: 2, rag_calls: 1, timeout_ms: 30000, max_retrieval_steps: 2, max_output_tokens: 1024}
+      - name: "network_sre"
+        description: "网络 SRE 专家"
+        tools: ["query_logs", "query_prometheus_instant", "query_prometheus_alerts", "query_internal_docs"]
+        max_retrieval_steps: 3
+        budget: {llm_calls: 3, tool_calls: 2, rag_calls: 1, timeout_ms: 30000, max_retrieval_steps: 2, max_output_tokens: 1024}
+      - name: "database_sre"
+        description: "数据库 SRE 专家"
+        tools: ["query_logs", "query_prometheus_instant", "query_prometheus_alerts", "query_internal_docs"]
+        max_retrieval_steps: 3
+        budget: {llm_calls: 3, tool_calls: 2, rag_calls: 1, timeout_ms: 30000, max_retrieval_steps: 2, max_output_tokens: 1024}
+    state_conversion:
+      enabled: false
+      max_depth: 2
+      tie_epsilon: 0.01
+      refinement_rules:
+        - parent: "资源耗尽"
+          children:
+            - {label: "CPU 饱和", score: 0.6, why: "验证 CPU 使用率、负载和节流状态", actionable: true}
+            - {label: "内存压力", score: 0.3, why: "验证内存使用、交换和 OOM 事件", actionable: true}
+            - {label: "磁盘 IO 饱和", score: 0.1, why: "验证 IO 等待、吞吐和磁盘容量", actionable: true}
+        - parent: "网络问题"
+          children:
+            - {label: "网络延迟升高", score: 0.5, why: "验证链路延迟和跨区 RTT", actionable: true}
+            - {label: "网络丢包", score: 0.3, why: "验证重传、丢包率和接口错误", actionable: true}
+            - {label: "DNS 解析异常", score: 0.2, why: "验证 DNS 延迟、失败率和解析结果", actionable: true}
+        - parent: "配置错误"
+          children:
+            - {label: "应用配置不一致", score: 0.5, why: "核对当前配置与最近变更", actionable: true}
+            - {label: "依赖地址配置错误", score: 0.3, why: "核对依赖端点、凭据引用和环境变量", actionable: true}
+            - {label: "发布参数错误", score: 0.2, why: "核对发布清单和运行参数", actionable: true}
 
 multi_agent:
   enabled: false
@@ -188,6 +268,7 @@ log_topic:
 mcp:
   log_url: "${MCP_LOG_URL}"
   log_http_url: "${MCP_LOG_HTTP_URL}"
+  log_default_window: "30m"
   prefer_http_log_tool: true
   connect_timeout_ms: 10000
   tool_timeout_ms: 5000
@@ -200,6 +281,7 @@ mysql:
 
 prometheus:
   address: "${PROMETHEUS_ADDRESS}"
+  alerts_max_results: 50
   discovery_timeout_ms: 5000
   discovery_default_window_minutes: 60
   discovery_max_window_minutes: 360

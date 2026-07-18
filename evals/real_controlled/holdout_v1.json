@@ -1,0 +1,62 @@
+{
+  "schema_version": "gos-eval-v2",
+  "role": "holdout",
+  "description": "Isolated controlled-fault holdout v1. Faults execute on the evaluation server; labels remain evaluator-only.",
+  "cases": [
+    {
+      "id": "real-controlled-001",
+      "domain": "cpu",
+      "scenario": "drilldown_required",
+      "symptom": "隔离评测环境中 eval-cpu-checkout 请求延迟升高，单个 worker 忙碌，但内存保持稳定。请根据实时指标和日志定位根因。",
+      "ground_truth": "eval-cpu-checkout 的单个 busy-loop worker 导致 CPU 饱和",
+      "expected_keywords": ["busy-loop", "worker", "CPU", "饱和"],
+      "expected_evidence_keywords": ["busy-loop", "CPU core", "memory remained stable"],
+      "expected_status": "succeeded",
+      "notes": "Ground truth comes from the measured CPU fault injector and is never included in tool configuration."
+    },
+    {
+      "id": "real-controlled-002",
+      "domain": "cpu",
+      "scenario": "evidence_conflict",
+      "symptom": "隔离评测环境中 eval-lock-payment 的请求发生排队，但进程没有持续 CPU 打满。请查询实时证据并判断瓶颈。",
+      "ground_truth": "eval-lock-payment 的共享互斥锁竞争导致请求排队",
+      "expected_keywords": ["互斥锁", "锁竞争", "mutex", "排队"],
+      "expected_evidence_keywords": ["shared mutex", "queued", "lock wait"],
+      "expected_status": "succeeded",
+      "notes": "Ground truth comes from measured contention among eight worker threads."
+    },
+    {
+      "id": "real-controlled-003",
+      "domain": "dependency",
+      "scenario": "tool_timeout",
+      "symptom": "隔离评测环境中 eval-risk-client 调用外部风控依赖持续失败，本地进程仍可响应。请核对调用日志和超时数据。",
+      "ground_truth": "外部风控依赖响应超过 50ms 客户端预算导致 eval-risk-client 超时",
+      "expected_keywords": ["外部依赖", "50ms", "预算", "超时"],
+      "expected_evidence_keywords": ["risk dependency", "50ms", "deadline"],
+      "expected_status": "succeeded",
+      "notes": "The fixture executes five HTTP calls against a measured slow dependency."
+    },
+    {
+      "id": "real-controlled-004",
+      "domain": "config_change",
+      "scenario": "wrong_initial_hypothesis",
+      "symptom": "隔离评测环境中 eval-config-client 新配置生效后依赖连接全部失败，依赖主机本身可达。请定位配置问题。",
+      "ground_truth": "eval-config-client 配置了已关闭的依赖端口，导致连接被拒绝",
+      "expected_keywords": ["端口", "配置", "连接被拒绝", "refused"],
+      "expected_evidence_keywords": ["closed port", "connection was refused", "configured endpoint"],
+      "expected_status": "succeeded",
+      "notes": "The fixture performs three real TCP connects to a released local port."
+    },
+    {
+      "id": "real-controlled-005",
+      "domain": "cache",
+      "scenario": "support_evidence",
+      "symptom": "隔离评测环境中 eval-cache-catalog 的 Redis 延迟正常，但某一时刻回源请求突然放大。请分析缓存侧实时证据。",
+      "ground_truth": "eval-cache-catalog 热点键同时过期引发缓存 miss 和回源请求尖峰",
+      "expected_keywords": ["热点键", "同时过期", "cache miss", "回源"],
+      "expected_evidence_keywords": ["shared one expiry", "cache misses", "origin requests"],
+      "expected_status": "succeeded",
+      "notes": "The fixture expires 32 hot keys together and measures 64 concurrent reads."
+    }
+  ]
+}

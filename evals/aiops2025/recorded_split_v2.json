@@ -1,0 +1,62 @@
+{
+  "schema_version": "aiops2025-recorded-split-v1",
+  "source": "agenticopseval/AIOps2025",
+  "archive_dates": [
+    "2025-06-09",
+    "2025-06-17",
+    "2025-06-19"
+  ],
+  "selection_contract": "input-only local-date stratification; exclude every prior development/holdout case; rank remaining ids by seeded SHA-256; labels are unavailable to selection",
+  "selection_algorithm": "capacity-balanced round-robin quotas in archive_dates order; within each date sha256(seed\\0archive_date\\0case_id), ascending",
+  "selection_seed": "opscaptain-aiops2025-holdout-v2",
+  "holdout_case_count": 18,
+  "selected_counts_by_archive_date": {
+    "2025-06-09": 4,
+    "2025-06-17": 7,
+    "2025-06-19": 7
+  },
+  "input_sha256": "db10c6d517ca5a8ab8fb73f203b345f729bdc396581e9d9d55afd92d6591f0e9",
+  "prior_manifest_sha256": "13c164ae1a46675e5983c5d19375b3038d1d4ace280b495c4d46ceeda2094b55",
+  "consumed_case_count": 36,
+  "consumed_case_ids_sha256": "9f0422faf9eab6eea1f181bd5eed0e61af25f8ebb6c1cdfa1c811f7927c0a492",
+  "development_case_ids": [
+    "50bce1c4-311",
+    "046aefa7-170",
+    "18b8cf77-318",
+    "332adc3a-317",
+    "cb5815ce-161",
+    "eba76009-152",
+    "168cdf19-153",
+    "9a257bd5-150",
+    "54002a5c-155",
+    "05b57997-154",
+    "934844b2-156",
+    "43e1b3bf-163",
+    "89c85406-162",
+    "1c47d7bf-157",
+    "70d3b8b0-329",
+    "3260fa48-316",
+    "162fe36a-151",
+    "a42d2eb4-319"
+  ],
+  "holdout_case_ids": [
+    "578fce7c-166",
+    "e0a261ce-171",
+    "e6c9989b-173",
+    "a0761b38-172",
+    "d44478e6-328",
+    "68bbf4fd-332",
+    "c0cdda5e-314",
+    "985de575-334",
+    "4fd42adb-327",
+    "53ab3ccb-326",
+    "76222cb2-331",
+    "371ba498-375",
+    "7dbfd4c3-365",
+    "14c1047f-366",
+    "d124f9b7-379",
+    "9450018e-372",
+    "aba2da7f-368",
+    "68727566-367"
+  ]
+}

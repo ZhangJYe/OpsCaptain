@@ -3,6 +3,7 @@ package service
 import (
 	"SuperBizAgent/internal/consts"
 	"context"
+	"regexp"
 	"strings"
 )
 
@@ -41,6 +42,9 @@ var analysisOnlyKeywords = []string{
 	"analyze", "diagnose", "summarize", "suggest", "recommend", "how to", "steps", "plan",
 }
 
+var negatedExecutionPrefix = regexp.MustCompile(`(?:不要|不得|禁止|避免|无需|不能|不应|不允许|不需要|请勿|不)(?:再|直接|立即|实际)?(?:执行|进行|做)?(?:任何)?$|(?:do not|don't|must not|never|without|no)(?: directly| actually)?(?: execute| perform| apply| make)?(?: any)?\s*$`)
+var negatedExecutionScope = regexp.MustCompile(`(?:不要|不得|禁止|避免|无需|不能|不应|不允许|不需要|请勿|不)(?:再|直接|立即|实际)?(?:执行|进行|做)|(?:do not|don't|must not|never|without)(?: directly| actually)?(?: execute| perform| apply| make)`)
+
 func (g *StaticApprovalGate) Check(ctx context.Context, action string) ApprovalDecision {
 	if bypass, _ := ctx.Value(consts.CtxKeyApprovalBypass).(bool); bypass {
 		return ApprovalDecision{Approved: true}
@@ -69,20 +73,48 @@ func (g *StaticApprovalGate) Check(ctx context.Context, action string) ApprovalD
 }
 
 func requiresApproval(action string) bool {
-	hasRisk := false
-	for _, keyword := range highRiskApprovalKeywords {
-		if strings.Contains(action, keyword) {
-			hasRisk = true
-			break
+	if !hasAnyUnnegatedKeyword(action, highRiskApprovalKeywords) {
+		return false
+	}
+	hasExecution := hasAnyUnnegatedKeyword(action, explicitExecutionKeywords)
+	if hasAnyKeyword(action, analysisOnlyKeywords) && !hasExecution {
+		return false
+	}
+	return hasExecution
+}
+
+func hasAnyUnnegatedKeyword(action string, keywords []string) bool {
+	for _, keyword := range keywords {
+		remaining := action
+		for {
+			index := strings.Index(remaining, keyword)
+			if index < 0 {
+				break
+			}
+			if !keywordIsNegated(remaining[:index]) {
+				return true
+			}
+			remaining = remaining[index+len(keyword):]
 		}
 	}
-	if !hasRisk {
-		return false
+	return false
+}
+
+func keywordIsNegated(prefix string) bool {
+	if negatedExecutionPrefix.MatchString(prefix) {
+		return true
 	}
-	if hasAnyKeyword(action, analysisOnlyKeywords) && !hasAnyKeyword(action, explicitExecutionKeywords) {
-		return false
+	return negatedExecutionScope.MatchString(currentExecutionClause(prefix))
+}
+
+func currentExecutionClause(value string) string {
+	start := 0
+	for _, separator := range []string{"，", ",", "。", ";", "；", "\n", "而是", "但是", "但要", "however", "but "} {
+		if index := strings.LastIndex(value, separator); index >= 0 && index+len(separator) > start {
+			start = index + len(separator)
+		}
 	}
-	return hasAnyKeyword(action, explicitExecutionKeywords)
+	return value[start:]
 }
 
 func hasAnyKeyword(action string, keywords []string) bool {

@@ -31,17 +31,15 @@ cd OpsCaption
 
 ### 2. 配置环境变量
 
-```bash
-cp .env.example .env.local
-```
-
-编辑 `.env.local`，至少填入以下必填项：
+编辑项目根目录唯一的 `.env`，至少填入以下必填项：
 
 ```bash
 DEEPSEEK_API_KEY=your-deepseek-api-key    # DeepSeek API 密钥
 ARK_API_KEY=your-ark-api-key              # 豆包 API 密钥（用于 Embedding）
 AUTH_JWT_SECRET=your-jwt-secret           # JWT 认证密钥
 ```
+
+模型方案使用 DeepSeek Chat + 豆包 Embedding。`.env` 是唯一的本地密钥入口；provider、模型名、Base URL 和向量维度统一维护在 `manifest/config/config.yaml`。
 
 ### 3. 启动后端
 
@@ -77,15 +75,46 @@ curl -X POST http://localhost:8000/api/chat \
 go test ./...
 ```
 
-## 完整环境（Docker Compose）
+## 本地可观测性环境
 
-如果需要完整的 Milvus + Redis + RabbitMQ 环境：
+Prometheus、Loki、模拟指标和模拟日志使用独立的本地环境，不复用生产 Compose：
 
 ```bash
-docker compose -f deploy/docker-compose.prod.yml up -d
+make observability-up
 ```
 
-这会启动：后端、前端、Redis、RabbitMQ、Milvus、Jaeger、Prometheus。
+它会启动：
+
+- Prometheus：`http://127.0.0.1:9090`
+- Loki：`http://127.0.0.1:3100`
+- Prometheus Avalanche：持续生成模拟指标并周期制造 series spike
+- 轻量日志生成器：持续生成 checkout/payment/gateway/catalog 模拟故障日志
+- 日志适配器：`http://127.0.0.1:18088/tools/query_logs`
+
+其中 checkout 指标、`CheckoutSyntheticSeriesSpike` 告警和 payment-timeout 日志共享 `service=checkout`、`incident=payment-timeout` 标签，可以直接用于 GoS 的告警、指标、日志证据关联。
+
+本地端点已经集中配置在 `manifest/config/config.yaml` 的 `prometheus.address` 和 `mcp.log_http_url`；`.env` 仍然只保存 API key、密码和 webhook secret。
+
+验证数据链路：
+
+```bash
+curl 'http://127.0.0.1:9090/api/v1/query?query=up'
+
+curl -X POST 'http://127.0.0.1:18088/tools/query_logs' \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"timeout","service":"checkout","window":"30m"}'
+```
+
+查看状态或停止：
+
+```bash
+make observability-status
+make observability-down
+```
+
+这套环境用于本地协议联调和 GoS smoke test。需要更真实的跨服务故障时，可以把 OpenTelemetry Astronomy Shop 的指标接入同一个 Prometheus、日志接入同一个 Loki，OpsCaptain 侧不需要再修改工具协议。
+
+`deploy/docker-compose.prod.yml` 仅用于部署手册定义的服务器生产环境，不作为本地验证入口。
 
 ## 下一步
 
@@ -104,4 +133,4 @@ A: Redis 是可选依赖。本地开发可以不启动 Redis，服务会降级�
 A: Milvus 是可选依赖。RAG 检索会不可用，但对话功能正常。
 
 **Q: 如何配置认证？**
-A: 在 `.env.local` 中设置 `AUTH_JWT_SECRET`，然后在 `config.yaml` 中设置 `auth.enabled: true`。
+A: 在 `.env` 中设置 `AUTH_JWT_SECRET`，然后在 `config.yaml` 中设置 `auth.enabled: true`。

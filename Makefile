@@ -1,7 +1,8 @@
 GO ?= go
 GOFLAGS ?= -count=1
+OBSERVABILITY_COMPOSE ?= deploy/observability/docker-compose.yml
 
-.PHONY: all fmt vet test test-race lint build clean
+.PHONY: all fmt vet test test-race lint build clean observability-up observability-down observability-status observability-check
 
 all: fmt vet lint test build
 
@@ -35,22 +36,37 @@ build:
 clean:
 	@rm -rf bin/ coverage.out
 
+# === Local observability ===
+
+observability-up:
+	@docker compose -f $(OBSERVABILITY_COMPOSE) up -d
+
+observability-down:
+	@docker compose -f $(OBSERVABILITY_COMPOSE) down
+
+observability-status:
+	@docker compose -f $(OBSERVABILITY_COMPOSE) ps
+
+observability-check:
+	@python3 -m unittest deploy/test_local_k8s_log_mcp.py
+	@docker compose -f $(OBSERVABILITY_COMPOSE) config --quiet
+
 # === Eval ===
 
 eval-gate:
 	@echo "==> Eval Gate (确定性回归检查)"
-	@$(GO) run cmd/gos_eval/main.go --mode=gate --gos-profile=eval \
+	@$(GO) run ./cmd/gos_eval --mode=gate --gos-profile=eval \
 	  --baseline=evals/baselines/gos_baseline.json \
 	  --output=evals/reports/gate_$$(date +%Y%m%d%H%M%S).json
 
 eval-runs-gos:
 	@echo "==> Export GoS/Diag runs"
-	@$(GO) run cmd/gos_eval/main.go --mode=export-runs --gos-profile=eval \
+	@$(GO) run ./cmd/gos_eval --mode=export-runs --gos-profile=eval \
 	  --output-dir=evals/runs
 
 eval-judge:
 	@echo "==> LLM Judge 评分"
-	@$(GO) run cmd/gos_eval/main.go --mode=judge \
+	@$(GO) run ./cmd/gos_eval --mode=judge \
 	  --input=evals/runs --output-dir=evals/reports
 
 eval-compression:

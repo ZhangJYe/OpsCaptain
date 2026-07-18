@@ -21,6 +21,43 @@ type ChatRes struct {
 	DegradationReason string   `json:"degradation_reason,omitempty"`
 }
 
+type AgentReq struct {
+	g.Meta           `path:"/agent" method:"post" summary:"统一Agent入口"`
+	SessionID        string   `json:"session_id" v:"required|max-length:128#会话ID不能为空|会话ID长度不能超过128"`
+	Query            string   `json:"query" v:"required|max-length:8000#问题不能为空|问题长度不能超过8000"`
+	Mode             string   `json:"mode,omitempty" v:"in:auto,chat,aiops_diagnosis#Agent模式不合法"`
+	SelectedSkillIds []string `json:"selected_skill_ids,omitempty"`
+}
+
+type AgentChatPayload struct {
+	Answer string   `json:"answer"`
+	Detail []string `json:"detail,omitempty"`
+	Cached bool     `json:"cached,omitempty"`
+}
+
+type AgentDiagnosisPayload struct {
+	Result            string         `json:"result"`
+	Detail            []string       `json:"detail,omitempty"`
+	ApprovalRequired  bool           `json:"approval_required,omitempty"`
+	ApprovalRequestID string         `json:"approval_request_id,omitempty"`
+	ApprovalStatus    string         `json:"approval_status,omitempty"`
+	ExecutionPlan     []string       `json:"execution_plan,omitempty"`
+	Confidence        float64        `json:"confidence,omitempty"`
+	Evidence          []EvidenceItem `json:"evidence,omitempty"`
+	NextActions       []string       `json:"next_actions,omitempty"`
+	StartedAt         int64          `json:"started_at,omitempty"`
+	FinishedAt        int64          `json:"finished_at,omitempty"`
+}
+
+type AgentRes struct {
+	TraceID           string                 `json:"trace_id,omitempty"`
+	Mode              string                 `json:"mode"`
+	Degraded          bool                   `json:"degraded,omitempty"`
+	DegradationReason string                 `json:"degradation_reason,omitempty"`
+	Chat              *AgentChatPayload      `json:"chat,omitempty"`
+	Diagnosis         *AgentDiagnosisPayload `json:"diagnosis,omitempty"`
+}
+
 type ChatSubmitReq struct {
 	g.Meta           `path:"/chat_submit" method:"post" summary:"提交异步对话任务"`
 	Id               string   `json:"Id" v:"required|max-length:128#会话ID不能为空|会话ID长度不能超过128"`

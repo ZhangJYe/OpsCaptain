@@ -1,37 +1,175 @@
-[
-  {
-    "id": "holdout-001",
-    "symptom": "服务 response timeout，CPU 使用率 95%，内存使用率 80%",
-    "ground_truth": "CPU 资源耗尽导致服务超时",
-    "expected_keywords": ["CPU", "资源耗尽", "超时"],
-    "notes": "高 CPU 使用率是主要原因"
-  },
-  {
-    "id": "holdout-002",
-    "symptom": "数据库连接超时，连接池已满，慢查询数量增加",
-    "ground_truth": "数据库连接池耗尽",
-    "expected_keywords": ["数据库", "连接池", "耗尽"],
-    "notes": "慢查询导致连接池被占满"
-  },
-  {
-    "id": "holdout-003",
-    "symptom": "网络延迟升高，跨区域调用超时，本地调用正常",
-    "ground_truth": "网络链路问题",
-    "expected_keywords": ["网络", "延迟", "链路"],
-    "notes": "跨区域网络不稳定"
-  },
-  {
-    "id": "holdout-004",
-    "symptom": "Redis 缓存命中率下降，缓存 key 过期，后端负载升高",
-    "ground_truth": "缓存失效导致后端压力",
-    "expected_keywords": ["缓存", "失效", "后端"],
-    "notes": "缓存策略需要优化"
-  },
-  {
-    "id": "holdout-005",
-    "symptom": "Kafka 消费延迟增加，消息堆积，消费者 CPU 使用率低",
-    "ground_truth": "Kafka 消费者处理能力不足",
-    "expected_keywords": ["Kafka", "消费者", "处理能力"],
-    "notes": "消费者需要扩容或优化"
-  }
-]
+{
+  "schema_version": "gos-eval-v2",
+  "role": "holdout",
+  "description": "独立真实评测集。禁止使用 eval profile，禁止将 ground truth、case id 或期望关键词写入 prompt、规则映射或索引。",
+  "cases": [
+    {
+      "id": "holdout-001",
+      "domain": "cpu",
+      "scenario": "drilldown_required",
+      "symptom": "订单接口的 p99 延迟突然升高，容器 load average 持续超过核数，单个 worker 占满一个核心，内存稳定。",
+      "ground_truth": "异常计算任务造成工作进程 CPU 饱和",
+      "expected_keywords": ["CPU", "进程", "饱和"],
+      "expected_evidence_keywords": ["load", "worker", "CPU"],
+      "expected_status": "succeeded",
+      "require_refine": true
+    },
+    {
+      "id": "holdout-002",
+      "domain": "cpu",
+      "scenario": "evidence_conflict",
+      "symptom": "支付服务告警显示 CPU 偶发 90%，但同一时段 throttling 指标为零；线程 dump 显示大量锁竞争。",
+      "ground_truth": "线程锁竞争而非 CPU 配额限制导致请求排队",
+      "expected_keywords": ["锁竞争", "排队", "CPU"],
+      "expected_evidence_keywords": ["throttling", "锁", "thread"],
+      "expected_status": "succeeded"
+    },
+    {
+      "id": "holdout-003",
+      "domain": "memory",
+      "scenario": "support_evidence",
+      "symptom": "推荐服务 RSS 每小时稳定增长，Full GC 后堆占用仍不下降，最终被 OOMKilled。",
+      "ground_truth": "长期存活对象累积引发应用内存泄漏",
+      "expected_keywords": ["内存泄漏", "对象", "OOM"],
+      "expected_evidence_keywords": ["RSS", "Full GC", "OOMKilled"],
+      "expected_status": "succeeded"
+    },
+    {
+      "id": "holdout-004",
+      "domain": "memory",
+      "scenario": "refute_evidence",
+      "symptom": "节点 memory available 很低，但业务容器 working set 正常；page cache 在批量文件读取后快速增长且可回收。",
+      "ground_truth": "可回收文件页缓存造成节点内存表象偏高",
+      "expected_keywords": ["页缓存", "可回收", "内存"],
+      "expected_evidence_keywords": ["page cache", "working set", "available"],
+      "expected_status": "succeeded"
+    },
+    {
+      "id": "holdout-005",
+      "domain": "network",
+      "scenario": "backtracking_required",
+      "symptom": "最初怀疑数据库慢查询，但数据库本地查询正常；应用到数据库的跨可用区连接出现重传和 RTT 抖动。",
+      "ground_truth": "跨可用区链路重传导致数据库调用延迟",
+      "expected_keywords": ["跨可用区", "重传", "链路"],
+      "expected_evidence_keywords": ["RTT", "重传", "本地查询正常"],
+      "expected_status": "succeeded",
+      "require_backtrack": true
+    },
+    {
+      "id": "holdout-006",
+      "domain": "network",
+      "scenario": "drilldown_required",
+      "symptom": "只有新建连接失败，已有长连接正常；客户端解析出的服务地址已过期，权威 DNS 返回新的地址。",
+      "ground_truth": "客户端 DNS 缓存未刷新导致连接旧地址",
+      "expected_keywords": ["DNS", "缓存", "旧地址"],
+      "expected_evidence_keywords": ["DNS", "新建连接", "权威"],
+      "expected_status": "succeeded",
+      "require_refine": true
+    },
+    {
+      "id": "holdout-007",
+      "domain": "database",
+      "scenario": "evidence_conflict",
+      "symptom": "连接池等待时间升高，但数据库 CPU 和活跃连接数正常；事务日志显示一个批处理长事务持有热点行锁。",
+      "ground_truth": "批处理长事务持锁造成数据库请求阻塞",
+      "expected_keywords": ["长事务", "行锁", "阻塞"],
+      "expected_evidence_keywords": ["事务", "行锁", "连接池"],
+      "expected_status": "succeeded"
+    },
+    {
+      "id": "holdout-008",
+      "domain": "database",
+      "scenario": "wrong_initial_hypothesis",
+      "symptom": "查询超时最初被归因为实例负载，实际执行计划在发布后从索引扫描退化为全表扫描，实例资源尚有余量。",
+      "ground_truth": "执行计划退化为全表扫描导致查询超时",
+      "expected_keywords": ["执行计划", "全表扫描", "超时"],
+      "expected_evidence_keywords": ["执行计划", "索引", "全表扫描"],
+      "expected_status": "succeeded",
+      "require_backtrack": true
+    },
+    {
+      "id": "holdout-009",
+      "domain": "cache",
+      "scenario": "support_evidence",
+      "symptom": "热点商品 key 在同一分钟集中失效，Redis 本身延迟正常，回源数据库 QPS 瞬间放大。",
+      "ground_truth": "热点缓存同时过期引发回源流量尖峰",
+      "expected_keywords": ["缓存", "同时过期", "回源"],
+      "expected_evidence_keywords": ["key", "失效", "数据库 QPS"],
+      "expected_status": "succeeded"
+    },
+    {
+      "id": "holdout-010",
+      "domain": "cache",
+      "scenario": "refute_evidence",
+      "symptom": "Redis 命中率下降但 key 数量稳定；客户端日志持续出现 MOVED，集群扩容后部分客户端仍使用旧槽位表。",
+      "ground_truth": "客户端槽位缓存陈旧导致 Redis 重定向开销",
+      "expected_keywords": ["槽位", "MOVED", "重定向"],
+      "expected_evidence_keywords": ["MOVED", "槽位", "扩容"],
+      "expected_status": "succeeded"
+    },
+    {
+      "id": "holdout-011",
+      "domain": "message_queue",
+      "scenario": "drilldown_required",
+      "symptom": "消费组总 lag 上升，但大多数分区正常；一个分区流量远高于其他分区，对应消费者持续繁忙。",
+      "ground_truth": "分区键倾斜造成单分区消费热点",
+      "expected_keywords": ["分区", "倾斜", "热点"],
+      "expected_evidence_keywords": ["lag", "分区", "消费者"],
+      "expected_status": "succeeded",
+      "require_refine": true
+    },
+    {
+      "id": "holdout-012",
+      "domain": "message_queue",
+      "scenario": "dependency",
+      "symptom": "生产端发送成功率正常，消费者反复重平衡；协调器请求超时与 broker controller 切换时间一致。",
+      "ground_truth": "消息集群控制器切换触发消费组重复重平衡",
+      "expected_keywords": ["控制器", "重平衡", "消费组"],
+      "expected_evidence_keywords": ["协调器", "controller", "重平衡"],
+      "expected_status": "succeeded"
+    },
+    {
+      "id": "holdout-013",
+      "domain": "config_change",
+      "scenario": "backtracking_required",
+      "symptom": "发布后接口大量 401，鉴权服务健康且密钥未轮换；新版本环境变量把 audience 配成了测试环境值。",
+      "ground_truth": "发布配置使用错误 token audience 导致鉴权失败",
+      "expected_keywords": ["audience", "配置", "鉴权"],
+      "expected_evidence_keywords": ["401", "环境变量", "测试环境"],
+      "expected_status": "succeeded",
+      "require_backtrack": true
+    },
+    {
+      "id": "holdout-014",
+      "domain": "config_change",
+      "scenario": "evidence_conflict",
+      "symptom": "新版本连接超时增加，服务发现返回正确地址；对比清单发现客户端 connect timeout 从 3 秒误设为 30 毫秒。",
+      "ground_truth": "连接超时参数单位配置错误造成快速失败",
+      "expected_keywords": ["超时参数", "单位", "配置"],
+      "expected_evidence_keywords": ["30 毫秒", "3 秒", "清单"],
+      "expected_status": "succeeded"
+    },
+    {
+      "id": "holdout-015",
+      "domain": "dependency",
+      "scenario": "tool_timeout",
+      "symptom": "调用第三方风控接口持续超时，本地线程池与网络出口正常，但依赖健康检查没有在预算内返回。",
+      "ground_truth": "外部风控依赖不可用导致调用链超时",
+      "expected_keywords": ["外部依赖", "风控", "超时"],
+      "expected_evidence_keywords": ["健康检查", "第三方", "timeout"],
+      "expected_status": "degraded",
+      "expected_failure_phase": "act"
+    },
+    {
+      "id": "holdout-016",
+      "domain": "dependency",
+      "scenario": "rag_empty",
+      "symptom": "内部证书签发服务返回未知错误，日志工具可用但知识库没有该组件的 runbook 或历史案例。",
+      "ground_truth": "证书签发依赖异常且缺少可验证处置知识",
+      "expected_keywords": ["证书", "依赖", "证据不足"],
+      "expected_evidence_keywords": ["证书", "未知错误"],
+      "expected_status": "degraded",
+      "expected_failure_phase": "act"
+    }
+  ]
+}

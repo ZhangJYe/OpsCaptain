@@ -74,3 +74,11 @@ func TestBuildSystemPromptIncludesSelectedSkillHintsWithoutLiteralReplayInstruct
 		t.Fatalf("expected hidden execution guidance guard, got %q", prompt)
 	}
 }
+
+func TestBuildSystemPromptExplainsAutoDiagnosisTool(t *testing.T) {
+	ctx := WithAutoDiagnosisTool(context.Background(), namedBaseTool{name: diagnoseIncidentToolNameForTest})
+	prompt := buildSystemPrompt(ctx)
+	if !strings.Contains(prompt, "必须调用 diagnose_incident") {
+		t.Fatalf("auto diagnosis instruction missing from prompt: %s", prompt)
+	}
+}

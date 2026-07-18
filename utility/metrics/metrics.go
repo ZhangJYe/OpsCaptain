@@ -107,7 +107,52 @@ var (
 		},
 		[]string{"status"},
 	)
+	gosRunDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "opscaptionai_gos_run_duration_seconds",
+			Help:    "GoS run duration in seconds by result status.",
+			Buckets: gosLatencyBuckets,
+		},
+		[]string{"status"},
+	)
+	gosPhaseDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "opscaptionai_gos_phase_duration_seconds",
+			Help:    "GoS phase duration in seconds.",
+			Buckets: gosLatencyBuckets,
+		},
+		[]string{"phase"},
+	)
+	gosCallsPerRun = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "opscaptionai_gos_calls_per_run",
+			Help:    "LLM, tool, and RAG calls per GoS run.",
+			Buckets: prometheus.LinearBuckets(0, 4, 17),
+		},
+		[]string{"type"},
+	)
+	gosGraphSize = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "opscaptionai_gos_graph_size",
+			Help:    "GoS graph and retained history size per run.",
+			Buckets: prometheus.ExponentialBuckets(1, 2, 25),
+		},
+		[]string{"type"},
+	)
+	gosTransitionsPerRun = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "opscaptionai_gos_transitions_per_run",
+			Help:    "GoS frontier, backtrack, and evidence changes per run.",
+			Buckets: prometheus.LinearBuckets(0, 1, 16),
+		},
+		[]string{"type"},
+	)
 )
+
+var gosLatencyBuckets = []float64{
+	0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10,
+	20, 30, 45, 60, 90, 120, 180, 300,
+}
 
 func Handler() http.Handler {
 	ensureRegistered()
@@ -188,6 +233,30 @@ func ObserveChatTask(status string) {
 	chatTaskEventsTotal.WithLabelValues(fallbackLabel(status, "unknown")).Inc()
 }
 
+func ObserveGoSRun(
+	status string,
+	duration time.Duration,
+	phaseLatencyMs map[string]int64,
+	calls map[string]int,
+	graphSize map[string]int,
+	transitions map[string]int,
+) {
+	ensureRegistered()
+	gosRunDuration.WithLabelValues(fallbackLabel(status, "unknown")).Observe(duration.Seconds())
+	for phase, latencyMs := range phaseLatencyMs {
+		gosPhaseDuration.WithLabelValues(fallbackLabel(phase, "unknown")).Observe(float64(latencyMs) / 1000)
+	}
+	for callType, count := range calls {
+		gosCallsPerRun.WithLabelValues(fallbackLabel(callType, "unknown")).Observe(float64(count))
+	}
+	for sizeType, size := range graphSize {
+		gosGraphSize.WithLabelValues(fallbackLabel(sizeType, "unknown")).Observe(float64(size))
+	}
+	for transitionType, count := range transitions {
+		gosTransitionsPerRun.WithLabelValues(fallbackLabel(transitionType, "unknown")).Observe(float64(count))
+	}
+}
+
 func ensureRegistered() {
 	registerMetricsOnce.Do(func() {
 		prometheus.MustRegister(
@@ -204,6 +273,11 @@ func ensureRegistered() {
 			sessionTokensTotal,
 			memoryExtractionTotal,
 			chatTaskEventsTotal,
+			gosRunDuration,
+			gosPhaseDuration,
+			gosCallsPerRun,
+			gosGraphSize,
+			gosTransitionsPerRun,
 		)
 	})
 }

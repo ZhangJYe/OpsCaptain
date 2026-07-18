@@ -1,0 +1,12 @@
+groups:
+  - name: opscaptain-isolated-real-eval
+    rules:
+      - alert: IsolatedEvalServiceDegraded
+        expr: opscaptain_eval_fault_active{provenance="controlled_fault_injection_v1"} == 1
+        for: 0m
+        labels:
+          severity: warning
+          environment: isolated-real-eval
+        annotations:
+          summary: "Controlled staging workload is degraded"
+          description: "Measured fault signal is active for {{ $labels.service }} ({{ $labels.case_id }})."

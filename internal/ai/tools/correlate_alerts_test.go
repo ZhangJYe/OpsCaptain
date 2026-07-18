@@ -45,12 +45,12 @@ func (r *fakeCorrelateRepo) ListServicesByCluster(cluster string) []cmdb.Service
 	}
 	return result
 }
-func (r *fakeCorrelateRepo) ListServicesByTeam(team string) []cmdb.ServiceInfo { return nil }
-func (r *fakeCorrelateRepo) GetDependents(name string) []string                { return r.dependents[name] }
-func (r *fakeCorrelateRepo) ListAll() []cmdb.ServiceInfo                       { return r.all }
-func (r *fakeCorrelateRepo) CreateService(svc cmdb.ServiceInfo) error          { return nil }
+func (r *fakeCorrelateRepo) ListServicesByTeam(team string) []cmdb.ServiceInfo     { return nil }
+func (r *fakeCorrelateRepo) GetDependents(name string) []string                    { return r.dependents[name] }
+func (r *fakeCorrelateRepo) ListAll() []cmdb.ServiceInfo                           { return r.all }
+func (r *fakeCorrelateRepo) CreateService(svc cmdb.ServiceInfo) error              { return nil }
 func (r *fakeCorrelateRepo) UpdateService(name string, svc cmdb.ServiceInfo) error { return nil }
-func (r *fakeCorrelateRepo) DeleteService(name string) error                   { return nil }
+func (r *fakeCorrelateRepo) DeleteService(name string) error                       { return nil }
 
 func TestCorrelateAlertsTool_NilRepo(t *testing.T) {
 	tool := NewCorrelateAlertsTool(nil)
@@ -80,8 +80,8 @@ func TestCorrelateAlertsTool_WithRepo(t *testing.T) {
 		t.Fatal("expected non-nil tool")
 	}
 
-	// This will fail to connect to Prometheus (not running in test),
-	// but should return a degraded response, not a panic
+	// Prometheus may or may not be available in the developer environment.
+	// Both a valid correlation result and an explicit degraded result are acceptable.
 	input := `{"lookback_minutes": 60}`
 	result, err := tool.InvokableRun(context.Background(), input)
 	if err != nil {
@@ -90,6 +90,10 @@ func TestCorrelateAlertsTool_WithRepo(t *testing.T) {
 
 	var output CorrelateAlertsOutput
 	require.NoError(t, json.Unmarshal([]byte(result), &output))
-	// Should be degraded because Prometheus is not configured
-	assert.True(t, output.Degraded || !output.Success)
+	if output.Success {
+		require.NotNil(t, output.Result)
+		return
+	}
+	assert.True(t, output.Degraded)
+	assert.NotEmpty(t, output.Error)
 }

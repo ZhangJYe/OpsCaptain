@@ -58,7 +58,7 @@ func isEmptyRetrievalOutput(output string) bool {
 		return false
 	}
 
-	for _, key := range []string{"data", "content"} {
+	for _, key := range []string{"data", "content", "alerts", "documents", "results"} {
 		value, ok := obj[key]
 		if !ok {
 			continue

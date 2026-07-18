@@ -22,6 +22,25 @@ func NewMilvusClient(ctx context.Context) (cli.Client, error) {
 	return newMilvusClientWithConfig(ctx, cfg)
 }
 
+// OpenExistingMilvusClient opens an existing database and collection without
+// creating or loading resources. Evaluation uses this path to keep production
+// Milvus access read-only.
+func OpenExistingMilvusClient(ctx context.Context) (cli.Client, error) {
+	cfg := MilvusConfigFromContext(ctx)
+	if _, err := InspectCollection(ctx); err != nil {
+		return nil, fmt.Errorf("inspect existing Milvus collection: %w", err)
+	}
+	agentClient, err := cli.NewClient(ctx, cli.Config{
+		Address: cfg.Addr,
+		DBName:  cfg.DBName,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("connect to existing Milvus database: %w", err)
+	}
+	registerClient(agentClient)
+	return agentClient, nil
+}
+
 func newMilvusClientWithConfig(ctx context.Context, cfg MilvusConfig) (cli.Client, error) {
 	defaultClient, err := cli.NewClient(ctx, cli.Config{
 		Address: cfg.Addr,

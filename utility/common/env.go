@@ -59,9 +59,6 @@ func LoadPreferredEnvFile() error {
 	case "prod", "production":
 		return LoadEnvFile(".env.production")
 	default:
-		if err := LoadEnvFile(".env.local"); err != nil {
-			return err
-		}
 		return LoadEnvFile(".env")
 	}
 }
@@ -108,6 +105,8 @@ func LooksLikePlaceholderSecret(val string) bool {
 	for _, prefix := range []string{
 		"replace-with",
 		"your-",
+		"your_",
+		"your ",
 		"example",
 		"<",
 	} {

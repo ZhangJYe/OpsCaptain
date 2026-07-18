@@ -1,0 +1,539 @@
+server:
+  address: ":8000"
+
+startup:
+  require_model_secrets: false
+
+auth:
+  enabled: false
+  jwt_secret: "${AUTH_JWT_SECRET}"
+  token_expiry_hours: 24
+  rate_limit_per_minute: 20
+  rate_limit_burst: 30
+
+safety:
+  prompt_guard:
+    enabled: true
+  output_filter:
+    enabled: true
+  injection_classifier:
+    enabled: false
+    timeout_ms: 3000
+    threshold: 0.7
+
+logging:
+  level: "DEBUG"
+
+tracing:
+  enabled: true
+  service_name: "opscaptionai-backend"
+  jaeger_endpoint: "http://127.0.0.1:14268/api/traces"
+  sample_ratio: 1.0
+
+events:
+  health_report_enabled: true
+  health_report_interval_ms: 300000
+  tool_summary_max_len: 4000
+
+hallucination:
+  enabled: true
+  contract_enabled: true
+  schema_gate_enabled: true
+  output_validation_enabled: true
+  no_tool_call_detection_enabled: true
+  ops_keywords:
+    - "告警"
+    - "alert"
+    - "prometheus"
+    - "日志"
+    - "log"
+    - "排查"
+    - "故障"
+    - "incident"
+    - "指标"
+    - "metric"
+    - "延迟"
+    - "latency"
+    - "错误率"
+    - "error rate"
+    - "超时"
+    - "timeout"
+    - "服务异常"
+    - "服务挂了"
+    - "报警"
+    - "cpu"
+    - "内存"
+    - "memory"
+    - "磁盘"
+    - "网络"
+    - "network"
+    - "数据库"
+    - "mysql"
+    - "redis"
+    - "连接池"
+    - "队列"
+    - "queue"
+  hedge_words:
+    - "推测"
+    - "可能"
+    - "大概"
+    - "不确定"
+    - "待确认"
+    - "需要进一步"
+    - "建议确认"
+    - "仅供参考"
+  problem_words:
+    - "异常"
+    - "故障"
+    - "错误"
+    - "告警"
+    - "升高"
+    - "下降"
+    - "超时"
+    - "失败"
+  action_words:
+    - "建议"
+    - "推荐"
+    - "可以"
+    - "需要"
+    - "排查"
+    - "检查"
+    - "尝试"
+    - "应该"
+  contradictions:
+    - ["正常", "异常"]
+    - ["健康", "故障"]
+    - ["无告警", "告警"]
+    - ["没有问题", "问题"]
+  metric_pattern: '(?i)(\d+(?:\.\d+)?)\s*(ms|秒|s|%)|P[0-9]+\s*[:：]\s*(\d+(?:\.\d+)?)'
+  llm_validation:
+    enabled: false
+    model: "chat_model_fast"
+    timeout_ms: 5000
+    max_tokens: 512
+    omission_detection: true
+    accuracy_check: true
+  contract_block_on_violation: false
+
+debug:
+  pprof_enabled: false
+  pprof_address: "127.0.0.1:6060"
+
+cache:
+  llm_response:
+    enabled: true
+    ttl_seconds: 300
+
+degradation:
+  kill_switch: false
+  redis_key: "opscaptionai:degradation:kill_switch"
+  message: "AI capabilities are temporarily degraded. Please retry later."
+
+approval:
+  enabled: true
+  redis_key_prefix: "opscaptionai:approval"
+  request_ttl_seconds: 86400
+
+cost:
+  daily_limit_tokens: 0
+  hourly_alert_tokens: 200000
+  user_daily_alert_tokens: 50000
+
+file_dir: "./docs/knowledge/"
+
+upload:
+  max_size_mb: 20
+
+cors:
+  # WARNING: "*" allows any origin. For production, restrict to specific domains.
+  allowed_origins:
+    - "*"
+
+harness:
+  max_iterations: 10
+  task_timeout_ms: 300000
+  retry_budget: 3
+  fail_fast: false
+  validation:
+    enabled: true
+    contract_enforce: true
+    strict_mode: false
+
+milvus:
+  address: "localhost:19530"
+  collection: ""
+
+chat_model:
+  provider: "deepseek"
+  model: "deepseek-v4-pro"
+  api_key: "${DEEPSEEK_API_KEY}"
+  base_url: "https://api.deepseek.com"
+
+chat_model_fast:
+  provider: "deepseek"
+  model: "deepseek-v4-flash"
+  api_key: "${DEEPSEEK_API_KEY}"
+  base_url: "https://api.deepseek.com"
+
+model_routing:
+  enabled: true
+  fast_model: "chat_model_fast"
+  pro_model: "chat_model"
+  complexity_threshold: 0.6
+
+llm:
+  max_concurrent_calls: 10
+  concurrent_wait_timeout_ms: 5000
+
+embedding_model:
+  provider: "doubao"
+  model: "doubao-embedding-vision-251215"
+  api_key: "${ARK_API_KEY}"
+  base_url: "https://ark.cn-beijing.volces.com/api/v3"
+  dimension: 2048
+
+memory:
+  max_window_size: 20
+  max_context_tokens: 4096
+  agent_mode: "llm"
+  project_id: "opscaption"
+  store_backend: ""
+  long_term_store_path: ""
+  extract_timeout_ms: 1500
+  extract_max_concurrency: 8
+  extract_wait_timeout_ms: 50
+  session_store:                 # 多实例必填：短期对话跨 Pod 共享
+    redis_enabled: false         # 多副本改 true，否则换 Pod 丢历史
+    prefix: "opscaption:session:"
+    ttl_seconds: 7200
+  long_term_max_entries: 1000
+  long_term_max_entries_per_session: 100
+
+chat_async:
+  enabled: false
+  task_ttl_seconds: 86400
+  execute_timeout_ms: 120000
+  redis_key_prefix: "opscaptionai:chat_task"
+
+chatops:
+  feishu:
+    enabled: false
+    webhook_url: "${FEISHU_CHATOPS_WEBHOOK_URL}"
+    timeout_ms: 5000
+
+chat:
+  react:
+    max_step: 25
+
+context:
+  chat_max_history_messages: 10
+  chat_max_memory_items: 5
+  aiops_max_memory_items: 5
+  reporter_max_tool_items: 8
+  min_memory_confidence: 0.50
+  docs_query_timeout_ms: 5000
+  docs_init_failure_ttl_ms: 15000
+  tool_rerank:
+    enabled: false
+    profiles: ["ai_ops"]
+    min_candidates: 6
+    candidate_limit: 20
+    timeout_ms: 2000
+    cache_ttl_seconds: 300
+    model: "chat_model_fast"
+
+retriever:
+  top_k: 5
+
+rag:
+  rewrite_enabled: false
+  rerank_enabled: false
+  rewrite_timeout_ms: 3000
+  rerank_timeout_ms: 5000
+  rerank_max_candidates: 10
+  hybrid_dense_top_k: 50
+  hybrid_lexical_top_k: 50
+  hybrid_fusion_k: 60
+  hybrid_candidate_top_k: 20
+  hybrid_final_top_k: 5
+  hybrid_metadata_boost_enabled: true
+  owner_scope_server_filter_enabled: true
+  planner:
+    enabled: true
+    model: "chat_model_fast"
+    timeout_ms: 5000
+    max_sub_queries: 4
+    min_query_length: 15
+    exec_timeout_ms: 5000
+    decomposition_keywords:
+      - "和"
+      - "以及"
+      - "还有"
+      - "跟"
+      - "为什么"
+      - "怎么回事"
+      - "导致"
+      - "关系"
+  agent:
+    enabled: false
+    model: "chat_model_fast"
+    max_rounds: 3
+    confidence_threshold: 0.7
+    eval_timeout_ms: 10000
+    plan_timeout_ms: 10000
+    total_timeout_ms: 30000
+    max_total_tokens: 8000
+
+context_compression:
+  enabled: false
+  mode: "audit"              # off | audit | optimize
+  min_tokens: 300            # 小于此 token 数不压缩
+  preserve_first: 3          # JSON: 保留前 N 项
+  preserve_last: 2           # JSON: 保留后 M 项
+  log_context_lines: 1       # 日志: 错误行上下文窗口行数
+  source_types: ["tool", "rag"]
+
+aiops:
+  enabled: true                  # 主开关（替代 multi_agent.enabled / multi_agent.ai_ops_enabled）
+  engine: "plan_execute_replan"
+  ledger:                        # 多实例必填：选 redis，让 trace_id/task/result 跨实例可见
+    backend: "file"              # file | redis；多副本部署改 redis
+    prefix: "opscaption:ai:"
+    retention_hours: 24
+    max_tasks: 20000
+    max_results: 20000
+  plan:
+    model_path: "chat_model_fast"
+    timeout_ms: 180000           # Plan agent 总超时（默认 3 分钟）
+    max_iterations: 5            # Plan-Execute-Replan 最大迭代次数
+    report_timeout_ms: 45000
+  incident:
+    enabled: true
+    store_dir: "./var/runtime/incidents"
+    turn_timeout_ms: 120000
+    max_context_turns: 6
+    event_replay_limit: 200
+  gos:
+    enabled: true
+    evaluation:
+      telemetry_profile: "real"  # synthetic | unverified | real；仅 real 可生成真实 baseline/compare
+      telemetry_provenance: "controlled_fault_injection_v1"  # controlled_fault_injection_v1 | production_observed_v1
+      rag_bootstrap_timeout_ms: 30000
+    model_path: "chat_model_fast"
+    temperature: 0.8
+    max_tokens: 4096
+    evidence_max_chars: 8192
+    session_max_steps: 5
+    max_retrieval_steps: 3
+    call_timeout_ms: 15000
+    fsm:
+      gap_delta: 0.3
+      min_support: 2
+      max_steps: 3
+      min_confidence: 0.7
+    confidence:
+      support_weight: 0.25
+      refute_weight: 0.35
+      deduplicate: true
+    graph:
+      checkpoint_interval: 10
+      max_nodes: 256
+      max_edges: 512
+      max_depth: 4
+      max_snapshots: 32
+      max_deltas: 10
+    structured_cognition:
+      enabled: true
+      call_timeout_ms: 10000
+      max_hypotheses: 4
+      max_observations: 8
+      max_plan_items: 2
+      plan_budget:
+        llm_calls: 3
+        tool_calls: 2
+        rag_calls: 1
+        timeout_ms: 10000
+        max_retrieval_steps: 2
+        max_output_tokens: 1024
+    execution:
+      max_concurrent_experts: 3
+      no_progress_round_limit: 2
+    report:
+      conflict_strength_threshold: 0.5
+      max_evidence_items: 8
+      max_next_actions: 3
+    experts:
+      - name: "linux_sre"
+        description: "Linux SRE 专家"
+        tools: ["query_logs", "query_internal_docs"]
+        max_retrieval_steps: 3
+        budget: {llm_calls: 3, tool_calls: 2, rag_calls: 1, timeout_ms: 10000, max_retrieval_steps: 2, max_output_tokens: 1024}
+      - name: "network_sre"
+        description: "网络 SRE 专家"
+        tools: ["query_logs", "query_internal_docs"]
+        max_retrieval_steps: 3
+        budget: {llm_calls: 3, tool_calls: 2, rag_calls: 1, timeout_ms: 10000, max_retrieval_steps: 2, max_output_tokens: 1024}
+      - name: "database_sre"
+        description: "数据库 SRE 专家"
+        tools: ["query_logs", "query_internal_docs"]
+        max_retrieval_steps: 3
+        budget: {llm_calls: 3, tool_calls: 2, rag_calls: 1, timeout_ms: 10000, max_retrieval_steps: 2, max_output_tokens: 1024}
+    state_conversion:
+      enabled: true
+      max_depth: 2
+      tie_epsilon: 0.01
+      refinement_rules:
+        - parent: "资源耗尽"
+          children:
+            - {label: "CPU 饱和", score: 0.6, why: "验证 CPU 使用率、负载和节流状态", actionable: true}
+            - {label: "内存压力", score: 0.3, why: "验证内存使用、交换和 OOM 事件", actionable: true}
+            - {label: "磁盘 IO 饱和", score: 0.1, why: "验证 IO 等待、吞吐和磁盘容量", actionable: true}
+        - parent: "网络问题"
+          children:
+            - {label: "网络延迟升高", score: 0.5, why: "验证链路延迟和跨区 RTT", actionable: true}
+            - {label: "网络丢包", score: 0.3, why: "验证重传、丢包率和接口错误", actionable: true}
+            - {label: "DNS 解析异常", score: 0.2, why: "验证 DNS 延迟、失败率和解析结果", actionable: true}
+        - parent: "配置错误"
+          children:
+            - {label: "应用配置不一致", score: 0.5, why: "核对当前配置与最近变更", actionable: true}
+            - {label: "依赖地址配置错误", score: 0.3, why: "核对依赖端点、凭据引用和环境变量", actionable: true}
+            - {label: "发布参数错误", score: 0.2, why: "核对发布清单和运行参数", actionable: true}
+
+change_events:
+  enabled: true
+  store_backend: "redis"          # redis | memory
+  max_events: 10000               # 最大存储事件数
+  recent_buffer_size: 200         # 内存 ring buffer 大小
+  retention_hours: 720            # 事件保留时长（30 天）
+  webhook:
+    enabled: true
+    json_enabled: false           # 外部 webhook 默认只开放 provider adapter；标准 JSON 走 /api/change_events + JWT
+    sources:
+      github:
+        enabled: false
+        secret: "${OPSCAPTION_GITHUB_WEBHOOK_SECRET}"
+      gitlab:
+        enabled: false
+        secret: "${OPSCAPTION_GITLAB_WEBHOOK_SECRET}"
+      argocd:
+        enabled: false
+        secret: "${OPSCAPTION_ARGOCD_WEBHOOK_SECRET}"
+  proactive:
+    enabled: true                 # 变更后主动巡检
+    debounce_seconds: 300         # 同服务变更去重窗口（5 分钟）
+    inspection_timeout_ms: 120000 # 主动巡检超时（毫秒）
+    require_env: "prod"           # 必须是生产环境
+    require_risk_level: "medium"  # risk_level >= medium
+    require_event_types:
+      - "deploy"
+      - "rollback"
+      - "config_update"
+      - "scale"
+  indexing:
+    enabled: true                 # 变更事件索引到 RAG（语义辅助）
+    source_prefix: "change_event"
+  cluster_broadcast:              # 多实例 SSE 跨实例广播（Redis Pub/Sub）
+    enabled: true                 # 多副本必开，单实例可关
+    channel: "change_events"
+    prefix: "opscaption"
+  notifier:
+    feishu:
+      enabled: true
+      webhook_url: "${FEISHU_WEBHOOK_URL}"  # 飞书群机器人 Webhook 地址
+      min_risk_level: "low"                 # 最低推送风险等级：low | medium | high | critical
+      services: []                          # 只推送这些服务的变更，空 = 全部
+      timeout_ms: 5000                      # HTTP 超时（毫秒）
+
+multi_agent:
+  enabled: false
+  data_dir: "./var/runtime"
+  ai_ops_enabled: false
+  agent_timeout_ms: 120000
+  metrics_query_timeout_ms: 5000
+  knowledge_query_timeout_ms: 5000
+  knowledge_init_failure_ttl_ms: 15000
+  knowledge_evidence_limit: 5
+  log_query_timeout_ms: 3000
+  log_evidence_limit: 3
+
+log_topic:
+  region: ""
+  id: ""
+
+mcp:
+  log_url: ""
+  log_http_url: "http://127.0.0.1:28088/tools/query_logs"
+  prefer_http_log_tool: true
+  connect_timeout_ms: 10000
+  tool_timeout_ms: 5000
+
+user_tools:
+  store_path: "var/runtime/user_tools/registry.json"
+  network_whitelist:
+    - "10.0.0.0/8"
+    - "172.16.0.0/12"
+    - "192.168.0.0/16"
+    - "127.0.0.0/8"
+  default_timeout_ms: 5000
+
+mysql:
+  dsn: ""
+  allowed_tables: []
+  query_timeout_ms: 10000
+  max_rows: 100
+
+prometheus:
+  address: "http://127.0.0.1:19090"
+  discovery_timeout_ms: 5000
+  discovery_default_window_minutes: 60
+  discovery_max_window_minutes: 360
+  discovery_max_metrics: 50
+  discovery_max_series: 50
+  discovery_max_label_values: 20
+  instant_query_timeout_ms: 5000
+  instant_max_series: 20
+  range_query_timeout_ms: 5000
+  range_default_window_minutes: 30
+  range_max_window_minutes: 360
+  range_default_step_seconds: 60
+  range_max_series: 20
+  range_max_points: 1000
+
+rabbitmq:
+  enabled: true
+  url: "amqp://guest:guest@127.0.0.1:5672/"
+  exchange: "opscaption.events"
+  memory_extract_queue: "opscaption.memory.extract"
+  memory_extract_consumer_enabled: true
+  prefetch: 8
+  max_retries: 3
+  retry_delay_ms: 2000
+  reconnect_delay_ms: 2000
+  publish_timeout_ms: 2000
+  chat_task_queue: "opscaption.chat.task"
+  chat_task_consumer_enabled: true
+  chat_task_prefetch: 4
+  chat_task_max_retries: 3
+  chat_task_retry_delay_ms: 2000
+  memory_extract_dedup_ttl_ms: 600000
+  memory_extract_dedup_max_entries: 20000
+
+cmdb:
+  enabled: true
+  store_path: "docs/assets/services.yaml"
+  search:
+    max_results: 10
+  tool:
+    timeout_ms: 3000
+  jaeger:
+    enabled: true
+    url: "http://127.0.0.1:16686"
+    lookback_hours: 24
+    timeout_ms: 5000
+    refresh_seconds: 300
+
+redis:
+  default:
+    address: "127.0.0.1:6380"
+    db: 0
+    pass: "${REDIS_PASSWORD}"

@@ -12,6 +12,7 @@ import (
 
 type IChatV1 interface {
 	Chat(ctx context.Context, req *v1.ChatReq) (res *v1.ChatRes, err error)
+	Agent(ctx context.Context, req *v1.AgentReq) (res *v1.AgentRes, err error)
 	ChatSubmit(ctx context.Context, req *v1.ChatSubmitReq) (res *v1.ChatSubmitRes, err error)
 	ChatTask(ctx context.Context, req *v1.ChatTaskReq) (res *v1.ChatTaskRes, err error)
 	ChatStream(ctx context.Context, req *v1.ChatStreamReq) (res *v1.ChatStreamRes, err error)

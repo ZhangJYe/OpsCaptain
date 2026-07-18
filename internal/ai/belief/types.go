@@ -1,6 +1,9 @@
 package belief
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 type NodeType string
 
@@ -28,13 +31,16 @@ const (
 )
 
 type EvidenceSource struct {
-	SourceType     string    `json:"source_type"`
-	SourceID       string    `json:"source_id"`
-	ToolName       string    `json:"tool_name,omitempty"`
-	RetrievalQuery string    `json:"retrieval_query,omitempty"`
-	Timestamp      time.Time `json:"timestamp"`
-	SummarySnippet string    `json:"summary_snippet"`
-	ArtifactRef    string    `json:"artifact_ref,omitempty"`
+	SourceType         string    `json:"source_type"`
+	SourceID           string    `json:"source_id"`
+	ToolName           string    `json:"tool_name,omitempty"`
+	RetrievalQuery     string    `json:"retrieval_query,omitempty"`
+	Timestamp          time.Time `json:"timestamp"`
+	SummarySnippet     string    `json:"summary_snippet"`
+	ArtifactRef        string    `json:"artifact_ref,omitempty"`
+	Relation           string    `json:"relation"`
+	TargetHypothesisID string    `json:"target_hypothesis_id"`
+	Strength           float64   `json:"strength"`
 }
 
 type Node struct {
@@ -88,6 +94,42 @@ type GraphSnapshot struct {
 	Edges     map[string]*Edge `json:"edges"`
 }
 
+type GraphDelta struct {
+	StepID      string           `json:"step_id"`
+	Timestamp   time.Time        `json:"timestamp"`
+	Action      string           `json:"action"`
+	UpsertNodes map[string]*Node `json:"upsert_nodes,omitempty"`
+	UpsertEdges map[string]*Edge `json:"upsert_edges,omitempty"`
+}
+
+type GraphPolicy struct {
+	CheckpointInterval int `json:"checkpoint_interval"`
+	MaxNodes           int `json:"max_nodes"`
+	MaxEdges           int `json:"max_edges"`
+	MaxDepth           int `json:"max_depth"`
+	MaxSnapshots       int `json:"max_snapshots"`
+	MaxDeltas          int `json:"max_deltas"`
+}
+
+type GraphResourceStats struct {
+	Nodes        int `json:"nodes"`
+	Edges        int `json:"edges"`
+	Depth        int `json:"depth"`
+	Snapshots    int `json:"snapshots"`
+	Deltas       int `json:"deltas"`
+	HistoryBytes int `json:"history_bytes"`
+}
+
+type GraphResourceLimitError struct {
+	Resource string
+	Limit    int
+	Actual   int
+}
+
+func (e *GraphResourceLimitError) Error() string {
+	return fmt.Sprintf("belief graph %s limit exceeded: limit=%d actual=%d", e.Resource, e.Limit, e.Actual)
+}
+
 type GraphUpdateResult struct {
 	Committed bool  `json:"committed"`
 	Error     error `json:"error,omitempty"`
@@ -107,10 +149,12 @@ type FSMDecision struct {
 }
 
 type FSMTransition struct {
-	From   FSMState `json:"from"`
-	To     FSMState `json:"to"`
-	Reason string   `json:"reason"`
-	StepID string   `json:"step_id"`
+	From      FSMState `json:"from"`
+	To        FSMState `json:"to"`
+	FromLevel int      `json:"from_level"`
+	ToLevel   int      `json:"to_level"`
+	Reason    string   `json:"reason"`
+	StepID    string   `json:"step_id"`
 }
 
 type FSMThresholds struct {

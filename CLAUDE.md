@@ -153,6 +153,7 @@ When injection risk is detected, only AlwaysOn tools are exposed.
 
 | Method | Path | Description |
 |--------|------|-------------|
+| POST | /api/agent | Unified Agent entry (`auto` / `chat` / `aiops_diagnosis`, feature flag controlled; enabled in current local config) |
 | POST | /api/chat | Synchronous chat |
 | POST | /api/chat_stream | SSE streaming chat |
 | POST | /api/chat_submit | Submit async chat task |

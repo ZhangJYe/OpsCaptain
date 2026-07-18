@@ -9,9 +9,11 @@ import (
 	"SuperBizAgent/internal/ai/tools"
 	"SuperBizAgent/internal/consts"
 	"context"
+	"fmt"
 	"io"
 	"sync"
 
+	toolapi "github.com/cloudwego/eino/components/tool"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/flow/agent/react"
 	"github.com/cloudwego/eino/schema"
@@ -50,6 +52,8 @@ func getChatDisclosure() *skills.ProgressiveDisclosure {
 
 type chatToolEmitterContextKey struct{}
 
+type autoDiagnosisToolContextKey struct{}
+
 type chatToolEmitterConfig struct {
 	emitter events.Emitter
 	traceID string
@@ -71,6 +75,20 @@ func chatToolEmitterFromContext(ctx context.Context) (events.Emitter, string, bo
 		return nil, "", false
 	}
 	return cfg.emitter, cfg.traceID, true
+}
+
+// WithAutoDiagnosisTool exposes one request-scoped, high-level diagnosis tool
+// to the main Chat ReAct agent. Legacy chat requests never set this context.
+func WithAutoDiagnosisTool(ctx context.Context, diagnosisTool toolapi.BaseTool) context.Context {
+	if diagnosisTool == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, autoDiagnosisToolContextKey{}, diagnosisTool)
+}
+
+func autoDiagnosisToolFromContext(ctx context.Context) (toolapi.BaseTool, bool) {
+	diagnosisTool, ok := ctx.Value(autoDiagnosisToolContextKey{}).(toolapi.BaseTool)
+	return diagnosisTool, ok && diagnosisTool != nil
 }
 
 func NormalizeSelectedSkillIDs(selectedSkillIDs []string) []string {
@@ -137,6 +155,11 @@ func newReactAgentLambdaWithQuery(ctx context.Context, query string) (lba *compo
 		} else {
 			config.ToolsConfig.Tools = getChatDisclosure().AllTools()
 		}
+		if diagnosisTool, ok := autoDiagnosisToolFromContext(ctx); ok {
+			if err := configureAutoDiagnosisTool(ctx, config, diagnosisTool); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	if emitter, traceID, ok := chatToolEmitterFromContext(ctx); ok {
@@ -158,6 +181,39 @@ func newReactAgentLambdaWithQuery(ctx context.Context, query string) (lba *compo
 		return nil, err
 	}
 	return lba, nil
+}
+
+func configureAutoDiagnosisTool(ctx context.Context, config *react.AgentConfig, diagnosisTool toolapi.BaseTool) error {
+	allowed := map[string]struct{}{
+		"get_current_time":    {},
+		"query_internal_docs": {},
+	}
+	filtered := make([]toolapi.BaseTool, 0, len(config.ToolsConfig.Tools)+1)
+	for _, candidate := range config.ToolsConfig.Tools {
+		if candidate == nil {
+			continue
+		}
+		info, err := candidate.Info(ctx)
+		if err != nil {
+			g.Log().Warningf(ctx, "auto mode skipped tool with unavailable metadata")
+			continue
+		}
+		if _, ok := allowed[info.Name]; ok {
+			filtered = append(filtered, candidate)
+		}
+	}
+
+	info, err := diagnosisTool.Info(ctx)
+	if err != nil {
+		return fmt.Errorf("read diagnosis tool info: %w", err)
+	}
+	if info == nil || info.Name == "" {
+		return fmt.Errorf("diagnosis tool name is required")
+	}
+	filtered = append(filtered, diagnosisTool)
+	config.ToolsConfig.Tools = filtered
+	config.ToolReturnDirectly[info.Name] = struct{}{}
+	return nil
 }
 
 func chatConfigInt(ctx context.Context, key string, fallback int) int {

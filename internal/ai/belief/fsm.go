@@ -66,19 +66,42 @@ func (f *BeliefFSM) Decide(g *BeliefGraph) *FSMDecision {
 }
 
 func (f *BeliefFSM) TransitionTo(s FSMState, reason string) {
+	f.transitionTo(s, f.CurrentLevel, f.CurrentLevel, reason)
+}
+
+func (f *BeliefFSM) transitionTo(s FSMState, fromLevel int, toLevel int, reason string) {
 	f.History = append(f.History, FSMTransition{
-		From:   f.State,
-		To:     s,
-		Reason: reason,
-		StepID: fmt.Sprintf("step-%d", f.TotalSteps),
+		From:      f.State,
+		To:        s,
+		FromLevel: fromLevel,
+		ToLevel:   toLevel,
+		Reason:    reason,
+		StepID:    fmt.Sprintf("step-%d", f.TotalSteps),
 	})
 	f.State = s
 }
 
 func (f *BeliefFSM) DrillDown(reason string) {
+	fromLevel := f.CurrentLevel
 	f.CurrentLevel++
 	f.LevelSteps[f.CurrentLevel] = 0
-	f.TransitionTo(StateDrilling, reason)
+	f.transitionTo(StateDrilling, fromLevel, f.CurrentLevel, reason)
+}
+
+func (f *BeliefFSM) BacktrackTo(level int, reason string) error {
+	if f.State != StateDrilling {
+		return fmt.Errorf("cannot backtrack from state %d", f.State)
+	}
+	if level < 1 || level >= f.CurrentLevel {
+		return fmt.Errorf("backtrack level must be within [1,%d)", f.CurrentLevel)
+	}
+	fromLevel := f.CurrentLevel
+	f.CurrentLevel = level
+	if _, ok := f.LevelSteps[level]; !ok {
+		f.LevelSteps[level] = 0
+	}
+	f.transitionTo(StateDrilling, fromLevel, f.CurrentLevel, reason)
+	return nil
 }
 
 func (f *BeliefFSM) MarkDone(reason string) {
@@ -95,7 +118,12 @@ func (f *BeliefFSM) topHypos(g *BeliefGraph, level int) []LevelNode {
 			c = append(c, LevelNode{NodeID: n.ID, Confidence: n.Score})
 		}
 	}
-	sort.Slice(c, func(i, j int) bool { return c[i].Confidence > c[j].Confidence })
+	sort.Slice(c, func(i, j int) bool {
+		if c[i].Confidence == c[j].Confidence {
+			return c[i].NodeID < c[j].NodeID
+		}
+		return c[i].Confidence > c[j].Confidence
+	})
 	return c
 }
 

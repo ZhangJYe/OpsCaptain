@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/cloudwego/eino/components/tool"
@@ -34,19 +35,24 @@ type PrometheusAlertsResult struct {
 }
 
 type SimplifiedAlert struct {
-	AlertName   string `json:"alert_name" jsonschema:"description=告警名称，从 Prometheus 告警的 labels.alertname 字段提取"`
-	Description string `json:"description" jsonschema:"description=告警描述信息，从 Prometheus 告警的 annotations.description 字段提取"`
-	State       string `json:"state" jsonschema:"description=告警状态，通常为 'firing'（触发中）或 'pending'（待触发）"`
-	ActiveAt    string `json:"active_at" jsonschema:"description=告警激活时间，RFC3339 格式的时间戳，例如 '2025-10-29T08:48:42.496134755Z'"`
-	Duration    string `json:"duration" jsonschema:"description=告警持续时间，从激活时间到当前时间的时长，格式如 '2h30m15s'、'30m15s' 或 '15s'"`
+	AlertName   string            `json:"alert_name" jsonschema:"description=告警名称，从 Prometheus 告警的 labels.alertname 字段提取"`
+	Labels      map[string]string `json:"labels,omitempty" jsonschema:"description=用于区分告警实例的 Prometheus 标签"`
+	Description string            `json:"description" jsonschema:"description=告警描述信息，从 Prometheus 告警的 annotations.description 字段提取"`
+	State       string            `json:"state" jsonschema:"description=告警状态，通常为 'firing'（触发中）或 'pending'（待触发）"`
+	ActiveAt    string            `json:"active_at" jsonschema:"description=告警激活时间，RFC3339 格式的时间戳，例如 '2025-10-29T08:48:42.496134755Z'"`
+	Duration    string            `json:"duration" jsonschema:"description=告警持续时间，从激活时间到当前时间的时长，格式如 '2h30m15s'、'30m15s' 或 '15s'"`
 }
 
 type PrometheusAlertsOutput struct {
 	Success  bool              `json:"success" jsonschema:"description=查询是否成功"`
 	Degraded bool              `json:"degraded,omitempty" jsonschema:"description=结果是否降级（查询失败时为 true）"`
-	Alerts   []SimplifiedAlert `json:"alerts,omitempty" jsonschema:"description=活动告警列表，每个告警包含名称、描述、状态、激活时间和持续时间。相同 alertname 的告警只保留第一个"`
+	Alerts   []SimplifiedAlert `json:"alerts,omitempty" jsonschema:"description=活动告警列表，每个告警包含名称、标签、描述、状态、激活时间和持续时间。完整标签集合相同的告警只保留第一个"`
 	Message  string            `json:"message,omitempty" jsonschema:"description=操作结果的状态消息"`
 	Error    string            `json:"error,omitempty" jsonschema:"description=如果查询失败，包含错误信息"`
+}
+
+type PrometheusAlertsInput struct {
+	Query string `json:"query,omitempty" jsonschema:"description=可选的服务名或 case_id，用于只返回与当前诊断对象匹配的告警"`
 }
 
 func queryPrometheusAlerts(ctx context.Context) (PrometheusAlertsResult, error) {
@@ -138,7 +144,7 @@ func NewPrometheusAlertsQueryTool() tool.InvokableTool {
 	t, err := utils.InferOptionableTool(
 		"query_prometheus_alerts",
 		"Query active alerts from Prometheus alerting system. This tool retrieves all currently active/firing alerts including their labels, annotations, state, and values. Use this tool when you need to check what alerts are currently firing, investigate alert conditions, or monitor alert status.",
-		func(ctx context.Context, input *struct{}, opts ...tool.Option) (output string, err error) {
+		func(ctx context.Context, input *PrometheusAlertsInput, opts ...tool.Option) (output string, err error) {
 			g.Log().Infof(ctx, "querying Prometheus active alerts")
 
 			result, err := queryPrometheusAlerts(ctx)
@@ -156,26 +162,13 @@ func NewPrometheusAlertsQueryTool() tool.InvokableTool {
 				return string(jsonBytes), nil
 			}
 
-			seenAlertNames := make(map[string]bool)
-			simplifiedAlerts := make([]SimplifiedAlert, 0)
-			for _, alert := range result.Data.Alerts {
-				alertName := alert.Labels["alertname"]
-
-				if seenAlertNames[alertName] {
-					continue
-				}
-
-				seenAlertNames[alertName] = true
-
-				simplified := SimplifiedAlert{
-					AlertName:   alertName,
-					Description: alert.Annotations["description"],
-					State:       alert.State,
-					ActiveAt:    alert.ActiveAt,
-					Duration:    calculateDuration(alert.ActiveAt),
-				}
-				simplifiedAlerts = append(simplifiedAlerts, simplified)
+			maxResults := g.Cfg().MustGet(ctx, "prometheus.alerts_max_results", 50).Int()
+			query := ""
+			if input != nil {
+				query = input.Query
 			}
+			filteredAlerts := filterPrometheusAlerts(result.Data.Alerts, query)
+			simplifiedAlerts := simplifyPrometheusAlerts(filteredAlerts, maxResults)
 
 			alertsOut := PrometheusAlertsOutput{
 				Success: true,
@@ -197,4 +190,66 @@ func NewPrometheusAlertsQueryTool() tool.InvokableTool {
 		return nil
 	}
 	return t
+}
+
+func filterPrometheusAlerts(alerts []PrometheusAlert, query string) []PrometheusAlert {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "" {
+		return alerts
+	}
+	out := make([]PrometheusAlert, 0, len(alerts))
+	for _, alert := range alerts {
+		candidates := []string{
+			alert.Labels["service"],
+			alert.Labels["case_id"],
+			alert.Labels["namespace"],
+			alert.Labels["pod"],
+			alert.Annotations["summary"],
+			alert.Annotations["description"],
+		}
+		matched := false
+		for _, candidate := range candidates {
+			candidate = strings.ToLower(strings.TrimSpace(candidate))
+			if candidate != "" && (strings.Contains(query, candidate) || strings.Contains(candidate, query)) {
+				matched = true
+				break
+			}
+		}
+		if matched {
+			out = append(out, alert)
+		}
+	}
+	return out
+}
+
+func simplifyPrometheusAlerts(alerts []PrometheusAlert, maxResults int) []SimplifiedAlert {
+	if maxResults <= 0 {
+		maxResults = 50
+	}
+	seen := make(map[string]struct{}, len(alerts))
+	out := make([]SimplifiedAlert, 0, min(len(alerts), maxResults))
+	for _, alert := range alerts {
+		identity, _ := json.Marshal(alert.Labels)
+		key := string(identity)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		labels := make(map[string]string, len(alert.Labels))
+		for name, value := range alert.Labels {
+			labels[name] = value
+		}
+		out = append(out, SimplifiedAlert{
+			AlertName:   alert.Labels["alertname"],
+			Labels:      labels,
+			Description: alert.Annotations["description"],
+			State:       alert.State,
+			ActiveAt:    alert.ActiveAt,
+			Duration:    calculateDuration(alert.ActiveAt),
+		})
+		if len(out) == maxResults {
+			break
+		}
+	}
+	return out
 }

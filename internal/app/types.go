@@ -21,9 +21,10 @@ func GenerateSessionID() string {
 
 // ChatInput is the application-layer input for a synchronous chat request.
 type ChatInput struct {
-	SessionID string
-	Question  string
-	SkillIDs  []string
+	SessionID    string
+	Question     string
+	SkillIDs     []string
+	DisableCache bool
 }
 
 // ChatResult is the application-layer output for a chat request.

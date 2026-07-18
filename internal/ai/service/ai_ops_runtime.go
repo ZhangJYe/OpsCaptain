@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -113,6 +114,7 @@ func (a *aiOpsPlanAgent) Handle(ctx context.Context, task *protocol.TaskEnvelope
 			Summary:           summary,
 			Confidence:        0.15,
 			DegradationReason: err.Error(),
+			Evidence:          planEvidenceFromDetails(planDetail),
 			Error: &protocol.TaskError{
 				Code:    "plan_execute_replan_failed",
 				Message: err.Error(),
@@ -125,7 +127,71 @@ func (a *aiOpsPlanAgent) Handle(ctx context.Context, task *protocol.TaskEnvelope
 		Status:     protocol.ResultStatusSucceeded,
 		Summary:    strings.TrimSpace(content),
 		Confidence: 0.8,
+		Evidence:   planEvidenceFromDetails(planDetail),
 	}, nil
+}
+
+func planEvidenceFromDetails(detail []string) []protocol.EvidenceItem {
+	const maxSnippetRunes = 4000
+
+	pendingTools := make([]string, 0)
+	seen := make(map[string]struct{})
+	evidence := make([]protocol.EvidenceItem, 0)
+	for _, item := range detail {
+		pendingTools = append(pendingTools, planToolNames(item)...)
+
+		raw, ok := strings.CutPrefix(strings.TrimSpace(item), "tool:")
+		if !ok || strings.TrimSpace(raw) == "" {
+			continue
+		}
+		raw = strings.TrimSpace(raw)
+		toolName := "plan_tool_result"
+		if len(pendingTools) > 0 {
+			toolName = pendingTools[0]
+			pendingTools = pendingTools[1:]
+		}
+		sum := sha256.Sum256([]byte(raw))
+		sourceID := fmt.Sprintf("%s:%x", toolName, sum[:8])
+		if _, exists := seen[sourceID]; exists {
+			continue
+		}
+		seen[sourceID] = struct{}{}
+
+		runes := []rune(raw)
+		if len(runes) > maxSnippetRunes {
+			raw = string(runes[:maxSnippetRunes]) + "..."
+		}
+		evidence = append(evidence, protocol.EvidenceItem{
+			SourceType: "tool",
+			SourceID:   sourceID,
+			Title:      toolName + " 工具结果",
+			Snippet:    raw,
+			Score:      1,
+		})
+	}
+	return evidence
+}
+
+func planToolNames(detail string) []string {
+	const marker = "Function:{Name:"
+
+	names := make([]string, 0)
+	remaining := detail
+	for {
+		index := strings.Index(remaining, marker)
+		if index < 0 {
+			return names
+		}
+		remaining = remaining[index+len(marker):]
+		end := strings.IndexAny(remaining, " }\t\r\n")
+		if end < 0 {
+			end = len(remaining)
+		}
+		if name := strings.TrimSpace(remaining[:end]); name != "" {
+			names = append(names, name)
+		}
+		remaining = remaining[end:]
+	}
 }
 
 type aiOpsGOSAgent struct{}
@@ -155,35 +221,7 @@ func (a *aiOpsGOSAgent) Handle(ctx context.Context, task *protocol.TaskEnvelope)
 			rt.EmitInfo(emitCtx, task, a.Name(), message, payload)
 		})
 	}
-	ch := make(chan *protocol.TaskResult, 1)
-	go func() {
-		ch <- engine.Run(ctx, query)
-	}()
-
-	var result *protocol.TaskResult
-	select {
-	case result = <-ch:
-	case <-ctx.Done():
-		now := time.Now().UnixMilli()
-		taskID := ""
-		if task != nil {
-			taskID = task.TaskID
-		}
-		result = &protocol.TaskResult{
-			TaskID:            taskID,
-			Agent:             a.Name(),
-			Status:            protocol.ResultStatusDegraded,
-			Summary:           fmt.Sprintf("GoS execution stopped by timeout: %v", ctx.Err()),
-			Confidence:        0.1,
-			DegradationReason: ctx.Err().Error(),
-			Error: &protocol.TaskError{
-				Code:    "gos_context_cancelled",
-				Message: ctx.Err().Error(),
-			},
-			StartedAt:  now,
-			FinishedAt: now,
-		}
-	}
+	result := engine.Run(ctx, query)
 	if result != nil && task != nil {
 		result.TaskID = task.TaskID
 		result.Agent = a.Name()
@@ -338,7 +376,7 @@ func requestedAIOpsEngine(ctx context.Context) (string, bool) {
 }
 
 func newAIOpsGoSEngine(ctx context.Context) *gos_engine.GoSEngine {
-	cfg := loadAIOpsGOSConfig(ctx)
+	cfg := LoadAIOpsGOSConfig(ctx)
 	engine := gos_engine.NewGoSEngine(cfg, aiOpsGOSLogger{})
 	toolReg := experts.NewToolRegistry()
 	registerAIOpsGOSTools(toolReg)
@@ -346,6 +384,13 @@ func newAIOpsGoSEngine(ctx context.Context) *gos_engine.GoSEngine {
 		registerAIOpsGOSExpert(engine, cfg, toolReg, expertCfg)
 	}
 	return engine
+}
+
+// LoadAIOpsGOSConfig returns the effective GoS runtime configuration. The
+// standalone evaluator uses the same loader so real compare exercises the
+// configured production candidate instead of DefaultConfig compatibility mode.
+func LoadAIOpsGOSConfig(ctx context.Context) *gos_engine.Config {
+	return loadAIOpsGOSConfig(ctx)
 }
 
 func loadAIOpsGOSConfig(ctx context.Context) *gos_engine.Config {
@@ -361,6 +406,9 @@ func loadAIOpsGOSConfig(ctx context.Context) *gos_engine.Config {
 	}
 	if v, ok := aiOpsConfigInt(ctx, "aiops.gos.max_tokens"); ok {
 		cfg.MaxTokens = v
+	}
+	if v, ok := aiOpsConfigInt(ctx, "aiops.gos.evidence_max_chars"); ok {
+		cfg.EvidenceMaxChars = v
 	}
 	if v, ok := aiOpsConfigInt(ctx, "aiops.gos.session_max_steps"); ok {
 		cfg.SessionMaxSteps = v
@@ -383,12 +431,105 @@ func loadAIOpsGOSConfig(ctx context.Context) *gos_engine.Config {
 	if v, ok := aiOpsConfigFloat(ctx, "aiops.gos.fsm.min_confidence"); ok {
 		cfg.FSM.MinConfidence = v
 	}
+	if v, ok := aiOpsConfigFloat(ctx, "aiops.gos.confidence.support_weight"); ok {
+		cfg.Confidence.SupportWeight = v
+	}
+	if v, ok := aiOpsConfigFloat(ctx, "aiops.gos.confidence.refute_weight"); ok {
+		cfg.Confidence.RefuteWeight = v
+	}
+	if v, ok := aiOpsConfigBool(ctx, "aiops.gos.confidence.deduplicate"); ok {
+		cfg.Confidence.Deduplicate = v
+	}
+	if v, ok := aiOpsConfigInt(ctx, "aiops.gos.graph.checkpoint_interval"); ok {
+		cfg.Graph.CheckpointInterval = v
+	}
+	if v, ok := aiOpsConfigInt(ctx, "aiops.gos.graph.max_nodes"); ok {
+		cfg.Graph.MaxNodes = v
+	}
+	if v, ok := aiOpsConfigInt(ctx, "aiops.gos.graph.max_edges"); ok {
+		cfg.Graph.MaxEdges = v
+	}
+	if v, ok := aiOpsConfigInt(ctx, "aiops.gos.graph.max_depth"); ok {
+		cfg.Graph.MaxDepth = v
+	}
+	if v, ok := aiOpsConfigInt(ctx, "aiops.gos.graph.max_snapshots"); ok {
+		cfg.Graph.MaxSnapshots = v
+	}
+	if v, ok := aiOpsConfigInt(ctx, "aiops.gos.graph.max_deltas"); ok {
+		cfg.Graph.MaxDeltas = v
+	}
+	if v, ok := aiOpsConfigBool(ctx, "aiops.gos.structured_cognition.enabled"); ok {
+		cfg.StructuredCognition.Enabled = v
+	}
+	if v, ok := aiOpsConfigInt(ctx, "aiops.gos.structured_cognition.call_timeout_ms"); ok {
+		cfg.StructuredCognition.CallTimeoutMs = v
+	}
+	if v, ok := aiOpsConfigInt(ctx, "aiops.gos.structured_cognition.max_hypotheses"); ok {
+		cfg.StructuredCognition.MaxHypotheses = v
+	}
+	if v, ok := aiOpsConfigInt(ctx, "aiops.gos.structured_cognition.max_observations"); ok {
+		cfg.StructuredCognition.MaxObservations = v
+	}
+	if v, ok := aiOpsConfigInt(ctx, "aiops.gos.structured_cognition.max_plan_items"); ok {
+		cfg.StructuredCognition.MaxPlanItems = v
+	}
+	if v, err := g.Cfg().Get(ctx, "aiops.gos.structured_cognition.plan_budget"); err == nil {
+		var budget gos_engine.PlanBudgetConfig
+		if err := v.Scan(&budget); err == nil {
+			cfg.StructuredCognition.PlanBudget = budget
+		}
+	}
+	if v, ok := aiOpsConfigInt(ctx, "aiops.gos.execution.max_concurrent_experts"); ok {
+		cfg.Execution.MaxConcurrentExperts = v
+	}
+	if v, ok := aiOpsConfigInt(ctx, "aiops.gos.execution.no_progress_round_limit"); ok {
+		cfg.Execution.NoProgressRoundLimit = v
+	}
+	if v, ok := aiOpsConfigFloat(ctx, "aiops.gos.report.conflict_strength_threshold"); ok {
+		cfg.Report.ConflictStrengthThreshold = v
+	}
+	if v, ok := aiOpsConfigInt(ctx, "aiops.gos.report.max_evidence_items"); ok {
+		cfg.Report.MaxEvidenceItems = v
+	}
+	if v, ok := aiOpsConfigInt(ctx, "aiops.gos.report.evidence_snippet_max_chars"); ok {
+		cfg.Report.EvidenceSnippetMaxChars = v
+	}
+	if v, ok := aiOpsConfigInt(ctx, "aiops.gos.report.max_next_actions"); ok {
+		cfg.Report.MaxNextActions = v
+	}
+	if v, err := g.Cfg().Get(ctx, "aiops.gos.experts"); err == nil {
+		var expertConfigs []gos_engine.ExpertConfig
+		if err := v.Scan(&expertConfigs); err == nil && len(expertConfigs) > 0 {
+			cfg.Experts = expertConfigs
+		}
+	}
+	if v, ok := aiOpsConfigBool(ctx, "aiops.gos.state_conversion.enabled"); ok {
+		cfg.StateConversion.Enabled = v
+	}
+	if v, ok := aiOpsConfigInt(ctx, "aiops.gos.state_conversion.max_depth"); ok {
+		cfg.StateConversion.MaxDepth = v
+	}
+	if v, ok := aiOpsConfigFloat(ctx, "aiops.gos.state_conversion.tie_epsilon"); ok {
+		cfg.StateConversion.TieEpsilon = v
+	}
+	if v, err := g.Cfg().Get(ctx, "aiops.gos.state_conversion.refinement_rules"); err == nil {
+		var rules []gos_engine.RefinementRule
+		if err := v.Scan(&rules); err == nil && len(rules) > 0 {
+			cfg.StateConversion.RefinementRules = rules
+		}
+	}
 	return cfg
 }
 
 func registerAIOpsGOSTools(toolReg *experts.ToolRegistry) {
 	if t := aitools.NewQueryInternalDocsTool(); t != nil {
 		toolReg.Register("query_internal_docs", t)
+	}
+	if t := aitools.NewPrometheusInstantQueryTool(); t != nil {
+		toolReg.Register("query_prometheus_instant", t)
+	}
+	if t := aitools.NewPrometheusAlertsQueryTool(); t != nil {
+		toolReg.Register("query_prometheus_alerts", t)
 	}
 	logTools, err := aitools.GetLogMcpTool()
 	registeredLog := false
@@ -418,6 +559,12 @@ func registerAIOpsGOSTools(toolReg *experts.ToolRegistry) {
 	}
 }
 
+// RegisterAIOpsGOSTools exposes the production GoS tool wiring to the standalone
+// evaluator so real-profile runs exercise the same registered capabilities.
+func RegisterAIOpsGOSTools(toolReg *experts.ToolRegistry) {
+	registerAIOpsGOSTools(toolReg)
+}
+
 func registerAIOpsGOSExpert(engine *gos_engine.GoSEngine, cfg *gos_engine.Config, toolReg *experts.ToolRegistry, ec gos_engine.ExpertConfig) {
 	if strings.TrimSpace(ec.Name) == "" {
 		return
@@ -439,8 +586,17 @@ func registerAIOpsGOSExpert(engine *gos_engine.GoSEngine, cfg *gos_engine.Config
 		ModelPath:         cfg.ModelPath,
 		Temperature:       cfg.Temperature,
 		MaxTokens:         cfg.MaxTokens,
+		EvidenceMaxChars:  cfg.EvidenceMaxChars,
 		CallTimeout:       time.Duration(cfg.CallTimeoutMs) * time.Millisecond,
 		ChatModelFactory:  models.OpenAIChatModelFactory(cfg.ModelPath),
+		ExecutionBudget: experts.ExecutionBudget{
+			LLMCalls:          ec.Budget.LLMCalls,
+			ToolCalls:         ec.Budget.ToolCalls,
+			RAGCalls:          ec.Budget.RAGCalls,
+			Timeout:           time.Duration(ec.Budget.TimeoutMs) * time.Millisecond,
+			MaxRetrievalSteps: ec.Budget.MaxRetrievalSteps,
+			MaxOutputTokens:   ec.Budget.MaxOutputTokens,
+		},
 	}
 	switch strings.ToLower(strings.TrimSpace(ec.Name)) {
 	case "linux_sre":
@@ -452,6 +608,12 @@ func registerAIOpsGOSExpert(engine *gos_engine.GoSEngine, cfg *gos_engine.Config
 	default:
 		engine.RegisterExpert(ec.Name, experts.NewBaseExpert(runtimeCfg, toolReg))
 	}
+}
+
+// RegisterAIOpsGOSExpert exposes the production expert and budget wiring to the
+// standalone evaluator.
+func RegisterAIOpsGOSExpert(engine *gos_engine.GoSEngine, cfg *gos_engine.Config, toolReg *experts.ToolRegistry, ec gos_engine.ExpertConfig) {
+	registerAIOpsGOSExpert(engine, cfg, toolReg, ec)
 }
 
 type aiOpsGOSLogger struct{}

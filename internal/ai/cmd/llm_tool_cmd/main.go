@@ -1,37 +1,22 @@
 package main
 
 import (
+	"SuperBizAgent/internal/ai/models"
 	tools2 "SuperBizAgent/internal/ai/tools"
 	"SuperBizAgent/utility/common"
 	"context"
 	"fmt"
 
-	"github.com/cloudwego/eino-ext/components/model/openai"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
-	"github.com/gogf/gf/v2/frame/g"
 )
 
 func main() {
+	if err := common.LoadPreferredEnvFile(); err != nil {
+		panic(err)
+	}
 	ctx := context.Background()
-	modelVal, err := readConfig(ctx, "chat_model_fast.model", "glm_chat_model_fast.model")
-	if err != nil {
-		panic(err)
-	}
-	apiKeyVal, err := readConfig(ctx, "chat_model_fast.api_key", "glm_chat_model_fast.api_key")
-	if err != nil {
-		panic(err)
-	}
-	baseURLVal, err := readConfig(ctx, "chat_model_fast.base_url", "glm_chat_model_fast.base_url")
-	if err != nil {
-		panic(err)
-	}
-	config := &openai.ChatModelConfig{
-		APIKey:  common.ResolveEnv(apiKeyVal),
-		Model:   common.ResolveEnv(modelVal),
-		BaseURL: common.ResolveEnv(baseURLVal),
-	}
-	chatModel, err := openai.NewChatModel(ctx, config)
+	chatModel, err := models.OpenAIForGLMFast(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -47,7 +32,7 @@ func main() {
 		toolInfos = append(toolInfos, info)
 	}
 
-	err = chatModel.BindTools(toolInfos)
+	chatModel, err = chatModel.WithTools(toolInfos)
 	if err != nil {
 		panic(err)
 	}
@@ -69,24 +54,4 @@ func main() {
 		panic(err)
 	}
 	fmt.Println(resp.Content)
-}
-
-func readConfig(ctx context.Context, paths ...string) (string, error) {
-	var lastErr error
-	var foundEmpty bool
-	for _, path := range paths {
-		v, err := g.Cfg().Get(ctx, path)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		if v.String() != "" {
-			return v.String(), nil
-		}
-		foundEmpty = true
-	}
-	if foundEmpty {
-		return "", nil
-	}
-	return "", lastErr
 }

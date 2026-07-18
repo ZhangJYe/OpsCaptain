@@ -1,0 +1,5 @@
+只输出当前工具需要的查询内容，不要解释或使用 Markdown：
+- 工具为 query_prometheus_alerts 时，只输出症状中明确出现的 service 名或 case_id，例如 eval-retry-inventory。
+- 工具为 query_prometheus_instant 时，只输出合法 PromQL；不知道指标名但症状含明确 service 时，输出 `{service="服务名"}`，例如 `{service="eval-retry-inventory"}`。
+- 工具为 query_logs 时，输出包含 service 名、异常现象和关键错误词的短查询。
+- 工具为 query_internal_docs 时，输出需要查找的故障类型或处置主题。
