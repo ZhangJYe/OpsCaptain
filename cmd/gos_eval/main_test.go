@@ -477,10 +477,34 @@ func TestEvalGenerateContentPromotesMappedRootCauseIntoGraphRefinement(t *testin
 	require.True(t, proposal.Refinements[0].Actionable)
 }
 
+func TestEvalGenerateContentUsesAllRetrievedEvidenceForRefinement(t *testing.T) {
+	graph := belief.NewBeliefGraph()
+	graph.StartSignalID = graph.AddSignal("跨区域调用延迟升高并出现丢包")
+	frontier := &belief.Frontier{NodeID: graph.AddHypothesis("资源耗尽", 0.6, 1, "需要验证"), Label: "资源耗尽"}
+	history := []experts.RetrievalRecord{
+		{Tool: "query_logs", Output: `{"success":true,"data":"Cross-region latency high, packet loss 5%"}`},
+		{Tool: "query_internal_docs", Output: `{"success":true,"data":"Network latency: check traceroute, mtr, tcpdump"}`},
+	}
+
+	raw, err := evalGenerateContent(context.Background(), frontier, graph, history, map[string]string{"action": "analyze"})
+	require.NoError(t, err)
+	var proposal evalAnalysisProposal
+	require.NoError(t, json.Unmarshal([]byte(raw), &proposal))
+	require.Equal(t, "网络链路问题", proposal.Analysis)
+	require.Len(t, proposal.Refinements, 1)
+	require.Equal(t, "网络链路问题", proposal.Refinements[0].Label)
+}
+
 func TestBuildGoSEngineEvalProfileExercisesStructuredRefinePath(t *testing.T) {
 	_, cfg, err := buildGoSEngine(true, nil)
 	require.NoError(t, err)
 	require.True(t, cfg.StructuredCognition.Enabled)
 	require.True(t, cfg.StateConversion.Enabled)
 	require.NotNil(t, cfg.StructuredGenerate)
+	require.Equal(t, 2, cfg.StructuredCognition.PlanBudget.LLMCalls)
+	require.Equal(t, 1, cfg.StructuredCognition.PlanBudget.ToolCalls)
+	for _, expert := range cfg.Experts {
+		require.Equal(t, 2, expert.Budget.LLMCalls)
+		require.Equal(t, 1, expert.Budget.ToolCalls)
+	}
 }

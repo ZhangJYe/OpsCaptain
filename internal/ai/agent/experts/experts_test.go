@@ -478,6 +478,18 @@ func TestEvidenceSourceIDIsStableForSameObservation(t *testing.T) {
 	assert.NotEqual(t, first, different)
 }
 
+func TestEvidenceSourceIDIgnoresVolatileToolEnvelope(t *testing.T) {
+	firstLogs := `{"success":true,"logs":[{"timestamp":"2026-07-18T12:35:21Z","service":"checkout","message":"upstream 503"}],"message":"found 1 record","query":"checkout retry"}`
+	secondLogs := `{"query":"HTTP 503 no backoff","message":"found 1 measured log record","logs":[{"message":"upstream 503","service":"checkout","timestamp":"2026-07-18T12:35:21Z"}],"success":true}`
+	assert.Equal(t, evidenceSourceID("query_logs", firstLogs), evidenceSourceID("query_logs", secondLogs))
+
+	firstMetrics := `{"success":true,"query":"{service=\"checkout\"}","time":"2026-07-18T20:43:25+08:00","samples":[{"labels":{"__name__":"retry_total","service":"checkout"},"timestamp":"2026-07-18T12:43:25Z","value":12}]}`
+	secondMetrics := `{"time":"2026-07-18T20:43:31+08:00","query":"retry_total{service=\"checkout\"}","success":true,"samples":[{"timestamp":"2026-07-18T12:43:31Z","value":12,"labels":{"service":"checkout","__name__":"retry_total"}}]}`
+	changedMetrics := `{"success":true,"samples":[{"labels":{"__name__":"retry_total","service":"checkout"},"timestamp":"2026-07-18T12:43:31Z","value":13}]}`
+	assert.Equal(t, evidenceSourceID("query_prometheus_instant", firstMetrics), evidenceSourceID("query_prometheus_instant", secondMetrics))
+	assert.NotEqual(t, evidenceSourceID("query_prometheus_instant", firstMetrics), evidenceSourceID("query_prometheus_instant", changedMetrics))
+}
+
 func TestBaseExpert_GenerateContent(t *testing.T) {
 	cfg := ExpertRuntimeConfig{
 		Name:      "test",

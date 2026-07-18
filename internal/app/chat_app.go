@@ -117,7 +117,7 @@ func (a *ChatApp) HandleChat(ctx context.Context, input *ChatInput) (*ChatResult
 	defer a.releaseSessionLock(id, mu)
 
 	sessionMem := memory.GetSimpleMemory(id)
-	bypassResponseCache := shouldBypassCache(msg)
+	bypassResponseCache := input.DisableCache || shouldBypassCache(msg)
 
 	if !bypassResponseCache {
 		if entry, found, cacheErr := cache.LoadChatResponse(ctx, id, msg, selectedSkillIDs...); cacheErr != nil {

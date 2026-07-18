@@ -6,6 +6,8 @@
 适用范围：`internal/ai/belief/`、`internal/ai/agent/gos_engine/`、`internal/ai/agent/experts/`、`cmd/gos_eval/`
 当前主链路：`aiops.engine=plan_execute_replan`，GoS 仅作为可切换实验引擎
 
+Agent 入口收敛、Chat/AIOps 业务路由、旧接口兼容和 Plan 退出生产的迁移设计，统一由 [统一 Agent 入口与意图路由 Spec](./unified-agent-routing-spec.md) 管理。本 Spec 只负责 GoS 的推理正确性、证据契约和真实发布 Gate；在 Phase 7 真实 Gate 通过前，不得因入口合并而提前删除 Plan 或切换生产默认引擎。
+
 ## 0. 执行状态
 
 最后更新：2026-07-18
@@ -25,7 +27,9 @@
 
 2026-07-18 按“最小闭环”停止继续扩展架构：仅修复真实 development case 直接暴露的问题，包括隔离日志默认窗口、日志与当前指标互补取证、同源 ID 不再包含专家名、中性证据禁止生成 refinement、source-backed actionability、证据优势状态收敛，以及报告保留诊断依据/受限证据片段。完整 `development_v1` 一次真实运行结果为 3 条根因均匹配、evidence coverage 100%、graph validity/traceability 100%，其中 2 条 succeeded、1 条因连续三次 30 秒 Planner 超时和后续结构化评估失败而 degraded，contract compliance 66.67%，evidence precision 41.67%。随后修复报告兄弟候选污染，使用最终代码只复核 case 002：root-cause accuracy、coverage、graph validity、traceability、contract compliance 均为 100%，artifact 为 `evals/real_controlled/artifacts/development_v1/case_002_minimal_closure.json`（SHA-256 `223d83e453e91e978e7de3a59d103bf90f71384fafbf6c53e5fc667005632cf9`）。该结果仅是可检查的 development 证据，不得替代冻结 v1 holdout：v1 compare 仍以 root-cause accuracy 20%、contract compliance 0%、degradation 100% 判定 Gate Failed，禁止重跑或调参覆盖。
 
-本轮 deterministic Gate 显式开启仅限 `eval` profile 的 Structured Cognition 与 State Conversion，使用确定性 generator 故障触发规则 fallback，并由 source-backed expert refinement 驱动 `Refine → Report`；它不使用真实 LLM，因此不计入真实 accuracy。结果为 5/5，root-cause accuracy、contract compliance、evidence precision、evidence coverage、graph validity、traceability 均为 100%，premature-stop 与 degradation 均为 0%，平均 LLM/tool/RAG calls 为 7/2/0，11 项 Gate 全部 PASS。Gate 曾先发现“专家文本已有精确根因、图结论仍停留在泛化资源耗尽”的链路错位；修复完整图路径后才重新生成 baseline，没有降低指标门槛。防遗漏输出过滤修复改变代码内容指纹后，旧 baseline 也按预期在执行前被拒绝，随后才用相同门槛重采并再次通过 Gate。当前 baseline SHA-256 为 `731b94c3e6291da16b789c2fe16a016018f7648b98abc59f95bf818a0846beb5`；artifact 同时校验 dataset/config/code 指纹、逐 case ID、ground truth、数量、`source-backed-signal-v2` 与 `complete-trace-profile-activity-v1` 运行质量契约。生产 GoS 总开关、State Conversion 与 Structured Cognition 仍保持关闭。
+同日继续收敛两个已复现问题：Structured Planner 首次生成失败后，在当前 Run 内锁定为规则 fallback，避免同一请求连续触发三个 30 秒超时；`query_logs` 与 `query_prometheus_instant` 的 evidence source ID 只忽略查询文本、评估时间和响应 message 等易变外壳，仍保留真实日志时间、指标标签与数值作为观测身份。该锁定不跨 Run，也不吞掉 schema/contract 错误；未增加配置项或新架构。
+
+本轮 deterministic Gate 显式开启仅限 `eval` profile 的 Structured Cognition 与 State Conversion，使用确定性 generator 故障触发规则 fallback，并由 source-backed expert refinement 驱动 `Refine → Report`；它不使用真实 LLM，因此不计入真实 accuracy。Gate 先发现 evaluator 在多次取证时用后一次文档结果覆盖前一次日志证据，并发现旧 baseline 的内部 config 指纹已经过期；修复 evaluator 的多源合并并恢复仅限 eval profile 的紧凑预算后，未降低任何门槛，重新生成 baseline。最终结果为 5/5，root-cause accuracy、contract compliance、evidence precision、evidence coverage、graph validity、traceability 均为 100%，premature-stop 与 degradation 均为 0%，平均 LLM/tool/RAG calls 为 6/2/0，11 项 Gate 全部 PASS。当前 baseline SHA-256 为 `5fedc48f0c738f4a953766ad8004abc9730c834f4d5c759120cdb7f2acf5dd4d`；artifact 同时校验 dataset/config/code 指纹、逐 case ID、ground truth、数量、`source-backed-signal-v2` 与 `complete-trace-profile-activity-v1` 运行质量契约。冻结 v1 holdout 不重跑；case 001 的真实 development 复核因隔离只读隧道当前未连接而保留为待办。生产 GoS 总开关、State Conversion 与 Structured Cognition 仍保持关闭，未执行 shadow、灰度、部署或生产写操作。
 
 当前本地 LLM、Embedding、MCP、Prometheus 与 Milvus 配置已经可用，29 份知识文档已通过真实豆包 Embedding 写入 Milvus，验收查询返回 5 份文档。真实 baseline 试跑到第 4 个 holdout 时主动中止：当前 Prometheus 主要业务数据来自 `synthetic-checkout`，与 16 个 holdout 故障没有逐 case 隔离关系，继续运行会把“真实模型 + 模拟遥测”误标为全真实结果。`aiops.gos.evaluation.telemetry_profile` 因此在本地设为 `synthetic`、生产配置设为 `unverified`；只有完成真实遥测来源核验并显式设为 `real` 后，`baseline/compare` 才可生成 artifact。AIOps2025 构建器现在同时支持 `groundtruth_guided` 与 `blind`：前者产物标记为 `recorded_label_assisted/development_only`，后者完全不读取 `groundtruth.jsonl`，只解析 input 中两个 UTC 时间戳并扫描窗内全部实体，产物标记为 `recorded_blind/development_only/input_time_window_only`。blind 证据现已通过 `recorded` profile 接为逐 case 隔离的只读 Tool/RAG replay，并完成真实模型对照；该 profile 仍显式标记为 `development_only`，不能替代真实生产遥测 Gate。
 

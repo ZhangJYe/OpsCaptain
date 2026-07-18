@@ -195,6 +195,7 @@ func main() {
 	chatApp := app.NewChatApp()
 	knowledgeApp := app.NewKnowledgeApp(infrafs.NewLocalUploadStore(common.FileDir))
 	aiopsApp := app.NewAIOpsApp()
+	agentApp := app.NewAgentApp(chatApp, aiopsApp)
 	app.RegisterChatTaskExecutor(chatApp)
 
 	changeEventApp, changeEventShutdown := configureChangeEvents(ctx, aiopsApp)
@@ -337,7 +338,7 @@ func main() {
 		group.Middleware(middleware.AuthMiddleware)
 		group.Middleware(middleware.RateLimitMiddleware)
 		group.Middleware(middleware.ResponseMiddleware)
-		group.Bind(chat.NewV1(chatApp, knowledgeApp, aiopsApp, changeEventApp, mcpToolApp, userSkillApp, cmdbApp, feedbackStore, analyticsCollector, shareStore, feishuSender))
+		group.Bind(chat.NewV1(chatApp, agentApp, knowledgeApp, aiopsApp, changeEventApp, mcpToolApp, userSkillApp, cmdbApp, feedbackStore, analyticsCollector, shareStore, feishuSender))
 	})
 
 	if err := s.Start(); err != nil {

@@ -59,6 +59,9 @@ func buildDynamicSystemPrompt(ctx context.Context) string {
 	if safetySection := buildInjectionSafetySection(ctx); strings.TrimSpace(safetySection) != "" {
 		sections = append(sections, promptSection{Scope: promptScopeSession, Content: safetySection})
 	}
+	if autoSection := buildAutoDiagnosisSection(ctx); strings.TrimSpace(autoSection) != "" {
+		sections = append(sections, promptSection{Scope: promptScopeSession, Content: autoSection})
+	}
 
 	if skillSection := buildSelectedSkillPromptSection(ctx); strings.TrimSpace(skillSection) != "" {
 		sections = append(sections, promptSection{Scope: promptScopeSession, Content: skillSection})
@@ -88,6 +91,20 @@ func buildDynamicSystemPrompt(ctx context.Context) string {
 		return ""
 	}
 	return renderPromptSections(sections)
+}
+
+func buildAutoDiagnosisSection(ctx context.Context) string {
+	if level, _ := ctx.Value(consts.CtxKeyInjectionRiskLevel).(string); level == "suspicious" {
+		return ""
+	}
+	if _, ok := autoDiagnosisToolFromContext(ctx); !ok {
+		return ""
+	}
+	return `## 统一入口自动模式
+- 普通对话、概念解释和内部文档问答直接回答，不要调用故障诊断。
+- 当用户要求查询真实系统状态、日志、指标、告警，或定位当前实际故障时，必须调用 diagnose_incident。
+- 信息不足以发起真实诊断时，先在普通回答中询问服务、环境、现象或时间范围。
+- diagnose_incident 会直接返回证据化报告；不要选择、猜测或向用户暴露其内部诊断引擎。`
 }
 
 func buildSelectedSkillPromptSection(ctx context.Context) string {

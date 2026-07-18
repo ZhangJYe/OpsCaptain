@@ -37,6 +37,17 @@ class IsolatedRealFixtureTest(unittest.TestCase):
         self.assertIn("opscaptain_eval_retry_attempts_total", metrics)
         self.assertIn("opscaptain_eval_db_pool_wait_seconds", metrics)
 
+    def test_fixture_can_isolate_one_case(self):
+        records, samples = fixture.build_fixture("development_v1", "real-development-002")
+
+        self.assertEqual([record["case_id"] for record in records], ["real-development-002"])
+        self.assertTrue(samples)
+        self.assertEqual({sample[1] for sample in samples}, {"real-development-002"})
+
+    def test_fixture_rejects_case_from_another_suite(self):
+        with self.assertRaisesRegex(ValueError, "does not belong"):
+            fixture.build_fixture("development_v1", "real-holdout-001")
+
 
 if __name__ == "__main__":
     unittest.main()

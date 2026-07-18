@@ -20,17 +20,19 @@ type Planner struct {
 }
 
 type PlanningHistory struct {
-	CalledGoalKeys  map[string]struct{}
-	FailedTools     map[string]struct{}
-	RemainingBudget PlanBudgetConfig
+	CalledGoalKeys               map[string]struct{}
+	FailedTools                  map[string]struct{}
+	RemainingBudget              PlanBudgetConfig
+	StructuredGenerationDisabled bool
 }
 
 type PlanningContext struct {
-	Frontier        *belief.Frontier
-	Graph           *belief.BeliefGraph
-	CalledGoalKeys  map[string]struct{}
-	FailedTools     map[string]struct{}
-	RemainingBudget PlanBudgetConfig
+	Frontier                     *belief.Frontier
+	Graph                        *belief.BeliefGraph
+	CalledGoalKeys               map[string]struct{}
+	FailedTools                  map[string]struct{}
+	RemainingBudget              PlanBudgetConfig
+	StructuredGenerationDisabled bool
 }
 
 type PlanOutcome struct {
@@ -99,7 +101,9 @@ func (p *Planner) PlanWithContext(ctx context.Context, planning PlanningContext)
 	outcome := PlanOutcome{Mode: "rules"}
 	if p.cfg.StructuredCognition.Enabled {
 		outcome.Mode = "rule_fallback"
-		if p.generate == nil {
+		if planning.StructuredGenerationDisabled {
+			outcome.FallbackReason = "structured_generation_disabled"
+		} else if p.generate == nil {
 			outcome.FallbackReason = "structured_generator_unavailable"
 		} else {
 			prompt, err := p.buildStructuredPrompt(planning)

@@ -488,8 +488,50 @@ func (e *BaseExpert) fallbackEvidenceQuery(frontier *belief.Frontier, graph *bel
 }
 
 func evidenceSourceID(sourceName, content string) string {
-	sum := sha256.Sum256([]byte(content))
+	sum := sha256.Sum256([]byte(canonicalEvidenceIdentity(sourceName, content)))
 	return fmt.Sprintf("%s:%x", sourceName, sum[:8])
+}
+
+func canonicalEvidenceIdentity(sourceName, content string) string {
+	content = strings.TrimSpace(content)
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(content), &payload); err != nil {
+		return content
+	}
+
+	switch sourceName {
+	case "query_logs":
+		delete(payload, "query")
+		delete(payload, "message")
+	case "query_prometheus_instant":
+		delete(payload, "query")
+		delete(payload, "time")
+		delete(payload, "message")
+		stripPrometheusInstantTimestamps(payload["samples"])
+		stripPrometheusInstantTimestamps(payload["evidence"])
+		stripPrometheusInstantTimestamps(payload["scalar"])
+	default:
+		return content
+	}
+
+	canonical, err := json.Marshal(payload)
+	if err != nil {
+		return content
+	}
+	return string(canonical)
+}
+
+func stripPrometheusInstantTimestamps(value any) {
+	switch items := value.(type) {
+	case []any:
+		for _, item := range items {
+			if sample, ok := item.(map[string]any); ok {
+				delete(sample, "timestamp")
+			}
+		}
+	case map[string]any:
+		delete(items, "timestamp")
+	}
 }
 
 type analysisProposal struct {

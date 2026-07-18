@@ -286,3 +286,30 @@ func TestPlannerDoesNotRepeatExpertWithoutNewEvidenceGoal(t *testing.T) {
 	assert.NotEqual(t, first.Items[0].ExpertName, second.Items[0].ExpertName)
 	assert.False(t, strings.EqualFold(planGoalKey(first.Items[0]), planGoalKey(second.Items[0])))
 }
+
+func TestEnginePlannerDisablesStructuredGenerationAfterFirstFailure(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.StructuredCognition.Enabled = true
+	calls := 0
+	cfg.StructuredGenerate = func(context.Context, string) (string, error) {
+		calls++
+		return "", context.DeadlineExceeded
+	}
+	engine := NewGoSEngine(cfg, &testLogger{})
+	engine.RegisterExpert("linux_sre", &mockExpert{name: "linux_sre"})
+	graph := belief.NewBeliefGraph()
+	hypothesisID := graph.AddHypothesis("资源耗尽", 0.5, 1, "检查资源指标")
+	frontier := &belief.Frontier{NodeID: hypothesisID, Label: "资源耗尽"}
+	history := NewPlanningHistory()
+	history.RemainingBudget = scalePlanBudget(cfg.StructuredCognition.PlanBudget, 2)
+
+	first, err := engine.plan(context.Background(), graph, frontier, history)
+	require.NoError(t, err)
+	assert.Equal(t, "structured_generation_failed", first.FallbackReason)
+	require.True(t, history.StructuredGenerationDisabled)
+
+	second, err := engine.plan(context.Background(), graph, frontier, history)
+	require.NoError(t, err)
+	assert.Equal(t, "structured_generation_disabled", second.FallbackReason)
+	assert.Equal(t, 1, calls)
+}

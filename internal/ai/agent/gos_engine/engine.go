@@ -379,13 +379,18 @@ func (e *GoSEngine) ingest(ctx context.Context, graph *belief.BeliefGraph, sympt
 
 func (e *GoSEngine) plan(ctx context.Context, graph *belief.BeliefGraph, frontier *belief.Frontier, history *PlanningHistory) (PlanOutcome, error) {
 	planner := NewStructuredPlanner(e.experts, e.cfg, e.logger, e.structuredGenerate)
-	return planner.PlanWithContext(ctx, PlanningContext{
-		Frontier:        frontier,
-		Graph:           graph,
-		CalledGoalKeys:  history.CalledGoalKeys,
-		FailedTools:     history.FailedTools,
-		RemainingBudget: history.RemainingBudget,
+	outcome, err := planner.PlanWithContext(ctx, PlanningContext{
+		Frontier:                     frontier,
+		Graph:                        graph,
+		CalledGoalKeys:               history.CalledGoalKeys,
+		FailedTools:                  history.FailedTools,
+		RemainingBudget:              history.RemainingBudget,
+		StructuredGenerationDisabled: history.StructuredGenerationDisabled,
 	})
+	if outcome.FallbackReason == "structured_generation_failed" {
+		history.StructuredGenerationDisabled = true
+	}
+	return outcome, err
 }
 
 func (e *GoSEngine) act(ctx context.Context, plan []PlanItem, frontier *belief.Frontier, graph *belief.BeliefGraph, stats *RunStats) (*ActResult, error) {

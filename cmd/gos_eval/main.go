@@ -537,16 +537,16 @@ func evalGenerateContent(ctx context.Context, frontier *belief.Frontier, graph *
 	case "retrieve":
 		return fmt.Sprintf("%s %s", frontier.Label, symptom), nil
 	case "analyze":
-		var toolData string
+		var toolData []string
 		for _, h := range history {
 			if h.Tool == "query_logs" || h.Tool == "query_internal_docs" {
 				d := extractDataFieldEval(h.Output)
 				if d != "" {
-					toolData = d
+					toolData = append(toolData, d)
 				}
 			}
 		}
-		conclusion := mapToolOutputToConclusion(toolData)
+		conclusion := mapToolOutputToConclusion(strings.Join(toolData, "\n"))
 		mappedConclusion := conclusion
 		if conclusion == "" {
 			conclusion = fmt.Sprintf("针对假设「%s」的分析：%s", frontier.Label, frontier.Why)
@@ -1023,6 +1023,12 @@ func buildGoSEngineFromConfig(cfg *gos_engine.Config, evalProfile bool, recorded
 		applyCompactEvalConfig(cfg)
 	}
 	if evalProfile {
+		cfg.StructuredCognition.PlanBudget.LLMCalls = 2
+		cfg.StructuredCognition.PlanBudget.ToolCalls = 1
+		for index := range cfg.Experts {
+			cfg.Experts[index].Budget.LLMCalls = 2
+			cfg.Experts[index].Budget.ToolCalls = 1
+		}
 		cfg.StructuredCognition.Enabled = true
 		cfg.StateConversion.Enabled = true
 		cfg.StructuredGenerate = func(context.Context, string) (string, error) {

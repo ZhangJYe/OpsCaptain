@@ -321,16 +321,20 @@ SUITES = {
 }
 
 
-def build_fixture(suite="holdout_v1"):
+def build_fixture(suite="holdout_v1", case_id=""):
     cases = SUITES[suite]
     records = []
     samples = []
     for fault in cases:
         measured_record, metrics = fault()
+        if case_id and measured_record["case_id"] != case_id:
+            continue
         records.append(measured_record)
         for metric, value in metrics.items():
             samples.append((metric, measured_record["case_id"], measured_record["service"], value))
         samples.append(("opscaptain_eval_fault_active", measured_record["case_id"], measured_record["service"], 1.0))
+    if case_id and not records:
+        raise ValueError(f"case {case_id!r} does not belong to suite {suite!r}")
     return records, samples
 
 
@@ -380,9 +384,10 @@ def main():
     parser.add_argument("--port", type=int, default=19100)
     parser.add_argument("--log-file", required=True)
     parser.add_argument("--suite", choices=sorted(SUITES), default="holdout_v1")
+    parser.add_argument("--case-id", default="")
     args = parser.parse_args()
 
-    records, samples = build_fixture(args.suite)
+    records, samples = build_fixture(args.suite, args.case_id.strip())
     write_records(Path(args.log_file), records)
     FixtureHandler.metrics = prometheus_text(samples).encode()
     server = ThreadingHTTPServer((args.host, args.port), FixtureHandler)

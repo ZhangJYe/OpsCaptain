@@ -17,6 +17,7 @@ import (
 type ControllerV1 struct {
 	service            *sse.Service
 	chatApp            *app.ChatApp
+	agentApp           *app.AgentApp
 	knowledgeApp       *app.KnowledgeApp
 	aiopsApp           *app.AIOpsApp
 	changeEventApp     *app.ChangeEventApp
@@ -29,7 +30,7 @@ type ControllerV1 struct {
 	feishuSender       *chatops.FeishuSender
 }
 
-func NewV1(chatApp *app.ChatApp, knowledgeApp *app.KnowledgeApp, aiopsApp *app.AIOpsApp,
+func NewV1(chatApp *app.ChatApp, agentApp *app.AgentApp, knowledgeApp *app.KnowledgeApp, aiopsApp *app.AIOpsApp,
 	changeEventApp *app.ChangeEventApp,
 	mcpToolApp *app.MCPToolApp, userSkillApp *app.UserSkillApp, cmdbApp *app.CMDBApp,
 	feedbackStore feedback.StoreInterface, analyticsCollector *analytics.Collector,
@@ -37,6 +38,7 @@ func NewV1(chatApp *app.ChatApp, knowledgeApp *app.KnowledgeApp, aiopsApp *app.A
 	return &ControllerV1{
 		service:            sse.New(),
 		chatApp:            chatApp,
+		agentApp:           agentApp,
 		knowledgeApp:       knowledgeApp,
 		aiopsApp:           aiopsApp,
 		changeEventApp:     changeEventApp,

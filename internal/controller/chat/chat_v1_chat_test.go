@@ -66,6 +66,33 @@ func TestChatReturnsAnswer(t *testing.T) {
 	}
 }
 
+func TestAgentExplicitChatReturnsUnifiedPayload(t *testing.T) {
+	chatApp := newTestChatApp(
+		func(_ context.Context, _ string) (compose.Runnable[*chat_pipeline.UserMessage, *schema.Message], error) {
+			return &fakeChatRunnable{answer: "hello from agent"}, nil
+		},
+		func(context.Context, string) aiService.DegradationDecision { return aiService.DegradationDecision{} },
+	)
+	agentApp := app.NewAgentApp(chatApp, app.NewAIOpsApp())
+	agentApp.SetEnabledCheck(func(context.Context) bool { return true })
+	ctrl := &ControllerV1{agentApp: agentApp}
+
+	res, err := ctrl.Agent(context.Background(), &v1.AgentReq{
+		SessionID: app.GenerateSessionID(),
+		Query:     "hello",
+		Mode:      "chat",
+	})
+	if err != nil {
+		t.Fatalf("agent returned error: %v", err)
+	}
+	if res.Mode != "chat" || res.Chat == nil || res.Diagnosis != nil {
+		t.Fatalf("unexpected unified response: %#v", res)
+	}
+	if res.Chat.Answer != "hello from agent" {
+		t.Fatalf("unexpected answer: %q", res.Chat.Answer)
+	}
+}
+
 func TestChatReturnsKillSwitchResponse(t *testing.T) {
 	chatApp := newTestChatApp(
 		func(_ context.Context, _ string) (compose.Runnable[*chat_pipeline.UserMessage, *schema.Message], error) {

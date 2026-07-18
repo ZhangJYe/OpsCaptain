@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -113,6 +114,7 @@ func (a *aiOpsPlanAgent) Handle(ctx context.Context, task *protocol.TaskEnvelope
 			Summary:           summary,
 			Confidence:        0.15,
 			DegradationReason: err.Error(),
+			Evidence:          planEvidenceFromDetails(planDetail),
 			Error: &protocol.TaskError{
 				Code:    "plan_execute_replan_failed",
 				Message: err.Error(),
@@ -125,7 +127,71 @@ func (a *aiOpsPlanAgent) Handle(ctx context.Context, task *protocol.TaskEnvelope
 		Status:     protocol.ResultStatusSucceeded,
 		Summary:    strings.TrimSpace(content),
 		Confidence: 0.8,
+		Evidence:   planEvidenceFromDetails(planDetail),
 	}, nil
+}
+
+func planEvidenceFromDetails(detail []string) []protocol.EvidenceItem {
+	const maxSnippetRunes = 4000
+
+	pendingTools := make([]string, 0)
+	seen := make(map[string]struct{})
+	evidence := make([]protocol.EvidenceItem, 0)
+	for _, item := range detail {
+		pendingTools = append(pendingTools, planToolNames(item)...)
+
+		raw, ok := strings.CutPrefix(strings.TrimSpace(item), "tool:")
+		if !ok || strings.TrimSpace(raw) == "" {
+			continue
+		}
+		raw = strings.TrimSpace(raw)
+		toolName := "plan_tool_result"
+		if len(pendingTools) > 0 {
+			toolName = pendingTools[0]
+			pendingTools = pendingTools[1:]
+		}
+		sum := sha256.Sum256([]byte(raw))
+		sourceID := fmt.Sprintf("%s:%x", toolName, sum[:8])
+		if _, exists := seen[sourceID]; exists {
+			continue
+		}
+		seen[sourceID] = struct{}{}
+
+		runes := []rune(raw)
+		if len(runes) > maxSnippetRunes {
+			raw = string(runes[:maxSnippetRunes]) + "..."
+		}
+		evidence = append(evidence, protocol.EvidenceItem{
+			SourceType: "tool",
+			SourceID:   sourceID,
+			Title:      toolName + " 工具结果",
+			Snippet:    raw,
+			Score:      1,
+		})
+	}
+	return evidence
+}
+
+func planToolNames(detail string) []string {
+	const marker = "Function:{Name:"
+
+	names := make([]string, 0)
+	remaining := detail
+	for {
+		index := strings.Index(remaining, marker)
+		if index < 0 {
+			return names
+		}
+		remaining = remaining[index+len(marker):]
+		end := strings.IndexAny(remaining, " }\t\r\n")
+		if end < 0 {
+			end = len(remaining)
+		}
+		if name := strings.TrimSpace(remaining[:end]); name != "" {
+			names = append(names, name)
+		}
+		remaining = remaining[end:]
+	}
 }
 
 type aiOpsGOSAgent struct{}

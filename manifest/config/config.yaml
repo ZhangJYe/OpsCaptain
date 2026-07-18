@@ -225,6 +225,9 @@ chat:
   react:
     max_step: 25
 
+agent_gateway:
+  enabled: true
+
 context:
   chat_max_history_messages: 10
   chat_max_memory_items: 5

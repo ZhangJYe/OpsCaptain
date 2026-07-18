@@ -258,7 +258,10 @@ func TestRunAIOpsCallsBuildPlanAgent(t *testing.T) {
 	var capturedQuery string
 	buildPlanAgent = func(_ context.Context, query string) (string, []string, error) {
 		capturedQuery = query
-		return "analysis complete", []string{"step1: queried alerts", "step2: found root cause"}, nil
+		return "analysis complete", []string{
+			"assistant: checking alerts\ntool_calls:\nindex[0]:{Type:function Function:{Name:query_prometheus_alerts Arguments:{}}}",
+			`tool: {"success":true,"alerts":[{"alert_name":"HighLatency"}]}`,
+		}, nil
 	}
 
 	memorySvc := &stubAIOpsMemory{
@@ -293,6 +296,12 @@ func TestRunAIOpsCallsBuildPlanAgent(t *testing.T) {
 	}
 	if len(response.Detail) < 3 {
 		t.Fatalf("expected context detail + plan detail, got %v", response.Detail)
+	}
+	if len(response.Evidence) != 1 {
+		t.Fatalf("expected one structured tool evidence item, got %+v", response.Evidence)
+	}
+	if response.Evidence[0].Title != "query_prometheus_alerts 工具结果" || !strings.Contains(response.Evidence[0].Snippet, "HighLatency") {
+		t.Fatalf("unexpected structured evidence: %+v", response.Evidence[0])
 	}
 }
 

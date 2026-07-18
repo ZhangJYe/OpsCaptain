@@ -55,18 +55,18 @@ observability-check:
 
 eval-gate:
 	@echo "==> Eval Gate (确定性回归检查)"
-	@$(GO) run cmd/gos_eval/main.go --mode=gate --gos-profile=eval \
+	@$(GO) run ./cmd/gos_eval --mode=gate --gos-profile=eval \
 	  --baseline=evals/baselines/gos_baseline.json \
 	  --output=evals/reports/gate_$$(date +%Y%m%d%H%M%S).json
 
 eval-runs-gos:
 	@echo "==> Export GoS/Diag runs"
-	@$(GO) run cmd/gos_eval/main.go --mode=export-runs --gos-profile=eval \
+	@$(GO) run ./cmd/gos_eval --mode=export-runs --gos-profile=eval \
 	  --output-dir=evals/runs
 
 eval-judge:
 	@echo "==> LLM Judge 评分"
-	@$(GO) run cmd/gos_eval/main.go --mode=judge \
+	@$(GO) run ./cmd/gos_eval --mode=judge \
 	  --input=evals/runs --output-dir=evals/reports
 
 eval-compression:
