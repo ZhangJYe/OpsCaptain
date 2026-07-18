@@ -6,6 +6,7 @@ import (
 	"SuperBizAgent/internal/ai/rag"
 	"SuperBizAgent/internal/ai/retriever"
 	inframv "SuperBizAgent/internal/infra/milvus"
+	"SuperBizAgent/utility/common"
 	"context"
 	"flag"
 	"fmt"
@@ -21,6 +22,10 @@ import (
 
 func main() {
 	ctx := context.Background()
+	if err := common.LoadPreferredEnvFile(); err != nil {
+		g.Log().Errorf(ctx, "load env file failed: %v", err)
+		os.Exit(1)
+	}
 	if err := run(ctx, os.Args[1:], rag.DefaultIndexingService(), os.Stdout); err != nil {
 		g.Log().Errorf(ctx, "knowledge index failed: %v", err)
 		os.Exit(1)

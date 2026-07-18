@@ -18,6 +18,26 @@ func TestPrometheusAlertsQueryToolContract(t *testing.T) {
 	}
 }
 
+func TestUnavailableLogQueryToolContract(t *testing.T) {
+	logTool := NewUnavailableLogQueryTool("test unavailable")
+	if logTool == nil {
+		t.Fatal("expected structured degraded log tool")
+	}
+	info, err := logTool.Info(nil)
+	if err != nil {
+		t.Fatalf("get tool info: %v", err)
+	}
+	if info.Name != "query_logs" {
+		t.Fatalf("expected tool name 'query_logs', got %q", info.Name)
+	}
+	if info.Desc == "" {
+		t.Fatal("expected non-empty tool description")
+	}
+	if info.ParamsOneOf == nil {
+		t.Fatal("expected query_logs input schema")
+	}
+}
+
 func TestPrometheusRangeQueryToolContract(t *testing.T) {
 	tool := NewPrometheusRangeQueryTool()
 	info, err := tool.Info(nil)
@@ -72,6 +92,9 @@ func TestQueryInternalDocsToolContract(t *testing.T) {
 	if info.Desc == "" {
 		t.Fatal("expected non-empty tool description")
 	}
+	if info.ParamsOneOf == nil {
+		t.Fatal("expected query_internal_docs input schema")
+	}
 }
 
 func TestGetLogMcpToolReturnsTools(t *testing.T) {
@@ -117,6 +140,50 @@ func TestPrometheusAlertsOutputStructure(t *testing.T) {
 		if alert.State == "" {
 			t.Fatalf("alert[%d].state should not be empty", i)
 		}
+	}
+}
+
+func TestSimplifyPrometheusAlertsKeepsDistinctLabelSetsAndCapsOutput(t *testing.T) {
+	alerts := []PrometheusAlert{
+		{Labels: map[string]string{"alertname": "ServiceDegraded", "case_id": "case-1", "service": "checkout"}, State: "firing"},
+		{Labels: map[string]string{"alertname": "ServiceDegraded", "case_id": "case-2", "service": "payment"}, State: "firing"},
+		{Labels: map[string]string{"alertname": "ServiceDegraded", "case_id": "case-1", "service": "checkout"}, State: "firing"},
+	}
+
+	got := simplifyPrometheusAlerts(alerts, 10)
+	if len(got) != 2 {
+		t.Fatalf("expected two distinct alert instances, got %d", len(got))
+	}
+	if got[0].Labels["case_id"] != "case-1" || got[1].Labels["case_id"] != "case-2" {
+		t.Fatalf("expected case labels to be preserved, got %#v", got)
+	}
+
+	capped := simplifyPrometheusAlerts(alerts, 1)
+	if len(capped) != 1 {
+		t.Fatalf("expected configured cap to limit output to one alert, got %d", len(capped))
+	}
+}
+
+func TestFilterPrometheusAlertsScopesByServiceOrCase(t *testing.T) {
+	alerts := []PrometheusAlert{
+		{Labels: map[string]string{"service": "eval-queue-orders", "case_id": "real-development-001"}},
+		{Labels: map[string]string{"service": "eval-retry-inventory", "case_id": "real-development-002"}},
+		{Labels: map[string]string{"service": "eval-db-profile", "case_id": "real-development-003"}},
+	}
+
+	byService := filterPrometheusAlerts(alerts, "检查 eval-retry-inventory 的失败与重试")
+	if len(byService) != 1 || byService[0].Labels["case_id"] != "real-development-002" {
+		t.Fatalf("expected service-scoped alert, got %#v", byService)
+	}
+	byCase := filterPrometheusAlerts(alerts, "real-development-003")
+	if len(byCase) != 1 || byCase[0].Labels["service"] != "eval-db-profile" {
+		t.Fatalf("expected case-scoped alert, got %#v", byCase)
+	}
+	if got := filterPrometheusAlerts(alerts, "unknown-service"); len(got) != 0 {
+		t.Fatalf("expected unmatched query to return no alerts, got %#v", got)
+	}
+	if got := filterPrometheusAlerts(alerts, ""); len(got) != len(alerts) {
+		t.Fatalf("expected empty query to preserve unfiltered tool behavior, got %d", len(got))
 	}
 }
 

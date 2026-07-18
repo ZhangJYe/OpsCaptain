@@ -1,0 +1,57 @@
+{
+  "schema_version": "gos-eval-v2",
+  "role": "regression",
+  "description": "确定性 regression 数据，仅用于本地 smoke/gate，不计入真实准确率。",
+  "cases": [
+    {
+      "id": "smoke-001",
+      "domain": "cpu",
+      "scenario": "support_evidence",
+      "symptom": "服务 response timeout，CPU 使用率 95%，内存使用率 80%",
+      "ground_truth": "CPU 资源耗尽导致服务超时",
+      "expected_keywords": ["CPU", "资源耗尽", "超时"],
+      "expected_evidence_keywords": ["CPU usage"],
+      "expected_status": "succeeded"
+    },
+    {
+      "id": "smoke-002",
+      "domain": "database",
+      "scenario": "support_evidence",
+      "symptom": "数据库连接超时，连接池已满，慢查询数量增加",
+      "ground_truth": "数据库连接池耗尽",
+      "expected_keywords": ["数据库", "连接池", "耗尽"],
+      "expected_evidence_keywords": ["Connection pool"],
+      "expected_status": "succeeded"
+    },
+    {
+      "id": "smoke-003",
+      "domain": "network",
+      "scenario": "support_evidence",
+      "symptom": "网络延迟升高，跨区域调用超时，本地调用正常",
+      "ground_truth": "网络链路问题",
+      "expected_keywords": ["网络", "延迟", "链路"],
+      "expected_evidence_keywords": ["Cross-region latency"],
+      "expected_status": "succeeded"
+    },
+    {
+      "id": "smoke-004",
+      "domain": "cache",
+      "scenario": "support_evidence",
+      "symptom": "Redis 缓存命中率下降，缓存 key 过期，后端负载升高",
+      "ground_truth": "缓存失效导致后端压力",
+      "expected_keywords": ["缓存", "失效", "后端"],
+      "expected_evidence_keywords": ["Cache hit rate"],
+      "expected_status": "succeeded"
+    },
+    {
+      "id": "smoke-005",
+      "domain": "message_queue",
+      "scenario": "support_evidence",
+      "symptom": "Kafka 消费延迟增加，消息堆积，消费者 CPU 使用率低",
+      "ground_truth": "Kafka 消费者处理能力不足",
+      "expected_keywords": ["Kafka", "消费者", "处理能力"],
+      "expected_evidence_keywords": ["Consumer lag"],
+      "expected_status": "succeeded"
+    }
+  ]
+}

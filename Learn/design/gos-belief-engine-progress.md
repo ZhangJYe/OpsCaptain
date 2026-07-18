@@ -1,5 +1,7 @@
 # GoS Belief Engine 当前进度与推进闭环
 
+> 历史进度快照：本文记录 2026-05-18 时的状态，部分“尚未接入路由”、评测数据集和调用次数描述已过期。2026-07-15 已建立 development/holdout/regression 三类隔离数据集；当前优化顺序、命令与验收标准以 [GoS 优化 Spec](./gos-optimization-spec.md) 为准。
+
 日期：2026-05-18
 分支：`feature/gos-belief-engine`
 当前阶段：Phase 3 评测闭环收口，尚未接入 AIOps 路由
@@ -75,7 +77,7 @@ GoS Belief Engine 已经具备最小可运行闭环：
 go run ./cmd/gos_eval \
   --mode=gos \
   --gos-profile=eval \
-  --holdout=internal/ai/agent/gos_engine/eval/testdata/holdout.json \
+  --holdout=internal/ai/agent/gos_engine/eval/testdata/smoke.json \
   --output=/tmp/gos_eval.json
 ```
 
@@ -118,6 +120,8 @@ go run ./cmd/gos_eval \
 严格 gate：
 
 - accuracy 不低于 baseline。
+- contract compliance 不低于 baseline。
+- evidence precision 不低于 baseline。
 - evidence coverage 不低于 baseline。
 - latency 不超过 baseline 的 1.5 倍。
 - LLM calls 不超过 baseline 的 2 倍。
@@ -176,7 +180,7 @@ aiops:
 - real profile 依赖真实 LLM、Milvus/RAG、MCP log tool，环境缺失会导致 degraded。
 - GoS 尚未接入 `manifest/config/config.yaml` 和 AIOps service routing。
 - Planner 当前只是按配置顺序选专家，不是智能调度。
-- baseline 的 LLM calls 目前用 detail steps 近似，后续最好接真实 callback 统计。
+- baseline 的 LLM/tool/RAG calls 已通过 Eino callback 统计，不再用 detail steps 近似。
 
 ## 6. 下一步执行命令
 
@@ -184,7 +188,7 @@ aiops:
 
 ```bash
 go test ./internal/ai/belief ./internal/ai/agent/gos_engine/... ./internal/ai/agent/experts ./internal/ai/agent/plan_execute_replan -count=1
-go run ./cmd/gos_eval --mode=gos --gos-profile=eval --holdout=internal/ai/agent/gos_engine/eval/testdata/holdout.json --output=/tmp/gos_eval.json
+go run ./cmd/gos_eval --mode=gos --gos-profile=eval --holdout=internal/ai/agent/gos_engine/eval/testdata/smoke.json --output=/tmp/gos_eval.json
 ```
 
 再跑真实对比：

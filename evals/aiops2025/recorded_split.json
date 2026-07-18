@@ -1,0 +1,50 @@
+{
+  "schema_version": "aiops2025-recorded-split-v1",
+  "source": "agenticopseval/AIOps2025",
+  "archive_dates": [
+    "2025-06-09",
+    "2025-06-17",
+    "2025-06-19"
+  ],
+  "selection_contract": "one disjoint case per fault type and role; labels are excluded from this manifest and blind extraction uses only input time windows",
+  "development_case_ids": [
+    "50bce1c4-311",
+    "046aefa7-170",
+    "18b8cf77-318",
+    "332adc3a-317",
+    "cb5815ce-161",
+    "eba76009-152",
+    "168cdf19-153",
+    "9a257bd5-150",
+    "54002a5c-155",
+    "05b57997-154",
+    "934844b2-156",
+    "43e1b3bf-163",
+    "89c85406-162",
+    "1c47d7bf-157",
+    "70d3b8b0-329",
+    "3260fa48-316",
+    "162fe36a-151",
+    "a42d2eb4-319"
+  ],
+  "holdout_case_ids": [
+    "009be6db-313",
+    "a482d876-315",
+    "2e8873a5-370",
+    "2878f9f0-376",
+    "df892932-168",
+    "47fe21f6-167",
+    "3600f326-158",
+    "7bdc4b83-164",
+    "0efb9550-160",
+    "80cdc066-374",
+    "a9c6d6c9-159",
+    "bf022434-378",
+    "3d284cf0-333",
+    "51fc47bf-169",
+    "a2047792-382",
+    "38d69375-380",
+    "cebb47f5-165",
+    "0419ba04-373"
+  ]
+}

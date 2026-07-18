@@ -97,17 +97,27 @@ skills/                               Agent skill 定义与候选材料
 
 ### 配置模型密钥
 
-启动时会读取 `.env.local` 或 `.env`。生产环境 `APP_ENV=production` 时读取 `.env.production`。
+当前模型方案固定为 DeepSeek Chat + 豆包 Embedding。模型名称、provider、地址和维度统一维护在 `manifest/config/config.yaml`；`.env` 是唯一的本地真实配置。生产环境 `APP_ENV=production` 时只读取由部署流程生成的 `.env.production`。
 
 ```bash
-cat > .env.local <<'EOF'
+# 编辑项目根目录已有的 .env，加入以下变量；不要覆盖现有配置
 DEEPSEEK_API_KEY=replace-with-your-deepseek-key
 ARK_API_KEY=replace-with-your-ark-key
 AUTH_JWT_SECRET=replace-with-a-strong-secret
-EOF
 ```
 
 默认 `startup.require_model_secrets=false`，密钥缺失时服务可以启动，但 AI 请求会降级或失败。生产环境应配置真实密钥，并开启合适的认证、CORS、限流和观测配置。
+
+`.env` 只保存不可提交的敏感值：
+
+| 类别 | 敏感环境变量 |
+|---|---|
+| 模型 | `DEEPSEEK_API_KEY`、`ARK_API_KEY` |
+| 认证 | `AUTH_JWT_SECRET` |
+| 基础设施凭据 | `REDIS_PASSWORD`、`MYSQL_DSN` |
+| Webhook | `OPSCAPTION_GITHUB_WEBHOOK_SECRET`、`OPSCAPTION_GITLAB_WEBHOOK_SECRET`、`OPSCAPTION_ARGOCD_WEBHOOK_SECRET`、`FEISHU_WEBHOOK_URL`、`FEISHU_CHATOPS_WEBHOOK_URL` |
+
+Redis/Milvus 地址、RabbitMQ、MCP、Prometheus、超时、额度和功能开关统一维护在 `manifest/config/config.yaml`，不放入 `.env`。
 
 ### 启动后端
 
@@ -226,7 +236,7 @@ docker compose --env-file .env.production -f docker-compose.prod.yml ps
 
 ## 配置说明
 
-主配置文件是 `manifest/config/config.yaml`。关键配置包括：
+主配置文件是 `manifest/config/config.yaml`，业务代码通过统一的模型配置加载器读取它，不再维护命令级模型配置副本。`deploy/config.prod.yaml` 仅是生产部署挂载文件，其中的模型段由测试约束为与主配置一致。关键配置包括：
 
 | 配置段 | 作用 |
 |---|---|
@@ -241,8 +251,8 @@ docker compose --env-file .env.production -f docker-compose.prod.yml ps
 | `approval` | 高风险请求审批 |
 | `cost` | token 成本与告警阈值 |
 | `milvus` | 向量数据库地址与 collection |
-| `chat_model` / `chat_model_fast` | 对话模型配置 |
-| `embedding_model` | embedding 模型配置 |
+| `chat_model` / `chat_model_fast` | DeepSeek 对话模型配置 |
+| `embedding_model` | 豆包 embedding 模型配置 |
 | `memory` | 会话记忆、长期记忆和抽取参数 |
 | `chat_async` | 异步聊天任务 |
 | `context` | 上下文预算和 rerank 策略 |

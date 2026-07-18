@@ -6,7 +6,7 @@
 
 1. 安装 Go 1.24+ 和 Node.js 18+
 2. 克隆项目：`git clone ... && cd OpsCaption`
-3. 配置环境变量：`cp .env.example .env.local` 并填入 API Key
+3. 编辑项目根目录的 `.env` 并填入 API Key
 4. 启动后端：`go run main.go`
 5. 启动前端：`cd frontend && npm install && npm run dev`
 

@@ -23,10 +23,12 @@ type ExpertRuntimeConfig struct {
 	ModelPath           string
 	Temperature         float64
 	MaxTokens           int
+	EvidenceMaxChars    int
 	RAGQueryFunc        RAGQueryFunc
 	GenerateContentFunc GenerateContentFunc
 	ChatModelFactory    ChatModelFactory
 	CallTimeout         time.Duration
+	ExecutionBudget     ExecutionBudget
 }
 
 type RetrievalRecord struct {

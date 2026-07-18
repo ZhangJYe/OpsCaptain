@@ -24,7 +24,6 @@ Thumbs.db
 # Env / secrets
 .env
 .env.*
-!.env.example
 
 # Config files with secrets
 manifest/config/config.yaml
@@ -63,7 +62,7 @@ rag_eval_cmd
 .playwright-cli/
 
 # Local evaluation artifacts
-gos_eval
+/gos_eval
 baseline_result*.json
 eval_compare*.json
 internal/ai/cmd/rag_online_eval_cmd/results/

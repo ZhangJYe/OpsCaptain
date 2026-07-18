@@ -207,12 +207,15 @@ func queryPrometheusRange(ctx context.Context, input *PrometheusRangeInput) (Pro
 
 func prometheusBaseURL(ctx context.Context) string {
 	ctx = ctxOrBackground(ctx)
+	if value := normalizeOptionalURL(os.Getenv("PROMETHEUS_ADDRESS")); value != "" {
+		return value
+	}
 	if v, err := g.Cfg().Get(ctx, "prometheus.address"); err == nil {
 		if value := normalizeOptionalURL(v.String()); value != "" {
 			return value
 		}
 	}
-	return normalizeOptionalURL(os.Getenv("PROMETHEUS_ADDRESS"))
+	return ""
 }
 
 func loadPrometheusRangePolicy(ctx context.Context) prometheusRangePolicy {

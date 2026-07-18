@@ -1,0 +1,500 @@
+{
+  "schema_version": "gos-eval-v2",
+  "role": "holdout",
+  "description": "AIOps2025 recorded_blind case-scoped replay. Agent input contains only the anomaly time window; ground truth and expected keywords are evaluator-only.",
+  "cases": [
+    {
+      "id": "8e7a3965-336",
+      "domain": "pod",
+      "scenario": "recorded_blind_root_cause",
+      "symptom": "Please analyze the abnormal event between 2025-06-17T17:10:03Z and 2025-06-17T17:15:03Z and provide the root cause.",
+      "ground_truth": "io fault; affected entity tidb-tikv; io fault",
+      "expected_keywords": [
+        "tidb-tikv",
+        "tidb-tikv-0",
+        "io fault"
+      ],
+      "expected_evidence_keywords": [
+        "region_pending",
+        "io_util",
+        "memory_usage",
+        "tidb",
+        "io",
+        "productcatalogservice",
+        "store_size"
+      ],
+      "expected_status": "succeeded",
+      "notes": "AIOps2025 recorded_blind; labels are evaluator-only and never passed to the agent."
+    },
+    {
+      "id": "b9319370-341",
+      "domain": "service",
+      "scenario": "recorded_blind_root_cause",
+      "symptom": "A fault occurred from 2025-06-17T22:10:08Z to 2025-06-17T22:34:08Z. Please identify the root cause.",
+      "ground_truth": "code error; affected entity productcatalogservice; method error",
+      "expected_keywords": [
+        "productcatalogservice",
+        "code error"
+      ],
+      "expected_evidence_keywords": [
+        "pod_processes",
+        "checkoutservice",
+        "frontend",
+        "recommendationservice",
+        "context",
+        "canceled",
+        "http.resp.status",
+        "302",
+        "request error",
+        "rpc",
+        "error",
+        "transport",
+        "Error",
+        "while",
+        "dialing",
+        "unavailable",
+        "request",
+        "response",
+        "pod_cpu_usage"
+      ],
+      "expected_status": "succeeded",
+      "notes": "AIOps2025 recorded_blind; labels are evaluator-only and never passed to the agent."
+    },
+    {
+      "id": "c3377c5c-337",
+      "domain": "service",
+      "scenario": "recorded_blind_root_cause",
+      "symptom": "Determine the root cause of the system fault during 2025-06-17T18:10:04Z to 2025-06-17T18:29:04Z.",
+      "ground_truth": "network corrupt; affected entity frontend; packet corruption",
+      "expected_keywords": [
+        "frontend",
+        "adservice",
+        "network corrupt"
+      ],
+      "expected_evidence_keywords": [
+        "rrt",
+        "rrt_max",
+        "request",
+        "response",
+        "pod_network_receive_bytes",
+        "pod_network_receive_packets",
+        "pod_network_transmit_bytes",
+        "pod_network_transmit_packets",
+        "frontend",
+        "deadlineexceeded",
+        "http.resp.status",
+        "302",
+        "rpc",
+        "error",
+        "client_error_ratio",
+        "error_ratio",
+        "pod_memory_working_set_bytes"
+      ],
+      "expected_status": "succeeded",
+      "notes": "AIOps2025 recorded_blind; labels are evaluator-only and never passed to the agent."
+    },
+    {
+      "id": "b9539d8e-345",
+      "domain": "service",
+      "scenario": "recorded_blind_root_cause",
+      "symptom": "A fault occurred from 2025-06-18T02:10:11Z to 2025-06-18T02:30:11Z. Please identify the root cause.",
+      "ground_truth": "target port misconfig; affected entity productcatalogservice; target port misconfig",
+      "expected_keywords": [
+        "productcatalogservice",
+        "target port misconfig"
+      ],
+      "expected_evidence_keywords": [
+        "request",
+        "response",
+        "port",
+        "checkoutservice",
+        "frontend",
+        "http.resp.status",
+        "302",
+        "Internal",
+        "request error",
+        "rpc",
+        "error",
+        "timeout",
+        "transport",
+        "Error",
+        "while",
+        "dialing",
+        "unavailable"
+      ],
+      "expected_status": "succeeded",
+      "notes": "AIOps2025 recorded_blind; labels are evaluator-only and never passed to the agent."
+    },
+    {
+      "id": "8c61bc09-338",
+      "domain": "service",
+      "scenario": "recorded_blind_root_cause",
+      "symptom": "A fault was detected from 2025-06-17T19:10:05Z to 2025-06-17T19:25:05Z. Please analyze its root cause.",
+      "ground_truth": "code error; affected entity frontend; Client URL misconfigured",
+      "expected_keywords": [
+        "frontend",
+        "code error"
+      ],
+      "expected_evidence_keywords": [
+        "pod_processes",
+        "checkoutservice",
+        "frontend",
+        "shippingservice",
+        "deadlineexceeded",
+        "http.resp.status",
+        "302",
+        "rpc",
+        "error",
+        "request",
+        "response",
+        "pod_cpu_usage"
+      ],
+      "expected_status": "succeeded",
+      "notes": "AIOps2025 recorded_blind; labels are evaluator-only and never passed to the agent."
+    },
+    {
+      "id": "fb20d6d2-350",
+      "domain": "pod",
+      "scenario": "recorded_blind_root_cause",
+      "symptom": "A fault occurred from 2025-06-18T07:10:16Z to 2025-06-18T07:25:16Z. Please identify the root cause.",
+      "ground_truth": "dns error; affected entity checkoutservice; shippingservice",
+      "expected_keywords": [
+        "checkoutservice",
+        "checkoutservice-2",
+        "dns error"
+      ],
+      "expected_evidence_keywords": [
+        "dns",
+        "http.resp.status",
+        "302"
+      ],
+      "expected_status": "succeeded",
+      "notes": "AIOps2025 recorded_blind; labels are evaluator-only and never passed to the agent."
+    },
+    {
+      "id": "0b81a605-339",
+      "domain": "pod",
+      "scenario": "recorded_blind_root_cause",
+      "symptom": "A fault occurred from 2025-06-17T20:10:05Z to 2025-06-17T20:24:05Z. Please identify the root cause.",
+      "ground_truth": "cpu stress; affected entity paymentservice; high CPU utilization",
+      "expected_keywords": [
+        "paymentservice",
+        "paymentservice-2",
+        "cpu stress"
+      ],
+      "expected_evidence_keywords": [
+        "pod_cpu_usage",
+        "checkoutservice",
+        "rrt",
+        "rrt_max",
+        "pod_processes"
+      ],
+      "expected_status": "succeeded",
+      "notes": "AIOps2025 recorded_blind; labels are evaluator-only and never passed to the agent."
+    },
+    {
+      "id": "1d868f8e-347",
+      "domain": "service",
+      "scenario": "recorded_blind_root_cause",
+      "symptom": "Please analyze the abnormal event between 2025-06-18T04:10:12Z and 2025-06-18T04:33:12Z and provide the root cause.",
+      "ground_truth": "network delay; affected entity frontend; high network latency",
+      "expected_keywords": [
+        "frontend",
+        "checkoutservice",
+        "network delay"
+      ],
+      "expected_evidence_keywords": [
+        "pod_network_receive_bytes",
+        "pod_network_receive_packets",
+        "pod_network_transmit_bytes",
+        "pod_network_transmit_packets",
+        "frontend",
+        "http.resp.status",
+        "302",
+        "pod_memory_working_set_bytes"
+      ],
+      "expected_status": "succeeded",
+      "notes": "AIOps2025 recorded_blind; labels are evaluator-only and never passed to the agent."
+    },
+    {
+      "id": "09b7c00b-344",
+      "domain": "service",
+      "scenario": "recorded_blind_root_cause",
+      "symptom": "A fault occurred from 2025-06-18T01:10:10Z to 2025-06-18T01:27:10Z. Please identify the root cause.",
+      "ground_truth": "code error; affected entity cartservice; database error",
+      "expected_keywords": [
+        "cartservice",
+        "code error"
+      ],
+      "expected_evidence_keywords": [
+        "pod_processes",
+        "FailedPrecondition",
+        "http.resp.status",
+        "302",
+        "request error",
+        "rpc",
+        "error",
+        "request",
+        "response",
+        "pod_cpu_usage"
+      ],
+      "expected_status": "succeeded",
+      "notes": "AIOps2025 recorded_blind; labels are evaluator-only and never passed to the agent."
+    },
+    {
+      "id": "81a145a5-394",
+      "domain": "service",
+      "scenario": "recorded_blind_root_cause",
+      "symptom": "The system experienced an anomaly from 2025-06-20T03:10:15Z to 2025-06-20T03:25:15Z. Please infer the possible cause.",
+      "ground_truth": "target port misconfig; affected entity paymentservice; target port misconfig",
+      "expected_keywords": [
+        "paymentservice",
+        "target port misconfig"
+      ],
+      "expected_evidence_keywords": [
+        "request",
+        "response",
+        "port"
+      ],
+      "expected_status": "succeeded",
+      "notes": "AIOps2025 recorded_blind; labels are evaluator-only and never passed to the agent."
+    },
+    {
+      "id": "cd049902-400",
+      "domain": "service",
+      "scenario": "recorded_blind_root_cause",
+      "symptom": "A fault was detected from 2025-06-20T09:10:23Z to 2025-06-20T09:33:23Z. Please analyze its root cause.",
+      "ground_truth": "code error; affected entity frontend; Client URL misconfigured",
+      "expected_keywords": [
+        "frontend",
+        "code error"
+      ],
+      "expected_evidence_keywords": [
+        "pod_processes",
+        "timeout",
+        "frontend",
+        "productcatalogservice",
+        "shippingservice",
+        "http.resp.status",
+        "302",
+        "request",
+        "response",
+        "pod_cpu_usage"
+      ],
+      "expected_status": "succeeded",
+      "notes": "AIOps2025 recorded_blind; labels are evaluator-only and never passed to the agent."
+    },
+    {
+      "id": "a7ed866b-406",
+      "domain": "service",
+      "scenario": "recorded_blind_root_cause",
+      "symptom": "A fault was detected from 2025-06-20T15:10:31Z to 2025-06-20T15:30:31Z. Please analyze its root cause.",
+      "ground_truth": "target port misconfig; affected entity checkoutservice; target port misconfig",
+      "expected_keywords": [
+        "checkoutservice",
+        "target port misconfig"
+      ],
+      "expected_evidence_keywords": [
+        "request",
+        "response",
+        "port",
+        "http.resp.status",
+        "302",
+        "request error",
+        "rpc",
+        "error",
+        "transport",
+        "Error",
+        "while",
+        "dialing",
+        "unavailable"
+      ],
+      "expected_status": "succeeded",
+      "notes": "AIOps2025 recorded_blind; labels are evaluator-only and never passed to the agent."
+    },
+    {
+      "id": "4153e4c6-397",
+      "domain": "service",
+      "scenario": "recorded_blind_root_cause",
+      "symptom": "Please analyze the abnormal event between 2025-06-20T06:10:19Z and 2025-06-20T06:24:19Z and provide the root cause.",
+      "ground_truth": "network corrupt; affected entity frontend; packet corruption",
+      "expected_keywords": [
+        "frontend",
+        "cartservice",
+        "network corrupt"
+      ],
+      "expected_evidence_keywords": [
+        "rrt",
+        "rrt_max",
+        "request",
+        "response",
+        "pod_network_receive_bytes",
+        "pod_network_receive_packets",
+        "pod_network_transmit_bytes",
+        "pod_network_transmit_packets",
+        "frontend",
+        "context",
+        "canceled",
+        "http.resp.status",
+        "302",
+        "Internal",
+        "request error",
+        "rpc",
+        "error",
+        "unavailable",
+        "client_error",
+        "client_error_ratio",
+        "error_ratio",
+        "pod_memory_working_set_bytes"
+      ],
+      "expected_status": "succeeded",
+      "notes": "AIOps2025 recorded_blind; labels are evaluator-only and never passed to the agent."
+    },
+    {
+      "id": "9b0004fb-390",
+      "domain": "service",
+      "scenario": "recorded_blind_root_cause",
+      "symptom": "A fault was detected from 2025-06-19T23:10:10Z to 2025-06-19T23:31:10Z. Please analyze its root cause.",
+      "ground_truth": "network loss; affected entity checkoutservice; packet loss",
+      "expected_keywords": [
+        "checkoutservice",
+        "shippingservice",
+        "network loss"
+      ],
+      "expected_evidence_keywords": [
+        "rrt",
+        "rrt_max",
+        "request",
+        "response",
+        "pod_network_receive_bytes",
+        "pod_network_receive_packets",
+        "pod_network_transmit_bytes",
+        "pod_network_transmit_packets",
+        "checkoutservice",
+        "frontend",
+        "failure",
+        "http.resp.status",
+        "302",
+        "Internal",
+        "request error",
+        "rpc",
+        "error",
+        "timeout",
+        "transport",
+        "Error",
+        "while",
+        "dialing",
+        "unavailable",
+        "client_error",
+        "client_error_ratio",
+        "error_ratio",
+        "pod_cpu_usage"
+      ],
+      "expected_status": "succeeded",
+      "notes": "AIOps2025 recorded_blind; labels are evaluator-only and never passed to the agent."
+    },
+    {
+      "id": "9f49250a-383",
+      "domain": "service",
+      "scenario": "recorded_blind_root_cause",
+      "symptom": "Please analyze the abnormal event between 2025-06-19T16:10:01Z and 2025-06-19T16:34:01Z and provide the root cause.",
+      "ground_truth": "target port misconfig; affected entity emailservice; target port misconfig",
+      "expected_keywords": [
+        "emailservice",
+        "target port misconfig"
+      ],
+      "expected_evidence_keywords": [
+        "request",
+        "response",
+        "port",
+        "rpc",
+        "error",
+        "transport",
+        "Error",
+        "while",
+        "dialing",
+        "unavailable"
+      ],
+      "expected_status": "succeeded",
+      "notes": "AIOps2025 recorded_blind; labels are evaluator-only and never passed to the agent."
+    },
+    {
+      "id": "5028909d-391",
+      "domain": "service",
+      "scenario": "recorded_blind_root_cause",
+      "symptom": "A fault occurred from 2025-06-20T00:10:11Z to 2025-06-20T00:28:11Z. Please identify the root cause.",
+      "ground_truth": "dns error; affected entity checkoutservice; emailservice",
+      "expected_keywords": [
+        "checkoutservice",
+        "dns error"
+      ],
+      "expected_evidence_keywords": [
+        "server_error",
+        "server_error_ratio",
+        "error",
+        "error_ratio",
+        "dns",
+        "http.resp.status",
+        "302",
+        "frontend",
+        "rpc",
+        "timeout",
+        "transport",
+        "Error",
+        "while",
+        "dialing",
+        "unavailable"
+      ],
+      "expected_status": "succeeded",
+      "notes": "AIOps2025 recorded_blind; labels are evaluator-only and never passed to the agent."
+    },
+    {
+      "id": "ec746a17-395",
+      "domain": "pod",
+      "scenario": "recorded_blind_root_cause",
+      "symptom": "A fault was detected from 2025-06-20T04:10:15Z to 2025-06-20T04:32:15Z. Please analyze its root cause.",
+      "ground_truth": "pod failure; affected entity tidb-tikv; pod crash",
+      "expected_keywords": [
+        "tidb-tikv",
+        "tidb-tikv-0",
+        "pod failure"
+      ],
+      "expected_evidence_keywords": [
+        "qps",
+        "grpc_qps",
+        "region_pending",
+        "tidb-tikv",
+        "productcatalogservice",
+        "failure",
+        "unavailable",
+        "store_size",
+        "cpu_usage",
+        "memory_usage"
+      ],
+      "expected_status": "succeeded",
+      "notes": "AIOps2025 recorded_blind; labels are evaluator-only and never passed to the agent."
+    },
+    {
+      "id": "c1e38e2e-399",
+      "domain": "pod",
+      "scenario": "recorded_blind_root_cause",
+      "symptom": "The system experienced an anomaly from 2025-06-20T08:10:22Z to 2025-06-20T08:33:22Z. Please infer the possible cause.",
+      "ground_truth": "pod failure; affected entity tidb-pd; pod crash",
+      "expected_keywords": [
+        "tidb-pd",
+        "tidb-pd-0",
+        "pod failure"
+      ],
+      "expected_evidence_keywords": [
+        "abnormal_region_count",
+        "region_health",
+        "leader_count",
+        "tidb-pd",
+        "failure",
+        "timeout"
+      ],
+      "expected_status": "succeeded",
+      "notes": "AIOps2025 recorded_blind; labels are evaluator-only and never passed to the agent."
+    }
+  ]
+}

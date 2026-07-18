@@ -1,0 +1,69 @@
+{
+  "code_fingerprint_scope": "go-source+modules+prompts-v1",
+  "code_sha256": "44f1d0c89a71daff854788be5a68bc32e7548c392e04fe61d7991c4d9b82a164",
+  "commit": "33478b7",
+  "evaluation_eligibility": "requires_verified_real_dependencies",
+  "evidence_metric_contract": "source-backed-signal-v2",
+  "metrics": {
+    "total_cases": 1,
+    "succeeded": 1,
+    "failed": 0,
+    "degraded": 0,
+    "matched": 1,
+    "accuracy": 1,
+    "root_cause_accuracy": 1,
+    "evidence_precision": 0.5,
+    "evidence_coverage": 1,
+    "backtrack_success": 1,
+    "premature_stop_rate": 0,
+    "graph_validity": 1,
+    "avg_latency": 53594591792,
+    "p50_latency": 53594591792,
+    "p95_latency": 53594591792,
+    "avg_llm_calls": 8,
+    "avg_tool_calls": 4,
+    "avg_rag_calls": 0,
+    "degradation_rate": 0,
+    "traceability": 1,
+    "contract_compliance": 1,
+    "per_status": {
+      "succeeded": 1
+    },
+    "failures_by_phase": {}
+  },
+  "mode": "gos",
+  "profile": "real",
+  "results": [
+    {
+      "case_id": "real-development-002",
+      "symptom": "隔离评测环境中 eval-retry-inventory 对上游的逻辑请求数不高，但实际 HTTP 请求量被放大。请检查失败与重试证据。",
+      "prediction": "## 结论\n\n根因候选：客户端重试策略导致请求重复发送（graph node: `node-8`）\n\n诊断依据：客户端重试策略（无退避）导致请求重复发送：服务 eval-retry-inventory 逻辑请求4次，实际HTTP请求12次（放大3倍），由上游HTTP 503触发，重试退避为0ms。建议配置退避策略和重试限制。\n\n## 图聚合置信度\n\n85%\n\n## 支持证据\n\n- `node-24` / `tool:query_logs:504d4d1ea4c1001d` → `node-8`，strength=0.90：query_logs output — {\"success\": true, \"degraded\": false, \"logs\": [{\"timestamp\": \"2026-07-18T12:35:21.808539Z\", \"namespace\": \"opscaptain-eval\", \"environment\": \"isolated-real-eval\", \"case_id\": \"real-development-002\", \"service\": \"eval-retry-inventory\", \"level\": \"error\", \"message\": \"upstream HTTP 503 responses were retried immediately without backoff and amplified each logical request\", \"measurements\": {\"logical_requests\": 4, \"attempts\": 12, \"attempts_per_request\": 3, \"backoff_ms\": 0}, \"provenance\": {\"source\": \"controlled_fault_in…\n- `node-20` / `tool:query_logs:ef4dc432d97fc258` → `node-8`，strength=0.90：query_logs output — {\"success\": true, \"degraded\": false, \"logs\": [{\"timestamp\": \"2026-07-18T12:35:21.808539Z\", \"namespace\": \"opscaptain-eval\", \"environment\": \"isolated-real-eval\", \"case_id\": \"real-development-002\", \"service\": \"eval-retry-inventory\", \"level\": \"error\", \"message\": \"upstream HTTP 503 responses were retried immediately without backoff and amplified each logical request\", \"measurements\": {\"logical_requests\": 4, \"attempts\": 12, \"attempts_per_request\": 3, \"backoff_ms\": 0}, \"provenance\": {\"source\": \"controlled_fault_in…\n- `node-26` / `tool:query_prometheus_instant:df764fcefde4e1ac` → `node-8`，strength=0.90：query_prometheus_instant output — {\"success\":true,\"query\":\"{service=\\\"eval-retry-inventory\\\"}\",\"time\":\"2026-07-18T20:43:31+08:00\",\"result_type\":\"vector\",\"summary\":{\"series_count\":5,\"numeric_count\":5,\"min\":1,\"max\":1784197771,\"avg\":356839557.8},\"samples\":[{\"labels\":{\"__name__\":\"opscaptain_eval_retry_attempts_total\",\"case_id\":\"real-development-002\",\"instance\":\"host.docker.internal:19101\",\"job\":\"opscaptain-isolated-real-eval\",\"provenance\":\"controlled_fault_injection_v1\",\"service\":\"eval-retry-inventory\"},\"timestamp\":\"2026-07-18T12:43:31Z\",\"value…\n- `node-22` / `tool:query_prometheus_instant:7d874c415935e9f0` → `node-8`，strength=0.85：query_prometheus_instant output — {\"success\":true,\"query\":\"{service=\\\"eval-retry-inventory\\\"}\",\"time\":\"2026-07-18T20:43:25+08:00\",\"result_type\":\"vector\",\"summary\":{\"series_count\":5,\"numeric_count\":5,\"min\":1,\"max\":1784197771,\"avg\":356839557.8},\"samples\":[{\"labels\":{\"__name__\":\"opscaptain_eval_retry_attempts_total\",\"case_id\":\"real-development-002\",\"instance\":\"host.docker.internal:19101\",\"job\":\"opscaptain-isolated-real-eval\",\"provenance\":\"controlled_fault_injection_v1\",\"service\":\"eval-retry-inventory\"},\"timestamp\":\"2026-07-18T12:43:25Z\",\"value…\n\n## 反驳与冲突证据\n\n- 无\n\n## 待判定观测\n\n- 无\n\n## 未解决缺口\n\n- 无关键缺口\n\n## 建议下一步\n\n- 在执行变更前由值班人员核对证据来源与影响范围",
+      "ground_truth": "上游持续返回 HTTP 503，eval-retry-inventory 无退避立即重试形成重试风暴",
+      "matched": true,
+      "latency": 53594591792,
+      "llm_calls": 8,
+      "tool_calls": 4,
+      "rag_calls": 0,
+      "status": "succeeded",
+      "expected_status": "succeeded",
+      "status_matched": true,
+      "evidence_count": 4,
+      "raw_evidence_count": 4,
+      "evidence_source_counts": {
+        "tool": 4
+      },
+      "relevant_evidence": 2,
+      "expected_evidence": 3,
+      "covered_evidence": 3,
+      "trace_complete": true,
+      "graph_valid": true,
+      "refined": false,
+      "backtracked": false,
+      "backtrack_required": false,
+      "premature_stop": false,
+      "failure_phase_matched": true,
+      "contract_matched": true,
+      "scenario": "evidence_conflict"
+    }
+  ]
+}

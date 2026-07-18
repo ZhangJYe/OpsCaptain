@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/adk/prebuilt/planexecute"
+	"github.com/cloudwego/eino/callbacks"
+	"github.com/cloudwego/eino/components"
 	"github.com/cloudwego/eino/schema"
 	"github.com/gogf/gf/v2/frame/g"
 )
@@ -16,6 +19,46 @@ import (
 type StageEmitter func(context.Context, string, map[string]any)
 
 type stageEmitterContextKey struct{}
+
+type RunStats struct {
+	LLMCalls  int `json:"llm_calls"`
+	ToolCalls int `json:"tool_calls"`
+	RAGCalls  int `json:"rag_calls"`
+}
+
+type runStatsCollector struct {
+	mu    sync.Mutex
+	stats RunStats
+}
+
+func (c *runStatsCollector) onStart(ctx context.Context, info *callbacks.RunInfo, _ callbacks.CallbackInput) context.Context {
+	if info == nil {
+		return ctx
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	switch info.Component {
+	case components.ComponentOfChatModel:
+		c.stats.LLMCalls++
+	case components.ComponentOfTool:
+		c.stats.ToolCalls++
+		name := strings.ToLower(strings.TrimSpace(info.Name))
+		if strings.Contains(name, "query_internal_docs") || strings.Contains(name, "knowledge") || strings.Contains(name, "rag") {
+			c.stats.RAGCalls++
+		}
+	}
+	return ctx
+}
+
+func (c *runStatsCollector) handler() callbacks.Handler {
+	return callbacks.NewHandlerBuilder().OnStartFn(c.onStart).Build()
+}
+
+func (c *runStatsCollector) snapshot() RunStats {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.stats
+}
 
 var synthesizePlanReportFn = synthesizePlanReport
 
@@ -43,6 +86,17 @@ func planMaxIterations(ctx context.Context) int {
 }
 
 func BuildPlanAgent(ctx context.Context, query string) (string, []string, error) {
+	return buildPlanAgent(ctx, query)
+}
+
+func BuildPlanAgentWithStats(ctx context.Context, query string) (string, []string, RunStats, error) {
+	collector := &runStatsCollector{}
+	ctx = callbacks.InitCallbacks(ctx, &callbacks.RunInfo{Name: "plan_execute_replan"}, collector.handler())
+	result, detail, err := buildPlanAgent(ctx, query)
+	return result, detail, collector.snapshot(), err
+}
+
+func buildPlanAgent(ctx context.Context, query string) (string, []string, error) {
 	timeout := planTimeout(ctx)
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -91,12 +145,12 @@ func consumePlanEvents(ctx context.Context, query string, next func() (*adk.Agen
 			continue
 		}
 		g.Log().Debugf(ctx, "[AIOps] step: %s", msg.String())
-		if item := planDetailMessage(msg); item != "" {
+		if item := planEventDetail(event.AgentName, msg); item != "" {
 			detail = append(detail, item)
-			emitPlanMessageStage(ctx, msg)
+			emitPlanEventStage(ctx, event.AgentName, msg)
 		}
 
-		if analysis := analysisMessageContent(msg); analysis != "" {
+		if analysis := terminalPlanAnalysis(event.AgentName, msg); analysis != "" {
 			return analysis, detail, nil
 		}
 	}
@@ -115,6 +169,28 @@ func consumePlanEvents(ctx context.Context, query string, next func() (*adk.Agen
 	}
 	emitPlanStage(ctx, "report_failed", "Plan 未生成诊断结论", nil)
 	return "", detail, fmt.Errorf("no analysis conclusion found in event stream")
+}
+
+func terminalPlanAnalysis(agentName string, msg adk.Message) string {
+	if agentName != "replanner" {
+		return ""
+	}
+	return analysisMessageContent(msg)
+}
+
+func planEventDetail(agentName string, msg adk.Message) string {
+	if agentName != "replanner" && analysisMessageContent(msg) != "" {
+		return strings.TrimSpace(msg.Content)
+	}
+	return planDetailMessage(msg)
+}
+
+func emitPlanEventStage(ctx context.Context, agentName string, msg adk.Message) {
+	if agentName != "replanner" && analysisMessageContent(msg) != "" {
+		emitPlanStage(ctx, "evidence_ready", "排障步骤已完成", nil)
+		return
+	}
+	emitPlanMessageStage(ctx, msg)
 }
 
 func synthesizePlanReport(ctx context.Context, query string, detail []string) (string, error) {

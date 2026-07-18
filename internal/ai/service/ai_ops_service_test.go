@@ -351,18 +351,21 @@ func (serviceTestGOSExpert) Name() string {
 	return "linux_sre"
 }
 
-func (serviceTestGOSExpert) Run(context.Context, *belief.Frontier, *belief.BeliefGraph) *experts.ExpertAnalysis {
+func (serviceTestGOSExpert) Run(_ context.Context, frontier *belief.Frontier, _ *belief.BeliefGraph) *experts.ExpertAnalysis {
 	return &experts.ExpertAnalysis{
 		ExpertName: "linux_sre",
 		Status:     "succeeded",
 		Analysis:   "GoS analysis complete",
 		Confidence: 0.9,
 		Evidence: []experts.EvidenceItem{{
-			SourceType: "test",
-			SourceID:   "evidence-1",
-			Title:      "evidence",
-			Snippet:    "supporting evidence",
-			Score:      1,
+			SourceType:         "test",
+			SourceID:           "evidence-1",
+			Title:              "evidence",
+			Snippet:            "supporting evidence",
+			Score:              1,
+			Relation:           experts.EvidenceRelationSupport,
+			TargetHypothesisID: frontier.NodeID,
+			Strength:           1,
 		}},
 	}
 }
@@ -426,7 +429,7 @@ func TestRunAIOpsUsesGOSWhenEnabled(t *testing.T) {
 	if response.Status != protocol.ResultStatusSucceeded {
 		t.Fatalf("expected succeeded status, got %q", response.Status)
 	}
-	if response.Content != "GoS analysis complete" {
+	if !strings.Contains(response.Content, "根因候选：资源耗尽") || !strings.Contains(response.Content, "test:evidence-1") {
 		t.Fatalf("expected gos result, got %q", response.Content)
 	}
 	if response.TraceID == "" {
@@ -534,5 +537,41 @@ func TestApproveQueuedAIOpsRequestRestoresOriginalUserID(t *testing.T) {
 	}
 	if response.ApprovalStatus != string(ApprovalStatusExecuted) {
 		t.Fatalf("expected executed approval status, got %q", response.ApprovalStatus)
+	}
+}
+
+func TestLoadAIOpsGOSConfigLoadsGraphResourcePolicy(t *testing.T) {
+	oldInt := aiOpsConfigInt
+	defer func() { aiOpsConfigInt = oldInt }()
+	values := map[string]int{
+		"aiops.gos.graph.checkpoint_interval": 7,
+		"aiops.gos.graph.max_nodes":           100,
+		"aiops.gos.graph.max_edges":           180,
+		"aiops.gos.graph.max_depth":           3,
+		"aiops.gos.graph.max_snapshots":       12,
+		"aiops.gos.graph.max_deltas":          6,
+	}
+	aiOpsConfigInt = func(_ context.Context, key string) (int, bool) {
+		value, ok := values[key]
+		return value, ok
+	}
+
+	cfg := loadAIOpsGOSConfig(context.Background())
+
+	if cfg.Graph.CheckpointInterval != 7 || cfg.Graph.MaxNodes != 100 || cfg.Graph.MaxEdges != 180 ||
+		cfg.Graph.MaxDepth != 3 || cfg.Graph.MaxSnapshots != 12 || cfg.Graph.MaxDeltas != 6 {
+		t.Fatalf("unexpected graph resource policy: %+v", cfg.Graph)
+	}
+}
+
+func TestRegisterAIOpsGOSToolsIncludesIndependentMetricEvidence(t *testing.T) {
+	registry := experts.NewToolRegistry()
+
+	registerAIOpsGOSTools(registry)
+
+	for _, name := range []string{"query_logs", "query_prometheus_alerts", "query_prometheus_instant", "query_internal_docs"} {
+		if _, ok := registry.Get(name); !ok {
+			t.Fatalf("expected GoS tool %q to be registered", name)
+		}
 	}
 }

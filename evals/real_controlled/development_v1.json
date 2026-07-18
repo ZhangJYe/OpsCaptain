@@ -1,0 +1,37 @@
+{
+  "schema_version": "gos-eval-v2",
+  "role": "development",
+  "description": "Isolated controlled-fault development set. It is disjoint from holdout_v1 and may be inspected while fixing GoS.",
+  "cases": [
+    {
+      "id": "real-development-001",
+      "domain": "queue",
+      "scenario": "support_evidence",
+      "symptom": "隔离评测环境中 eval-queue-orders 的请求进入工作队列后积压，生产速率突增而消费者数量未变化。请查询实时证据定位瓶颈。",
+      "ground_truth": "单个慢消费者处理不过生产突发，导致 eval-queue-orders 工作队列积压",
+      "expected_keywords": ["慢消费者", "生产突发", "队列", "积压"],
+      "expected_evidence_keywords": ["producer burst", "single slow consumer", "queue backlog"],
+      "expected_status": "succeeded"
+    },
+    {
+      "id": "real-development-002",
+      "domain": "dependency",
+      "scenario": "evidence_conflict",
+      "symptom": "隔离评测环境中 eval-retry-inventory 对上游的逻辑请求数不高，但实际 HTTP 请求量被放大。请检查失败与重试证据。",
+      "ground_truth": "上游持续返回 HTTP 503，eval-retry-inventory 无退避立即重试形成重试风暴",
+      "expected_keywords": ["503", "无退避", "重试", "放大"],
+      "expected_evidence_keywords": ["HTTP 503", "without backoff", "amplified"],
+      "expected_status": "succeeded"
+    },
+    {
+      "id": "real-development-003",
+      "domain": "database",
+      "scenario": "drilldown_required",
+      "symptom": "隔离评测环境中 eval-db-profile 的数据库健康，但并发请求大量等待获取连接。请结合实时日志判断资源瓶颈。",
+      "ground_truth": "eval-db-profile 的两连接数据库连接池被八个 worker 争用，导致连接池等待",
+      "expected_keywords": ["连接池", "两连接", "worker", "等待"],
+      "expected_evidence_keywords": ["two-slot", "connection pool", "waited"],
+      "expected_status": "succeeded"
+    }
+  ]
+}

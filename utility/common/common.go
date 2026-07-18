@@ -80,11 +80,9 @@ func normalizeMilvusAddr(raw string) string {
 }
 
 func GetVectorDimension(ctx context.Context) int {
-	for _, path := range []string{"embedding_model.dimension", "doubao_embedding_model.dimension"} {
-		val, err := g.Cfg().Get(ctx, path)
-		if err == nil && val.Int() > 0 {
-			return val.Int()
-		}
+	val, err := g.Cfg().Get(ctx, EmbeddingModel+".dimension")
+	if err == nil && val.Int() > 0 {
+		return val.Int()
 	}
 	return 2048
 }

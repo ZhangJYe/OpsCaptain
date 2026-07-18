@@ -247,6 +247,29 @@ function applyTraceEventToSteps(
   const isGoS = isGoSEngine(engine);
 
   if (isGoS) {
+    if (stage === "state_transition") {
+      const stateKind = String(event.payload?.state_kind || "explore");
+      const stateLabels: Record<string, string> = {
+        explore: "探索",
+        drill_down: "钻取",
+        backtrack: "回溯",
+        report: "报告",
+        degraded: "降级",
+      };
+      const label = stateLabels[stateKind] || "状态转换";
+      const stateStep: ThinkingStep = {
+        id: `gos:state:${event.event_id}`,
+        label,
+        status: stateKind === "degraded" ? "error" : "done",
+        detail: event.message || label,
+        meta: [stateKind],
+      };
+      if (steps.some((step) => step.id === stateStep.id)) return steps;
+      const reporterIndex = steps.findIndex((step) => step.id === "gos:reporter");
+      if (reporterIndex < 0) return [...steps, stateStep];
+      return [...steps.slice(0, reporterIndex), stateStep, ...steps.slice(reporterIndex)];
+    }
+
     const stageMap: Record<string, { stepId: string; detail: string }> = {
       ingest: { stepId: "gos:hypothesis", detail: "解析症状并建立候选假设..." },
       ingest_done: { stepId: "gos:hypothesis", detail: event.message || "候选假设已建立" },
@@ -255,6 +278,8 @@ function applyTraceEventToSteps(
       evidence_attached: { stepId: "gos:evidence", detail: event.message || "挂载证据" },
       confidence_updated: { stepId: "gos:confidence", detail: event.message || "置信度更新" },
       fsm_decision: { stepId: "gos:confidence", detail: event.message || "FSM 决策" },
+      state_decision: { stepId: "gos:confidence", detail: event.message || "StateConverter 决策" },
+      no_progress: { stepId: "gos:confidence", detail: event.message || "检测到无进展轮次" },
       report: { stepId: "gos:reporter", detail: "生成证据链报告..." },
     };
 

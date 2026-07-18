@@ -6,8 +6,8 @@ source "$(dirname "$0")/utils.sh"
 log "=== 新会话开始 ==="
 
 # 加载项目上下文
-if [ -f ".env.local" ]; then
-  add_context "已加载 .env.local 环境变量"
+if [ -f ".env" ]; then
+  add_context "已加载 .env 环境变量"
 fi
 
 # 检查 Go 版本

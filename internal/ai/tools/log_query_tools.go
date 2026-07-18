@@ -100,6 +100,7 @@ func NewHTTPLogQueryTool(httpURL string, reason string) tool.InvokableTool {
 			if input == nil {
 				input = &LogQueryInput{}
 			}
+			applyDefaultLogWindow(input, g.Cfg().MustGet(ctx, "mcp.log_default_window", "30m").String())
 			payload, err := json.Marshal(input)
 			if err != nil {
 				return "", err
@@ -120,6 +121,13 @@ func NewHTTPLogQueryTool(httpURL string, reason string) tool.InvokableTool {
 		return nil
 	}
 	return t
+}
+
+func applyDefaultLogWindow(input *LogQueryInput, window string) {
+	if input == nil || strings.TrimSpace(input.Window) != "" {
+		return
+	}
+	input.Window = strings.TrimSpace(window)
 }
 
 func callLogHTTPFallback(ctx context.Context, httpURL string, args string, timeout time.Duration) (string, error) {
@@ -162,13 +170,13 @@ func callLogHTTPFallback(ctx context.Context, httpURL string, args string, timeo
 }
 
 func resolveLogHTTPURL(ctx context.Context, mcpURL string) string {
+	if value := normalizeOptionalURL(os.Getenv("MCP_LOG_HTTP_URL")); value != "" {
+		return value
+	}
 	if v, err := g.Cfg().Get(ctx, "mcp.log_http_url"); err == nil {
 		if value := normalizeOptionalURL(v.String()); value != "" {
 			return value
 		}
-	}
-	if value := normalizeOptionalURL(os.Getenv("MCP_LOG_HTTP_URL")); value != "" {
-		return value
 	}
 	mcpURL = normalizeOptionalURL(mcpURL)
 	if mcpURL == "" {

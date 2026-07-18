@@ -148,11 +148,12 @@ func (a *AIOpsApp) HandleAIOps(ctx context.Context, input *AIOpsInput) (*AIOpsRe
 		return nil, promptErr
 	}
 	if d := a.degradationCheck(ctx, "ai_ops"); d.Enabled {
+		message, detail := filterOutput(ctx, d.Message, []string{d.Reason})
 		return &AIOpsResult{
-			Result:            d.Message,
-			Detail:            []string{d.Reason},
+			Result:            message,
+			Detail:            detail,
 			Degraded:          true,
-			DegradationReason: d.Reason,
+			DegradationReason: filterAIOpsText(ctx, d.Reason),
 		}, nil
 	}
 
@@ -185,11 +186,6 @@ func (a *AIOpsApp) HandleAIOps(ctx context.Context, input *AIOpsInput) (*AIOpsRe
 		}
 	}
 	result, detail := filterOutput(ctx, result, response.Detail)
-	executionPlan := make([]string, 0, len(response.ExecutionPlan))
-	for _, step := range response.ExecutionPlan {
-		filtered, _ := filterOutput(ctx, step, nil)
-		executionPlan = append(executionPlan, filtered)
-	}
 
 	return &AIOpsResult{
 		TraceID:           response.TraceID,
@@ -199,12 +195,12 @@ func (a *AIOpsApp) HandleAIOps(ctx context.Context, input *AIOpsInput) (*AIOpsRe
 		ApprovalRequired:  response.ApprovalRequired,
 		ApprovalRequestID: response.ApprovalRequestID,
 		ApprovalStatus:    response.ApprovalStatus,
-		ExecutionPlan:     executionPlan,
+		ExecutionPlan:     filterAIOpsStrings(ctx, response.ExecutionPlan),
 		Degraded:          response.Degraded(),
-		DegradationReason: response.DegradationReason,
+		DegradationReason: filterAIOpsText(ctx, response.DegradationReason),
 		Confidence:        response.Confidence,
-		Evidence:          response.Evidence,
-		NextActions:       response.NextActions,
+		Evidence:          filterAIOpsEvidence(ctx, response.Evidence),
+		NextActions:       filterAIOpsStrings(ctx, response.NextActions),
 		StartedAt:         response.StartedAt,
 		FinishedAt:        response.FinishedAt,
 	}, nil
@@ -237,7 +233,7 @@ func (a *AIOpsApp) HandleAIOpsRuns(ctx context.Context, input *AIOpsRunsInput) (
 		Engine:            runs.Engine,
 		Status:            runs.Status,
 		Degraded:          runs.Degraded,
-		DegradationReason: runs.DegradationReason,
+		DegradationReason: filterAIOpsText(ctx, runs.DegradationReason),
 		ApprovalRequired:  runs.ApprovalRequired,
 		ApprovalRequestID: runs.ApprovalRequestID,
 		ApprovalStatus:    runs.ApprovalStatus,
@@ -249,7 +245,10 @@ func (a *AIOpsApp) HandleAIOpsTrace(ctx context.Context, traceID string) (*AIOps
 	if err != nil {
 		return nil, err
 	}
-	return &AIOpsTraceResult{Events: events, Detail: detail}, nil
+	return &AIOpsTraceResult{
+		Events: filterAIOpsTraceEvents(ctx, events),
+		Detail: filterAIOpsStrings(ctx, detail),
+	}, nil
 }
 
 func (a *AIOpsApp) HandleAIOpsResult(ctx context.Context, traceID string) (*AIOpsLookupResult, error) {
@@ -264,17 +263,94 @@ func (a *AIOpsApp) HandleAIOpsResult(ctx context.Context, traceID string) (*AIOp
 		Found:             true,
 		Status:            string(result.Status),
 		TraceID:           traceID,
-		Result:            result.Content,
-		Detail:            result.Detail,
+		Result:            filterAIOpsText(ctx, result.Content),
+		Detail:            filterAIOpsStrings(ctx, result.Detail),
 		Engine:            result.Engine,
 		Confidence:        result.Confidence,
-		Evidence:          result.Evidence,
-		NextActions:       result.NextActions,
+		Evidence:          filterAIOpsEvidence(ctx, result.Evidence),
+		NextActions:       filterAIOpsStrings(ctx, result.NextActions),
 		Degraded:          result.Degraded(),
-		DegradationReason: result.DegradationReason,
+		DegradationReason: filterAIOpsText(ctx, result.DegradationReason),
 		StartedAt:         result.StartedAt,
 		FinishedAt:        result.FinishedAt,
 	}, nil
+}
+
+func filterAIOpsText(ctx context.Context, value string) string {
+	return safety.FilterOutput(ctx, value).Content
+}
+
+func filterAIOpsStrings(ctx context.Context, values []string) []string {
+	return safety.FilterDetails(ctx, values)
+}
+
+func filterAIOpsEvidence(ctx context.Context, evidence []protocol.EvidenceItem) []protocol.EvidenceItem {
+	if len(evidence) == 0 {
+		return nil
+	}
+	out := make([]protocol.EvidenceItem, len(evidence))
+	for i, item := range evidence {
+		item.SourceType = filterAIOpsText(ctx, item.SourceType)
+		item.SourceID = filterAIOpsText(ctx, item.SourceID)
+		item.Title = filterAIOpsText(ctx, item.Title)
+		item.Snippet = filterAIOpsText(ctx, item.Snippet)
+		item.URI = filterAIOpsText(ctx, item.URI)
+		out[i] = item
+	}
+	return out
+}
+
+func filterAIOpsTraceEvents(ctx context.Context, events []*protocol.TaskEvent) []*protocol.TaskEvent {
+	if len(events) == 0 {
+		return nil
+	}
+	out := make([]*protocol.TaskEvent, len(events))
+	for i, event := range events {
+		if event == nil {
+			continue
+		}
+		cloned := *event
+		cloned.Message = filterAIOpsText(ctx, event.Message)
+		cloned.Payload = filterAIOpsPayload(ctx, event.Payload)
+		out[i] = &cloned
+	}
+	return out
+}
+
+func filterAIOpsPayload(ctx context.Context, payload map[string]any) map[string]any {
+	if len(payload) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(payload))
+	for key, value := range payload {
+		out[key] = filterAIOpsPayloadValue(ctx, value)
+	}
+	return out
+}
+
+func filterAIOpsPayloadValue(ctx context.Context, value any) any {
+	switch typed := value.(type) {
+	case string:
+		return filterAIOpsText(ctx, typed)
+	case []string:
+		return filterAIOpsStrings(ctx, typed)
+	case []any:
+		out := make([]any, len(typed))
+		for i, item := range typed {
+			out[i] = filterAIOpsPayloadValue(ctx, item)
+		}
+		return out
+	case map[string]string:
+		out := make(map[string]string, len(typed))
+		for key, item := range typed {
+			out[key] = filterAIOpsText(ctx, item)
+		}
+		return out
+	case map[string]any:
+		return filterAIOpsPayload(ctx, typed)
+	default:
+		return value
+	}
 }
 
 func validatePrompt(ctx context.Context, input string) (context.Context, error) {

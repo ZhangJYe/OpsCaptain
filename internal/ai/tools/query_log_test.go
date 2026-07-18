@@ -39,6 +39,22 @@ func TestResolveLogHTTPURLUsesEnvOverride(t *testing.T) {
 	}
 }
 
+func TestApplyDefaultLogWindow(t *testing.T) {
+	input := &LogQueryInput{}
+	applyDefaultLogWindow(input, " 6h ")
+	if input.Window != "6h" {
+		t.Fatalf("expected default window 6h, got %q", input.Window)
+	}
+
+	input.Window = "1h"
+	applyDefaultLogWindow(input, "6h")
+	if input.Window != "1h" {
+		t.Fatalf("expected explicit window to be preserved, got %q", input.Window)
+	}
+
+	applyDefaultLogWindow(nil, "6h")
+}
+
 func TestCallLogHTTPFallbackReturnsStructuredLogs(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/tools/query_logs" {

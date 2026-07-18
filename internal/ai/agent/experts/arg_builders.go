@@ -21,7 +21,7 @@ func (b *RawArgBuilder) Build(args string) (string, error) {
 
 func GetArgBuilder(toolName string) ArgBuilder {
 	switch toolName {
-	case "query_internal_docs", "query_logs":
+	case "query_internal_docs", "query_logs", "query_prometheus_alerts":
 		return &QueryArgBuilder{}
 	case "get_current_time":
 		return &RawArgBuilder{}

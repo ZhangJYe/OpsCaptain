@@ -6,8 +6,48 @@ import (
 	"testing"
 
 	"github.com/cloudwego/eino/adk"
+	"github.com/cloudwego/eino/callbacks"
+	"github.com/cloudwego/eino/components"
+	"github.com/cloudwego/eino/components/tool"
 	einoschema "github.com/cloudwego/eino/schema"
 )
+
+type executorTestTool struct{ name string }
+
+func (t executorTestTool) Info(context.Context) (*einoschema.ToolInfo, error) {
+	return &einoschema.ToolInfo{Name: t.name}, nil
+}
+
+func TestRunStatsCollectorCountsModelToolAndRAGCalls(t *testing.T) {
+	collector := &runStatsCollector{}
+	ctx := context.Background()
+	collector.onStart(ctx, &callbacks.RunInfo{Component: components.ComponentOfChatModel, Name: "deepseek"}, nil)
+	collector.onStart(ctx, &callbacks.RunInfo{Component: components.ComponentOfTool, Name: "query_logs"}, nil)
+	collector.onStart(ctx, &callbacks.RunInfo{Component: components.ComponentOfTool, Name: "query_internal_docs"}, nil)
+
+	stats := collector.snapshot()
+	if stats.LLMCalls != 1 || stats.ToolCalls != 2 || stats.RAGCalls != 1 {
+		t.Fatalf("unexpected stats: %+v", stats)
+	}
+}
+
+func TestWithExecutorToolsKeepsAnExplicitCaseScopedToolSet(t *testing.T) {
+	input := []tool.BaseTool{executorTestTool{name: "query_recorded_telemetry"}}
+	ctx := WithExecutorTools(context.Background(), input)
+	input[0] = executorTestTool{name: "changed"}
+
+	got, ok := executorToolsFromContext(ctx)
+	if !ok || len(got) != 1 {
+		t.Fatalf("unexpected override: ok=%v tools=%d", ok, len(got))
+	}
+	info, err := got[0].Info(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Name != "query_recorded_telemetry" {
+		t.Fatalf("unexpected tool %q", info.Name)
+	}
+}
 
 func TestIsAnalysisMessage(t *testing.T) {
 	tests := []struct {
@@ -162,6 +202,9 @@ func TestConsumePlanEventsReturnsAfterTerminalReport(t *testing.T) {
 			Content: `{"steps":["should not be consumed"]}`,
 		}, nil, einoschema.Assistant, ""),
 	}
+	events[0].AgentName = "planner"
+	events[1].AgentName = "replanner"
+	events[2].AgentName = "planner"
 	calls := 0
 	analysis, detail, err := consumePlanEvents(context.Background(), "分析 paymentservice", func() (*adk.AgentEvent, bool) {
 		if calls >= len(events) {
@@ -182,6 +225,43 @@ func TestConsumePlanEventsReturnsAfterTerminalReport(t *testing.T) {
 	}
 	if len(detail) != 2 {
 		t.Fatalf("expected plan and report detail, got %v", detail)
+	}
+}
+
+func TestConsumePlanEventsDoesNotTreatExecutorStepAsFinalReport(t *testing.T) {
+	executorEvent := adk.EventFromMessage(&einoschema.Message{
+		Role:    einoschema.Assistant,
+		Content: "## 步骤1执行完成\ncartservice 日志显示 FailedPrecondition，但还需要继续检查根因。",
+	}, nil, einoschema.Assistant, "")
+	executorEvent.AgentName = "executor"
+	finalEvent := adk.EventFromMessage(&einoschema.Message{
+		Role:    einoschema.Assistant,
+		Content: `{"response":"## 诊断报告\ncartservice 代码错误导致数据库访问失败。"}`,
+	}, nil, einoschema.Assistant, "")
+	finalEvent.AgentName = "replanner"
+	events := []*adk.AgentEvent{executorEvent, finalEvent}
+	calls := 0
+
+	analysis, detail, err := consumePlanEvents(context.Background(), "分析 cartservice", func() (*adk.AgentEvent, bool) {
+		if calls >= len(events) {
+			return nil, false
+		}
+		event := events[calls]
+		calls++
+		return event, true
+	})
+
+	if err != nil {
+		t.Fatalf("expected final replanner report, got %v", err)
+	}
+	if calls != 2 {
+		t.Fatalf("expected executor event to be ignored as terminal, consumed %d", calls)
+	}
+	if !strings.Contains(analysis, "代码错误") {
+		t.Fatalf("expected replanner analysis, got %q", analysis)
+	}
+	if len(detail) != 2 || detail[0] == "Plan generated final diagnostic report" {
+		t.Fatalf("expected executor output to remain step evidence, got %v", detail)
 	}
 }
 

@@ -1,7 +1,8 @@
 GO ?= go
 GOFLAGS ?= -count=1
+OBSERVABILITY_COMPOSE ?= deploy/observability/docker-compose.yml
 
-.PHONY: all fmt vet test test-race lint build clean
+.PHONY: all fmt vet test test-race lint build clean observability-up observability-down observability-status observability-check
 
 all: fmt vet lint test build
 
@@ -34,6 +35,21 @@ build:
 
 clean:
 	@rm -rf bin/ coverage.out
+
+# === Local observability ===
+
+observability-up:
+	@docker compose -f $(OBSERVABILITY_COMPOSE) up -d
+
+observability-down:
+	@docker compose -f $(OBSERVABILITY_COMPOSE) down
+
+observability-status:
+	@docker compose -f $(OBSERVABILITY_COMPOSE) ps
+
+observability-check:
+	@python3 -m unittest deploy/test_local_k8s_log_mcp.py
+	@docker compose -f $(OBSERVABILITY_COMPOSE) config --quiet
 
 # === Eval ===
 
