@@ -33,6 +33,8 @@ const (
 type EvidenceSource struct {
 	SourceType         string    `json:"source_type"`
 	SourceID           string    `json:"source_id"`
+	SignalType         string    `json:"signal_type,omitempty"`
+	Entity             string    `json:"entity,omitempty"`
 	ToolName           string    `json:"tool_name,omitempty"`
 	RetrievalQuery     string    `json:"retrieval_query,omitempty"`
 	Timestamp          time.Time `json:"timestamp"`

@@ -90,6 +90,57 @@ func TestCompactReportTextNormalizesAndLimitsUnicode(t *testing.T) {
 	assert.Equal(t, "连接池等…", compactReportText("连接池等待超时", 4))
 }
 
+func TestGenerateReportTruncatesDisplayOnlyAndPreservesProtocolEvidence(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.FSM.MinConfidence = 0.1
+	cfg.FSM.MinSupport = 1
+	cfg.Report.MaxEvidenceItems = 1
+	cfg.Report.EvidenceSnippetMaxChars = 12
+	engine := NewGoSEngine(cfg, &testLogger{})
+	graph := belief.NewBeliefGraph()
+	hypothesisID := graph.AddHypothesis("缓存耗尽", 0.8, 1, "核验缓存指标")
+	frontier := &belief.Frontier{NodeID: hypothesisID, Label: "缓存耗尽", Level: 1}
+	observedAt := time.Date(2025, 6, 18, 8, 12, 0, 0, time.UTC)
+	fullSnippet := "redis connected clients reached the configured maximum and rejected new connections"
+	update := engine.updateGraph(context.Background(), graph, []*experts.ExpertAnalysis{{
+		ExpertName: "linux_sre",
+		Evidence: []experts.EvidenceItem{
+			{
+				SourceType: "metric", SignalType: "metric", SourceID: "redis-connections", Entity: "redis-cart",
+				Title: "Redis 连接数达到上限", Snippet: fullSnippet, ArtifactRef: "recorded://case-a",
+				ObservationTime: observedAt, Relation: experts.EvidenceRelationSupport,
+				TargetHypothesisID: hypothesisID, Strength: 0.9,
+			},
+			{
+				SourceType: "log", SignalType: "log", SourceID: "redis-rejection", Entity: "redis-cart",
+				Title: "Redis 拒绝连接", Snippet: "maximum number of clients reached", ArtifactRef: "recorded://case-a",
+				ObservationTime: observedAt, Relation: experts.EvidenceRelationSupport,
+				TargetHypothesisID: hypothesisID, Strength: 0.8,
+			},
+		},
+	}}, frontier)
+	require.True(t, update.Committed, update.Error)
+
+	result := engine.generateReport(context.Background(), graph, belief.NewBeliefFSM(cfg.ToFSMThresholds()), time.Now(), &RunStats{})
+
+	assert.NotContains(t, result.Summary, fullSnippet)
+	assert.Contains(t, result.Summary, "redis connec…")
+	require.Len(t, result.Evidence, 2)
+	assert.Equal(t, fullSnippet, result.Evidence[0].Snippet)
+	assert.Equal(t, "metric", result.Evidence[0].SignalType)
+	assert.Equal(t, "redis-cart", result.Evidence[0].Entity)
+	assert.Equal(t, "recorded://case-a", result.Evidence[0].URI)
+	assert.Equal(t, observedAt, result.Evidence[0].ObservationTime)
+	assert.Equal(t, "maximum number of clients reached", result.Evidence[1].Snippet)
+	assert.NotContains(t, result.Summary, "Redis 拒绝连接")
+	report := result.Metadata["evidence_report"].(EvidenceReport)
+	require.Len(t, report.SupportingEvidence, 1)
+	assert.Equal(t, fullSnippet, report.SupportingEvidence[0].Snippet)
+	assert.Equal(t, "metric", report.SupportingEvidence[0].SignalType)
+	assert.Equal(t, "redis-cart", report.SupportingEvidence[0].Entity)
+	assert.Equal(t, observedAt, report.SupportingEvidence[0].ObservationTime)
+}
+
 func TestGenerateReportDegradesOnCriticalRefutingEvidence(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.FSM.MinConfidence = 0.1

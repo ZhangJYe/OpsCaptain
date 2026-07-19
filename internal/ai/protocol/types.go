@@ -72,12 +72,15 @@ type TaskError struct {
 }
 
 type EvidenceItem struct {
-	SourceType string  `json:"source_type"`
-	SourceID   string  `json:"source_id"`
-	Title      string  `json:"title"`
-	Snippet    string  `json:"snippet"`
-	Score      float64 `json:"score"`
-	URI        string  `json:"uri,omitempty"`
+	SourceType      string    `json:"source_type"`
+	SourceID        string    `json:"source_id"`
+	SignalType      string    `json:"signal_type,omitempty"`
+	Entity          string    `json:"entity,omitempty"`
+	Title           string    `json:"title"`
+	Snippet         string    `json:"snippet"`
+	Score           float64   `json:"score"`
+	URI             string    `json:"uri,omitempty"`
+	ObservationTime time.Time `json:"observation_time,omitempty"`
 }
 
 type TaskResult struct {

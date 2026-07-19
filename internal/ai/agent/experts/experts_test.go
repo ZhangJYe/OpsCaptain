@@ -594,11 +594,13 @@ func TestTruncateStringKeepsUTF8Valid(t *testing.T) {
 }
 
 func TestBaseExpertEvidenceBudgetIsConfigurable(t *testing.T) {
-	configured := NewBaseExpert(ExpertRuntimeConfig{EvidenceMaxChars: 8192}, NewToolRegistry())
+	configured := NewBaseExpert(ExpertRuntimeConfig{EvidenceMaxChars: 8192, EvidenceMaxItems: 24}, NewToolRegistry())
 	legacyFallback := NewBaseExpert(ExpertRuntimeConfig{}, NewToolRegistry())
 
 	assert.Equal(t, 8192, configured.evidenceMaxChars())
+	assert.Equal(t, 24, configured.evidenceMaxItems())
 	assert.Equal(t, 500, legacyFallback.evidenceMaxChars())
+	assert.Equal(t, 12, legacyFallback.evidenceMaxItems())
 	assert.Contains(t, truncateString(strings.Repeat("x", 600)+"tail", configured.evidenceMaxChars()), "tail")
 	assert.NotContains(t, truncateString(strings.Repeat("x", 600)+"tail", legacyFallback.evidenceMaxChars()), "tail")
 }

@@ -199,6 +199,7 @@ func (e *GoSEngine) configVersion() string {
 		Temperature         float64
 		MaxTokens           int
 		EvidenceMaxChars    int
+		EvidenceMaxItems    int
 		SessionMaxSteps     int
 		MaxRetrievalSteps   int
 		CallTimeoutMs       int
@@ -218,6 +219,7 @@ func (e *GoSEngine) configVersion() string {
 		Temperature:         e.cfg.Temperature,
 		MaxTokens:           e.cfg.MaxTokens,
 		EvidenceMaxChars:    e.cfg.EvidenceMaxChars,
+		EvidenceMaxItems:    e.cfg.EvidenceMaxItems,
 		SessionMaxSteps:     e.cfg.SessionMaxSteps,
 		MaxRetrievalSteps:   e.cfg.MaxRetrievalSteps,
 		CallTimeoutMs:       e.cfg.CallTimeoutMs,

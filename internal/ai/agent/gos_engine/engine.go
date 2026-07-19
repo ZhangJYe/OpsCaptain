@@ -463,10 +463,14 @@ func (e *GoSEngine) bootstrapEvidence(ctx context.Context, symptom string) (*exp
 		}
 		seen[sourceID] = struct{}{}
 		evidence = append(evidence, BootstrapEvidence{
-			SourceType: strings.TrimSpace(item.SourceType),
-			SourceID:   sourceID,
-			Title:      truncateBootstrapText(item.Title, 256),
-			Snippet:    snippet,
+			SourceType:      strings.TrimSpace(item.SourceType),
+			SourceID:        sourceID,
+			SignalType:      strings.TrimSpace(item.SignalType),
+			Entity:          strings.TrimSpace(item.Entity),
+			Title:           truncateBootstrapText(item.Title, 256),
+			Snippet:         snippet,
+			ArtifactRef:     strings.TrimSpace(item.ArtifactRef),
+			ObservationTime: item.ObservationTime,
 		})
 		if len(evidence) >= limit {
 			break

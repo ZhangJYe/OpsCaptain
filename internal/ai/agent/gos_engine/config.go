@@ -17,6 +17,7 @@ type Config struct {
 	Temperature         float64                   `yaml:"temperature"`
 	MaxTokens           int                       `yaml:"max_tokens"`
 	EvidenceMaxChars    int                       `yaml:"evidence_max_chars"`
+	EvidenceMaxItems    int                       `yaml:"evidence_max_items"`
 	SessionMaxSteps     int                       `yaml:"session_max_steps"`
 	MaxRetrievalSteps   int                       `yaml:"max_retrieval_steps"`
 	CallTimeoutMs       int                       `yaml:"call_timeout_ms"`
@@ -129,6 +130,7 @@ func DefaultConfig() *Config {
 		Temperature:       0.8,
 		MaxTokens:         4096,
 		EvidenceMaxChars:  8192,
+		EvidenceMaxItems:  12,
 		SessionMaxSteps:   5,
 		MaxRetrievalSteps: 3,
 		CallTimeoutMs:     30000,

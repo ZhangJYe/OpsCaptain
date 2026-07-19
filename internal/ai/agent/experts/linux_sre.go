@@ -221,20 +221,19 @@ func (e *BaseExpert) run(ctx context.Context, task ExpertTask) *ExpertAnalysis {
 				continue
 			}
 
-			sanitizedOutput := truncateString(redactSecrets(output), e.evidenceMaxChars())
-			history = append(history, RetrievalRecord{Query: content, Output: sanitizedOutput, Tool: toolName})
-			result.Evidence = append(result.Evidence, EvidenceItem{
-				SourceType:         "tool",
-				SourceID:           evidenceSourceID(toolName, sanitizedOutput),
-				Title:              fmt.Sprintf("%s output", toolName),
-				Snippet:            sanitizedOutput,
-				Score:              1.0,
-				Relation:           EvidenceRelationNeutral,
-				TargetHypothesisID: task.Frontier.NodeID,
-				Strength:           0,
-				ToolName:           toolName,
-				ObservationTime:    time.Now(),
-			})
+			atoms := atomizeToolEvidence(toolName, output, task.Frontier.NodeID, time.Now().UTC(), e.evidenceMaxItems())
+			if len(atoms) == 0 {
+				result.ToolErrors = append(result.ToolErrors, ToolError{
+					ToolName: toolName,
+					Action:   "execute",
+					Error:    "no evidence atoms found",
+				})
+				result.Status = "degraded"
+				result.DegradationReason = fmt.Sprintf("tool %s returned no evidence atoms", toolName)
+				continue
+			}
+			history = append(history, formatEvidenceHistory(atoms, content, toolName, e.evidenceMaxChars())...)
+			result.Evidence = append(result.Evidence, atoms...)
 			if task.StopAfterEvidence {
 				return result
 			}
@@ -268,23 +267,19 @@ func (e *BaseExpert) run(ctx context.Context, task ExpertTask) *ExpertAnalysis {
 				continue
 			}
 
-			var combined string
-			for _, d := range docs {
-				combined += d.Content + "\n"
+			atoms := atomizeRAGEvidence(docs, task.Frontier.NodeID, time.Now().UTC(), e.evidenceMaxItems())
+			if len(atoms) == 0 {
+				result.ToolErrors = append(result.ToolErrors, ToolError{
+					ToolName: "rag",
+					Action:   "retrieve",
+					Error:    "no evidence atoms found",
+				})
+				result.Status = "degraded"
+				result.DegradationReason = "no_rag_evidence_atoms"
+				continue
 			}
-			sanitizedCombined := truncateString(redactSecrets(combined), e.evidenceMaxChars())
-			history = append(history, RetrievalRecord{Query: content, Output: sanitizedCombined, Tool: "rag"})
-			result.Evidence = append(result.Evidence, EvidenceItem{
-				SourceType:         "rag",
-				SourceID:           evidenceSourceID("rag", sanitizedCombined),
-				Title:              "RAG retrieval",
-				Snippet:            sanitizedCombined,
-				Score:              1.0,
-				Relation:           EvidenceRelationNeutral,
-				TargetHypothesisID: task.Frontier.NodeID,
-				Strength:           0,
-				ObservationTime:    time.Now(),
-			})
+			history = append(history, formatEvidenceHistory(atoms, content, "rag", e.evidenceMaxChars())...)
+			result.Evidence = append(result.Evidence, atoms...)
 			if task.StopAfterEvidence {
 				return result
 			}
@@ -671,6 +666,13 @@ func (e *BaseExpert) evidenceMaxChars() int {
 		return e.cfg.EvidenceMaxChars
 	}
 	return 500
+}
+
+func (e *BaseExpert) evidenceMaxItems() int {
+	if e.cfg.EvidenceMaxItems > 0 {
+		return e.cfg.EvidenceMaxItems
+	}
+	return 12
 }
 
 func (e *BaseExpert) runTool(ctx context.Context, adapter *ToolAdapter, content string) (string, error) {

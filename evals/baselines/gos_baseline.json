@@ -1,6 +1,6 @@
 {
-  "commit": "ac94764",
-  "code_sha256": "40017559285146792cb4f165ea72a9d734b854c5373418789637380ad3004c46",
+  "commit": "47c65a7",
+  "code_sha256": "75bdef7910b148d54505f8c99548c869a4ede7e24acae1844cf6319e35510fe6",
   "code_fingerprint_scope": "go-source+modules+prompts-v1",
   "evidence_metric_contract": "source-backed-signal-v2",
   "baseline_quality_contract": "complete-trace-profile-activity-v1",
@@ -19,14 +19,14 @@
   "dataset_path": "internal/ai/agent/gos_engine/eval/testdata/smoke.json",
   "dataset_sha256": "b3c7d87dac9a80943547e185d05a561c9671be4e602c6c82e7c3e5e7640ea635",
   "config_path": "manifest/config/config.yaml",
-  "config_sha256": "96f66796a93ae66be70a5c69e6dbb7ccb2e355a156faea3ee82b07984f457809",
+  "config_sha256": "fbfe1f079a098c8373754609ae0d1f575eb227ab80f4e4602c6576a6c33e7dae",
   "config_summary": {
     "engine": "gos",
     "mode": "regression-baseline",
     "session_max_steps": 3,
     "state_conversion_enabled": true
   },
-  "timestamp": "2026-07-19T10:31:16+08:00",
+  "timestamp": "2026-07-19T11:28:06+08:00",
   "metrics": {
     "total_cases": 5,
     "succeeded": 5,
@@ -40,9 +40,9 @@
     "backtrack_success": 1,
     "premature_stop_rate": 0,
     "graph_validity": 1,
-    "avg_latency": 1008874,
-    "p50_latency": 573708,
-    "p95_latency": 2091959,
+    "avg_latency": 726441,
+    "p50_latency": 847542,
+    "p95_latency": 1106875,
     "avg_llm_calls": 6,
     "avg_tool_calls": 2,
     "avg_rag_calls": 0,
@@ -58,10 +58,10 @@
     {
       "case_id": "smoke-001",
       "symptom": "服务 response timeout，CPU 使用率 95%，内存使用率 80%",
-      "prediction": "## 结论\n\n根因候选：CPU 资源耗尽导致服务超时（graph node: `node-10`）\n\n诊断依据：CPU 资源耗尽导致服务超时\n\n## 图聚合置信度\n\n84%\n\n## 支持证据\n\n- `node-12` / `tool:query_logs:c08b7cb08ef677c9` → `node-10`，strength=0.80：query_logs output — {\"success\": true, \"data\": \"CPU usage 95%, memory 80%\"}\n- `node-8` / `tool:query_logs:c08b7cb08ef677c9` → `node-2`，strength=0.80：query_logs output — {\"success\": true, \"data\": \"CPU usage 95%, memory 80%\"}\n\n## 反驳与冲突证据\n\n- 无\n\n## 待判定观测\n\n- 无\n\n## 未解决缺口\n\n- 无关键缺口\n\n## 建议下一步\n\n- 在执行变更前由值班人员核对证据来源与影响范围",
+      "prediction": "## 结论\n\n根因候选：CPU 资源耗尽导致服务超时（graph node: `node-10`）\n\n诊断依据：CPU 资源耗尽导致服务超时\n\n## 图聚合置信度\n\n84%\n\n## 支持证据\n\n- `node-12` / `log:query_logs:log:639605a7ce727abf` → `node-10`，strength=0.80：log signal — CPU usage 95%, memory 80%\n- `node-8` / `log:query_logs:log:639605a7ce727abf` → `node-2`，strength=0.80：log signal — CPU usage 95%, memory 80%\n\n## 反驳与冲突证据\n\n- 无\n\n## 待判定观测\n\n- 无\n\n## 未解决缺口\n\n- 无关键缺口\n\n## 建议下一步\n\n- 在执行变更前由值班人员核对证据来源与影响范围",
       "ground_truth": "CPU 资源耗尽导致服务超时",
       "matched": true,
-      "latency": 2091959,
+      "latency": 1106875,
       "llm_calls": 6,
       "tool_calls": 2,
       "rag_calls": 0,
@@ -71,7 +71,7 @@
       "evidence_count": 2,
       "raw_evidence_count": 2,
       "evidence_source_counts": {
-        "tool": 2
+        "log": 2
       },
       "relevant_evidence": 2,
       "expected_evidence": 1,
@@ -89,10 +89,10 @@
     {
       "case_id": "smoke-002",
       "symptom": "数据库连接超时，连接池已满，慢查询数量增加",
-      "prediction": "## 结论\n\n根因候选：数据库连接池耗尽（graph node: `node-10`）\n\n诊断依据：数据库连接池耗尽\n\n## 图聚合置信度\n\n84%\n\n## 支持证据\n\n- `node-12` / `tool:query_logs:bed2bbe81f8b5cab` → `node-10`，strength=0.80：query_logs output — {\"success\": true, \"data\": \"Connection pool exhausted, slow queries increased\"}\n- `node-8` / `tool:query_logs:bed2bbe81f8b5cab` → `node-2`，strength=0.80：query_logs output — {\"success\": true, \"data\": \"Connection pool exhausted, slow queries increased\"}\n\n## 反驳与冲突证据\n\n- 无\n\n## 待判定观测\n\n- 无\n\n## 未解决缺口\n\n- 无关键缺口\n\n## 建议下一步\n\n- 在执行变更前由值班人员核对证据来源与影响范围",
+      "prediction": "## 结论\n\n根因候选：数据库连接池耗尽（graph node: `node-10`）\n\n诊断依据：数据库连接池耗尽\n\n## 图聚合置信度\n\n84%\n\n## 支持证据\n\n- `node-12` / `log:query_logs:log:35dfb46c926bb343` → `node-10`，strength=0.80：log signal — Connection pool exhausted, slow queries increased\n- `node-8` / `log:query_logs:log:35dfb46c926bb343` → `node-2`，strength=0.80：log signal — Connection pool exhausted, slow queries increased\n\n## 反驳与冲突证据\n\n- 无\n\n## 待判定观测\n\n- 无\n\n## 未解决缺口\n\n- 无关键缺口\n\n## 建议下一步\n\n- 在执行变更前由值班人员核对证据来源与影响范围",
       "ground_truth": "数据库连接池耗尽",
       "matched": true,
-      "latency": 556208,
+      "latency": 374083,
       "llm_calls": 6,
       "tool_calls": 2,
       "rag_calls": 0,
@@ -102,7 +102,7 @@
       "evidence_count": 2,
       "raw_evidence_count": 2,
       "evidence_source_counts": {
-        "tool": 2
+        "log": 2
       },
       "relevant_evidence": 2,
       "expected_evidence": 1,
@@ -120,10 +120,10 @@
     {
       "case_id": "smoke-003",
       "symptom": "网络延迟升高，跨区域调用超时，本地调用正常",
-      "prediction": "## 结论\n\n根因候选：网络链路问题（graph node: `node-10`）\n\n诊断依据：网络链路问题\n\n## 图聚合置信度\n\n84%\n\n## 支持证据\n\n- `node-12` / `tool:query_logs:763bd7376c4c9083` → `node-10`，strength=0.80：query_logs output — {\"success\": true, \"data\": \"Cross-region latency high, packet loss 5%\"}\n- `node-8` / `tool:query_logs:763bd7376c4c9083` → `node-2`，strength=0.80：query_logs output — {\"success\": true, \"data\": \"Cross-region latency high, packet loss 5%\"}\n\n## 反驳与冲突证据\n\n- 无\n\n## 待判定观测\n\n- 无\n\n## 未解决缺口\n\n- 无关键缺口\n\n## 建议下一步\n\n- 在执行变更前由值班人员核对证据来源与影响范围",
+      "prediction": "## 结论\n\n根因候选：网络链路问题（graph node: `node-10`）\n\n诊断依据：网络链路问题\n\n## 图聚合置信度\n\n84%\n\n## 支持证据\n\n- `node-12` / `log:query_logs:log:fe55ac89d7e4fe53` → `node-10`，strength=0.80：log signal — Cross-region latency high, packet loss 5%\n- `node-8` / `log:query_logs:log:fe55ac89d7e4fe53` → `node-2`，strength=0.80：log signal — Cross-region latency high, packet loss 5%\n\n## 反驳与冲突证据\n\n- 无\n\n## 待判定观测\n\n- 无\n\n## 未解决缺口\n\n- 无关键缺口\n\n## 建议下一步\n\n- 在执行变更前由值班人员核对证据来源与影响范围",
       "ground_truth": "网络链路问题",
       "matched": true,
-      "latency": 1278916,
+      "latency": 344542,
       "llm_calls": 6,
       "tool_calls": 2,
       "rag_calls": 0,
@@ -133,7 +133,7 @@
       "evidence_count": 2,
       "raw_evidence_count": 2,
       "evidence_source_counts": {
-        "tool": 2
+        "log": 2
       },
       "relevant_evidence": 2,
       "expected_evidence": 1,
@@ -151,10 +151,10 @@
     {
       "case_id": "smoke-004",
       "symptom": "Redis 缓存命中率下降，缓存 key 过期，后端负载升高",
-      "prediction": "## 结论\n\n根因候选：缓存失效导致后端压力（graph node: `node-10`）\n\n诊断依据：缓存失效导致后端压力\n\n## 图聚合置信度\n\n84%\n\n## 支持证据\n\n- `node-12` / `tool:query_logs:b1dd83ddffbbcd7d` → `node-10`，strength=0.80：query_logs output — {\"success\": true, \"data\": \"Cache hit rate decreased, keys expired\"}\n- `node-8` / `tool:query_logs:b1dd83ddffbbcd7d` → `node-2`，strength=0.80：query_logs output — {\"success\": true, \"data\": \"Cache hit rate decreased, keys expired\"}\n\n## 反驳与冲突证据\n\n- 无\n\n## 待判定观测\n\n- 无\n\n## 未解决缺口\n\n- 无关键缺口\n\n## 建议下一步\n\n- 在执行变更前由值班人员核对证据来源与影响范围",
+      "prediction": "## 结论\n\n根因候选：缓存失效导致后端压力（graph node: `node-10`）\n\n诊断依据：缓存失效导致后端压力\n\n## 图聚合置信度\n\n84%\n\n## 支持证据\n\n- `node-12` / `log:query_logs:log:a0d9f8b6880e7bec` → `node-10`，strength=0.80：log signal — Cache hit rate decreased, keys expired\n- `node-8` / `log:query_logs:log:a0d9f8b6880e7bec` → `node-2`，strength=0.80：log signal — Cache hit rate decreased, keys expired\n\n## 反驳与冲突证据\n\n- 无\n\n## 待判定观测\n\n- 无\n\n## 未解决缺口\n\n- 无关键缺口\n\n## 建议下一步\n\n- 在执行变更前由值班人员核对证据来源与影响范围",
       "ground_truth": "缓存失效导致后端压力",
       "matched": true,
-      "latency": 573708,
+      "latency": 847542,
       "llm_calls": 6,
       "tool_calls": 2,
       "rag_calls": 0,
@@ -164,7 +164,7 @@
       "evidence_count": 2,
       "raw_evidence_count": 2,
       "evidence_source_counts": {
-        "tool": 2
+        "log": 2
       },
       "relevant_evidence": 2,
       "expected_evidence": 1,
@@ -182,10 +182,10 @@
     {
       "case_id": "smoke-005",
       "symptom": "Kafka 消费延迟增加，消息堆积，消费者 CPU 使用率低",
-      "prediction": "## 结论\n\n根因候选：Kafka 消费者处理能力不足（graph node: `node-10`）\n\n诊断依据：Kafka 消费者处理能力不足\n\n## 图聚合置信度\n\n84%\n\n## 支持证据\n\n- `node-12` / `tool:query_logs:d4f4f9ab5c709921` → `node-10`，strength=0.80：query_logs output — {\"success\": true, \"data\": \"Consumer lag increased, messages堆积\"}\n- `node-8` / `tool:query_logs:d4f4f9ab5c709921` → `node-2`，strength=0.80：query_logs output — {\"success\": true, \"data\": \"Consumer lag increased, messages堆积\"}\n\n## 反驳与冲突证据\n\n- 无\n\n## 待判定观测\n\n- 无\n\n## 未解决缺口\n\n- 无关键缺口\n\n## 建议下一步\n\n- 在执行变更前由值班人员核对证据来源与影响范围",
+      "prediction": "## 结论\n\n根因候选：Kafka 消费者处理能力不足（graph node: `node-10`）\n\n诊断依据：Kafka 消费者处理能力不足\n\n## 图聚合置信度\n\n84%\n\n## 支持证据\n\n- `node-12` / `log:query_logs:log:575d1e513d241a15` → `node-10`，strength=0.80：log signal — Consumer lag increased, messages堆积\n- `node-8` / `log:query_logs:log:575d1e513d241a15` → `node-2`，strength=0.80：log signal — Consumer lag increased, messages堆积\n\n## 反驳与冲突证据\n\n- 无\n\n## 待判定观测\n\n- 无\n\n## 未解决缺口\n\n- 无关键缺口\n\n## 建议下一步\n\n- 在执行变更前由值班人员核对证据来源与影响范围",
       "ground_truth": "Kafka 消费者处理能力不足",
       "matched": true,
-      "latency": 543583,
+      "latency": 959167,
       "llm_calls": 6,
       "tool_calls": 2,
       "rag_calls": 0,
@@ -195,7 +195,7 @@
       "evidence_count": 2,
       "raw_evidence_count": 2,
       "evidence_source_counts": {
-        "tool": 2
+        "log": 2
       },
       "relevant_evidence": 2,
       "expected_evidence": 1,

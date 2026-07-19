@@ -410,6 +410,9 @@ func loadAIOpsGOSConfig(ctx context.Context) *gos_engine.Config {
 	if v, ok := aiOpsConfigInt(ctx, "aiops.gos.evidence_max_chars"); ok {
 		cfg.EvidenceMaxChars = v
 	}
+	if v, ok := aiOpsConfigInt(ctx, "aiops.gos.evidence_max_items"); ok {
+		cfg.EvidenceMaxItems = v
+	}
 	if v, ok := aiOpsConfigInt(ctx, "aiops.gos.session_max_steps"); ok {
 		cfg.SessionMaxSteps = v
 	}
@@ -593,6 +596,7 @@ func registerAIOpsGOSExpert(engine *gos_engine.GoSEngine, cfg *gos_engine.Config
 		Temperature:       cfg.Temperature,
 		MaxTokens:         cfg.MaxTokens,
 		EvidenceMaxChars:  cfg.EvidenceMaxChars,
+		EvidenceMaxItems:  cfg.EvidenceMaxItems,
 		CallTimeout:       time.Duration(cfg.CallTimeoutMs) * time.Millisecond,
 		ChatModelFactory:  models.OpenAIChatModelFactory(cfg.ModelPath),
 		ExecutionBudget: experts.ExecutionBudget{

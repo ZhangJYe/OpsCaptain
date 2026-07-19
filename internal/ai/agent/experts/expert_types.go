@@ -24,6 +24,7 @@ type ExpertRuntimeConfig struct {
 	Temperature         float64
 	MaxTokens           int
 	EvidenceMaxChars    int
+	EvidenceMaxItems    int
 	RAGQueryFunc        RAGQueryFunc
 	GenerateContentFunc GenerateContentFunc
 	ChatModelFactory    ChatModelFactory

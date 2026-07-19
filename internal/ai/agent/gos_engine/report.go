@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"SuperBizAgent/internal/ai/agent/experts"
 	"SuperBizAgent/internal/ai/belief"
@@ -11,16 +12,18 @@ import (
 )
 
 type EvidenceReport struct {
-	Conclusion         ReportConclusion `json:"conclusion"`
-	Confidence         float64          `json:"confidence"`
-	SupportingEvidence []ReportEvidence `json:"supporting_evidence"`
-	RefutingEvidence   []ReportEvidence `json:"refuting_evidence"`
-	NeutralEvidence    []ReportEvidence `json:"neutral_evidence"`
-	Conflicts          []ReportConflict `json:"conflicts"`
-	UnresolvedGaps     []string         `json:"unresolved_gaps"`
-	NextActions        []string         `json:"next_actions"`
-	ReasonCodes        []string         `json:"reason_codes,omitempty"`
-	Sufficient         bool             `json:"sufficient"`
+	Conclusion             ReportConclusion `json:"conclusion"`
+	Confidence             float64          `json:"confidence"`
+	SupportingEvidence     []ReportEvidence `json:"supporting_evidence"`
+	RefutingEvidence       []ReportEvidence `json:"refuting_evidence"`
+	NeutralEvidence        []ReportEvidence `json:"neutral_evidence"`
+	Conflicts              []ReportConflict `json:"conflicts"`
+	UnresolvedGaps         []string         `json:"unresolved_gaps"`
+	NextActions            []string         `json:"next_actions"`
+	ReasonCodes            []string         `json:"reason_codes,omitempty"`
+	Sufficient             bool             `json:"sufficient"`
+	SnippetDisplayMaxChars int              `json:"-"`
+	EvaluationEvidence     []ReportEvidence `json:"-"`
 }
 
 type ReportConclusion struct {
@@ -30,17 +33,20 @@ type ReportConclusion struct {
 }
 
 type ReportEvidence struct {
-	NodeID             string  `json:"node_id"`
-	EdgeRef            string  `json:"edge_ref,omitempty"`
-	Relation           string  `json:"relation"`
-	Strength           float64 `json:"strength"`
-	TargetHypothesisID string  `json:"target_hypothesis_id"`
-	SourceType         string  `json:"source_type"`
-	SourceID           string  `json:"source_id"`
-	ToolName           string  `json:"tool_name,omitempty"`
-	ArtifactRef        string  `json:"artifact_ref,omitempty"`
-	Title              string  `json:"title"`
-	Snippet            string  `json:"snippet"`
+	NodeID             string    `json:"node_id"`
+	EdgeRef            string    `json:"edge_ref,omitempty"`
+	Relation           string    `json:"relation"`
+	Strength           float64   `json:"strength"`
+	TargetHypothesisID string    `json:"target_hypothesis_id"`
+	SourceType         string    `json:"source_type"`
+	SourceID           string    `json:"source_id"`
+	SignalType         string    `json:"signal_type,omitempty"`
+	Entity             string    `json:"entity,omitempty"`
+	ToolName           string    `json:"tool_name,omitempty"`
+	ArtifactRef        string    `json:"artifact_ref,omitempty"`
+	Title              string    `json:"title"`
+	Snippet            string    `json:"snippet"`
+	ObservationTime    time.Time `json:"observation_time,omitempty"`
 }
 
 type ReportConflict struct {
@@ -67,7 +73,7 @@ func selectReportFrontier(graph *belief.BeliefGraph, fsm *belief.BeliefFSM) *bel
 }
 
 func (e *GoSEngine) buildEvidenceReport(graph *belief.BeliefGraph, frontier *belief.Frontier, stats *RunStats, additionalGaps ...string) EvidenceReport {
-	report := EvidenceReport{}
+	report := EvidenceReport{SnippetDisplayMaxChars: e.cfg.Report.EvidenceSnippetMaxChars}
 	if frontier == nil {
 		report.Conclusion.Text = "尚未形成可验证的根因候选"
 		report.UnresolvedGaps = appendUniqueStrings(report.UnresolvedGaps, "没有可用 frontier")
@@ -80,15 +86,13 @@ func (e *GoSEngine) buildEvidenceReport(graph *belief.BeliefGraph, frontier *bel
 
 	targetIDs := reportHypothesisScopeIDs(graph, frontier)
 	allEvidence := reportEvidenceForTargets(graph, targetIDs)
+	report.EvaluationEvidence = append([]ReportEvidence(nil), allEvidence...)
 	allSupports, allRefutes, allNeutral := splitReportEvidence(allEvidence)
 	maxItems := e.cfg.Report.MaxEvidenceItems
 	if maxItems <= 0 {
 		maxItems = 1
 	}
 	selected := selectReportEvidence(allSupports, allRefutes, allNeutral, maxItems)
-	for index := range selected {
-		selected[index].Snippet = compactReportText(selected[index].Snippet, e.cfg.Report.EvidenceSnippetMaxChars)
-	}
 	report.SupportingEvidence, report.RefutingEvidence, report.NeutralEvidence = splitReportEvidence(selected)
 
 	requiredSupports := e.cfg.FSM.MinSupport
@@ -210,10 +214,13 @@ func reportEvidenceForTargets(graph *belief.BeliefGraph, targetIDs map[string]st
 			TargetHypothesisID: node.Source.TargetHypothesisID,
 			SourceType:         node.Source.SourceType,
 			SourceID:           node.Source.SourceID,
+			SignalType:         node.Source.SignalType,
+			Entity:             node.Source.Entity,
 			ToolName:           node.Source.ToolName,
 			ArtifactRef:        node.Source.ArtifactRef,
 			Title:              node.Label,
 			Snippet:            node.Source.SummarySnippet,
+			ObservationTime:    node.Source.Timestamp,
 		})
 	}
 	sort.Slice(items, func(i, j int) bool {
@@ -350,9 +357,9 @@ func formatEvidenceReport(report EvidenceReport) string {
 		b.WriteString("\n\n诊断依据：" + report.Conclusion.Rationale)
 	}
 	b.WriteString(fmt.Sprintf("\n\n## 图聚合置信度\n\n%.0f%%\n", report.Confidence*100))
-	writeReportEvidenceSection(&b, "支持证据", report.SupportingEvidence)
-	writeReportEvidenceSection(&b, "反驳与冲突证据", report.RefutingEvidence)
-	writeReportEvidenceSection(&b, "待判定观测", report.NeutralEvidence)
+	writeReportEvidenceSection(&b, "支持证据", report.SupportingEvidence, report.SnippetDisplayMaxChars)
+	writeReportEvidenceSection(&b, "反驳与冲突证据", report.RefutingEvidence, report.SnippetDisplayMaxChars)
+	writeReportEvidenceSection(&b, "待判定观测", report.NeutralEvidence, report.SnippetDisplayMaxChars)
 	b.WriteString("\n## 未解决缺口\n\n")
 	writeStringList(&b, report.UnresolvedGaps, "无关键缺口")
 	b.WriteString("\n## 建议下一步\n\n")
@@ -360,7 +367,7 @@ func formatEvidenceReport(report EvidenceReport) string {
 	return strings.TrimSpace(b.String())
 }
 
-func writeReportEvidenceSection(b *strings.Builder, title string, items []ReportEvidence) {
+func writeReportEvidenceSection(b *strings.Builder, title string, items []ReportEvidence, snippetMaxChars int) {
 	b.WriteString("\n## " + title + "\n\n")
 	if len(items) == 0 {
 		b.WriteString("- 无\n")
@@ -368,8 +375,9 @@ func writeReportEvidenceSection(b *strings.Builder, title string, items []Report
 	}
 	for _, item := range items {
 		detail := item.Title
-		if item.Snippet != "" && item.Snippet != item.Title {
-			detail += " — " + item.Snippet
+		snippet := compactReportText(item.Snippet, snippetMaxChars)
+		if snippet != "" && snippet != item.Title {
+			detail += " — " + snippet
 		}
 		b.WriteString(fmt.Sprintf("- `%s` / `%s:%s` → `%s`，strength=%.2f：%s\n", item.NodeID, item.SourceType, item.SourceID, item.TargetHypothesisID, item.Strength, detail))
 	}
@@ -398,22 +406,30 @@ func writeStringList(b *strings.Builder, items []string, emptyText string) {
 }
 
 func (report EvidenceReport) protocolEvidence() []protocol.EvidenceItem {
-	items := make([]protocol.EvidenceItem, 0, len(report.SupportingEvidence)+len(report.RefutingEvidence)+len(report.NeutralEvidence))
+	evidence := report.EvaluationEvidence
+	if evidence == nil {
+		evidence = make([]ReportEvidence, 0, len(report.SupportingEvidence)+len(report.RefutingEvidence)+len(report.NeutralEvidence))
+		evidence = append(evidence, report.SupportingEvidence...)
+		evidence = append(evidence, report.RefutingEvidence...)
+		evidence = append(evidence, report.NeutralEvidence...)
+	}
+	items := make([]protocol.EvidenceItem, 0, len(evidence))
 	appendEvidence := func(evidence []ReportEvidence) {
 		for _, item := range evidence {
 			items = append(items, protocol.EvidenceItem{
-				SourceType: item.SourceType,
-				SourceID:   item.SourceID,
-				Title:      item.Title,
-				Snippet:    item.Snippet,
-				Score:      item.Strength,
-				URI:        item.ArtifactRef,
+				SourceType:      item.SourceType,
+				SourceID:        item.SourceID,
+				SignalType:      item.SignalType,
+				Entity:          item.Entity,
+				Title:           item.Title,
+				Snippet:         item.Snippet,
+				Score:           item.Strength,
+				URI:             item.ArtifactRef,
+				ObservationTime: item.ObservationTime,
 			})
 		}
 	}
-	appendEvidence(report.SupportingEvidence)
-	appendEvidence(report.RefutingEvidence)
-	appendEvidence(report.NeutralEvidence)
+	appendEvidence(evidence)
 	return items
 }
 

@@ -326,6 +326,7 @@ aiops:
     temperature: 0.8
     max_tokens: 4096
     evidence_max_chars: 8192
+    evidence_max_items: 12
     session_max_steps: 5
     max_retrieval_steps: 3
     call_timeout_ms: 30000

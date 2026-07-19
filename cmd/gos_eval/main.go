@@ -1096,6 +1096,7 @@ func buildGoSEngineFromConfig(cfg *gos_engine.Config, evalProfile bool, recorded
 		ToolNames:           toolNames,
 		MaxRetrievalSteps:   3,
 		EvidenceMaxChars:    cfg.EvidenceMaxChars,
+		EvidenceMaxItems:    cfg.EvidenceMaxItems,
 		RAGQueryFunc:        ragFunc,
 		GenerateContentFunc: contentFunc,
 		CallTimeout:         time.Duration(cfg.CallTimeoutMs) * time.Millisecond,

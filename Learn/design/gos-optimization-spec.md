@@ -381,12 +381,14 @@ Engine 的结果 metadata 和最终 `observability` Trace 事件均包含 ingest
 
 1. [x] **P0 评测可信度**：原因/实体分离、标签污染测试、压缩 recorded 证据计数、逐 case 原子 checkpoint、身份漂移拒绝、离线重评分 provenance、LLM 调用和磁盘阈值预算。
 2. [x] **P1 证据优先初始化**：`Run` 已在 ingest 前复用 `PlannedExpertAgent` 执行一次受预算、只读、case-scoped 的 evidence bootstrap；只允许显式只读工具，获得第一条来源明确的证据即停止。代码固定 observation 的 source ID，模型只能生成候选，不能伪造 provenance；取证为空或证据化 structured ingest 失败时保持空图并返回 degraded，不再落入“资源耗尽”等固定候选。生产配置与 GoS 总开关仍保持关闭。
-3. [ ] **P2 证据原子化**：当前每例最终只有 1 个 RAG evidence node，整份 metric/log/trace snapshot 被压成单一 snippet，无法分别绑定实体、时间、relation 与 hypothesis。应将每个来源信号映射为独立 evidence/observation，并保留 `artifact_ref`；报告截断只影响展示，不得破坏 evaluator 和图中的完整证据。
+3. [x] **P2 证据原子化**：Tool/RAG 输出已按 metric/log/trace/alert/RAG 文档拆成独立 evidence；evidence 与初始化 observation 均保留 `signal_type`、实体、观测时间和 `artifact_ref`，evidence 另保留 relation 与目标 hypothesis。`evidence_max_items` 集中限制单次取证原子数并优先覆盖不同信号类型；报告只在 Markdown 展示层截断 snippet 和限制条数，图与 evaluator 继续使用完整原子证据。
 4. [ ] **P3 结构化判断可靠性**：修复 `structured_assessment_invalid`、10 秒模型超时与重试放大；分别统计 decision/content/evidence-assessment 的失败率。只有 schema-valid 的 support/refute 才进入图，失败继续 degraded，不能降级为无来源的确定性结论。
 5. [ ] **P4 development 复测**：只在已消费的 v1–v4 development 数据上调试 P1–P3，使用同一严格 matcher，要求根因准确率、证据 coverage 和降级率同时改善；不得根据 v5 标签逐 case 打补丁。
 6. [ ] **P5 新 holdout 与生产门禁**：v1–v5 共 120 个 AIOps2025 case 已全部被本项目使用，v5 从本轮起不再算“未见 holdout”。生产准入需要新来源的至少 100 个独立 case，并尽量保证每个主要故障类型不少于 20 个；随后再做同规模 Plan baseline、shadow run 和灰度。没有新 holdout 前保持 GoS 开关关闭。
 
 P1 development 证据（2026-07-19）：在已消费的 v1 `recorded_blind` case `50bce1c4-311` 上，第一次真实模型 smoke 的 bootstrap 已完成 1 次只读 Tool 调用，但 structured ingest 在 30 秒边界超时，系统保持空图并以 `evidence_bootstrap_ingest_failed` 降级，未生成泛化候选。相同 case 的第二次独立重跑完成了 evidence-first ingest：从旧链路的 0 observation + 3 个固定规则候选变为 1 个受信 observation + 4 个证据驱动候选，最终候选不再固定为“资源耗尽”。该例仍因后续 `structured_assessment_invalid`、模型超时和 `no_progress_loop` 降级，耗时 133.60 秒、15 次计数内 LLM 调用、1 次 Tool、4 次 RAG；它只证明 P1 顺序和失败边界生效，不证明根因准确率提升。临时可复核 artifact 位于 `/private/tmp/opscaptain-gos-p1-dev-smoke-retry-20260719/run.json`，不纳入版本库；后续严格按 P2、P3 继续。
+
+P2 development 证据（2026-07-19）：复用同一已消费 case `50bce1c4-311` 执行真实模型 smoke，structured ingest 写入 2 个带来源 observation；专家单次取证输出从整份 snapshot 的 1 条证据变为最多 12 条原子证据，实际最终 evaluator 收到 12 条（11 metric、1 log），报告按配置只展示 8 条但未裁剪 evaluator 的完整 snippet。运行保持 `degraded`，失败阶段仍为 report，耗时约 120.08 秒、13 次 LLM、1 次 Tool、4 次 RAG；其中仍出现 `structured_assessment_invalid` 和模型超时，明确留给 P3，不将 P2 的结构闭环误报为诊断准确率提升。临时 artifact 位于 `/private/tmp/opscaptain-gos-p2-dev-smoke-20260719/run.json`，不纳入版本库。
 
 准入 Gate：
 

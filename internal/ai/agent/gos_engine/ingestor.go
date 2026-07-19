@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"SuperBizAgent/internal/ai/belief"
 	"SuperBizAgent/internal/ai/promptreg"
@@ -24,9 +25,13 @@ type IngestProposal struct {
 }
 
 type ObservationProposal struct {
-	Label      string `json:"label"`
-	SourceType string `json:"source_type"`
-	SourceID   string `json:"source_id"`
+	Label           string    `json:"label"`
+	SourceType      string    `json:"source_type"`
+	SourceID        string    `json:"source_id"`
+	SignalType      string    `json:"signal_type,omitempty"`
+	Entity          string    `json:"entity,omitempty"`
+	ArtifactRef     string    `json:"artifact_ref,omitempty"`
+	ObservationTime time.Time `json:"observation_time,omitempty"`
 }
 
 type HypothesisProposal struct {
@@ -45,10 +50,14 @@ type IngestOutcome struct {
 }
 
 type BootstrapEvidence struct {
-	SourceType string `json:"source_type"`
-	SourceID   string `json:"source_id"`
-	Title      string `json:"title"`
-	Snippet    string `json:"snippet"`
+	SourceType      string    `json:"source_type"`
+	SourceID        string    `json:"source_id"`
+	SignalType      string    `json:"signal_type,omitempty"`
+	Entity          string    `json:"entity,omitempty"`
+	Title           string    `json:"title"`
+	Snippet         string    `json:"snippet"`
+	ArtifactRef     string    `json:"artifact_ref,omitempty"`
+	ObservationTime time.Time `json:"observation_time,omitempty"`
 }
 
 func NewIngestor(graph *belief.BeliefGraph, logger Logger) *Ingestor {
@@ -101,15 +110,23 @@ func (i *Ingestor) IngestWithBootstrap(ctx context.Context, symptom string, evid
 			label = title + ": " + snippet
 		}
 		trustedObservations = append(trustedObservations, ObservationProposal{
-			Label:      label,
-			SourceType: "telemetry",
-			SourceID:   sourceID,
+			Label:           label,
+			SourceType:      "telemetry",
+			SourceID:        sourceID,
+			SignalType:      strings.TrimSpace(item.SignalType),
+			Entity:          strings.TrimSpace(item.Entity),
+			ArtifactRef:     strings.TrimSpace(item.ArtifactRef),
+			ObservationTime: item.ObservationTime,
 		})
 		trustedEvidence = append(trustedEvidence, BootstrapEvidence{
-			SourceType: strings.TrimSpace(item.SourceType),
-			SourceID:   sourceID,
-			Title:      title,
-			Snippet:    snippet,
+			SourceType:      strings.TrimSpace(item.SourceType),
+			SourceID:        sourceID,
+			SignalType:      strings.TrimSpace(item.SignalType),
+			Entity:          strings.TrimSpace(item.Entity),
+			Title:           title,
+			Snippet:         snippet,
+			ArtifactRef:     strings.TrimSpace(item.ArtifactRef),
+			ObservationTime: item.ObservationTime,
 		})
 	}
 
@@ -239,11 +256,24 @@ func applyIngestProposal(graph *belief.BeliefGraph, proposal IngestProposal, out
 
 	observationIDs := make([]string, 0, len(proposal.Observations))
 	for _, observation := range proposal.Observations {
-		observationID := graph.AddNodeCopy(belief.NodeSignal, strings.TrimSpace(observation.Label), 1, 0, map[string]interface{}{
+		attrs := map[string]interface{}{
 			"semantic_type": "observation",
 			"source_type":   strings.TrimSpace(observation.SourceType),
 			"source_id":     strings.TrimSpace(observation.SourceID),
-		}, nil)
+		}
+		if value := strings.TrimSpace(observation.SignalType); value != "" {
+			attrs["signal_type"] = value
+		}
+		if value := strings.TrimSpace(observation.Entity); value != "" {
+			attrs["entity"] = value
+		}
+		if value := strings.TrimSpace(observation.ArtifactRef); value != "" {
+			attrs["artifact_ref"] = value
+		}
+		if !observation.ObservationTime.IsZero() {
+			attrs["observation_time"] = observation.ObservationTime
+		}
+		observationID := graph.AddNodeCopy(belief.NodeSignal, strings.TrimSpace(observation.Label), 1, 0, attrs, nil)
 		graph.AddEdgeCopy(signalID, observationID, belief.EdgeCausal, 1, "structured_ingest_v1")
 		observationIDs = append(observationIDs, observationID)
 	}

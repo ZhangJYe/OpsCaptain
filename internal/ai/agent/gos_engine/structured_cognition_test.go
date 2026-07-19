@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"SuperBizAgent/internal/ai/agent/experts"
 	"SuperBizAgent/internal/ai/belief"
@@ -88,11 +89,16 @@ func TestStructuredIngestorUsesTrustedBootstrapEvidenceProvenance(t *testing.T) 
 }`, nil
 	})
 
+	observedAt := time.Date(2025, 6, 18, 8, 12, 0, 0, time.UTC)
 	outcome, err := ingestor.IngestWithBootstrap(context.Background(), "checkout 在故障时间窗内超时", []BootstrapEvidence{{
-		SourceType: "metric",
-		SourceID:   "metric://mysql/connections",
-		Title:      "MySQL connections",
-		Snippet:    "active connections 100/100",
+		SourceType:      "metric",
+		SourceID:        "metric://mysql/connections",
+		SignalType:      "metric",
+		Entity:          "mysql-primary",
+		Title:           "MySQL connections",
+		Snippet:         "active connections 100/100",
+		ArtifactRef:     "recorded://case-a",
+		ObservationTime: observedAt,
 	}})
 	require.NoError(t, err)
 	assert.Equal(t, "structured", outcome.Mode)
@@ -105,6 +111,10 @@ func TestStructuredIngestorUsesTrustedBootstrapEvidenceProvenance(t *testing.T) 
 		}
 		assert.Equal(t, "metric://mysql/connections", node.Attrs["source_id"])
 		assert.NotEqual(t, "invented://source", node.Attrs["source_id"])
+		assert.Equal(t, "metric", node.Attrs["signal_type"])
+		assert.Equal(t, "mysql-primary", node.Attrs["entity"])
+		assert.Equal(t, "recorded://case-a", node.Attrs["artifact_ref"])
+		assert.Equal(t, observedAt, node.Attrs["observation_time"])
 		foundTrustedObservation = true
 	}
 	assert.True(t, foundTrustedObservation)
