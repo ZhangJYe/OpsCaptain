@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"SuperBizAgent/internal/ai/protocol"
 )
@@ -16,6 +17,8 @@ type EvalCase struct {
 	Symptom                  string   `json:"symptom"`
 	GroundTruth              string   `json:"ground_truth"`
 	ExpectedKeywords         []string `json:"expected_keywords,omitempty"`
+	ExpectedCauseKeywords    []string `json:"expected_cause_keywords,omitempty"`
+	ExpectedEntityKeywords   []string `json:"expected_entity_keywords,omitempty"`
 	ExpectedEvidenceKeywords []string `json:"expected_evidence_keywords,omitempty"`
 	ExpectedStatus           string   `json:"expected_status,omitempty"`
 	ExpectedFailurePhase     string   `json:"expected_failure_phase,omitempty"`
@@ -265,6 +268,38 @@ func MatchPrediction(prediction, groundTruth string, expectedKeywords []string) 
 
 	threshold := float64(matched) / float64(len(gtKeywords))
 	return threshold >= 0.5
+}
+
+func MatchCasePrediction(prediction string, evalCase EvalCase) bool {
+	if len(evalCase.ExpectedCauseKeywords) == 0 && len(evalCase.ExpectedEntityKeywords) == 0 {
+		return MatchPrediction(prediction, evalCase.GroundTruth, evalCase.ExpectedKeywords)
+	}
+	if len(evalCase.ExpectedCauseKeywords) == 0 || len(evalCase.ExpectedEntityKeywords) == 0 {
+		return false
+	}
+	normalizedPrediction := normalizeMatchText(prediction)
+	return containsAnyNormalized(normalizedPrediction, evalCase.ExpectedCauseKeywords) &&
+		containsAnyNormalized(normalizedPrediction, evalCase.ExpectedEntityKeywords)
+}
+
+func containsAnyNormalized(normalizedText string, values []string) bool {
+	for _, value := range values {
+		normalized := normalizeMatchText(value)
+		if normalized != "" && strings.Contains(normalizedText, normalized) {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeMatchText(value string) string {
+	var builder strings.Builder
+	for _, r := range strings.ToLower(value) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			builder.WriteRune(r)
+		}
+	}
+	return builder.String()
 }
 
 func extractKeywords(s string) []string {

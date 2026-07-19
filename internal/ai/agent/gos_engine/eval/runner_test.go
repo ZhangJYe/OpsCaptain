@@ -206,6 +206,24 @@ func TestMatchPrediction(t *testing.T) {
 	}
 }
 
+func TestMatchCasePredictionRequiresCauseAndEntityForStructuredContract(t *testing.T) {
+	evalCase := EvalCase{
+		GroundTruth:            "code error; affected entity cartservice; database error",
+		ExpectedKeywords:       []string{"cartservice", "code error"},
+		ExpectedCauseKeywords:  []string{"code error", "database error", "代码错误", "数据库错误"},
+		ExpectedEntityKeywords: []string{"cartservice"},
+	}
+
+	assert.False(t, MatchCasePrediction(
+		"磁盘 I/O 饱和导致 CartService 写入失败",
+		evalCase,
+	))
+	assert.True(t, MatchCasePrediction(
+		"CartService 出现数据库错误，根因是代码异常",
+		evalCase,
+	))
+}
+
 func TestCheckGate(t *testing.T) {
 	baseline := &EvalMetrics{
 		Accuracy:          0.8,
@@ -528,6 +546,8 @@ func TestFailurePhaseAttribution(t *testing.T) {
 		backtrack  bool
 		expected   string
 	}{
+		{name: "bootstrap collection", result: &protocol.TaskResult{Metadata: map[string]any{"error_phase": "evidence_bootstrap_failed"}}, expected: "ingest"},
+		{name: "bootstrap ingest", result: &protocol.TaskResult{Metadata: map[string]any{"error_phase": "evidence_bootstrap_ingest_failed"}}, expected: "ingest"},
 		{name: "explicit act", result: &protocol.TaskResult{Metadata: map[string]any{"error_phase": "act_failed"}}, expected: "act"},
 		{name: "invalid graph", result: &protocol.TaskResult{}, matched: true, expected: "update"},
 		{name: "missing state transition", result: &protocol.TaskResult{}, evalCase: EvalCase{RequireBacktrack: true}, matched: true, evidence: 1, graphValid: true, expected: "state"},
@@ -627,6 +647,22 @@ func TestDiagnosticEvidenceItemsKeepsPrometheusAlertToolOutput(t *testing.T) {
 	got := diagnosticEvidenceItems(evidence)
 	require.Len(t, got, 1)
 	assert.Equal(t, evidence[0].SourceID, got[0].SourceID)
+}
+
+func TestDiagnosticEvidenceItemsParsesCompactedRecordedReportSnippet(t *testing.T) {
+	evidence := []protocol.EvidenceItem{{
+		SourceType: "rag",
+		SourceID:   "rag-a",
+		Title:      "RAG retrieval",
+		Snippet:    "# Telemetry Evidence Case - case_id: case-a ## Metric Signals - pod_cpu_usage score=9 ## Log Signals - timeout while dialing ## Trace Signals - checkoutservice latency",
+	}}
+
+	got := diagnosticEvidenceItems(evidence)
+	require.Len(t, got, 3)
+	assert.Equal(t, "recorded_metric", got[0].SourceType)
+	assert.Contains(t, got[0].Snippet, "pod_cpu_usage")
+	assert.Equal(t, "recorded_log", got[1].SourceType)
+	assert.Equal(t, "recorded_trace", got[2].SourceType)
 }
 
 func TestCaseRunnerBuildsAnIsolatedEnginePerCase(t *testing.T) {

@@ -39,11 +39,32 @@ func TestValidateModeDatasetIsolation(t *testing.T) {
 	assert.NoError(t, ValidateModeDataset("baseline", "recorded", development))
 	assert.NoError(t, ValidateModeDataset("compare", "recorded", development))
 	assert.NoError(t, ValidateModeDataset("gos", "recorded", holdout))
+	assert.NoError(t, ValidateModeDataset("gos-batch", "recorded", holdout))
 	assert.NoError(t, ValidateModeDataset("gate", "eval", regression))
 	assert.Error(t, ValidateModeDataset("gate", "eval", holdout))
 	assert.Error(t, ValidateModeDataset("gos", "eval", holdout))
 	assert.Error(t, ValidateModeDataset("compare", "eval", holdout))
 	assert.Error(t, ValidateModeDataset("compare", "real", development))
+}
+
+func TestValidateModeDatasetRejectsWeakRecordedMatcher(t *testing.T) {
+	dataset := &EvalDataset{
+		SchemaVersion: DatasetSchemaVersion,
+		Role:          DatasetRoleHoldout,
+		Cases: []EvalCase{{
+			ID:               "recorded-case",
+			Domain:           "service",
+			Scenario:         "recorded_blind_root_cause",
+			Symptom:          "analyze this incident window",
+			GroundTruth:      "dns error; affected entity checkoutservice",
+			ExpectedKeywords: []string{"dns error", "checkoutservice"},
+		}},
+	}
+
+	assert.ErrorContains(t, ValidateModeDataset("gos-batch", "recorded", dataset), "structured cause and entity")
+	dataset.Cases[0].ExpectedCauseKeywords = []string{"dns error"}
+	dataset.Cases[0].ExpectedEntityKeywords = []string{"checkoutservice"}
+	assert.NoError(t, ValidateModeDataset("gos-batch", "recorded", dataset))
 }
 
 func TestValidateCorpusRejectsOverlap(t *testing.T) {

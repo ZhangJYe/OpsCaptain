@@ -34,20 +34,23 @@ type ActResult struct {
 }
 
 type RunStats struct {
-	LLMCalls         int
-	ToolCalls        int
-	RAGCalls         int
-	Steps            int
-	ExpertDegraded   int
-	ExpertFailed     int
-	NoProgressRounds int
-	RemainingBudget  PlanBudgetConfig
-	PhaseLatencyMs   map[string]int64
-	FrontierChanges  int
-	BacktrackCount   int
-	NewEvidenceCount int
-	ConfidenceDelta  float64
-	Graph            belief.GraphResourceStats
+	LLMCalls          int
+	ToolCalls         int
+	RAGCalls          int
+	Steps             int
+	ExpertDegraded    int
+	ExpertFailed      int
+	NoProgressRounds  int
+	RemainingBudget   PlanBudgetConfig
+	PhaseLatencyMs    map[string]int64
+	FrontierChanges   int
+	BacktrackCount    int
+	NewEvidenceCount  int
+	ConfidenceDelta   float64
+	Graph             belief.GraphResourceStats
+	BootstrapStatus   string
+	BootstrapReason   string
+	BootstrapEvidence int
 }
 
 func NewGoSEngine(cfg *Config, logger Logger) *GoSEngine {
@@ -115,22 +118,59 @@ func (e *GoSEngine) Run(ctx context.Context, symptom string) (result *protocol.T
 	planningHistory.RemainingBudget = scalePlanBudget(e.cfg.StructuredCognition.PlanBudget, sessionBudgetFactor)
 	stats.RemainingBudget = planningHistory.RemainingBudget
 	noProgressRounds := 0
+	var bootstrapEvidence []BootstrapEvidence
+	if e.cfg.EvidenceBootstrap.Enabled {
+		e.emit(ctx, "evidence_bootstrap", "在生成候选假设前收集只读证据", map[string]any{
+			"expert_name": e.cfg.EvidenceBootstrap.ExpertName,
+		})
+		phaseStartedAt := time.Now()
+		analysis, evidence, bootstrapErr := e.bootstrapEvidence(ctx, symptom)
+		stats.addPhaseLatency("evidence_bootstrap", time.Since(phaseStartedAt))
+		if analysis != nil {
+			stats.LLMCalls += analysis.LLMCalls
+			stats.ToolCalls += analysis.ToolCalls
+			stats.RAGCalls += analysis.RAGCalls
+			stats.BootstrapStatus = analysis.Status
+			stats.BootstrapReason = analysis.DegradationReason
+			if analysis.Status == "degraded" {
+				stats.ExpertDegraded++
+			} else if analysis.Status == "failed" {
+				stats.ExpertFailed++
+			}
+		}
+		stats.BootstrapEvidence = len(evidence)
+		if bootstrapErr != nil {
+			stats.BootstrapReason = bootstrapErr.Error()
+			return e.degradedResult(graph, fsm, startedAt, stats, "evidence_bootstrap_failed", bootstrapErr, nil, false)
+		}
+		bootstrapEvidence = evidence
+		e.emit(ctx, "evidence_bootstrap_done", fmt.Sprintf("已获得 %d 条只读证据", len(evidence)), map[string]any{
+			"evidence_count": len(evidence),
+			"status":         stats.BootstrapStatus,
+			"reason":         stats.BootstrapReason,
+		})
+	}
 
 	e.emit(ctx, "ingest", "解析症状并建立候选假设", nil)
 	phaseStartedAt := time.Now()
-	ingestOutcome, err := e.ingest(ctx, graph, symptom)
+	ingestOutcome, err := e.ingest(ctx, graph, symptom, bootstrapEvidence)
 	stats.addPhaseLatency("ingest", time.Since(phaseStartedAt))
 	stats.LLMCalls += ingestOutcome.LLMCalls
 	if err != nil {
-		return e.degradedResult(graph, fsm, startedAt, stats, graphFailureReason("ingest_failed", err), err, nil, false)
+		reason := "ingest_failed"
+		if len(bootstrapEvidence) > 0 {
+			reason = "evidence_bootstrap_ingest_failed"
+		}
+		return e.degradedResult(graph, fsm, startedAt, stats, graphFailureReason(reason, err), err, nil, false)
 	}
 	stats.observeGraph(graph)
 	e.emit(ctx, "ingest_done", fmt.Sprintf("已抽取 %d 个候选节点", len(graph.Nodes)), map[string]any{
-		"node_count":        len(graph.Nodes),
-		"observation_count": ingestOutcome.ObservationCount,
-		"hypothesis_count":  ingestOutcome.HypothesisCount,
-		"mode":              ingestOutcome.Mode,
-		"fallback_reason":   ingestOutcome.FallbackReason,
+		"node_count":               len(graph.Nodes),
+		"observation_count":        ingestOutcome.ObservationCount,
+		"hypothesis_count":         ingestOutcome.HypothesisCount,
+		"mode":                     ingestOutcome.Mode,
+		"fallback_reason":          ingestOutcome.FallbackReason,
+		"bootstrap_evidence_count": len(bootstrapEvidence),
 	})
 
 	for {
@@ -372,9 +412,95 @@ func (p graphProgress) progressedFrom(before graphProgress) bool {
 		p.refutes != before.refutes
 }
 
-func (e *GoSEngine) ingest(ctx context.Context, graph *belief.BeliefGraph, symptom string) (IngestOutcome, error) {
+func (e *GoSEngine) ingest(ctx context.Context, graph *belief.BeliefGraph, symptom string, evidence []BootstrapEvidence) (IngestOutcome, error) {
 	ingestor := NewStructuredIngestor(graph, e.cfg, e.logger, e.structuredGenerate)
-	return ingestor.IngestWithOutcome(ctx, symptom)
+	return ingestor.IngestWithBootstrap(ctx, symptom, evidence)
+}
+
+func (e *GoSEngine) bootstrapEvidence(ctx context.Context, symptom string) (*experts.ExpertAnalysis, []BootstrapEvidence, error) {
+	expertName := strings.TrimSpace(e.cfg.EvidenceBootstrap.ExpertName)
+	agent, ok := e.experts[expertName]
+	if !ok {
+		return nil, nil, fmt.Errorf("bootstrap expert %q is not registered", expertName)
+	}
+	planned, ok := agent.(experts.PlannedExpertAgent)
+	if !ok {
+		return nil, nil, fmt.Errorf("bootstrap expert %q does not support budgeted execution", expertName)
+	}
+
+	bootstrapGraph := belief.NewBeliefGraphWithPolicy(e.cfg.ToGraphPolicy())
+	bootstrapGraph.StartSignalID = bootstrapGraph.AddSignal(strings.TrimSpace(symptom))
+	frontier := &belief.Frontier{
+		NodeID: bootstrapGraph.StartSignalID,
+		Label:  strings.TrimSpace(symptom),
+		Why:    "在生成根因候选前收集与当前故障时间窗一致的只读证据",
+		Score:  1,
+	}
+	analysis := planned.RunPlanned(ctx, experts.ExpertTask{
+		Frontier:          frontier,
+		Graph:             bootstrapGraph,
+		ExpectedEvidence:  []string{"当前故障时间窗内的日志、指标、告警或检索证据"},
+		AllowedTools:      append([]string(nil), e.cfg.EvidenceBootstrap.AllowedTools...),
+		StopConditions:    []string{"获得至少一条带来源的只读证据"},
+		Budget:            toExpertExecutionBudget(e.cfg.EvidenceBootstrap.Budget),
+		StopAfterEvidence: true,
+	})
+	if analysis == nil {
+		return nil, nil, fmt.Errorf("bootstrap expert %q returned nil analysis", expertName)
+	}
+
+	limit := e.cfg.EvidenceBootstrap.MaxEvidenceItems
+	evidence := make([]BootstrapEvidence, 0, min(limit, len(analysis.Evidence)))
+	seen := make(map[string]struct{}, len(analysis.Evidence))
+	for _, item := range analysis.Evidence {
+		sourceID := strings.TrimSpace(item.SourceID)
+		snippet := truncateBootstrapText(item.Snippet, e.cfg.EvidenceBootstrap.EvidenceSnippetMaxChars)
+		if sourceID == "" || snippet == "" {
+			continue
+		}
+		if _, exists := seen[sourceID]; exists {
+			continue
+		}
+		seen[sourceID] = struct{}{}
+		evidence = append(evidence, BootstrapEvidence{
+			SourceType: strings.TrimSpace(item.SourceType),
+			SourceID:   sourceID,
+			Title:      truncateBootstrapText(item.Title, 256),
+			Snippet:    snippet,
+		})
+		if len(evidence) >= limit {
+			break
+		}
+	}
+	if len(evidence) == 0 {
+		reason := strings.TrimSpace(analysis.DegradationReason)
+		if reason == "" {
+			reason = "no source-backed evidence returned"
+		}
+		return analysis, nil, fmt.Errorf("bootstrap expert %q: %s", expertName, reason)
+	}
+	return analysis, evidence, nil
+}
+
+func isReadOnlyBootstrapTool(toolName string) bool {
+	switch strings.TrimSpace(toolName) {
+	case "query_logs", "query_prometheus_instant", "query_prometheus_alerts", "query_internal_docs", "query_recorded_telemetry":
+		return true
+	default:
+		return false
+	}
+}
+
+func truncateBootstrapText(value string, maxChars int) string {
+	value = strings.TrimSpace(value)
+	if maxChars <= 0 {
+		return ""
+	}
+	runes := []rune(value)
+	if len(runes) <= maxChars {
+		return value
+	}
+	return string(runes[:maxChars])
 }
 
 func (e *GoSEngine) plan(ctx context.Context, graph *belief.BeliefGraph, frontier *belief.Frontier, history *PlanningHistory) (PlanOutcome, error) {

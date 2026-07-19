@@ -3,6 +3,7 @@ package gos_engine
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"SuperBizAgent/internal/ai/belief"
 )
@@ -23,6 +24,7 @@ type Config struct {
 	Confidence          ConfidenceConfig          `yaml:"confidence"`
 	Graph               GraphConfig               `yaml:"graph"`
 	StateConversion     StateConversionConfig     `yaml:"state_conversion"`
+	EvidenceBootstrap   EvidenceBootstrapConfig   `yaml:"evidence_bootstrap"`
 	StructuredCognition StructuredCognitionConfig `yaml:"structured_cognition"`
 	Execution           ExecutionConfig           `yaml:"execution"`
 	Report              ReportConfig              `yaml:"report"`
@@ -59,6 +61,15 @@ type StateConversionConfig struct {
 	MaxDepth        int              `yaml:"max_depth"`
 	TieEpsilon      float64          `yaml:"tie_epsilon"`
 	RefinementRules []RefinementRule `yaml:"refinement_rules"`
+}
+
+type EvidenceBootstrapConfig struct {
+	Enabled                 bool             `yaml:"enabled" json:"enabled"`
+	ExpertName              string           `yaml:"expert_name" json:"expert_name"`
+	AllowedTools            []string         `yaml:"allowed_tools" json:"allowed_tools"`
+	MaxEvidenceItems        int              `yaml:"max_evidence_items" json:"max_evidence_items"`
+	EvidenceSnippetMaxChars int              `yaml:"evidence_snippet_max_chars" json:"evidence_snippet_max_chars"`
+	Budget                  PlanBudgetConfig `yaml:"budget" json:"budget"`
 }
 
 type StructuredCognitionConfig struct {
@@ -171,6 +182,21 @@ func DefaultConfig() *Config {
 				},
 			},
 		},
+		EvidenceBootstrap: EvidenceBootstrapConfig{
+			Enabled:                 false,
+			ExpertName:              "linux_sre",
+			AllowedTools:            []string{"query_logs", "query_prometheus_instant", "query_prometheus_alerts", "query_internal_docs"},
+			MaxEvidenceItems:        2,
+			EvidenceSnippetMaxChars: 2048,
+			Budget: PlanBudgetConfig{
+				LLMCalls:          2,
+				ToolCalls:         1,
+				RAGCalls:          1,
+				TimeoutMs:         10000,
+				MaxRetrievalSteps: 1,
+				MaxOutputTokens:   512,
+			},
+		},
 		StructuredCognition: StructuredCognitionConfig{
 			Enabled:         false,
 			CallTimeoutMs:   30000,
@@ -264,6 +290,26 @@ func (c *Config) ValidateGraphConfig() error {
 	}
 	if c.StateConversion.Enabled && c.Graph.MaxDepth < c.StateConversion.MaxDepth {
 		return fmt.Errorf("aiops.gos.graph.max_depth must be >= state_conversion.max_depth")
+	}
+	if c.EvidenceBootstrap.Enabled {
+		if !c.StructuredCognition.Enabled {
+			return fmt.Errorf("aiops.gos.structured_cognition.enabled must be true when evidence_bootstrap is enabled")
+		}
+		if strings.TrimSpace(c.EvidenceBootstrap.ExpertName) == "" {
+			return fmt.Errorf("aiops.gos.evidence_bootstrap.expert_name is required")
+		}
+		if c.EvidenceBootstrap.MaxEvidenceItems <= 0 || c.EvidenceBootstrap.EvidenceSnippetMaxChars <= 0 {
+			return fmt.Errorf("aiops.gos.evidence_bootstrap evidence limits must be positive")
+		}
+		budget := c.EvidenceBootstrap.Budget
+		if budget.LLMCalls <= 0 || budget.ToolCalls <= 0 || budget.RAGCalls <= 0 || budget.TimeoutMs <= 0 || budget.MaxRetrievalSteps <= 0 || budget.MaxOutputTokens <= 0 {
+			return fmt.Errorf("aiops.gos.evidence_bootstrap budget values must be positive")
+		}
+		for _, toolName := range c.EvidenceBootstrap.AllowedTools {
+			if !isReadOnlyBootstrapTool(toolName) {
+				return fmt.Errorf("aiops.gos.evidence_bootstrap tool %q is not read-only", toolName)
+			}
+		}
 	}
 	return nil
 }

@@ -167,9 +167,11 @@ def build_gos_eval_dataset(
         symptom = str(inputs[case_id].get("Anomaly Description", "")).strip()
         if not symptom:
             raise ValueError(f"missing anomaly description for case {case_id}")
-        expected_keywords = diagnosis_keywords(label)
+        entity_keywords = diagnosis_entity_keywords(label)
+        cause_keywords = diagnosis_cause_keywords(label)
+        expected_keywords = unique_non_empty([*entity_keywords, str(label.get("fault_type", "")).strip()])
         evidence_keywords = evidence_contract_keywords(label)
-        affected = expected_keywords[0] if expected_keywords else "unknown"
+        affected = entity_keywords[0] if entity_keywords else "unknown"
         fault_type = str(label.get("fault_type", "unknown fault")).strip()
         descriptions = [str(item).strip() for item in label.get("fault_description", []) if str(item).strip()]
         ground_truth = f"{fault_type}; affected entity {affected}"
@@ -183,6 +185,8 @@ def build_gos_eval_dataset(
                 "symptom": symptom,
                 "ground_truth": ground_truth,
                 "expected_keywords": expected_keywords,
+                "expected_cause_keywords": cause_keywords,
+                "expected_entity_keywords": entity_keywords,
                 "expected_evidence_keywords": evidence_keywords,
                 "expected_status": "succeeded",
                 "notes": "AIOps2025 recorded_blind; labels are evaluator-only and never passed to the agent.",
@@ -199,14 +203,33 @@ def build_gos_eval_dataset(
     }
 
 
-def diagnosis_keywords(label: dict[str, Any]) -> list[str]:
+def diagnosis_entity_keywords(label: dict[str, Any]) -> list[str]:
     instances = label.get("instance", [])
     if isinstance(instances, str):
         instances = [instances]
     values = [label.get("service", "")]
     values.extend(instances)
-    values.append(label.get("fault_type", ""))
     return unique_non_empty(str(value).strip() for value in values)
+
+
+CAUSE_ALIASES = {
+    "code error": ["database error", "代码错误", "代码异常", "程序错误", "方法错误", "数据库错误"],
+    "pod failure": ["pod crash", "pod崩溃", "容器崩溃"],
+    "io fault": ["i/o fault", "磁盘io", "磁盘i/o", "io异常", "i/o异常"],
+    "node memory stress": ["node memory exhaustion", "节点内存压力", "节点内存耗尽"],
+    "target port misconfig": ["目标端口配置错误", "端口配置错误"],
+    "network corrupt": ["packet corruption", "网络损坏", "数据包损坏"],
+    "dns error": ["dns错误", "dns异常", "域名解析错误"],
+    "network delay": ["high network latency", "网络延迟"],
+    "network loss": ["packet loss", "网络丢包", "丢包"],
+    "node cpu stress": ["node cpu overload", "节点cpu压力", "节点cpu过载"],
+}
+
+
+def diagnosis_cause_keywords(label: dict[str, Any]) -> list[str]:
+    fault_type = str(label.get("fault_type", "")).strip()
+    aliases = CAUSE_ALIASES.get(fault_type.lower(), [])
+    return unique_non_empty([fault_type, *aliases])
 
 
 def evidence_contract_keywords(label: dict[str, Any]) -> list[str]:

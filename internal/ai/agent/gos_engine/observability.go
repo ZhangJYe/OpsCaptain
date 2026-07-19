@@ -103,7 +103,12 @@ func (e *GoSEngine) finalizeResult(result *protocol.TaskResult, graph *belief.Be
 		"backtrack_count":    stats.BacktrackCount,
 		"new_evidence_count": stats.NewEvidenceCount,
 		"confidence_delta":   stats.ConfidenceDelta,
-		"graph":              stats.Graph,
+		"evidence_bootstrap": map[string]any{
+			"status":         stats.BootstrapStatus,
+			"reason":         stats.BootstrapReason,
+			"evidence_count": stats.BootstrapEvidence,
+		},
+		"graph": stats.Graph,
 		"calls": map[string]int{
 			"llm":  stats.LLMCalls,
 			"tool": stats.ToolCalls,
@@ -124,6 +129,11 @@ func (e *GoSEngine) finalizeResult(result *protocol.TaskResult, graph *belief.Be
 	result.Metadata["backtrack_count"] = stats.BacktrackCount
 	result.Metadata["new_evidence_count"] = stats.NewEvidenceCount
 	result.Metadata["confidence_delta"] = stats.ConfidenceDelta
+	result.Metadata["evidence_bootstrap"] = map[string]any{
+		"status":         stats.BootstrapStatus,
+		"reason":         stats.BootstrapReason,
+		"evidence_count": stats.BootstrapEvidence,
+	}
 	result.Metadata["graph_resource_stats"] = stats.Graph
 	e.emit(context.Background(), "observability", "GoS 运行指标", map[string]any{
 		"status":             result.Status,
@@ -196,6 +206,7 @@ func (e *GoSEngine) configVersion() string {
 		Confidence          ConfidenceConfig
 		Graph               GraphConfig
 		StateConversion     StateConversionConfig
+		EvidenceBootstrap   EvidenceBootstrapConfig
 		StructuredCognition StructuredCognitionConfig
 		Execution           ExecutionConfig
 		Report              ReportConfig
@@ -214,6 +225,7 @@ func (e *GoSEngine) configVersion() string {
 		Confidence:          e.cfg.Confidence,
 		Graph:               e.cfg.Graph,
 		StateConversion:     e.cfg.StateConversion,
+		EvidenceBootstrap:   e.cfg.EvidenceBootstrap,
 		StructuredCognition: e.cfg.StructuredCognition,
 		Execution:           e.cfg.Execution,
 		Report:              e.cfg.Report,

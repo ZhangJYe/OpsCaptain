@@ -262,6 +262,7 @@ func TestValidateRealDependencyConfigReportsAllMissingInputs(t *testing.T) {
 
 	require.Error(t, err)
 	require.ErrorContains(t, err, "chat_model.api_key")
+	require.ErrorContains(t, err, "chat_model_fast.api_key")
 	require.ErrorContains(t, err, "embedding_model.api_key")
 	require.ErrorContains(t, err, "MCP_LOG_URL or MCP_LOG_HTTP_URL")
 }
@@ -269,6 +270,7 @@ func TestValidateRealDependencyConfigReportsAllMissingInputs(t *testing.T) {
 func TestValidateRealDependencyConfigAcceptsResolvedInputs(t *testing.T) {
 	err := validateRealDependencyConfig(realDependencyConfig{
 		ChatModel:        common.AIModelConfig{Provider: "deepseek", APIKey: "test-deepseek-key"},
+		ChatModelFast:    common.AIModelConfig{Provider: "deepseek", APIKey: "test-fast-key"},
 		EmbeddingModel:   common.AIModelConfig{Provider: "doubao", APIKey: "test-ark-key"},
 		MCPLogHTTPURL:    "http://log-service/tools/query_logs",
 		MilvusAddress:    "localhost:19530",
@@ -281,6 +283,7 @@ func TestValidateRealDependencyConfigAcceptsResolvedInputs(t *testing.T) {
 func TestValidateRealDependencyConfigRejectsPlaceholders(t *testing.T) {
 	err := validateRealDependencyConfig(realDependencyConfig{
 		ChatModel:        common.AIModelConfig{Provider: "deepseek", APIKey: "your-deepseek-api-key"},
+		ChatModelFast:    common.AIModelConfig{Provider: "deepseek", APIKey: "your-fast-key"},
 		EmbeddingModel:   common.AIModelConfig{Provider: "doubao", APIKey: "replace-with-your-ark-key"},
 		MCPLogURL:        "${MCP_LOG_URL}",
 		MilvusAddress:    "localhost:19530",
@@ -289,6 +292,7 @@ func TestValidateRealDependencyConfigRejectsPlaceholders(t *testing.T) {
 
 	require.Error(t, err)
 	require.ErrorContains(t, err, "chat_model.api_key")
+	require.ErrorContains(t, err, "chat_model_fast.api_key")
 	require.ErrorContains(t, err, "embedding_model.api_key")
 	require.ErrorContains(t, err, "MCP_LOG_URL or MCP_LOG_HTTP_URL")
 }
@@ -296,7 +300,10 @@ func TestValidateRealDependencyConfigRejectsPlaceholders(t *testing.T) {
 func TestRequiresRealDependencies(t *testing.T) {
 	require.True(t, requiresRealDependencies("baseline", "eval"))
 	require.False(t, requiresRealDependencies("baseline", "recorded"))
+	require.True(t, requiresRealDependencies("baseline-batch", "real"))
+	require.False(t, requiresRealDependencies("baseline-batch", "recorded"))
 	require.True(t, requiresRealDependencies("gos", "real"))
+	require.True(t, requiresRealDependencies("gos-batch", "real"))
 	require.True(t, requiresRealDependencies("compare", "real"))
 	require.True(t, requiresRealDependencies("export-runs", "real"))
 	require.False(t, requiresRealDependencies("gos", "eval"))
@@ -307,6 +314,7 @@ func TestRequiresRealDependencies(t *testing.T) {
 func TestRequiresVerifiedTelemetry(t *testing.T) {
 	require.False(t, requiresVerifiedTelemetry("baseline", "eval"))
 	require.False(t, requiresVerifiedTelemetry("baseline", "recorded"))
+	require.True(t, requiresVerifiedTelemetry("baseline-batch", "real"))
 	require.True(t, requiresVerifiedTelemetry("compare", "real"))
 	require.False(t, requiresVerifiedTelemetry("gos", "real"))
 	require.False(t, requiresVerifiedTelemetry("export-runs", "real"))
@@ -314,19 +322,25 @@ func TestRequiresVerifiedTelemetry(t *testing.T) {
 }
 
 func TestRecordedProfileIsRestrictedToCaseScopedEvaluationModes(t *testing.T) {
-	for _, mode := range []string{"gos", "baseline", "compare"} {
+	for _, mode := range []string{"gos", "gos-batch", "baseline", "baseline-batch", "compare"} {
 		require.NoError(t, validateProfileForMode(mode, "recorded"))
 	}
 	require.Error(t, validateProfileForMode("export-runs", "recorded"))
 	require.Error(t, validateProfileForMode("gate", "unknown"))
 }
 
-func TestValidateRecordedDependencyConfigOnlyRequiresRealChatModel(t *testing.T) {
+func TestValidateRecordedDependencyConfigRequiresBothChatModels(t *testing.T) {
 	require.NoError(t, validateRecordedDependencyConfig(realDependencyConfig{
-		ChatModel: common.AIModelConfig{Provider: "deepseek", APIKey: "test-key"},
+		ChatModel:     common.AIModelConfig{Provider: "deepseek", APIKey: "test-key"},
+		ChatModelFast: common.AIModelConfig{Provider: "deepseek", APIKey: "test-fast-key"},
 	}))
 	require.Error(t, validateRecordedDependencyConfig(realDependencyConfig{
-		ChatModel: common.AIModelConfig{Provider: "deepseek", APIKey: "your-deepseek-key"},
+		ChatModel:     common.AIModelConfig{Provider: "deepseek", APIKey: "your-deepseek-key"},
+		ChatModelFast: common.AIModelConfig{Provider: "deepseek", APIKey: "test-fast-key"},
+	}))
+	require.Error(t, validateRecordedDependencyConfig(realDependencyConfig{
+		ChatModel:     common.AIModelConfig{Provider: "deepseek", APIKey: "test-key"},
+		ChatModelFast: common.AIModelConfig{Provider: "deepseek", APIKey: "your-fast-key"},
 	}))
 }
 

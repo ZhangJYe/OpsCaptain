@@ -345,6 +345,13 @@ aiops:
       max_depth: 4
       max_snapshots: 32
       max_deltas: 10
+    evidence_bootstrap:
+      enabled: false
+      expert_name: "linux_sre"
+      allowed_tools: ["query_logs", "query_prometheus_instant", "query_prometheus_alerts", "query_internal_docs"]
+      max_evidence_items: 2
+      evidence_snippet_max_chars: 2048
+      budget: {llm_calls: 2, tool_calls: 1, rag_calls: 1, timeout_ms: 10000, max_retrieval_steps: 1, max_output_tokens: 512}
     structured_cognition:
       enabled: false
       call_timeout_ms: 30000

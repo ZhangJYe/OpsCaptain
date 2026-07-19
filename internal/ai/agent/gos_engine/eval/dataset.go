@@ -74,6 +74,9 @@ func ValidateDataset(dataset *EvalDataset) error {
 		if strings.TrimSpace(evalCase.Domain) == "" || strings.TrimSpace(evalCase.Scenario) == "" {
 			return fmt.Errorf("case %q requires domain and scenario", evalCase.ID)
 		}
+		if (len(evalCase.ExpectedCauseKeywords) == 0) != (len(evalCase.ExpectedEntityKeywords) == 0) {
+			return fmt.Errorf("case %q requires both expected_cause_keywords and expected_entity_keywords", evalCase.ID)
+		}
 		if ids[evalCase.ID] {
 			return fmt.Errorf("duplicate case id %q", evalCase.ID)
 		}
@@ -144,6 +147,14 @@ func ValidateModeDataset(mode, profile string, dataset *EvalDataset) error {
 	if err := ValidateDataset(dataset); err != nil {
 		return err
 	}
+	if profile == "recorded" {
+		for _, evalCase := range dataset.Cases {
+			if evalCase.Scenario == "recorded_blind_root_cause" &&
+				(len(evalCase.ExpectedCauseKeywords) == 0 || len(evalCase.ExpectedEntityKeywords) == 0) {
+				return fmt.Errorf("recorded case %q requires structured cause and entity labels", evalCase.ID)
+			}
+		}
+	}
 	switch mode {
 	case "gate", "smoke", "regression-baseline":
 		if dataset.Role != DatasetRoleRegression {
@@ -159,7 +170,7 @@ func ValidateModeDataset(mode, profile string, dataset *EvalDataset) error {
 		if profile != "real" && profile != "recorded" {
 			return fmt.Errorf("%s mode requires real or recorded profile", mode)
 		}
-	case "gos", "export-runs":
+	case "gos", "gos-batch", "export-runs":
 		if profile == "eval" && dataset.Role == DatasetRoleHoldout {
 			return fmt.Errorf("eval profile cannot run holdout dataset")
 		}

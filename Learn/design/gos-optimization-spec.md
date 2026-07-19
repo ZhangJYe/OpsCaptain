@@ -373,6 +373,21 @@ Engine 的结果 metadata 和最终 `observability` Trace 事件均包含 ingest
 
 2026-07-16 真实服务器只读审计证据：生产 Compose 服务、健康检查和就绪检查正常，知识集合 schema 正常且有 3,185 条记录；服务器内 DeepSeek 最小请求返回成功。当前本地代码通过临时 SSH 转发和严格只读客户端完成真实豆包 Embedding + 生产 Milvus 检索，返回 5/5 份可用文档；探针未调用数据库/集合创建或 `LoadCollection`，未输出文档内容，结束后已关闭转发并删除临时代码。在线 Prometheus 只有 backend 与自身两个健康 target，没有逐 case 故障遥测；日志 MCP 虽可访问，但抽样命中的 7 条记录全部是读取失败信息，且缺少时间戳、namespace 与 provenance，不能证明是目标 case 的真实日志。在线后端镜像版本早于当前本地 HEAD，部署目录没有当前源码或 `gos_eval`，当前 GoS dirty worktree 也未部署。评测器对 `--mode=baseline --gos-profile=real` 与 `--mode=compare --gos-profile=real` 均在模型/工具调用前以 `telemetry_profile=synthetic` 拒绝，退出码为 1 且没有生成 artifact；不得通过手工改成 `real` 绕过证据门禁。因此本轮保持前两项未勾选，阻断原因是缺少逐 case、可核验、与 ground truth 对齐的真实遥测，以及 baseline/compare 与目标运行版本不一致，而不是服务器或模型不可连接。
 
+2026-07-19 大样本 `recorded_blind` 评测证据：从 AIOps2025 剩余未使用样本中冻结 v5 holdout，共 30 个 case、19 个唯一 ground truth，覆盖 service 12、pod 14、node 4；提取阶段只使用时间窗，完成后 evaluator 才读取标签，反泄漏契约通过，30/30 证据非空。该 profile 使用真实 DeepSeek 模型和 case 隔离的录制遥测，但不是真实生产遥测，因此仍标记 `development_only`。评测过程中发现旧关键词规则只命中实体即可误判，以及 `fault_description` 中的关联实体被错误放入原因关键词；现已改为“至少命中一个原因词且至少命中一个实体词”，原因词只来自故障类型与显式同义词，并保留可审计的离线重评分来源。最终 GoS 严格命中 0/30，Wilson 95% 区间为 0%–11.35%；6 succeeded、24 degraded，降级率 80%，证据 precision 20.0%、coverage 2.15%，图有效率与 traceability 均为 100%，平均 5.57 次 LLM、2.60 次 RAG、0 次 Tool，平均延迟 25.12 秒、P95 48.34 秒，30 个 case 的失败阶段均落在 report。结果说明图和 Trace 合约可用，但诊断结论不可用，不能灰度。冻结结果见 `evals/aiops2025/recorded_holdout_v5_gos_batch_rescored.json`。
+
+同一 v5 前 10 个 case 的 Plan-Execute-Replan 成本受控对照为 2/10 严格命中（20%，Wilson 95% 区间 5.67%–50.98%），9 succeeded、1 degraded，证据 precision 43.41%、coverage 50.59%，平均 25.2 次 LLM、16 次 Tool，平均延迟 83.10 秒、P95 180.01 秒。GoS 在相同 10 个 case 为 0/10；Fisher 双侧检验 `p=0.474`，样本不足以证明架构优劣。Plan 对照只用于确认“证据可被另一链路消费”，不能替代完整同规模 baseline，也不能作为生产准入结论。冻结结果见 `evals/aiops2025/recorded_holdout_v5_plan_batch_10.json`。
+
+本轮失败链路按以下顺序修复，顺序不得颠倒：
+
+1. [x] **P0 评测可信度**：原因/实体分离、标签污染测试、压缩 recorded 证据计数、逐 case 原子 checkpoint、身份漂移拒绝、离线重评分 provenance、LLM 调用和磁盘阈值预算。
+2. [x] **P1 证据优先初始化**：`Run` 已在 ingest 前复用 `PlannedExpertAgent` 执行一次受预算、只读、case-scoped 的 evidence bootstrap；只允许显式只读工具，获得第一条来源明确的证据即停止。代码固定 observation 的 source ID，模型只能生成候选，不能伪造 provenance；取证为空或证据化 structured ingest 失败时保持空图并返回 degraded，不再落入“资源耗尽”等固定候选。生产配置与 GoS 总开关仍保持关闭。
+3. [ ] **P2 证据原子化**：当前每例最终只有 1 个 RAG evidence node，整份 metric/log/trace snapshot 被压成单一 snippet，无法分别绑定实体、时间、relation 与 hypothesis。应将每个来源信号映射为独立 evidence/observation，并保留 `artifact_ref`；报告截断只影响展示，不得破坏 evaluator 和图中的完整证据。
+4. [ ] **P3 结构化判断可靠性**：修复 `structured_assessment_invalid`、10 秒模型超时与重试放大；分别统计 decision/content/evidence-assessment 的失败率。只有 schema-valid 的 support/refute 才进入图，失败继续 degraded，不能降级为无来源的确定性结论。
+5. [ ] **P4 development 复测**：只在已消费的 v1–v4 development 数据上调试 P1–P3，使用同一严格 matcher，要求根因准确率、证据 coverage 和降级率同时改善；不得根据 v5 标签逐 case 打补丁。
+6. [ ] **P5 新 holdout 与生产门禁**：v1–v5 共 120 个 AIOps2025 case 已全部被本项目使用，v5 从本轮起不再算“未见 holdout”。生产准入需要新来源的至少 100 个独立 case，并尽量保证每个主要故障类型不少于 20 个；随后再做同规模 Plan baseline、shadow run 和灰度。没有新 holdout 前保持 GoS 开关关闭。
+
+P1 development 证据（2026-07-19）：在已消费的 v1 `recorded_blind` case `50bce1c4-311` 上，第一次真实模型 smoke 的 bootstrap 已完成 1 次只读 Tool 调用，但 structured ingest 在 30 秒边界超时，系统保持空图并以 `evidence_bootstrap_ingest_failed` 降级，未生成泛化候选。相同 case 的第二次独立重跑完成了 evidence-first ingest：从旧链路的 0 observation + 3 个固定规则候选变为 1 个受信 observation + 4 个证据驱动候选，最终候选不再固定为“资源耗尽”。该例仍因后续 `structured_assessment_invalid`、模型超时和 `no_progress_loop` 降级，耗时 133.60 秒、15 次计数内 LLM 调用、1 次 Tool、4 次 RAG；它只证明 P1 顺序和失败边界生效，不证明根因准确率提升。临时可复核 artifact 位于 `/private/tmp/opscaptain-gos-p1-dev-smoke-retry-20260719/run.json`，不纳入版本库；后续严格按 P2、P3 继续。
+
 准入 Gate：
 
 - Accuracy 不低于同版本 baseline。

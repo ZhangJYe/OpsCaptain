@@ -23,12 +23,13 @@ type PlannedExpertAgent interface {
 }
 
 type ExpertTask struct {
-	Frontier         *belief.Frontier
-	Graph            *belief.BeliefGraph
-	ExpectedEvidence []string
-	AllowedTools     []string
-	StopConditions   []string
-	Budget           ExecutionBudget
+	Frontier          *belief.Frontier
+	Graph             *belief.BeliefGraph
+	ExpectedEvidence  []string
+	AllowedTools      []string
+	StopConditions    []string
+	Budget            ExecutionBudget
+	StopAfterEvidence bool
 }
 
 type ExecutionBudget struct {

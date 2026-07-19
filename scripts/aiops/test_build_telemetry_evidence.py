@@ -168,7 +168,7 @@ class BuildTelemetryEvidenceTest(unittest.TestCase):
                         "instance": "cartservice",
                         "instance_type": "service",
                         "fault_type": "code error",
-                        "fault_description": ["database error"],
+                        "fault_description": ["database error", "cartservice"],
                         "key_metrics": ["pod_processes"],
                         "key_observations": [{"type": "log", "keyword": ["FailedPrecondition"]}],
                     }
@@ -184,6 +184,11 @@ class BuildTelemetryEvidenceTest(unittest.TestCase):
             self.assertEqual(["case-b"], [case["id"] for case in dataset["cases"]])
             self.assertNotIn("cartservice", dataset["cases"][0]["symptom"])
             self.assertEqual(["cartservice", "code error"], dataset["cases"][0]["expected_keywords"])
+            self.assertEqual(["cartservice"], dataset["cases"][0]["expected_entity_keywords"])
+            self.assertIn("code error", dataset["cases"][0]["expected_cause_keywords"])
+            self.assertIn("database error", dataset["cases"][0]["expected_cause_keywords"])
+            self.assertIn("代码错误", dataset["cases"][0]["expected_cause_keywords"])
+            self.assertNotIn("cartservice", dataset["cases"][0]["expected_cause_keywords"])
             self.assertEqual(
                 ["pod_processes", "FailedPrecondition"],
                 dataset["cases"][0]["expected_evidence_keywords"],

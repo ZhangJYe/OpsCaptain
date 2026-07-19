@@ -2,6 +2,9 @@ package gos_engine
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -53,6 +56,12 @@ func (m *plannedMockExpert) RunPlanned(ctx context.Context, task experts.ExpertT
 		return nil
 	}
 	response := *m.response
+	response.Evidence = append([]experts.EvidenceItem(nil), m.response.Evidence...)
+	for i := range response.Evidence {
+		if response.Evidence[i].TargetHypothesisID == "" && task.Frontier != nil {
+			response.Evidence[i].TargetHypothesisID = task.Frontier.NodeID
+		}
+	}
 	return &response
 }
 
@@ -119,6 +128,89 @@ func TestGoSEngine_Run_ExpertSuccess(t *testing.T) {
 	result := engine.Run(context.Background(), "服务响应超时")
 	require.NotNil(t, result)
 	assert.Equal(t, "gos_engine", result.Agent)
+}
+
+func TestGoSEngineEvidenceBootstrapFeedsStructuredIngest(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.EvidenceBootstrap.Enabled = true
+	cfg.StructuredCognition.Enabled = true
+	cfg.SessionMaxSteps = 1
+	cfg.FSM.MinSupport = 1
+	cfg.FSM.GapDelta = 0.1
+
+	ingestSawEvidence := false
+	cfg.StructuredGenerate = func(_ context.Context, prompt string) (string, error) {
+		if !strings.Contains(prompt, "只读取证上下文") {
+			return "", errors.New("planner uses deterministic fallback")
+		}
+		ingestSawEvidence = strings.Contains(prompt, "active connections 100/100") && strings.Contains(prompt, "metric://mysql/connections")
+		return `{
+  "signal":"checkout 在故障时间窗内超时",
+  "observations":[],
+  "hypotheses":[{"label":"MySQL 连接池耗尽","score":0.9,"why":"连接数达到上限","actionable":true}]
+}`, nil
+	}
+
+	engine := NewGoSEngine(cfg, &testLogger{})
+	engine.RegisterExpert("linux_sre", &plannedMockExpert{
+		name: "linux_sre",
+		response: &experts.ExpertAnalysis{
+			ExpertName: "linux_sre",
+			Analysis:   "MySQL 连接数达到上限",
+			Confidence: 0.9,
+			Status:     "succeeded",
+			LLMCalls:   2,
+			RAGCalls:   1,
+			Evidence: []experts.EvidenceItem{{
+				SourceType: "metric",
+				SourceID:   "metric://mysql/connections",
+				Title:      "MySQL connections",
+				Snippet:    "active connections 100/100",
+				Relation:   experts.EvidenceRelationSupport,
+				Strength:   1,
+			}},
+		},
+	})
+
+	result := engine.Run(context.Background(), "checkout 在故障时间窗内超时")
+	require.NotNil(t, result)
+	assert.True(t, ingestSawEvidence)
+	bootstrap, ok := result.Metadata["evidence_bootstrap"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, 1, bootstrap["evidence_count"])
+	serialized, err := json.Marshal(result.Metadata["belief_graph"])
+	require.NoError(t, err)
+	assert.Contains(t, string(serialized), "MySQL 连接池耗尽")
+	assert.Contains(t, string(serialized), "metric://mysql/connections")
+}
+
+func TestGoSEngineEvidenceBootstrapStopsWithoutBudgetedExpert(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.EvidenceBootstrap.Enabled = true
+	cfg.StructuredCognition.Enabled = true
+	cfg.StructuredGenerate = func(context.Context, string) (string, error) {
+		t.Fatal("ingest must not run without bootstrap evidence")
+		return "", nil
+	}
+	engine := NewGoSEngine(cfg, &testLogger{})
+	engine.RegisterExpert("linux_sre", &mockExpert{name: "linux_sre"})
+
+	result := engine.Run(context.Background(), "服务异常")
+	require.NotNil(t, result)
+	assert.Equal(t, protocol.ResultStatusDegraded, result.Status)
+	assert.Contains(t, result.DegradationReason, "evidence_bootstrap_failed")
+	assert.Equal(t, "evidence_bootstrap_failed", result.Metadata["error_phase"])
+}
+
+func TestEvidenceBootstrapRejectsNonReadOnlyTool(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.EvidenceBootstrap.Enabled = true
+	cfg.StructuredCognition.Enabled = true
+	cfg.EvidenceBootstrap.AllowedTools = []string{"restart_service"}
+
+	err := cfg.ValidateGraphConfig()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not read-only")
 }
 
 func TestGoSEngineRunRealBaseExpertCanReachMinSupport(t *testing.T) {

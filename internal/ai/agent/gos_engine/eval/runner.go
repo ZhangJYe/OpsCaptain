@@ -46,17 +46,24 @@ func (r *Runner) RunFromCases(ctx context.Context, cases []EvalCase) (*EvalMetri
 	results := make([]EvalResult, 0, len(cases))
 
 	for _, c := range cases {
-		engine, err := r.engineForCase(c.ID)
+		result, err := r.RunCase(ctx, c)
 		if err != nil {
-			return nil, nil, fmt.Errorf("build engine for case %q: %w", c.ID, err)
+			return nil, nil, err
 		}
-		result := r.runCase(ctx, engine, c)
 		results = append(results, result)
 		metrics.AddResult(&result)
 	}
 
 	metrics.Finalize()
 	return metrics, results, nil
+}
+
+func (r *Runner) RunCase(ctx context.Context, evalCase EvalCase) (EvalResult, error) {
+	engine, err := r.engineForCase(evalCase.ID)
+	if err != nil {
+		return EvalResult{}, fmt.Errorf("build engine for case %q: %w", evalCase.ID, err)
+	}
+	return r.runCase(ctx, engine, evalCase), nil
 }
 
 func (r *Runner) engineForCase(caseID string) (EngineRunner, error) {
@@ -108,7 +115,7 @@ func (r *Runner) runCase(ctx context.Context, engine EngineRunner, c EvalCase) E
 	evidenceCount := len(diagnosticEvidence)
 	relevantEvidence, expectedEvidence, coveredEvidence := evaluateEvidence(diagnosticEvidence, c.ExpectedEvidenceKeywords)
 
-	matched := MatchPrediction(taskResult.Summary, c.GroundTruth, c.ExpectedKeywords)
+	matched := MatchCasePrediction(taskResult.Summary, c)
 
 	traceComplete := checkTraceComplete(taskResult)
 	refined, backtracked := transitionFlags(taskResult.Metadata["fsm_history"])
@@ -194,8 +201,8 @@ func diagnosticEvidenceItems(evidence []protocol.EvidenceItem) []protocol.Eviden
 
 func expandRecordedEvidenceItem(item protocol.EvidenceItem) ([]protocol.EvidenceItem, bool) {
 	document := item.Snippet
-	recorded := strings.Contains(document, "# Telemetry Evidence Case")
-	if !recorded && strings.HasPrefix(strings.TrimSpace(document), "{") {
+	recorded := false
+	if strings.HasPrefix(strings.TrimSpace(document), "{") {
 		var wrapper struct {
 			ProvenanceProfile string `json:"provenance_profile"`
 			Data              string `json:"data"`
@@ -204,6 +211,9 @@ func expandRecordedEvidenceItem(item protocol.EvidenceItem) ([]protocol.Evidence
 			recorded = true
 			document = wrapper.Data
 		}
+	}
+	if !recorded {
+		recorded = strings.Contains(document, "# Telemetry Evidence Case")
 	}
 	if !recorded {
 		return nil, false
@@ -242,7 +252,49 @@ func expandRecordedEvidenceItem(item protocol.EvidenceItem) ([]protocol.Evidence
 			Snippet:    snippet,
 		})
 	}
+	if len(items) == 0 {
+		items = compactRecordedEvidenceItems(item, document)
+	}
 	return items, true
+}
+
+func compactRecordedEvidenceItems(item protocol.EvidenceItem, document string) []protocol.EvidenceItem {
+	sections := []struct {
+		marker     string
+		sourceType string
+	}{
+		{marker: "## Metric Signals", sourceType: "recorded_metric"},
+		{marker: "## Log Signals", sourceType: "recorded_log"},
+		{marker: "## Trace Signals", sourceType: "recorded_trace"},
+	}
+	items := make([]protocol.EvidenceItem, 0, len(sections))
+	for index, section := range sections {
+		start := strings.Index(document, section.marker)
+		if start < 0 {
+			continue
+		}
+		start += len(section.marker)
+		end := len(document)
+		for _, next := range sections[index+1:] {
+			if nextIndex := strings.Index(document[start:], next.marker); nextIndex >= 0 && start+nextIndex < end {
+				end = start + nextIndex
+			}
+		}
+		if headingIndex := strings.Index(document[start:end], "## "); headingIndex >= 0 {
+			end = start + headingIndex
+		}
+		snippet := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(document[start:end]), "-"))
+		if snippet == "" || strings.HasPrefix(strings.ToLower(snippet), "no ") {
+			continue
+		}
+		items = append(items, protocol.EvidenceItem{
+			SourceType: section.sourceType,
+			SourceID:   item.SourceID,
+			Title:      strings.TrimPrefix(section.sourceType, "recorded_") + " signal",
+			Snippet:    snippet,
+		})
+	}
+	return items
 }
 
 func checkTraceComplete(taskResult *protocol.TaskResult) bool {
@@ -376,6 +428,9 @@ func failurePhase(taskResult *protocol.TaskResult, outcomeMatched bool, evidence
 
 func normalizeFailurePhase(phase string) string {
 	phase = strings.TrimSpace(strings.TrimSuffix(phase, "_failed"))
+	if strings.HasPrefix(phase, "evidence_bootstrap") {
+		return "ingest"
+	}
 	switch phase {
 	case "graph_invalid", "confidence_update":
 		return "update"

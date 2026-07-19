@@ -2,6 +2,7 @@ package gos_engine
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -43,6 +44,13 @@ type IngestOutcome struct {
 	HypothesisCount  int
 }
 
+type BootstrapEvidence struct {
+	SourceType string `json:"source_type"`
+	SourceID   string `json:"source_id"`
+	Title      string `json:"title"`
+	Snippet    string `json:"snippet"`
+}
+
 func NewIngestor(graph *belief.BeliefGraph, logger Logger) *Ingestor {
 	cfg := DefaultConfig()
 	return &Ingestor{
@@ -65,6 +73,10 @@ func (i *Ingestor) Ingest(ctx context.Context, symptom string) error {
 }
 
 func (i *Ingestor) IngestWithOutcome(ctx context.Context, symptom string) (IngestOutcome, error) {
+	return i.IngestWithBootstrap(ctx, symptom, nil)
+}
+
+func (i *Ingestor) IngestWithBootstrap(ctx context.Context, symptom string, evidence []BootstrapEvidence) (IngestOutcome, error) {
 	if err := ctx.Err(); err != nil {
 		return IngestOutcome{}, err
 	}
@@ -75,7 +87,34 @@ func (i *Ingestor) IngestWithOutcome(ctx context.Context, symptom string) (Inges
 		return IngestOutcome{}, fmt.Errorf("symptom is required")
 	}
 
+	trustedObservations := make([]ObservationProposal, 0, len(evidence))
+	trustedEvidence := make([]BootstrapEvidence, 0, len(evidence))
+	for _, item := range evidence {
+		sourceID := strings.TrimSpace(item.SourceID)
+		snippet := strings.TrimSpace(item.Snippet)
+		if sourceID == "" || snippet == "" {
+			continue
+		}
+		title := strings.TrimSpace(item.Title)
+		label := snippet
+		if title != "" {
+			label = title + ": " + snippet
+		}
+		trustedObservations = append(trustedObservations, ObservationProposal{
+			Label:      label,
+			SourceType: "telemetry",
+			SourceID:   sourceID,
+		})
+		trustedEvidence = append(trustedEvidence, BootstrapEvidence{
+			SourceType: strings.TrimSpace(item.SourceType),
+			SourceID:   sourceID,
+			Title:      title,
+			Snippet:    snippet,
+		})
+	}
+
 	proposal := fallbackIngestProposal(symptom)
+	proposal.Observations = trustedObservations
 	outcome := IngestOutcome{Mode: "rules"}
 	if i.cfg.StructuredCognition.Enabled {
 		outcome.Mode = "rule_fallback"
@@ -83,7 +122,11 @@ func (i *Ingestor) IngestWithOutcome(ctx context.Context, symptom string) (Inges
 			outcome.FallbackReason = "structured_generator_unavailable"
 		} else {
 			outcome.LLMCalls = 1
-			raw, err := i.generate(ctx, renderStructuredPrompt(promptreg.GOSIngest, map[string]string{"symptom": symptom}))
+			evidenceJSON, _ := json.Marshal(trustedEvidence)
+			raw, err := i.generate(ctx, renderStructuredPrompt(promptreg.GOSIngest, map[string]string{
+				"symptom":          symptom,
+				"evidence_context": string(evidenceJSON),
+			}))
 			if ctx.Err() != nil {
 				return outcome, ctx.Err()
 			}
@@ -93,15 +136,23 @@ func (i *Ingestor) IngestWithOutcome(ctx context.Context, symptom string) (Inges
 				var structured IngestProposal
 				if err := decodeStrictJSONObject(raw, &structured); err != nil {
 					outcome.FallbackReason = "structured_schema_invalid"
-				} else if err := validateIngestProposal(structured, i.cfg.StructuredCognition); err != nil {
-					outcome.FallbackReason = "structured_contract_invalid"
 				} else {
-					proposal = structured
-					outcome.Mode = "structured"
-					outcome.FallbackReason = ""
+					if len(trustedObservations) > 0 {
+						structured.Observations = trustedObservations
+					}
+					if err := validateIngestProposal(structured, i.cfg.StructuredCognition); err != nil {
+						outcome.FallbackReason = "structured_contract_invalid"
+					} else {
+						proposal = structured
+						outcome.Mode = "structured"
+						outcome.FallbackReason = ""
+					}
 				}
 			}
 		}
+	}
+	if len(trustedEvidence) > 0 && outcome.Mode != "structured" {
+		return outcome, fmt.Errorf("bootstrap evidence requires structured ingest: %s", outcome.FallbackReason)
 	}
 
 	result := i.graph.UpdateCopyOnWrite(func(graph *belief.BeliefGraph) error {

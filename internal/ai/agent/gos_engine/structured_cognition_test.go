@@ -74,6 +74,62 @@ func TestStructuredIngestorAppliesValidatedProposalAtomically(t *testing.T) {
 	assert.Equal(t, "actionable_root_cause", decision.ReasonCode)
 }
 
+func TestStructuredIngestorUsesTrustedBootstrapEvidenceProvenance(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.StructuredCognition.Enabled = true
+	graph := belief.NewBeliefGraph()
+	ingestor := NewStructuredIngestor(graph, cfg, &testLogger{}, func(_ context.Context, prompt string) (string, error) {
+		assert.Contains(t, prompt, "metric://mysql/connections")
+		assert.Contains(t, prompt, "active connections 100/100")
+		return `{
+  "signal":"checkout 在故障时间窗内超时",
+  "observations":[{"label":"模型伪造观测","source_type":"telemetry","source_id":"invented://source"}],
+  "hypotheses":[{"label":"MySQL 连接池耗尽","score":0.9,"why":"活跃连接达到上限","actionable":true}]
+}`, nil
+	})
+
+	outcome, err := ingestor.IngestWithBootstrap(context.Background(), "checkout 在故障时间窗内超时", []BootstrapEvidence{{
+		SourceType: "metric",
+		SourceID:   "metric://mysql/connections",
+		Title:      "MySQL connections",
+		Snippet:    "active connections 100/100",
+	}})
+	require.NoError(t, err)
+	assert.Equal(t, "structured", outcome.Mode)
+	assert.Equal(t, 1, outcome.ObservationCount)
+
+	foundTrustedObservation := false
+	for _, node := range graph.Nodes {
+		if node.Attrs["semantic_type"] != "observation" {
+			continue
+		}
+		assert.Equal(t, "metric://mysql/connections", node.Attrs["source_id"])
+		assert.NotEqual(t, "invented://source", node.Attrs["source_id"])
+		foundTrustedObservation = true
+	}
+	assert.True(t, foundTrustedObservation)
+}
+
+func TestStructuredIngestorDoesNotCreateGenericHypothesesWhenBootstrapIngestFails(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.StructuredCognition.Enabled = true
+	graph := belief.NewBeliefGraph()
+	ingestor := NewStructuredIngestor(graph, cfg, &testLogger{}, func(context.Context, string) (string, error) {
+		return "", context.DeadlineExceeded
+	})
+
+	outcome, err := ingestor.IngestWithBootstrap(context.Background(), "仅包含故障时间窗", []BootstrapEvidence{{
+		SourceType: "rag",
+		SourceID:   "rag://snapshot",
+		Snippet:    "pod payment-0 restart_count increased to 12",
+	}})
+	require.Error(t, err)
+	assert.Equal(t, "rule_fallback", outcome.Mode)
+	assert.Equal(t, "structured_generation_failed", outcome.FallbackReason)
+	assert.Empty(t, graph.Nodes)
+	assert.Empty(t, graph.Edges)
+}
+
 func TestStructuredIngestorRequiresExplicitActionability(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.StructuredCognition.Enabled = true

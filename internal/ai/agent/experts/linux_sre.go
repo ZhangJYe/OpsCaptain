@@ -235,6 +235,9 @@ func (e *BaseExpert) run(ctx context.Context, task ExpertTask) *ExpertAnalysis {
 				ToolName:           toolName,
 				ObservationTime:    time.Now(),
 			})
+			if task.StopAfterEvidence {
+				return result
+			}
 
 		case "retrieve":
 			if result.RAGCalls >= execution.budget.RAGCalls {
@@ -282,6 +285,9 @@ func (e *BaseExpert) run(ctx context.Context, task ExpertTask) *ExpertAnalysis {
 				Strength:           0,
 				ObservationTime:    time.Now(),
 			})
+			if task.StopAfterEvidence {
+				return result
+			}
 
 		case "analyze":
 			if err := applyAnalysisProposal(result, content); err != nil {

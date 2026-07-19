@@ -458,6 +458,12 @@ func loadAIOpsGOSConfig(ctx context.Context) *gos_engine.Config {
 	if v, ok := aiOpsConfigInt(ctx, "aiops.gos.graph.max_deltas"); ok {
 		cfg.Graph.MaxDeltas = v
 	}
+	if v, err := g.Cfg().Get(ctx, "aiops.gos.evidence_bootstrap"); err == nil {
+		var bootstrap gos_engine.EvidenceBootstrapConfig
+		if err := v.Scan(&bootstrap); err == nil {
+			cfg.EvidenceBootstrap = bootstrap
+		}
+	}
 	if v, ok := aiOpsConfigBool(ctx, "aiops.gos.structured_cognition.enabled"); ok {
 		cfg.StructuredCognition.Enabled = v
 	}

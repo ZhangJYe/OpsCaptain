@@ -13,6 +13,18 @@
         "cartservice",
         "code error"
       ],
+      "expected_cause_keywords": [
+        "code error",
+        "database error",
+        "代码错误",
+        "代码异常",
+        "程序错误",
+        "方法错误",
+        "数据库错误"
+      ],
+      "expected_entity_keywords": [
+        "cartservice"
+      ],
       "expected_evidence_keywords": [
         "pod_processes",
         "frontend",
@@ -39,6 +51,12 @@
         "shippingservice",
         "cpu stress"
       ],
+      "expected_cause_keywords": [
+        "cpu stress"
+      ],
+      "expected_entity_keywords": [
+        "shippingservice"
+      ],
       "expected_evidence_keywords": [
         "pod_cpu_usage",
         "rrt",
@@ -58,6 +76,16 @@
         "checkoutservice",
         "checkoutservice-2",
         "dns error"
+      ],
+      "expected_cause_keywords": [
+        "dns error",
+        "dns错误",
+        "dns异常",
+        "域名解析错误"
+      ],
+      "expected_entity_keywords": [
+        "checkoutservice",
+        "checkoutservice-2"
       ],
       "expected_evidence_keywords": [
         "server_error",
@@ -92,6 +120,18 @@
         "tidb-tikv-0",
         "io fault"
       ],
+      "expected_cause_keywords": [
+        "io fault",
+        "i/o fault",
+        "磁盘io",
+        "磁盘i/o",
+        "io异常",
+        "i/o异常"
+      ],
+      "expected_entity_keywords": [
+        "tidb-tikv",
+        "tidb-tikv-0"
+      ],
       "expected_evidence_keywords": [
         "region_pending",
         "io_util",
@@ -117,6 +157,12 @@
         "adservice",
         "jvm cpu"
       ],
+      "expected_cause_keywords": [
+        "jvm cpu"
+      ],
+      "expected_entity_keywords": [
+        "adservice"
+      ],
       "expected_evidence_keywords": [
         "pod_cpu_usage",
         "adservice--stress",
@@ -138,6 +184,12 @@
       "expected_keywords": [
         "adservice",
         "jvm exception"
+      ],
+      "expected_cause_keywords": [
+        "jvm exception"
+      ],
+      "expected_entity_keywords": [
+        "adservice"
       ],
       "expected_evidence_keywords": [
         "adservice-getrandomads-exception",
@@ -168,6 +220,13 @@
         "adservice-0",
         "jvm gc"
       ],
+      "expected_cause_keywords": [
+        "jvm gc"
+      ],
+      "expected_entity_keywords": [
+        "adservice",
+        "adservice-0"
+      ],
       "expected_evidence_keywords": [
         "adservice--gc",
         "GCHelper",
@@ -189,6 +248,12 @@
       "expected_keywords": [
         "adservice",
         "jvm latency"
+      ],
+      "expected_cause_keywords": [
+        "jvm latency"
+      ],
+      "expected_entity_keywords": [
+        "adservice"
       ],
       "expected_evidence_keywords": [
         "adservice-getRandomAds-latency",
@@ -213,6 +278,13 @@
         "productcatalogservice-2",
         "memory stress"
       ],
+      "expected_cause_keywords": [
+        "memory stress"
+      ],
+      "expected_entity_keywords": [
+        "productcatalogservice",
+        "productcatalogservice-2"
+      ],
       "expected_evidence_keywords": [
         "pod_memory_working_set_bytes",
         "pod_processes"
@@ -230,6 +302,16 @@
         "checkoutservice",
         "shippingservice",
         "network corrupt"
+      ],
+      "expected_cause_keywords": [
+        "network corrupt",
+        "packet corruption",
+        "网络损坏",
+        "数据包损坏"
+      ],
+      "expected_entity_keywords": [
+        "checkoutservice",
+        "shippingservice"
       ],
       "expected_evidence_keywords": [
         "rrt",
@@ -276,6 +358,15 @@
         "cartservice",
         "network delay"
       ],
+      "expected_cause_keywords": [
+        "network delay",
+        "high network latency",
+        "网络延迟"
+      ],
+      "expected_entity_keywords": [
+        "frontend",
+        "cartservice"
+      ],
       "expected_evidence_keywords": [
         "rrt",
         "rrt_max",
@@ -300,6 +391,16 @@
         "frontend",
         "checkoutservice",
         "network loss"
+      ],
+      "expected_cause_keywords": [
+        "network loss",
+        "packet loss",
+        "网络丢包",
+        "丢包"
+      ],
+      "expected_entity_keywords": [
+        "frontend",
+        "checkoutservice"
       ],
       "expected_evidence_keywords": [
         "rrt",
@@ -337,6 +438,15 @@
         "aiops-k8s-06",
         "node cpu stress"
       ],
+      "expected_cause_keywords": [
+        "node cpu stress",
+        "node cpu overload",
+        "节点cpu压力",
+        "节点cpu过载"
+      ],
+      "expected_entity_keywords": [
+        "aiops-k8s-06"
+      ],
       "expected_evidence_keywords": [
         "node_cpu_usage_rate",
         "node_network_receive_packets_total"
@@ -354,6 +464,12 @@
         "aiops-k8s-06",
         "node disk fill"
       ],
+      "expected_cause_keywords": [
+        "node disk fill"
+      ],
+      "expected_entity_keywords": [
+        "aiops-k8s-06"
+      ],
       "expected_evidence_keywords": [
         "node_filesystem_usage_rate"
       ],
@@ -369,6 +485,15 @@
       "expected_keywords": [
         "aiops-k8s-06",
         "node memory stress"
+      ],
+      "expected_cause_keywords": [
+        "node memory stress",
+        "node memory exhaustion",
+        "节点内存压力",
+        "节点内存耗尽"
+      ],
+      "expected_entity_keywords": [
+        "aiops-k8s-06"
       ],
       "expected_evidence_keywords": [
         "node_memory_usage_rate",
@@ -389,6 +514,16 @@
         "tidb-tidb",
         "tidb-tidb-0",
         "pod failure"
+      ],
+      "expected_cause_keywords": [
+        "pod failure",
+        "pod crash",
+        "pod崩溃",
+        "容器崩溃"
+      ],
+      "expected_entity_keywords": [
+        "tidb-tidb",
+        "tidb-tidb-0"
       ],
       "expected_evidence_keywords": [
         "connection_count",
@@ -417,6 +552,13 @@
         "paymentservice-1",
         "pod kill"
       ],
+      "expected_cause_keywords": [
+        "pod kill"
+      ],
+      "expected_entity_keywords": [
+        "paymentservice",
+        "paymentservice-1"
+      ],
       "expected_evidence_keywords": [
         "client_error",
         "client_error_ratio",
@@ -443,6 +585,14 @@
       "expected_keywords": [
         "currencyservice",
         "target port misconfig"
+      ],
+      "expected_cause_keywords": [
+        "target port misconfig",
+        "目标端口配置错误",
+        "端口配置错误"
+      ],
+      "expected_entity_keywords": [
+        "currencyservice"
       ],
       "expected_evidence_keywords": [
         "request",

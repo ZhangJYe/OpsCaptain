@@ -86,32 +86,37 @@ func (l *testLogger) Error(msg string, keysAndValues ...interface{}) {
 }
 
 type realDependencyConfig struct {
-	ChatModel        common.AIModelConfig
-	ChatModelError   error
-	EmbeddingModel   common.AIModelConfig
-	EmbeddingError   error
-	MCPLogURL        string
-	MCPLogHTTPURL    string
-	MilvusAddress    string
-	MilvusCollection string
-	TelemetryProfile string
-	TelemetrySource  string
+	ChatModel          common.AIModelConfig
+	ChatModelError     error
+	ChatModelFast      common.AIModelConfig
+	ChatModelFastError error
+	EmbeddingModel     common.AIModelConfig
+	EmbeddingError     error
+	MCPLogURL          string
+	MCPLogHTTPURL      string
+	MilvusAddress      string
+	MilvusCollection   string
+	TelemetryProfile   string
+	TelemetrySource    string
 }
 
 func loadRealDependencyConfig(ctx context.Context) realDependencyConfig {
 	chatModel, chatModelErr := common.LoadChatModelConfig(ctx, common.ChatModelPrimary)
+	chatModelFast, chatModelFastErr := common.LoadChatModelConfig(ctx, common.ChatModelFast)
 	embeddingModel, embeddingErr := common.LoadEmbeddingModelConfig(ctx)
 	return realDependencyConfig{
-		ChatModel:        chatModel,
-		ChatModelError:   chatModelErr,
-		EmbeddingModel:   embeddingModel,
-		EmbeddingError:   embeddingErr,
-		MCPLogURL:        resolveOptionalConfig(ctx, "mcp.log_url", "MCP_LOG_URL"),
-		MCPLogHTTPURL:    resolveOptionalConfig(ctx, "mcp.log_http_url", "MCP_LOG_HTTP_URL"),
-		MilvusAddress:    common.GetMilvusAddr(ctx),
-		MilvusCollection: common.GetMilvusCollectionName(ctx),
-		TelemetryProfile: loadTelemetryProfile(ctx),
-		TelemetrySource:  loadTelemetryProvenance(ctx),
+		ChatModel:          chatModel,
+		ChatModelError:     chatModelErr,
+		ChatModelFast:      chatModelFast,
+		ChatModelFastError: chatModelFastErr,
+		EmbeddingModel:     embeddingModel,
+		EmbeddingError:     embeddingErr,
+		MCPLogURL:          resolveOptionalConfig(ctx, "mcp.log_url", "MCP_LOG_URL"),
+		MCPLogHTTPURL:      resolveOptionalConfig(ctx, "mcp.log_http_url", "MCP_LOG_HTTP_URL"),
+		MilvusAddress:      common.GetMilvusAddr(ctx),
+		MilvusCollection:   common.GetMilvusCollectionName(ctx),
+		TelemetryProfile:   loadTelemetryProfile(ctx),
+		TelemetrySource:    loadTelemetryProvenance(ctx),
 	}
 }
 
@@ -151,6 +156,11 @@ func validateRealDependencyConfig(cfg realDependencyConfig) error {
 	} else if common.LooksLikePlaceholderSecret(cfg.ChatModel.APIKey) {
 		errs = append(errs, errors.New("chat_model.api_key is empty or placeholder"))
 	}
+	if cfg.ChatModelFastError != nil {
+		errs = append(errs, fmt.Errorf("fast chat model config: %w", cfg.ChatModelFastError))
+	} else if common.LooksLikePlaceholderSecret(cfg.ChatModelFast.APIKey) {
+		errs = append(errs, errors.New("chat_model_fast.api_key is empty or placeholder"))
+	}
 	if cfg.EmbeddingError != nil {
 		errs = append(errs, fmt.Errorf("embedding model config: %w", cfg.EmbeddingError))
 	} else if common.LooksLikePlaceholderSecret(cfg.EmbeddingModel.APIKey) {
@@ -171,6 +181,7 @@ func validateRealDependencyConfig(cfg realDependencyConfig) error {
 func printRealDependencyPreflight(cfg realDependencyConfig) error {
 	fmt.Println("=== GoS 真实依赖静态预检 ===")
 	printDependencyStatus(modelDependencyLabel("LLM", cfg.ChatModel.Provider), cfg.ChatModelError == nil)
+	printDependencyStatus(modelDependencyLabel("LLM fast", cfg.ChatModelFast.Provider), cfg.ChatModelFastError == nil)
 	printDependencyStatus(modelDependencyLabel("Embedding", cfg.EmbeddingModel.Provider), cfg.EmbeddingError == nil)
 	printDependencyStatus("Logs / MCP endpoint", !common.LooksLikePlaceholderSecret(cfg.MCPLogURL) || !common.LooksLikePlaceholderSecret(cfg.MCPLogHTTPURL))
 	printDependencyStatus("RAG / Milvus config", strings.TrimSpace(cfg.MilvusAddress) != "" && strings.TrimSpace(cfg.MilvusCollection) != "")
@@ -213,9 +224,9 @@ func printDependencyStatus(name string, ready bool) {
 
 func requiresRealDependencies(mode, profile string) bool {
 	switch mode {
-	case "baseline":
+	case "baseline", "baseline-batch":
 		return profile != "recorded"
-	case "gos", "compare", "export-runs":
+	case "gos", "gos-batch", "compare", "export-runs":
 		return profile == "real"
 	default:
 		return false
@@ -223,7 +234,7 @@ func requiresRealDependencies(mode, profile string) bool {
 }
 
 func requiresVerifiedTelemetry(mode, profile string) bool {
-	return (mode == "baseline" || mode == "compare") && profile == "real"
+	return (mode == "baseline" || mode == "baseline-batch" || mode == "compare") && profile == "real"
 }
 
 func requiresRecordedReplay(mode, profile string) bool {
@@ -231,7 +242,7 @@ func requiresRecordedReplay(mode, profile string) bool {
 		return false
 	}
 	switch mode {
-	case "gos", "baseline", "compare":
+	case "gos", "gos-batch", "baseline", "baseline-batch", "compare":
 		return true
 	default:
 		return false
@@ -239,13 +250,18 @@ func requiresRecordedReplay(mode, profile string) bool {
 }
 
 func validateRecordedDependencyConfig(cfg realDependencyConfig) error {
+	var errs []error
 	if cfg.ChatModelError != nil {
-		return fmt.Errorf("chat model config: %w", cfg.ChatModelError)
+		errs = append(errs, fmt.Errorf("chat model config: %w", cfg.ChatModelError))
+	} else if common.LooksLikePlaceholderSecret(cfg.ChatModel.APIKey) {
+		errs = append(errs, errors.New("chat_model.api_key is empty or placeholder"))
 	}
-	if common.LooksLikePlaceholderSecret(cfg.ChatModel.APIKey) {
-		return errors.New("chat_model.api_key is empty or placeholder")
+	if cfg.ChatModelFastError != nil {
+		errs = append(errs, fmt.Errorf("fast chat model config: %w", cfg.ChatModelFastError))
+	} else if common.LooksLikePlaceholderSecret(cfg.ChatModelFast.APIKey) {
+		errs = append(errs, errors.New("chat_model_fast.api_key is empty or placeholder"))
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 func validateRecordedReplayConfig(root string, timeout time.Duration) error {
@@ -648,7 +664,7 @@ func (b *smokeBaselineRunner) runCase(ctx context.Context, c goseval.EvalCase) *
 	llmCalls++
 
 	prediction := b.analyzeSymptom(c.Symptom)
-	matched := goseval.MatchPrediction(prediction, c.GroundTruth, c.ExpectedKeywords)
+	matched := goseval.MatchCasePrediction(prediction, c)
 	relevantEvidence, expectedEvidence, coveredEvidence := goseval.EvaluateEvidence(evidence, c.ExpectedEvidenceKeywords)
 
 	status := string(protocol.ResultStatusSucceeded)
@@ -1022,6 +1038,11 @@ func buildGoSEngineFromConfig(cfg *gos_engine.Config, evalProfile bool, recorded
 	if evalProfile || recorded != nil {
 		applyCompactEvalConfig(cfg)
 	}
+	if recorded != nil {
+		cfg.StructuredCognition.Enabled = true
+		cfg.EvidenceBootstrap.Enabled = true
+		cfg.EvidenceBootstrap.AllowedTools = []string{recordedTelemetryToolName}
+	}
 	if evalProfile {
 		cfg.StructuredCognition.PlanBudget.LLMCalls = 2
 		cfg.StructuredCognition.PlanBudget.ToolCalls = 1
@@ -1141,7 +1162,7 @@ func buildGoSRunner(profile, recordedRoot string, recordedTimeout time.Duration)
 }
 
 func main() {
-	mode := flag.String("mode", "gos", "运行模式: preflight|gos|baseline|regression-baseline|compare|smoke|gate|export-runs|judge")
+	mode := flag.String("mode", "gos", "运行模式: preflight|gos|gos-batch|gos-rescore|baseline|baseline-batch|regression-baseline|compare|smoke|gate|export-runs|judge")
 	baselineFile := flag.String("baseline", "baseline_result.json", "baseline artifact 文件路径")
 	holdoutPath := flag.String("holdout", "", "评测数据集路径（未指定时按模式选择 holdout 或 regression）")
 	outputFile := flag.String("output", "eval_result.json", "输出文件路径")
@@ -1149,8 +1170,14 @@ func main() {
 	recordedEvidenceRoot := flag.String("recorded-evidence-root", "", "recorded profile 的 case 隔离盲证据根目录")
 	recordedTimeoutMs := flag.Int("recorded-timeout-ms", 2000, "recorded 证据单次只读超时（毫秒）")
 	verbose := flag.Bool("verbose", false, "输出评测过程中的 DEBUG 级模型与工具明细")
-	outputDir := flag.String("output-dir", "evals/runs", "export-runs 模式的输出目录")
+	outputDir := flag.String("output-dir", "evals/runs", "export-runs / gos-batch 输出目录")
 	inputDir := flag.String("input", "evals/runs", "judge 输入目录（diag JSONL 文件）")
+	batchCaseTimeoutMs := flag.Int("batch-case-timeout-ms", 180000, "gos-batch 单 case 超时（毫秒）")
+	batchResume := flag.Bool("batch-resume", true, "gos-batch 从已完成的 case checkpoint 续跑")
+	batchMaxNewCases := flag.Int("batch-max-new-cases", 0, "gos-batch 本次最多新增执行 case 数；0 表示不限")
+	batchMaxLLMCalls := flag.Int("batch-max-llm-calls", 0, "gos-batch 累计 LLM 调用预算；0 表示不限")
+	batchMinFreeDiskGB := flag.Uint64("batch-min-free-disk-gb", 5, "gos-batch 每条 case 开始前要求的最小剩余磁盘 GiB")
+	batchCleanupCheckpoints := flag.Bool("batch-cleanup-checkpoints", false, "gos-batch 完成后删除逐 case checkpoint，仅保留聚合报告")
 	flag.Parse()
 	datasetPath := resolveDatasetPath(*mode, *holdoutPath)
 	if strings.TrimSpace(*holdoutPath) == "" && *gosProfile == "recorded" {
@@ -1223,8 +1250,50 @@ func main() {
 	switch *mode {
 	case "gos":
 		runGoSOnly(datasetPath, *outputFile, *gosProfile, *recordedEvidenceRoot, recordedTimeout)
+	case "gos-batch":
+		if err := runGoSBatch(context.Background(), batchOptions{
+			DatasetPath:        datasetPath,
+			OutputDir:          *outputDir,
+			Profile:            *gosProfile,
+			RecordedRoot:       *recordedEvidenceRoot,
+			RecordedTimeout:    recordedTimeout,
+			CaseTimeout:        time.Duration(*batchCaseTimeoutMs) * time.Millisecond,
+			Resume:             *batchResume,
+			MaxNewCases:        *batchMaxNewCases,
+			MaxLLMCalls:        *batchMaxLLMCalls,
+			MinFreeDiskBytes:   *batchMinFreeDiskGB * 1024 * 1024 * 1024,
+			CleanupCheckpoints: *batchCleanupCheckpoints,
+		}); err != nil {
+			fmt.Printf("ERROR: GoS batch 失败: %v\n", err)
+			os.Exit(1)
+		}
+	case "gos-rescore":
+		artifact, err := rescoreGoSBatch(datasetPath, *inputDir, *outputFile)
+		if err != nil {
+			fmt.Printf("ERROR: GoS batch 重评分失败: %v\n", err)
+			os.Exit(1)
+		}
+		printMetrics("GoS Batch Rescored", artifact.Metrics)
+		fmt.Printf("重评分结果已保存到 %s\n", *outputFile)
 	case "baseline":
 		runBaseline(datasetPath, *outputFile, *gosProfile, *recordedEvidenceRoot, recordedTimeout)
+	case "baseline-batch":
+		if err := runPlanBatch(context.Background(), batchOptions{
+			DatasetPath:        datasetPath,
+			OutputDir:          *outputDir,
+			Profile:            *gosProfile,
+			RecordedRoot:       *recordedEvidenceRoot,
+			RecordedTimeout:    recordedTimeout,
+			CaseTimeout:        time.Duration(*batchCaseTimeoutMs) * time.Millisecond,
+			Resume:             *batchResume,
+			MaxNewCases:        *batchMaxNewCases,
+			MaxLLMCalls:        *batchMaxLLMCalls,
+			MinFreeDiskBytes:   *batchMinFreeDiskGB * 1024 * 1024 * 1024,
+			CleanupCheckpoints: *batchCleanupCheckpoints,
+		}); err != nil {
+			fmt.Printf("ERROR: Plan batch 失败: %v\n", err)
+			os.Exit(1)
+		}
 	case "regression-baseline":
 		runRegressionBaseline(datasetPath, *outputFile)
 	case "compare":
@@ -1239,7 +1308,7 @@ func main() {
 		runJudge(*inputDir, *outputDir)
 	default:
 		fmt.Printf("未知模式: %s\n", *mode)
-		fmt.Println("可用模式: preflight, gos, baseline, regression-baseline, compare, smoke, gate, export-runs, judge")
+		fmt.Println("可用模式: preflight, gos, gos-batch, gos-rescore, baseline, baseline-batch, regression-baseline, compare, smoke, gate, export-runs, judge")
 		os.Exit(1)
 	}
 }
@@ -1315,110 +1384,19 @@ func runBaseline(holdoutPath, outputFile, profile, recordedRoot string, recorded
 
 	for i, c := range cases {
 		fmt.Printf("  [%d/%d] %s: %s\n", i+1, len(cases), c.ID, truncateSymptom(c.Symptom, 50))
-
-		runCtx := context.Background()
-		var recordedSource *recordedEvidenceSource
-		if profile == "recorded" {
-			source, sourceErr := newRecordedEvidenceSource(recordedRoot, c.ID, recordedTimeout)
-			if sourceErr != nil {
-				fmt.Printf("ERROR: 创建 case %s 的 recorded 证据源失败: %v\n", c.ID, sourceErr)
-				os.Exit(1)
-			}
-			recordedTool, toolErr := source.Tool()
-			if toolErr != nil {
-				fmt.Printf("ERROR: 创建 case %s 的 recorded 工具失败: %v\n", c.ID, toolErr)
-				os.Exit(1)
-			}
-			recordedSource = source
-			runCtx = plan_execute_replan.WithExecutorTools(runCtx, []tool.BaseTool{recordedTool})
-		}
-		start := time.Now()
-		prediction, detail, runStats, err := plan_execute_replan.BuildPlanAgentWithStats(runCtx, c.Symptom)
-		latency := time.Since(start)
-
-		status := "succeeded"
-		if err != nil {
-			status = "degraded"
-			prediction = degradedBaselinePrediction(prediction, err)
-		}
-
-		matched := goseval.MatchPrediction(prediction, c.GroundTruth, c.ExpectedKeywords)
-		evidence := make([]protocol.EvidenceItem, 0, len(detail))
-		if recordedSource != nil && runStats.ToolCalls > 0 {
-			recordedDocument, loadErr := recordedSource.Load(context.Background())
-			if loadErr != nil {
-				fmt.Printf("ERROR: 读取 case %s 的 source-backed recorded 证据失败: %v\n", c.ID, loadErr)
-				os.Exit(1)
-			}
-			evidence = append(evidence, protocol.EvidenceItem{
-				SourceType: "recorded_replay",
-				SourceID:   "recorded://" + c.ID,
-				Title:      "Case-scoped recorded telemetry",
-				Snippet:    recordedDocument,
-			})
-		} else {
-			for index, step := range detail {
-				evidence = append(evidence, protocol.EvidenceItem{
-					SourceType: "plan_trace",
-					SourceID:   fmt.Sprintf("%s-step-%d", c.ID, index+1),
-					Title:      "Plan-Execute-Replan trace",
-					Snippet:    step,
-				})
-			}
-		}
-		evidenceCount, relevantEvidence, expectedEvidence, coveredEvidence := goseval.EvaluateEvidenceMetrics(evidence, c.ExpectedEvidenceKeywords)
-		statusMatches := c.ExpectedStatus == "" || c.ExpectedStatus == status
-		prematureStop := goseval.IsPrematureStop(
-			status,
-			statusMatches,
-			c.RequireRefine,
-			false,
-			c.RequireBacktrack,
-			false,
-		)
-		failurePhase := ""
-		if err != nil {
-			failurePhase = baselineFailurePhase(err)
-		} else if !matched || !statusMatches || c.RequireRefine || c.RequireBacktrack {
-			failurePhase = "report"
-		}
-		failurePhaseMatches := c.ExpectedFailurePhase == "" || c.ExpectedFailurePhase == failurePhase
-
-		r := &goseval.EvalResult{
-			CaseID:               c.ID,
-			Scenario:             c.Scenario,
-			Symptom:              c.Symptom,
-			GroundTruth:          c.GroundTruth,
-			Prediction:           prediction,
-			Status:               status,
-			ExpectedStatus:       c.ExpectedStatus,
-			StatusMatched:        statusMatches,
-			Latency:              latency,
-			LLMCalls:             runStats.LLMCalls,
-			ToolCalls:            runStats.ToolCalls,
-			RAGCalls:             runStats.RAGCalls,
-			EvidenceCount:        evidenceCount,
-			RelevantEvidence:     relevantEvidence,
-			ExpectedEvidence:     expectedEvidence,
-			CoveredEvidence:      coveredEvidence,
-			Matched:              matched,
-			TraceComplete:        len(detail) > 0,
-			GraphValid:           true,
-			BacktrackRequired:    c.RequireBacktrack,
-			PrematureStop:        prematureStop,
-			FailurePhase:         failurePhase,
-			ExpectedFailurePhase: c.ExpectedFailurePhase,
-			FailurePhaseMatched:  failurePhaseMatches,
-			ContractMatched:      statusMatches && failurePhaseMatches && !c.RequireRefine && !c.RequireBacktrack,
+		r, runErr := runPlanBaselineCase(context.Background(), c, profile, recordedRoot, recordedTimeout)
+		if runErr != nil {
+			fmt.Printf("ERROR: 运行 case %s 失败: %v\n", c.ID, runErr)
+			os.Exit(1)
 		}
 		metrics.AddResult(r)
 		results = append(results, *r)
 
 		matchStr := "✓"
-		if !matched {
+		if !r.Matched {
 			matchStr = "✗"
 		}
-		fmt.Printf("         %s pred=%q truth=%q (%v)\n", matchStr, truncateSymptom(prediction, 60), c.GroundTruth, latency)
+		fmt.Printf("         %s pred=%q truth=%q (%v)\n", matchStr, truncateSymptom(r.Prediction, 60), c.GroundTruth, r.Latency)
 	}
 
 	metrics.Finalize()
@@ -1522,6 +1500,99 @@ func runBaseline(holdoutPath, outputFile, profile, recordedRoot string, recorded
 	}
 	fmt.Printf("\nBaseline artifact 已保存到 %s\n", outputFile)
 	fmt.Printf("用 --mode=compare --baseline=%s 对照 GoS 结果\n", outputFile)
+}
+
+func runPlanBaselineCase(
+	ctx context.Context,
+	c goseval.EvalCase,
+	profile, recordedRoot string,
+	recordedTimeout time.Duration,
+) (*goseval.EvalResult, error) {
+	runCtx := ctx
+	var recordedSource *recordedEvidenceSource
+	if profile == "recorded" {
+		source, err := newRecordedEvidenceSource(recordedRoot, c.ID, recordedTimeout)
+		if err != nil {
+			return nil, fmt.Errorf("create recorded source: %w", err)
+		}
+		recordedTool, err := source.Tool()
+		if err != nil {
+			return nil, fmt.Errorf("create recorded tool: %w", err)
+		}
+		recordedSource = source
+		runCtx = plan_execute_replan.WithExecutorTools(runCtx, []tool.BaseTool{recordedTool})
+	}
+
+	start := time.Now()
+	prediction, detail, runStats, runErr := plan_execute_replan.BuildPlanAgentWithStats(runCtx, c.Symptom)
+	latency := time.Since(start)
+	status := "succeeded"
+	if runErr != nil {
+		status = "degraded"
+		prediction = degradedBaselinePrediction(prediction, runErr)
+	}
+
+	matched := goseval.MatchCasePrediction(prediction, c)
+	evidence := make([]protocol.EvidenceItem, 0, len(detail))
+	if recordedSource != nil && runStats.ToolCalls > 0 {
+		recordedDocument, err := recordedSource.Load(context.Background())
+		if err != nil {
+			return nil, fmt.Errorf("load source-backed recorded evidence: %w", err)
+		}
+		evidence = append(evidence, protocol.EvidenceItem{
+			SourceType: "recorded_replay",
+			SourceID:   "recorded://" + c.ID,
+			Title:      "Case-scoped recorded telemetry",
+			Snippet:    recordedDocument,
+		})
+	} else {
+		for index, step := range detail {
+			evidence = append(evidence, protocol.EvidenceItem{
+				SourceType: "plan_trace",
+				SourceID:   fmt.Sprintf("%s-step-%d", c.ID, index+1),
+				Title:      "Plan-Execute-Replan trace",
+				Snippet:    step,
+			})
+		}
+	}
+	evidenceCount, relevantEvidence, expectedEvidence, coveredEvidence := goseval.EvaluateEvidenceMetrics(evidence, c.ExpectedEvidenceKeywords)
+	statusMatches := c.ExpectedStatus == "" || c.ExpectedStatus == status
+	prematureStop := goseval.IsPrematureStop(status, statusMatches, c.RequireRefine, false, c.RequireBacktrack, false)
+	failurePhase := ""
+	if runErr != nil {
+		failurePhase = baselineFailurePhase(runErr)
+	} else if !matched || !statusMatches || c.RequireRefine || c.RequireBacktrack {
+		failurePhase = "report"
+	}
+	failurePhaseMatches := c.ExpectedFailurePhase == "" || c.ExpectedFailurePhase == failurePhase
+
+	return &goseval.EvalResult{
+		CaseID:               c.ID,
+		Scenario:             c.Scenario,
+		Symptom:              c.Symptom,
+		GroundTruth:          c.GroundTruth,
+		Prediction:           prediction,
+		Status:               status,
+		ExpectedStatus:       c.ExpectedStatus,
+		StatusMatched:        statusMatches,
+		Latency:              latency,
+		LLMCalls:             runStats.LLMCalls,
+		ToolCalls:            runStats.ToolCalls,
+		RAGCalls:             runStats.RAGCalls,
+		EvidenceCount:        evidenceCount,
+		RelevantEvidence:     relevantEvidence,
+		ExpectedEvidence:     expectedEvidence,
+		CoveredEvidence:      coveredEvidence,
+		Matched:              matched,
+		TraceComplete:        len(detail) > 0,
+		GraphValid:           true,
+		BacktrackRequired:    c.RequireBacktrack,
+		PrematureStop:        prematureStop,
+		FailurePhase:         failurePhase,
+		ExpectedFailurePhase: c.ExpectedFailurePhase,
+		FailurePhaseMatched:  failurePhaseMatches,
+		ContractMatched:      statusMatches && failurePhaseMatches && !c.RequireRefine && !c.RequireBacktrack,
+	}, nil
 }
 
 func degradedBaselinePrediction(prediction string, err error) string {

@@ -824,6 +824,45 @@ func TestBaseExpertRunPlannedEnforcesAuthorizationAndBudgets(t *testing.T) {
 	assert.Equal(t, []string{"CPU 使用率与节流状态"}, result.Metadata["expected_evidence"])
 }
 
+func TestBaseExpertRunPlannedCanStopAfterFirstEvidence(t *testing.T) {
+	logTool := &fallbackQueryTestTool{}
+	registry := NewToolRegistry()
+	registry.Register("query_logs", logTool)
+	expert := NewBaseExpert(ExpertRuntimeConfig{
+		Name:              "linux_sre",
+		ToolNames:         []string{"query_logs"},
+		MaxRetrievalSteps: 2,
+		GenerateContentFunc: func(_ context.Context, _ *belief.Frontier, _ *belief.BeliefGraph, _ []RetrievalRecord, decision map[string]string) (string, error) {
+			if decision["action"] == "analyze" {
+				t.Fatal("bootstrap retrieval must stop before evidence assessment")
+			}
+			return "查询故障时间窗日志", nil
+		},
+	}, registry)
+
+	result := expert.RunPlanned(context.Background(), ExpertTask{
+		Frontier:          &belief.Frontier{NodeID: "bootstrap", Label: "服务异常"},
+		Graph:             belief.NewBeliefGraph(),
+		AllowedTools:      []string{"query_logs"},
+		StopAfterEvidence: true,
+		Budget: ExecutionBudget{
+			LLMCalls:          2,
+			ToolCalls:         1,
+			RAGCalls:          1,
+			Timeout:           time.Second,
+			MaxRetrievalSteps: 2,
+			MaxOutputTokens:   128,
+		},
+	})
+
+	require.Equal(t, "succeeded", result.Status)
+	require.Len(t, result.Evidence, 1)
+	assert.Empty(t, result.Analysis)
+	assert.Equal(t, 1, result.LLMCalls)
+	assert.Equal(t, 1, result.ToolCalls)
+	assert.Equal(t, 1, logTool.calls)
+}
+
 func TestBaseExpertRunPlannedStopsAtOverallTimeoutWithinBudget(t *testing.T) {
 	expert := NewBaseExpert(ExpertRuntimeConfig{
 		Name:              "linux_sre",
