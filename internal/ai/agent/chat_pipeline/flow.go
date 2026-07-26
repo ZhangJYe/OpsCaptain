@@ -27,6 +27,8 @@ var (
 	// Lazy-initialized user tools dependencies; set via SetUserToolDeps before first chat.
 	userToolStoreDeps skills.UserSkillStore
 	dynamicMCPRegDeps *tools.DynamicMCPRegistry
+
+	sharedRegistries []*skills.Registry
 )
 
 // SetUserToolDeps configures user tool dependencies for progressive disclosure.
@@ -36,14 +38,23 @@ func SetUserToolDeps(store skills.UserSkillStore, reg *tools.DynamicMCPRegistry)
 	dynamicMCPRegDeps = reg
 }
 
+// SetSharedRegistries 在启动时调用，设置共享 registry 实例
+func SetSharedRegistries(registries []*skills.Registry) {
+	sharedRegistries = registries
+}
+
 func getChatDisclosure() *skills.ProgressiveDisclosure {
 	chatDisclosureOnce.Do(func() {
-		chatDisclosureIns = skills.NewProgressiveDisclosure(
-			[]*skills.Registry{
+		registries := sharedRegistries
+		if len(registries) == 0 {
+			registries = []*skills.Registry{
 				logs.SkillRegistry(),
 				metrics.SkillRegistry(),
 				knowledge.SkillRegistry(),
-			},
+			}
+		}
+		chatDisclosureIns = skills.NewProgressiveDisclosure(
+			registries,
 			tools.BuildTieredTools(context.Background(), userToolStoreDeps, dynamicMCPRegDeps),
 		)
 	})

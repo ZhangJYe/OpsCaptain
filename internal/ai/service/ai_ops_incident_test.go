@@ -22,7 +22,7 @@ func TestAIOpsIncidentAppendUsesExistingIncidentContext(t *testing.T) {
 		}, nil
 	}
 
-	created, err := CreateAIOpsIncident(context.Background(), "payment timeout", "")
+	created, err := CreateAIOpsIncident(context.Background(), "payment timeout", "", nil)
 	if err != nil {
 		t.Fatalf("create incident: %v", err)
 	}
@@ -30,7 +30,7 @@ func TestAIOpsIncidentAppendUsesExistingIncidentContext(t *testing.T) {
 		t.Fatalf("unexpected incident identifiers: %#v", created)
 	}
 
-	appended, err := AppendAIOpsIncidentTurn(context.Background(), created.IncidentID, "checkout errors")
+	appended, err := AppendAIOpsIncidentTurn(context.Background(), created.IncidentID, "checkout errors", nil)
 	if err != nil {
 		t.Fatalf("append incident turn: %v", err)
 	}
@@ -57,12 +57,12 @@ func TestAIOpsIncidentRejectsConcurrentTurn(t *testing.T) {
 	setupIncidentTest(t)
 
 	startIncidentRun = func(func()) {}
-	created, err := CreateAIOpsIncident(context.Background(), "api latency", "")
+	created, err := CreateAIOpsIncident(context.Background(), "api latency", "", nil)
 	if err != nil {
 		t.Fatalf("create incident: %v", err)
 	}
 
-	if _, err := AppendAIOpsIncidentTurn(context.Background(), created.IncidentID, "more evidence"); err != ErrIncidentTurnRunning {
+	if _, err := AppendAIOpsIncidentTurn(context.Background(), created.IncidentID, "more evidence", nil); err != ErrIncidentTurnRunning {
 		t.Fatalf("expected running turn error, got %v", err)
 	}
 }
@@ -80,7 +80,7 @@ func TestAIOpsIncidentApprovalExecutionUpdatesOriginalTurn(t *testing.T) {
 		}, nil
 	}
 
-	created, err := CreateAIOpsIncident(context.Background(), "restart paymentservice", "")
+	created, err := CreateAIOpsIncident(context.Background(), "restart paymentservice", "", nil)
 	if err != nil {
 		t.Fatalf("create incident: %v", err)
 	}

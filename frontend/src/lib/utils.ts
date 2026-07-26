@@ -113,6 +113,20 @@ export const SKILL_GROUPS: SkillGroup[] = [
         domain: 'logs',
         promptFocus: '优先分析失败率升高涉及的接口、错误码和依赖调用模式。',
       },
+      {
+        id: 'logs_service_offline_panic_trace',
+        label: '服务离线追踪',
+        description: '追踪服务下线、pod 重启、crashloop 和 panic 证据。',
+        domain: 'logs',
+        promptFocus: '优先检查 panic、stack trace、nil pointer、restart reason、crashloop、oom 信号。',
+      },
+      {
+        id: 'logs_auth_failure_trace',
+        label: '鉴权失败追踪',
+        description: '追踪登录、token 和鉴权失败。',
+        domain: 'logs',
+        promptFocus: '优先检查 login、token、jwt、forbidden、unauthorized、permission denied 信号。',
+      },
     ],
   },
   {
@@ -147,6 +161,13 @@ export const SKILL_GROUPS: SkillGroup[] = [
         description: '优先给出可执行的回滚与验证步骤。',
         domain: 'knowledge',
         promptFocus: '优先输出可执行的回滚步骤、风险提示和验证项。',
+      },
+      {
+        id: 'knowledge_service_error_code_lookup',
+        label: '错误码查询',
+        description: '检索服务错误码说明和排查步骤。',
+        domain: 'knowledge',
+        promptFocus: '优先查询错误码含义、常见原因、受影响依赖和初步排查步骤。',
       },
     ],
   },
@@ -186,4 +207,13 @@ export function isGoSMessage(message: ChatMessage): boolean {
     return true
   }
   return message.executionSteps?.some((s) => s.id.startsWith('gos:')) ?? false
+}
+
+export function getSkillLabelById(id: string): string {
+  const builtin = findSkillsByIds([id])
+  if (builtin.length > 0) return builtin[0].label
+  if (id.startsWith('user-skill:')) {
+    return id.replace('user-skill:', '')
+  }
+  return id
 }

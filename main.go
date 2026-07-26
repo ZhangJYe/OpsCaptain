@@ -18,6 +18,9 @@ import (
 	"SuperBizAgent/internal/ai/retriever"
 	aiservice "SuperBizAgent/internal/ai/service"
 	"SuperBizAgent/internal/ai/skills"
+	"SuperBizAgent/internal/ai/skills/domains/knowledge"
+	"SuperBizAgent/internal/ai/skills/domains/logs"
+	domainmetrics "SuperBizAgent/internal/ai/skills/domains/metrics"
 	"SuperBizAgent/internal/ai/tools"
 	"SuperBizAgent/internal/app"
 	"SuperBizAgent/internal/ai/chatops"
@@ -220,9 +223,12 @@ func main() {
 		dynamicMCPReg, _ = tools.NewDynamicMCPRegistry(nil, timeoutMs)
 	}
 
-	// Create user skill loader; domain registries are managed by AIOps runtime, pass nil for now
+	// Create user skill loader with shared domain registries
+	logsR := logs.SkillRegistry()
+	metricsR := domainmetrics.SkillRegistry()
+	knowledgeR := knowledge.SkillRegistry()
 	customReg, _ := skills.NewRegistry("custom", nil)
-	userSkillLoader := skills.NewUserSkillLoader(userSkillStore, dynamicMCPReg, nil, nil, nil, customReg)
+	userSkillLoader := skills.NewUserSkillLoader(userSkillStore, dynamicMCPReg, metricsR, logsR, knowledgeR, customReg)
 	if reloadErr := userSkillLoader.Reload(ctx); reloadErr != nil {
 		g.Log().Warningf(ctx, "load user skills: %v", reloadErr)
 	}
@@ -277,6 +283,8 @@ func main() {
 
 	// Wire user tool dependencies into chat pipeline for progressive disclosure
 	chat_pipeline.SetUserToolDeps(userSkillStore, dynamicMCPReg)
+	chat_pipeline.SetSharedRegistries([]*skills.Registry{metricsR, logsR, knowledgeR, customReg})
+	aiservice.SetSharedAIOpsRegistries([]*skills.Registry{metricsR, logsR, knowledgeR, customReg})
 
 	chatTaskPipelineShutdown := func(context.Context) error { return nil }
 	if shutdownFn, startErr := aiservice.StartChatTaskPipeline(ctx); startErr != nil {

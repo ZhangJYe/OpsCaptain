@@ -40,6 +40,7 @@ type IncidentTurn struct {
 	Result            string         `json:"result,omitempty"`
 	Detail            []string       `json:"detail,omitempty"`
 	Engine            string         `json:"engine,omitempty"`
+	SelectedSkillIds  []string       `json:"selected_skill_ids,omitempty"`
 	ApprovalRequestID string         `json:"approval_request_id,omitempty"`
 	ApprovalStatus    string         `json:"approval_status,omitempty"`
 	DegradationReason string         `json:"degradation_reason,omitempty"`
@@ -60,16 +61,17 @@ type IncidentEvent struct {
 }
 
 type IncidentSession struct {
-	IncidentID     string          `json:"incident_id"`
-	SessionID      string          `json:"session_id"`
-	Title          string          `json:"title"`
-	Status         IncidentStatus  `json:"status"`
-	EngineStrategy string          `json:"engine_strategy"`
-	LatestSummary  string          `json:"latest_summary,omitempty"`
-	Turns          []IncidentTurn  `json:"turns,omitempty"`
-	Events         []IncidentEvent `json:"events,omitempty"`
-	CreatedAt      int64           `json:"created_at"`
-	UpdatedAt      int64           `json:"updated_at"`
+	IncidentID       string          `json:"incident_id"`
+	SessionID        string          `json:"session_id"`
+	Title            string          `json:"title"`
+	Status           IncidentStatus  `json:"status"`
+	EngineStrategy   string          `json:"engine_strategy"`
+	LatestSummary    string          `json:"latest_summary,omitempty"`
+	SelectedSkillIds []string        `json:"selected_skill_ids,omitempty"`
+	Turns            []IncidentTurn  `json:"turns,omitempty"`
+	Events           []IncidentEvent `json:"events,omitempty"`
+	CreatedAt        int64           `json:"created_at"`
+	UpdatedAt        int64           `json:"updated_at"`
 }
 
 type IncidentStore interface {
@@ -113,7 +115,7 @@ var (
 	}
 )
 
-func CreateAIOpsIncident(ctx context.Context, query, engine string) (*IncidentSession, error) {
+func CreateAIOpsIncident(ctx context.Context, query, engine string, selectedSkillIds []string) (*IncidentSession, error) {
 	if !incidentEnabled(ctx) {
 		return nil, fmt.Errorf("aiops incident sessions are disabled")
 	}
@@ -128,26 +130,28 @@ func CreateAIOpsIncident(ctx context.Context, query, engine string) (*IncidentSe
 	now := time.Now().UnixMilli()
 	incidentID := uuid.NewString()
 	turn := IncidentTurn{
-		TurnID:     uuid.NewString(),
-		IncidentID: incidentID,
-		UserQuery:  query,
-		Status:     IncidentStatusRunning,
-		CreatedAt:  now,
+		TurnID:           uuid.NewString(),
+		IncidentID:       incidentID,
+		UserQuery:        query,
+		Status:           IncidentStatusRunning,
+		SelectedSkillIds: selectedSkillIds,
+		CreatedAt:        now,
 	}
 	sessionID := memory.GenerateSessionID()
 	if value, ok := ctx.Value(consts.CtxKeySessionID).(string); ok && strings.TrimSpace(value) != "" {
 		sessionID = strings.TrimSpace(value)
 	}
 	incident := &IncidentSession{
-		IncidentID:     incidentID,
-		SessionID:      sessionID,
-		Title:          incidentTitle(query),
-		Status:         IncidentStatusRunning,
-		EngineStrategy: incidentEngine(ctx, engine),
-		Turns:          []IncidentTurn{turn},
-		Events:         []IncidentEvent{newIncidentEvent(incidentID, turn.TurnID, "", "turn_started", "", "开始事故排障", nil)},
-		CreatedAt:      now,
-		UpdatedAt:      now,
+		IncidentID:       incidentID,
+		SessionID:        sessionID,
+		Title:            incidentTitle(query),
+		Status:           IncidentStatusRunning,
+		EngineStrategy:   incidentEngine(ctx, engine),
+		SelectedSkillIds: selectedSkillIds,
+		Turns:            []IncidentTurn{turn},
+		Events:           []IncidentEvent{newIncidentEvent(incidentID, turn.TurnID, "", "turn_started", "", "开始事故排障", nil)},
+		CreatedAt:        now,
+		UpdatedAt:        now,
 	}
 	if err := store.Create(ctx, incident); err != nil {
 		return nil, err
@@ -156,7 +160,7 @@ func CreateAIOpsIncident(ctx context.Context, query, engine string) (*IncidentSe
 	return incident, nil
 }
 
-func AppendAIOpsIncidentTurn(ctx context.Context, incidentID, query string) (*IncidentSession, error) {
+func AppendAIOpsIncidentTurn(ctx context.Context, incidentID, query string, selectedSkillIds []string) (*IncidentSession, error) {
 	if !incidentEnabled(ctx) {
 		return nil, fmt.Errorf("aiops incident sessions are disabled")
 	}
@@ -175,11 +179,12 @@ func AppendAIOpsIncidentTurn(ctx context.Context, incidentID, query string) (*In
 			return ErrIncidentTurnRunning
 		}
 		incident.Turns = append(incident.Turns, IncidentTurn{
-			TurnID:     turnID,
-			IncidentID: incident.IncidentID,
-			UserQuery:  query,
-			Status:     IncidentStatusRunning,
-			CreatedAt:  now,
+			TurnID:           turnID,
+			IncidentID:       incident.IncidentID,
+			UserQuery:        query,
+			Status:           IncidentStatusRunning,
+			SelectedSkillIds: selectedSkillIds,
+			CreatedAt:        now,
 		})
 		incident.Status = IncidentStatusRunning
 		incident.Events = append(incident.Events, newIncidentEvent(incident.IncidentID, turnID, "", "turn_started", "", "继续事故排障", nil))

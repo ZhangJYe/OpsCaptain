@@ -106,9 +106,9 @@ export default function App() {
   const handleStartAIOps = useCallback(
     (query: string) => {
       setWorkbenchMode('aiops')
-      void incidents.createIncident(query, aiOpsEngine).catch(() => undefined)
+      void incidents.createIncident(query, aiOpsEngine, selectedSkillIds).catch(() => undefined)
     },
-    [aiOpsEngine, incidents],
+    [aiOpsEngine, incidents, selectedSkillIds],
   )
 
   const handleAIOpsEngineChange = useCallback(
@@ -187,7 +187,7 @@ export default function App() {
           engine={displayedAIOpsEngine}
           onCreate={handleStartAIOps}
           onAppend={(query) => {
-            void incidents.appendTurn(query).catch(() => undefined)
+            void incidents.appendTurn(query, selectedSkillIds).catch(() => undefined)
           }}
         />
       ) : (
@@ -202,6 +202,7 @@ export default function App() {
           mode={chat.mode}
           workbenchMode="chat"
           selectedSkillIds={selectedSkillIds}
+          onSelectedSkillIdsChange={setSelectedSkillIds}
           petEnabled={petEnabled}
           aiOpsEngine={aiOpsEngine}
           onSend={handleSendChat}

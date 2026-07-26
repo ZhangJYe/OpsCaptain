@@ -16,7 +16,7 @@ func (c *ControllerV1) AIOpsIncidentCreate(ctx context.Context, req *v1.AIOpsInc
 	if ctx, _, err = checkAndGuardPrompt(ctx, req.Query); err != nil {
 		return nil, err
 	}
-	incident, err := app.CreateAIOpsIncident(ctx, req.Query, req.Engine)
+	incident, err := app.CreateAIOpsIncident(ctx, req.Query, req.Engine, req.SelectedSkillIds)
 	if err != nil {
 		return nil, err
 	}
@@ -27,7 +27,7 @@ func (c *ControllerV1) AIOpsIncidentTurn(ctx context.Context, req *v1.AIOpsIncid
 	if ctx, _, err = checkAndGuardPrompt(ctx, req.Query); err != nil {
 		return nil, err
 	}
-	incident, err := app.AppendAIOpsIncidentTurn(ctx, req.IncidentID, req.Query)
+	incident, err := app.AppendAIOpsIncidentTurn(ctx, req.IncidentID, req.Query, req.SelectedSkillIds)
 	if err != nil {
 		if errors.Is(err, app.ErrIncidentTurnRunning) {
 			return nil, errors.New("incident turn is still running")

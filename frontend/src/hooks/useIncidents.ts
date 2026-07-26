@@ -151,7 +151,7 @@ export function useIncidents() {
   )
 
   const createIncident = useCallback(
-    async (query: string, engine: AIOpsEngine) => {
+    async (query: string, engine: AIOpsEngine, selectedSkillIds?: string[]) => {
       setError(null)
       closeEvents()
       setIsLoading(true)
@@ -159,7 +159,7 @@ export function useIncidents() {
         const res = await fetch(`${getApiBaseUrl()}/ai_ops/incidents`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query, engine }),
+          body: JSON.stringify({ query, engine, selected_skill_ids: selectedSkillIds }),
         })
         const next = await readIncidentResponse(res)
         setIncident(next)
@@ -176,7 +176,7 @@ export function useIncidents() {
   )
 
   const appendTurn = useCallback(
-    async (query: string) => {
+    async (query: string, selectedSkillIds?: string[]) => {
       if (!incident) {
         throw new Error('请先创建事故。')
       }
@@ -189,7 +189,7 @@ export function useIncidents() {
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query }),
+            body: JSON.stringify({ query, selected_skill_ids: selectedSkillIds }),
           },
         )
         const next = await readIncidentResponse(res)

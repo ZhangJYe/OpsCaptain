@@ -30,6 +30,7 @@ interface Props {
   mode: ChatMode
   workbenchMode: WorkbenchMode
   selectedSkillIds: string[]
+  onSelectedSkillIdsChange?: (ids: string[]) => void
   petEnabled: boolean
   aiOpsEngine: AIOpsEngine
   onSend: (query: string) => void
@@ -155,6 +156,7 @@ export function AgentWorkbenchView({
   mode,
   workbenchMode,
   selectedSkillIds,
+  onSelectedSkillIdsChange,
   petEnabled,
   aiOpsEngine,
   onSend,
@@ -352,6 +354,7 @@ export function AgentWorkbenchView({
                 workbenchMode={workbenchMode}
                 aiOpsEngine={aiOpsEngine}
                 selectedSkillIds={selectedSkillIds}
+                onSelectedSkillIdsChange={onSelectedSkillIdsChange}
                 onModeChange={onModeChange}
                 embedded
               />
