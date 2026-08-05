@@ -547,6 +547,14 @@ function terminalTone(turn: IncidentTurn): string {
   return 'text-zinc-500 dark:text-zinc-400'
 }
 
+function suggestedAction(status: IncidentStatus, hasConclusion: boolean): string {
+  if (status === 'waiting_approval') return '审批后继续写回当前事故；拒绝后仍可补充只读分析。'
+  if (status === 'degraded') return '已保留当前证据，建议补充现象或切换到可用的数据源后继续。'
+  if (status === 'failed') return '请补充影响范围与异常时间窗，再从当前事故继续排查。'
+  if (hasConclusion) return '先复核结论引用的证据，再决定是否执行后续动作。'
+  return '补充告警、日志、指标或影响范围，开始生成可复核的排障过程。'
+}
+
 export function IncidentView({ incident, isLoading, error, engine, onCreate, onAppend }: Props) {
   const [query, setQuery] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -558,6 +566,8 @@ export function IncidentView({ incident, isLoading, error, engine, onCreate, onA
     () => projectProcess(recentEvents, incident?.engine_strategy || engine, incident?.status || 'active'),
     [engine, incident?.engine_strategy, incident?.status, recentEvents],
   )
+  const evidenceCount = process.signals.filter((signal) => signal.tone === 'evidence' || signal.tone === 'judgement').length
+  const action = suggestedAction(incident?.status || 'active', Boolean(conclusion))
 
   useEffect(() => {
     if (!textareaRef.current) {
@@ -588,15 +598,16 @@ export function IncidentView({ incident, isLoading, error, engine, onCreate, onA
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[#fafafa] dark:bg-[#09090b]">
-      <div className="shrink-0 border-b border-zinc-200/80 bg-white/80 px-4 py-4 backdrop-blur-xl dark:border-zinc-900/80 dark:bg-zinc-950/70 lg:px-6">
-        <div className="mx-auto flex max-w-6xl flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div className="flex h-full min-h-0 flex-col bg-[#f7f8fa] dark:bg-[#09090b]">
+      <div className="shrink-0 border-b border-zinc-200/80 bg-white/85 px-4 py-5 backdrop-blur-xl dark:border-zinc-900/80 dark:bg-zinc-950/70 lg:px-6">
+        <div className="mx-auto max-w-7xl">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
             <div className="mb-2 inline-flex items-center gap-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">
               <Activity size={14} className="text-accent" />
-              事故排障
+              事故诊断 <span className="text-zinc-300 dark:text-zinc-700">/</span> 当前事故
             </div>
-            <h1 className="truncate text-xl font-semibold text-zinc-950 dark:text-white">
+            <h1 className="truncate text-2xl font-semibold tracking-tight text-zinc-950 dark:text-white">
               {incident?.title || '描述首条现象，创建事故记录'}
             </h1>
           </div>
@@ -615,17 +626,35 @@ export function IncidentView({ incident, isLoading, error, engine, onCreate, onA
               </span>
             )}
           </div>
+          </div>
+
+          {incident && (
+            <div className="mt-5 grid overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm shadow-zinc-900/[0.025] dark:border-zinc-800/70 dark:bg-zinc-900/45 sm:grid-cols-3">
+              <div className="flex items-center gap-3 px-4 py-3.5 sm:border-r sm:border-zinc-100 dark:sm:border-zinc-800/70">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-300"><Activity size={17} /></span>
+                <div><div className="text-xs text-zinc-500 dark:text-zinc-400">关键过程</div><div className="mt-0.5 text-sm font-semibold text-zinc-900 dark:text-white">{process.meaningfulCount} 条已沉淀</div></div>
+              </div>
+              <div className="flex items-center gap-3 border-t border-zinc-100 px-4 py-3.5 dark:border-zinc-800/70 sm:border-t-0 sm:border-r">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-300"><FileSearch size={17} /></span>
+                <div><div className="text-xs text-zinc-500 dark:text-zinc-400">证据与判断</div><div className="mt-0.5 text-sm font-semibold text-zinc-900 dark:text-white">{evidenceCount} 条可复核动态</div></div>
+              </div>
+              <div className="flex items-center gap-3 border-t border-zinc-100 px-4 py-3.5 dark:border-zinc-800/70 sm:border-t-0">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-300"><Clock3 size={17} /></span>
+                <div><div className="text-xs text-zinc-500 dark:text-zinc-400">最近更新</div><div className="mt-0.5 text-sm font-semibold text-zinc-900 dark:text-white">{dateTime(incident.updated_at)}</div></div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
-        <div className="mx-auto grid max-w-6xl gap-0 px-4 py-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.92fr)] lg:px-6">
-          <section className="min-w-0 border-b border-zinc-200/80 pb-5 lg:border-b-0 lg:border-r lg:pr-6 dark:border-zinc-800/70">
+        <div className="mx-auto grid max-w-7xl gap-5 px-4 py-5 lg:grid-cols-[minmax(0,1fr)_minmax(330px,0.9fr)] lg:px-6">
+          <section className="min-w-0 rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-sm shadow-zinc-900/[0.025] dark:border-zinc-800/70 dark:bg-zinc-900/35 sm:p-5">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">实时过程</h2>
                 <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-500">
-                  阶段、证据、降级和审批都沉淀在当前事故。
+                只呈现可以回看和复核的排障主线。
                 </p>
               </div>
               <span className="text-xs text-zinc-400 dark:text-zinc-600">{process.meaningfulCount} 关键事件</span>
@@ -652,12 +681,14 @@ export function IncidentView({ incident, isLoading, error, engine, onCreate, onA
             )}
 
             {recentEvents.length === 0 ? (
-              <div className="flex min-h-[220px] items-center justify-center border border-dashed border-zinc-300 px-6 text-center text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-500">
-                输入首条现象后，这里会显示排障阶段和证据回放。
+              <div className="flex min-h-[300px] flex-col items-center justify-center rounded-xl border border-dashed border-zinc-300 px-6 text-center dark:border-zinc-800">
+                <span className="flex size-11 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-300"><Activity size={20} /></span>
+                <h3 className="mt-4 text-sm font-semibold text-zinc-800 dark:text-zinc-100">等待第一条现象</h3>
+                <p className="mt-2 max-w-sm text-sm leading-6 text-zinc-500 dark:text-zinc-500">输入告警、日志、指标异常或影响范围后，这里会依次呈现过程、证据和结论。</p>
               </div>
             ) : (
               <div className="space-y-4">
-                <div className="overflow-hidden border border-zinc-200/80 bg-white/85 shadow-sm shadow-zinc-900/[0.025] dark:border-zinc-800/70 dark:bg-zinc-900/45">
+                <div className="overflow-hidden rounded-xl border border-zinc-200/80 bg-zinc-50/60 dark:border-zinc-800/70 dark:bg-zinc-950/20">
                   <div className="grid gap-4 border-b border-zinc-100 px-4 py-4 dark:border-zinc-800/80 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
                     <div className="min-w-0">
                       <div className="text-[11px] font-medium text-zinc-400 dark:text-zinc-500">当前阶段</div>
@@ -724,30 +755,7 @@ export function IncidentView({ incident, isLoading, error, engine, onCreate, onA
                   </div>
                 </div>
 
-                {process.signals.length > 0 && (
-                  <div className="border border-zinc-200/80 bg-white/75 px-4 py-4 dark:border-zinc-800/70 dark:bg-zinc-900/35">
-                    <div className="mb-3 flex items-center justify-between gap-2">
-                      <h3 className="text-xs font-medium text-zinc-500 dark:text-zinc-400">关键动态</h3>
-                      <span className="text-[11px] text-zinc-400 dark:text-zinc-600">最近 {process.signals.length} 条</span>
-                    </div>
-                    <div className="space-y-3">
-                      {process.signals.map((signal) => (
-                        <div key={signal.id} className="grid gap-2 border-t border-zinc-100 pt-3 first:border-t-0 first:pt-0 dark:border-zinc-800/80 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-start">
-                          <span className={`inline-flex w-fit rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${processSignalTone(signal)}`}>
-                            {signal.label}
-                          </span>
-                          <div className="min-w-0">
-                            <div className="break-words text-sm text-zinc-800 dark:text-zinc-200">{signal.summary}</div>
-                            {signal.detail && <div className="mt-1 break-words text-[11px] text-zinc-400 dark:text-zinc-500">{signal.detail}</div>}
-                          </div>
-                          <time className="text-[11px] text-zinc-400 dark:text-zinc-600">{dateTime(signal.createdAt)}</time>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <details className="group border border-zinc-200/80 bg-white/60 dark:border-zinc-800/70 dark:bg-zinc-900/25">
+                <details className="group rounded-xl border border-zinc-200/80 bg-white/60 dark:border-zinc-800/70 dark:bg-zinc-900/25">
                   <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm text-zinc-700 outline-none transition hover:bg-zinc-50 dark:text-zinc-200 dark:hover:bg-zinc-900/65">
                     <span className="font-medium">运行详情</span>
                     <span className="flex flex-wrap items-center gap-2 text-[11px] text-zinc-400 dark:text-zinc-500">
@@ -790,23 +798,30 @@ export function IncidentView({ incident, isLoading, error, engine, onCreate, onA
             )}
           </section>
 
-          <section className="min-w-0 pt-5 lg:pl-6 lg:pt-0">
+          <section className="min-w-0 rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-sm shadow-zinc-900/[0.025] dark:border-zinc-800/70 dark:bg-zinc-900/35 sm:p-5">
             <div className="mb-4 flex items-center gap-2">
               <FileSearch size={16} className="text-accent" />
               <div>
                 <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">诊断结论</h2>
-                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-500">保留轮次、trace 和最新判断。</p>
+                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-500">先给出判断，再保留每一条依据。</p>
               </div>
             </div>
 
             {error && (
-              <div className="mb-4 border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/25 dark:text-rose-200">
-                {error}
+              <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/25 dark:text-amber-200">
+                <div className="flex gap-3">
+                  <AlertTriangle size={17} className="mt-0.5 shrink-0" />
+                  <div>
+                    <div className="font-medium">暂时无法获取诊断结果</div>
+                    <p className="mt-1 text-xs leading-5 opacity-80">当前已保留本地输入和过程；连接恢复后可继续在同一事故中排查。</p>
+                    <details className="mt-2 text-xs opacity-70"><summary className="cursor-pointer">查看错误详情</summary><p className="mt-1 break-words">{error}</p></details>
+                  </div>
+                </div>
               </div>
             )}
 
             {conclusion ? (
-              <div className="border border-zinc-200/80 bg-white/90 px-4 py-4 shadow-sm shadow-zinc-900/[0.03] dark:border-zinc-800/70 dark:bg-zinc-900/55">
+              <div className="rounded-xl border border-sky-200/80 bg-sky-50/35 px-4 py-4 shadow-sm shadow-sky-500/[0.03] dark:border-sky-900/50 dark:bg-sky-950/15">
                 <div className="prose-chat">
                   <ReactMarkdown remarkPlugins={[remarkGfm, remarkFixHeadings]}>
                     {normalizeLooseMarkdown(conclusion)}
@@ -814,8 +829,28 @@ export function IncidentView({ incident, isLoading, error, engine, onCreate, onA
                 </div>
               </div>
             ) : (
-              <div className="border border-dashed border-zinc-300 px-4 py-8 text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-500">
-                当前还没有最终结论。
+              <div className="rounded-xl border border-dashed border-zinc-300 px-4 py-8 text-sm text-zinc-500 dark:border-zinc-800 dark:text-zinc-500">
+                当前还没有最终结论；过程和证据会持续在这里汇总。
+              </div>
+            )}
+
+            <div className="mt-5 rounded-xl border border-sky-200/80 bg-sky-50/45 px-4 py-4 dark:border-sky-900/50 dark:bg-sky-950/15">
+              <div className="flex items-start gap-3">
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white text-sky-600 shadow-sm ring-1 ring-sky-100 dark:bg-slate-900 dark:text-sky-300 dark:ring-sky-900/60"><ArrowRight size={16} /></span>
+                <div><h3 className="text-sm font-semibold text-zinc-900 dark:text-white">建议动作</h3><p className="mt-1 text-xs leading-5 text-zinc-600 dark:text-zinc-300">{action}</p></div>
+              </div>
+            </div>
+
+            {process.signals.length > 0 && (
+              <div className="mt-5">
+                <div className="mb-2 flex items-center justify-between"><h3 className="text-xs font-medium text-zinc-500 dark:text-zinc-400">关键证据</h3><span className="text-[11px] text-zinc-400 dark:text-zinc-600">最近 {process.signals.length} 条</span></div>
+                <div className="space-y-2">
+                  {process.signals.map((signal) => (
+                    <div key={signal.id} className="rounded-lg border border-zinc-200/80 bg-zinc-50/70 px-3 py-3 dark:border-zinc-800/70 dark:bg-zinc-950/20">
+                      <div className="flex items-start gap-2"><span className={`mt-0.5 inline-flex shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${processSignalTone(signal)}`}>{signal.label}</span><div className="min-w-0 flex-1"><div className="break-words text-sm text-zinc-800 dark:text-zinc-200">{signal.summary}</div>{signal.detail && <div className="mt-1 text-[11px] text-zinc-400 dark:text-zinc-500">{signal.detail}</div>}</div></div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -850,7 +885,7 @@ export function IncidentView({ incident, isLoading, error, engine, onCreate, onA
       </div>
 
       <div className="shrink-0 border-t border-zinc-200/80 bg-white/90 px-4 py-4 backdrop-blur-xl dark:border-zinc-900/80 dark:bg-zinc-950/88 lg:px-6">
-        <div className="mx-auto max-w-6xl border border-zinc-200/80 bg-white dark:border-zinc-800/70 dark:bg-zinc-900/70">
+        <div className="mx-auto max-w-7xl rounded-xl border border-zinc-200/80 bg-white shadow-sm shadow-zinc-900/[0.02] dark:border-zinc-800/70 dark:bg-zinc-900/70">
           <textarea
             ref={textareaRef}
             value={query}
