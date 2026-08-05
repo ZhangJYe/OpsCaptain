@@ -1,8 +1,6 @@
 import { useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Activity, Bell, BellRing, Check, ChevronUp, Clock3, RadioTower, Trash2, WifiOff, X } from 'lucide-react'
-import { PetCharacter } from '../pet/PetCharacter'
-import type { PetMood } from '../pet/PetCharacter'
 import { useChangeEvents, type ChangeEventItem, type ChangeEventRisk, type ChangeEventStreamStatus } from '../../hooks/useChangeEvents'
 
 const RISK_LABELS: Record<string, string> = {
@@ -60,15 +58,6 @@ function statusTone(status: ChangeEventStreamStatus): string {
       : 'bg-zinc-300 dark:bg-zinc-600'
 }
 
-function eventMood(event: ChangeEventItem | undefined, status: ChangeEventStreamStatus): PetMood {
-  if (status === 'connecting') return 'thinking'
-  if (status === 'error') return 'error'
-  const risk = String(event?.risk_level || '').toLowerCase()
-  if (risk === 'critical' || risk === 'high') return 'error'
-  if (event) return 'done'
-  return 'idle'
-}
-
 function formatTime(value?: string): string {
   if (!value) return '--:--'
   const date = new Date(value)
@@ -119,7 +108,6 @@ export function ChangeEventSentinel() {
   const { events, latestEvent, unreadCount, status, markRead, clear } = useChangeEvents()
   const [panelOpen, setPanelOpen] = useState(false)
 
-  const mood = eventMood(latestEvent, status)
   const headline = useMemo(() => {
     if (latestEvent) {
       return `${latestEvent.service} ${eventLabel(latestEvent.event_type, TYPE_LABELS)}`
@@ -227,8 +215,8 @@ export function ChangeEventSentinel() {
         aria-label={panelOpen ? '收起变更哨兵' : '打开变更哨兵'}
         title={panelOpen ? '收起变更哨兵' : '打开变更哨兵'}
       >
-        <span className="relative">
-          <PetCharacter mood={mood} size={48} className="rounded-[18px]" />
+        <span className={`relative flex h-11 w-11 items-center justify-center rounded-[18px] bg-sky-50 text-sky-600 dark:bg-sky-500/10 dark:text-sky-300`}>
+          {unreadCount > 0 ? <BellRing size={19} /> : <Bell size={19} />}
           <span className={`absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full ring-2 ring-white dark:ring-slate-900 ${statusTone(status)}`} />
         </span>
         <span className="hidden min-w-0 text-left sm:block">

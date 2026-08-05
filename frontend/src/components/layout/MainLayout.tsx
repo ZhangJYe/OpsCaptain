@@ -2,8 +2,10 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { TopBar } from './TopBar'
 import { Sidebar } from '../sidebar/Sidebar'
 import { ChangeEventSentinel } from '../change-events/ChangeEventSentinel'
+import { FloatingCompanion } from '../pet/FloatingCompanion'
 import type { ReactNode } from 'react'
 import type { AIOpsEngine, ChatMessage, ChatMode, ChatSession, IncidentSession, WorkbenchMode } from '../../types/chat'
+import type { PetMood } from '../pet/PetCharacter'
 import { getSiteRecord } from '../../lib/utils'
 
 interface Props {
@@ -29,6 +31,8 @@ interface Props {
   selectedSkillIds: string[]
   onSelectedSkillIdsChange: (ids: string[]) => void
   isLoading: boolean
+  petEnabled: boolean
+  petMood: PetMood
   children: ReactNode
 }
 
@@ -55,6 +59,8 @@ export function MainLayout({
   selectedSkillIds,
   onSelectedSkillIdsChange,
   isLoading,
+  petEnabled,
+  petMood,
   children,
 }: Props) {
   const siteRecord = getSiteRecord()
@@ -141,6 +147,7 @@ export function MainLayout({
           </div>
         </div>
         <ChangeEventSentinel />
+        {petEnabled && <FloatingCompanion mood={petMood} />}
       </div>
     </div>
   )
