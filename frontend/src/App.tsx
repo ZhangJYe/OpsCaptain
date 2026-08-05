@@ -9,6 +9,7 @@ import { SettingsView } from './components/settings/SettingsView'
 import { TopologyView } from './components/topology/TopologyView'
 import { saveSession } from './lib/storage'
 import type { AIOpsEngine, ChatSession, WorkbenchMode } from './types/chat'
+import type { PetMood } from './components/pet/PetCharacter'
 
 const SKILL_STORAGE_KEY = 'opscaptain-selected-skills'
 const AIOPS_ENGINE_STORAGE_KEY = 'opscaptain-aiops-engine'
@@ -51,6 +52,12 @@ export default function App() {
   })
   const incidentEngine = incidents.incident?.engine_strategy === 'gos_engine' ? 'gos_engine' : 'plan_execute_replan'
   const displayedAIOpsEngine = incidents.incident && workbenchMode === 'aiops' ? incidentEngine : aiOpsEngine
+  const agentWorking = workbenchMode === 'aiops' ? incidents.isLoading : chat.isLoading
+  const petMood: PetMood = agentWorking
+    ? (workbenchMode === 'aiops' ? displayedAIOpsEngine === 'gos_engine' : chat.loadingEngine === 'gos_engine')
+      ? 'gos'
+      : 'thinking'
+    : 'idle'
 
   useEffect(() => {
     try {
@@ -174,6 +181,8 @@ export default function App() {
       selectedSkillIds={selectedSkillIds}
       onSelectedSkillIdsChange={setSelectedSkillIds}
       isLoading={chat.isLoading || incidents.isLoading}
+      petEnabled={petEnabled}
+      petMood={petMood}
     >
       {workbenchMode === 'settings' ? (
         <SettingsView onBack={() => setWorkbenchMode('chat')} />

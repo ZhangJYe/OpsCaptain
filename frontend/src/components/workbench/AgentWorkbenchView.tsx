@@ -8,7 +8,6 @@ import { GoSBeliefProgress } from './GoSBeliefProgress'
 import { SuggestionChips } from '../agent/SuggestionChips'
 import type { Suggestion } from '../agent/SuggestionChips'
 import type { ThinkingStep } from '../agent/ThinkingCollapse'
-import { CompanionBar } from './CompanionBar'
 import { DetailPanel } from './DetailPanel'
 import { EvidenceBlock } from './EvidenceBlock'
 import type { DetailItem } from './DetailPanel'
@@ -336,13 +335,6 @@ export function AgentWorkbenchView({
 
         <div className="shrink-0 border-t border-white/40 bg-white/40 backdrop-blur-xl dark:border-white/5 dark:bg-slate-900/30">
           <div className="mx-auto flex max-w-5xl items-end gap-2 px-4 py-3 sm:gap-4 sm:px-5">
-            {petEnabled && (
-              <CompanionBar
-                steps={thinkingSteps}
-                isStreaming={isLoading}
-                isGoS={isGoS}
-              />
-            )}
             <div className="min-w-0 flex-1">
               <ChatInput
                 onSend={onSend}
