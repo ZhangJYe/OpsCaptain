@@ -89,11 +89,11 @@ export function MainLayout({
             )}
           </AnimatePresence>
 
-          <div className={`flex-shrink-0 overflow-hidden transition-[width] duration-200 ease-in-out ${sidebarOpen ? 'w-72' : 'w-0'}`}>
+          <div className={`flex-shrink-0 overflow-hidden transition-[width] duration-200 ease-in-out ${sidebarOpen ? 'w-48' : 'w-0'}`}>
             <motion.aside
-              className={`fixed bottom-0 left-0 top-0 z-50 w-72 lg:static lg:z-0 lg:h-full ${sidebarOpen ? '' : 'pointer-events-none'}`}
+              className={`fixed bottom-0 left-0 top-0 z-50 w-48 lg:static lg:z-0 lg:h-full ${sidebarOpen ? '' : 'pointer-events-none'}`}
               initial={false}
-              animate={{ x: sidebarOpen ? 0 : -288 }}
+              animate={{ x: sidebarOpen ? 0 : -192 }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
             >
               <Sidebar

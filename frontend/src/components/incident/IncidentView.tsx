@@ -5,13 +5,19 @@ import {
   Activity,
   AlertTriangle,
   ArrowRight,
+  BarChart3,
   CheckCircle2,
+  CircleDot,
   Clock3,
+  Database,
   FileSearch,
+  Gauge,
   GitBranch,
   Loader2,
   Send,
   ShieldAlert,
+  Sparkles,
+  Wrench,
 } from 'lucide-react'
 import remarkFixHeadings, { normalizeLooseMarkdown } from '../../lib/remarkFixHeadings'
 import type { AIOpsEngine, IncidentEvent, IncidentSession, IncidentStatus, IncidentTurn } from '../../types/chat'
@@ -555,6 +561,69 @@ function suggestedAction(status: IncidentStatus, hasConclusion: boolean): string
   return '补充告警、日志、指标或影响范围，开始生成可复核的排障过程。'
 }
 
+function DemoEvidenceChart({ color = '#ef4444' }: { color?: string }) {
+  return (
+    <svg viewBox="0 0 120 28" className="h-7 w-28" aria-label="指标趋势图" role="img">
+      <path d="M1 23C12 22 12 20 22 21S34 18 43 20s14-4 24-2 10-5 20-5 13-9 32-10" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" />
+      <path d="M1 27C12 26 12 24 22 25S34 22 43 24s14-4 24-2 10-5 20-5 13-9 32-10V28H1Z" fill={color} opacity=".08" />
+    </svg>
+  )
+}
+
+function DemoIncident({ engine, onCreate }: Pick<Props, 'engine' | 'onCreate'>) {
+  const [query, setQuery] = useState('')
+  const submit = () => query.trim() && onCreate(query.trim())
+
+  return (
+    <div className="h-full overflow-y-auto bg-[#fbfcfe] dark:bg-[#0b0f19]">
+      <div className="mx-auto max-w-6xl px-4 py-5 lg:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4 dark:border-slate-800">
+          <div><div className="flex items-center gap-2 text-[11px] text-slate-400"><span className="inline-flex items-center gap-1 rounded bg-sky-50 px-1.5 py-1 font-medium text-sky-600 dark:bg-sky-500/10 dark:text-sky-300"><Sparkles size={11} /> 演示案例</span> 事故诊断 / 已完成</div><h1 className="mt-2 text-lg font-semibold tracking-tight text-slate-900 dark:text-white">paymentservice P95 延迟升高 <span className="ml-1 rounded bg-rose-50 px-1.5 py-0.5 align-middle text-[10px] font-semibold text-rose-500 dark:bg-rose-500/10">P1</span></h1></div>
+          <div className="flex items-center gap-3 text-[10px] text-slate-400"><span className="rounded-full bg-emerald-50 px-2 py-1 font-medium text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300">已恢复</span><span>开始时间：2026-08-05 14:12:31</span><span>{engineLabel(engine)} 策略</span></div>
+        </div>
+
+        <div className="mt-4 grid overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950 sm:grid-cols-3">
+          {[
+            ['影响：结算请求超时 3.2%', 'paymentservice P95 从 320ms 升至 2.8s', AlertTriangle, 'text-rose-500 bg-rose-50 dark:bg-rose-500/10'],
+            ['置信度 87%', '根因已收敛，等待人工复核', CircleDot, 'text-sky-500 bg-sky-50 dark:bg-sky-500/10'],
+            ['耗时 2分18秒', '已生成可执行恢复建议', Gauge, 'text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10'],
+          ].map(([title, detail, Icon, tone], index) => { const SummaryIcon = Icon as typeof Activity; return <div key={title as string} className={`flex items-center gap-2.5 px-4 py-3 ${index < 2 ? 'border-b border-slate-100 sm:border-r sm:border-b-0 dark:border-slate-800' : ''}`}><span className={`flex size-7 items-center justify-center rounded-full ${tone as string}`}><SummaryIcon size={14} /></span><div><div className="text-xs font-semibold text-slate-700 dark:text-slate-200">{title as string}</div><div className="mt-0.5 text-[10px] text-slate-400">{detail as string}</div></div></div> })}
+        </div>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,0.93fr)_minmax(380px,1.07fr)]">
+          <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+            <div className="flex items-center justify-between"><h2 className="text-xs font-semibold text-slate-700 dark:text-slate-200">诊断过程</h2><span className="text-[10px] text-slate-400">14:21:31</span></div>
+            <div className="mt-4 space-y-0">
+              {[
+                ['发现异常', 'paymentservice P95 从 320ms 升至 2.8s，错误率稳定。', '14:21:31'],
+                ['关联分析', '对比应用 CPU、GC 和中间件指标后，排除计算资源瓶颈。', '14:22:42'],
+                ['检查日志', '慢请求主要卡在 Redis 获取连接；连接等待日志持续增加。', '14:24:09'],
+                ['形成结论', '连接池达到上限，扩容后延迟快速回落，根因已验证。', '14:26:13'],
+              ].map(([title, detail, time], index) => <div key={title} className="grid grid-cols-[18px_minmax(0,1fr)_42px] gap-2.5 pb-4 last:pb-0"><div className="relative flex justify-center"><span className="relative z-10 mt-0.5 flex size-4 items-center justify-center rounded-full bg-sky-500 text-[9px] font-bold text-white">✓</span>{index < 3 && <span className="absolute top-4 h-[calc(100%+2px)] w-px bg-sky-100 dark:bg-sky-500/20" />}</div><div><h3 className="text-[11px] font-semibold text-slate-700 dark:text-slate-200">{title}</h3><p className="mt-1 text-[10px] leading-4 text-slate-500 dark:text-slate-400">{detail}</p></div><time className="pt-0.5 text-right text-[9px] text-slate-400">{time}</time></div>)}
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+            <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2.5 dark:border-rose-500/20 dark:bg-rose-500/10"><div className="flex items-center gap-2 text-xs font-semibold text-rose-700 dark:text-rose-300"><AlertTriangle size={13} /> 根因：Redis 连接池耗尽</div><p className="mt-1 text-[10px] leading-4 text-rose-600/80 dark:text-rose-200/70">连接达到上限，后续请求在连接队列排队，进而放大支付接口 P95 延迟。</p></div>
+            <div className="mt-4 flex items-center justify-between"><h2 className="text-xs font-semibold text-slate-700 dark:text-slate-200">关键证据</h2><span className="text-[10px] text-slate-400">3 项已核验</span></div>
+            <div className="mt-2.5 space-y-2">
+              {[
+                ['Redis 连接数', '1,016 / 1,024', '#ef4444', '连接数接近满载'],
+                ['Redis 连接池等待 (P95)', '1,842 ms', '#f97316', '等待时间持续上升'],
+                ['应用日志', '302 条/分钟', '#3b82f6', 'JedisPool timeout 反复出现'],
+              ].map(([label, value, color, detail]) => <div key={label} className="grid grid-cols-[minmax(0,1fr)_112px] items-center gap-3 rounded-md border border-slate-100 px-3 py-2 dark:border-slate-800"><div><div className="flex items-baseline gap-2"><span className="text-[11px] font-medium text-slate-700 dark:text-slate-200">{label}</span><strong className="text-[10px]" style={{ color }}>{value}</strong></div><p className="mt-0.5 text-[9px] text-slate-400">{detail}</p></div><DemoEvidenceChart color={color} /></div>)}
+            </div>
+          </section>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-sky-200 bg-sky-50/65 px-4 py-3 dark:border-sky-500/20 dark:bg-sky-500/10"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex gap-2.5"><span className="flex size-7 shrink-0 items-center justify-center rounded bg-white text-sky-600 shadow-sm dark:bg-slate-900 dark:text-sky-300"><Wrench size={14} /></span><div><h2 className="text-xs font-semibold text-slate-700 dark:text-slate-200">建议动作</h2><p className="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">将 Redis 连接池上限扩至 2048，并开启空闲连接回收策略。</p></div></div><span className="shrink-0 rounded border border-sky-300 bg-white px-3 py-1.5 text-[10px] font-medium text-sky-600 shadow-sm dark:border-sky-500/30 dark:bg-slate-900 dark:text-sky-300">人工复核后执行</span></div></div>
+
+        <div className="mt-4 flex gap-2 rounded-lg border border-slate-200 bg-white p-2 shadow-sm dark:border-slate-800 dark:bg-slate-950"><input value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && submit()} placeholder="输入告警或异常现象，开始一次真实诊断…" className="min-w-0 flex-1 bg-transparent px-2 text-xs outline-none placeholder:text-slate-400" /><button onClick={submit} disabled={!query.trim()} className="inline-flex items-center gap-1.5 rounded bg-sky-500 px-3 py-1.5 text-[10px] font-medium text-white disabled:opacity-40"><Send size={12} /> 发起诊断</button></div>
+      </div>
+    </div>
+  )
+}
+
 export function IncidentView({ incident, isLoading, error, engine, onCreate, onAppend }: Props) {
   const [query, setQuery] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -595,6 +664,10 @@ export function IncidentView({ incident, isLoading, error, engine, onCreate, onA
       event.preventDefault()
       submit()
     }
+  }
+
+  if (!incident && !isLoading) {
+    return <DemoIncident engine={engine} onCreate={onCreate} />
   }
 
   return (
