@@ -58,6 +58,21 @@ type AgentRes struct {
 	Diagnosis         *AgentDiagnosisPayload `json:"diagnosis,omitempty"`
 }
 
+type AgentRouteReq struct {
+	g.Meta            `path:"/agent_route" method:"post" summary:"Agent运行路由决策"`
+	Query             string `json:"query" v:"required|max-length:8000#问题不能为空|问题长度不能超过8000"`
+	RouteMode         string `json:"route_mode,omitempty" v:"in:auto,react,diagnosis#运行方式不合法"`
+	DiagnosisStrategy string `json:"diagnosis_strategy,omitempty" v:"in:auto,plan_execute_replan,gos_engine,gos#诊断策略不合法"`
+}
+
+type AgentRouteRes struct {
+	Decision   string  `json:"decision"`
+	Strategy   string  `json:"strategy,omitempty"`
+	Confidence float64 `json:"confidence,omitempty"`
+	Reason     string  `json:"reason"`
+	Degraded   bool    `json:"degraded,omitempty"`
+}
+
 type ChatSubmitReq struct {
 	g.Meta           `path:"/chat_submit" method:"post" summary:"提交异步对话任务"`
 	Id               string   `json:"Id" v:"required|max-length:128#会话ID不能为空|会话ID长度不能超过128"`
@@ -124,6 +139,40 @@ type UploadStatusReq struct {
 type UploadStatusRes struct {
 	FileID string `json:"file_id"`
 	Status string `json:"status"`
+}
+
+type KnowledgeDocumentListReq struct {
+	g.Meta `path:"/knowledge_documents" method:"get" summary:"知识资料列表"`
+}
+
+type KnowledgeDocumentItem struct {
+	FileID     string `json:"file_id"`
+	FileName   string `json:"file_name"`
+	FileSize   int64  `json:"file_size"`
+	MIMEType   string `json:"mime_type"`
+	Status     string `json:"status"`
+	UploadedAt string `json:"uploaded_at"`
+	Version    int    `json:"version"`
+}
+
+type KnowledgeDocumentListRes struct {
+	Items []KnowledgeDocumentItem `json:"items"`
+}
+
+type KnowledgeDocumentDeleteReq struct {
+	g.Meta `path:"/knowledge_documents/{file_id}" method:"delete" summary:"删除知识资料"`
+	FileID string `json:"file_id" v:"required|max-length:128#资料ID不能为空|资料ID长度不能超过128"`
+}
+
+type KnowledgeDocumentDeleteRes struct{}
+
+type KnowledgeDocumentReindexReq struct {
+	g.Meta `path:"/knowledge_documents/{file_id}/reindex" method:"post" summary:"重新索引知识资料"`
+	FileID string `json:"file_id" v:"required|max-length:128#资料ID不能为空|资料ID长度不能超过128"`
+}
+
+type KnowledgeDocumentReindexRes struct {
+	Item KnowledgeDocumentItem `json:"item"`
 }
 
 type AIOpsReq struct {
@@ -406,23 +455,23 @@ type MemoryActionRes struct {
 }
 
 type IncidentLifecycleUpdateReq struct {
-	g.Meta  `path:"/ai_ops/incidents/{incident_id}/lifecycle" method:"put" summary:"更新事件生命周期"`
-	IncidentID      string `json:"incident_id" v:"required"`
-	Status          string `json:"status,omitempty"`
-	Severity        string `json:"severity,omitempty"`
+	g.Meta           `path:"/ai_ops/incidents/{incident_id}/lifecycle" method:"put" summary:"更新事件生命周期"`
+	IncidentID       string   `json:"incident_id" v:"required"`
+	Status           string   `json:"status,omitempty"`
+	Severity         string   `json:"severity,omitempty"`
 	AffectedServices []string `json:"affected_services,omitempty"`
-	ImpactSummary   string `json:"impact_summary,omitempty"`
+	ImpactSummary    string   `json:"impact_summary,omitempty"`
 }
 
 type IncidentLifecycleUpdateRes struct {
-	Success bool        `json:"success"`
+	Success  bool        `json:"success"`
 	Incident interface{} `json:"incident,omitempty"`
-	Error   string      `json:"error,omitempty"`
-	Message string      `json:"message,omitempty"`
+	Error    string      `json:"error,omitempty"`
+	Message  string      `json:"message,omitempty"`
 }
 
 type IncidentPostmortemReq struct {
-	g.Meta  `path:"/ai_ops/incidents/{incident_id}/postmortem" method:"get" summary:"生成事件 Postmortem"`
+	g.Meta     `path:"/ai_ops/incidents/{incident_id}/postmortem" method:"get" summary:"生成事件 Postmortem"`
 	IncidentID string `json:"incident_id" v:"required"`
 }
 

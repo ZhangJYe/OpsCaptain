@@ -25,6 +25,9 @@ type UploadStore interface {
 	UploadStatus(context.Context, string) (string, error)
 	MarkUploadStatus(context.Context, string, string) error
 	CleanupReplacedUploads(context.Context, string, string, string) error
+	ListUploads(context.Context, string, string) ([]UploadRecord, error)
+	GetUpload(context.Context, string) (*UploadRecord, error)
+	DeleteUpload(context.Context, string) error
 }
 
 type LocalUploadStore struct {
@@ -48,6 +51,19 @@ type UploadSaveResult struct {
 	SourceKey string
 	Status    string
 	Duplicate bool
+}
+
+type UploadRecord struct {
+	FileID      string
+	FileName    string
+	FilePath    string
+	FileSize    int64
+	MIMEType    string
+	SourceKind  string
+	SourceKey   string
+	UploadedAt  string
+	Version     int
+	IndexStatus string
 }
 
 type uploadFileRecord struct {
@@ -188,6 +204,45 @@ func (s *LocalUploadStore) CleanupReplacedUploads(_ context.Context, sourceKind,
 	return nil
 }
 
+func (s *LocalUploadStore) ListUploads(_ context.Context, sourceKind, sourcePrefix string) ([]UploadRecord, error) {
+	records, err := s.listUploadRecordsByPrefix(sourceKind, sourcePrefix)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]UploadRecord, 0, len(records))
+	for _, record := range records {
+		items = append(items, toUploadRecord(record))
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		return items[i].UploadedAt > items[j].UploadedAt
+	})
+	return items, nil
+}
+
+func (s *LocalUploadStore) GetUpload(_ context.Context, fileID string) (*UploadRecord, error) {
+	fileID = safeStoredFilename(fileID)
+	record, err := readUploadRecord(uploadMetadataPath(filepath.Join(s.dir, fileID)))
+	if err != nil {
+		return nil, err
+	}
+	record.filePath = filepath.Join(s.dir, fileID)
+	record.metadataPath = uploadMetadataPath(record.filePath)
+	item := toUploadRecord(record)
+	return &item, nil
+}
+
+func (s *LocalUploadStore) DeleteUpload(ctx context.Context, fileID string) error {
+	record, err := s.GetUpload(ctx, fileID)
+	if err != nil {
+		return err
+	}
+	return cleanupUploadRecord(uploadFileRecord{
+		StoredFilename: record.FileID,
+		filePath:       record.FilePath,
+		metadataPath:   uploadMetadataPath(record.FilePath),
+	})
+}
+
 func sanitizeFilename(name string) string {
 	name = filepath.Base(name)
 	name = strings.ReplaceAll(name, "..", "")
@@ -220,6 +275,18 @@ func uploadMetadataPath(path string) string {
 }
 
 func (s *LocalUploadStore) listUploadRecordsBySource(sourceKind, sourceKey string) ([]uploadFileRecord, error) {
+	return s.listUploadRecords(sourceKind, func(record uploadFileRecord) bool {
+		return record.SourceKey == sourceKey
+	})
+}
+
+func (s *LocalUploadStore) listUploadRecordsByPrefix(sourceKind, sourcePrefix string) ([]uploadFileRecord, error) {
+	return s.listUploadRecords(sourceKind, func(record uploadFileRecord) bool {
+		return strings.HasPrefix(record.SourceKey, sourcePrefix)
+	})
+}
+
+func (s *LocalUploadStore) listUploadRecords(sourceKind string, matches func(uploadFileRecord) bool) ([]uploadFileRecord, error) {
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -237,7 +304,7 @@ func (s *LocalUploadStore) listUploadRecordsBySource(sourceKind, sourceKey strin
 		if err != nil {
 			return nil, err
 		}
-		if record.SourceKind != sourceKind || record.SourceKey != sourceKey {
+		if record.SourceKind != sourceKind || !matches(record) {
 			continue
 		}
 		if strings.TrimSpace(record.StoredFilename) == "" {
@@ -255,6 +322,25 @@ func (s *LocalUploadStore) listUploadRecordsBySource(sourceKind, sourceKey strin
 		return records[i].UploadedAt > records[j].UploadedAt
 	})
 	return records, nil
+}
+
+func toUploadRecord(record uploadFileRecord) UploadRecord {
+	status := record.IndexStatus
+	if status == "" {
+		status = "ready"
+	}
+	return UploadRecord{
+		FileID:      record.StoredFilename,
+		FileName:    record.OriginalFilename,
+		FilePath:    record.filePath,
+		FileSize:    record.FileSize,
+		MIMEType:    record.MIMEType,
+		SourceKind:  record.SourceKind,
+		SourceKey:   record.SourceKey,
+		UploadedAt:  record.UploadedAt,
+		Version:     record.Version,
+		IndexStatus: status,
+	}
 }
 
 func readUploadRecord(path string) (uploadFileRecord, error) {

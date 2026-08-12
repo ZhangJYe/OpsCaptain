@@ -18,6 +18,7 @@ type ControllerV1 struct {
 	service            *sse.Service
 	chatApp            *app.ChatApp
 	agentApp           *app.AgentApp
+	agentRouterApp     *app.AgentRouterApp
 	knowledgeApp       *app.KnowledgeApp
 	aiopsApp           *app.AIOpsApp
 	changeEventApp     *app.ChangeEventApp
@@ -39,6 +40,7 @@ func NewV1(chatApp *app.ChatApp, agentApp *app.AgentApp, knowledgeApp *app.Knowl
 		service:            sse.New(),
 		chatApp:            chatApp,
 		agentApp:           agentApp,
+		agentRouterApp:     app.NewAgentRouterApp(),
 		knowledgeApp:       knowledgeApp,
 		aiopsApp:           aiopsApp,
 		changeEventApp:     changeEventApp,

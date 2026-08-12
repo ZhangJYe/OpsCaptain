@@ -72,3 +72,37 @@ func (c *ControllerV1) UploadStatus(ctx context.Context, req *v1.UploadStatusReq
 		Status: result.Status,
 	}, nil
 }
+
+func (c *ControllerV1) KnowledgeDocumentList(ctx context.Context, req *v1.KnowledgeDocumentListReq) (res *v1.KnowledgeDocumentListRes, err error) {
+	items, err := c.knowledgeApp.ListDocuments(ctx)
+	if err != nil {
+		return nil, gerror.New(err.Error())
+	}
+	result := make([]v1.KnowledgeDocumentItem, 0, len(items))
+	for _, item := range items {
+		result = append(result, knowledgeDocumentResponse(item))
+	}
+	return &v1.KnowledgeDocumentListRes{Items: result}, nil
+}
+
+func (c *ControllerV1) KnowledgeDocumentDelete(ctx context.Context, req *v1.KnowledgeDocumentDeleteReq) (res *v1.KnowledgeDocumentDeleteRes, err error) {
+	if err := c.knowledgeApp.DeleteDocument(ctx, req.FileID); err != nil {
+		return nil, gerror.New(err.Error())
+	}
+	return &v1.KnowledgeDocumentDeleteRes{}, nil
+}
+
+func (c *ControllerV1) KnowledgeDocumentReindex(ctx context.Context, req *v1.KnowledgeDocumentReindexReq) (res *v1.KnowledgeDocumentReindexRes, err error) {
+	item, err := c.knowledgeApp.RetryDocumentIndex(ctx, req.FileID)
+	if err != nil {
+		return nil, gerror.New(err.Error())
+	}
+	return &v1.KnowledgeDocumentReindexRes{Item: knowledgeDocumentResponse(*item)}, nil
+}
+
+func knowledgeDocumentResponse(item app.KnowledgeDocument) v1.KnowledgeDocumentItem {
+	return v1.KnowledgeDocumentItem{
+		FileID: item.FileID, FileName: item.FileName, FileSize: item.FileSize,
+		MIMEType: item.MIMEType, Status: item.Status, UploadedAt: item.UploadedAt, Version: item.Version,
+	}
+}

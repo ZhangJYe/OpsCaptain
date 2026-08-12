@@ -77,6 +77,33 @@ func (c *ControllerV1) Agent(ctx context.Context, req *v1.AgentReq) (res *v1.Age
 	return mapAgentResult(result), nil
 }
 
+func (c *ControllerV1) AgentRoute(ctx context.Context, req *v1.AgentRouteReq) (res *v1.AgentRouteRes, err error) {
+	router := c.agentRouterApp
+	if router == nil {
+		router = app.NewAgentRouterApp()
+	}
+	result, err := router.Decide(ctx, &app.AgentRouteInput{
+		Query:             req.Query,
+		RouteMode:         app.AgentRouteMode(req.RouteMode),
+		DiagnosisStrategy: app.AgentDiagnosisStrategy(req.DiagnosisStrategy),
+	})
+	if err != nil {
+		if errors.Is(err, app.ErrDiagnosisStrategyUnavailable) {
+			if r := g.RequestFromCtx(ctx); r != nil {
+				r.Response.WriteStatus(http.StatusBadRequest)
+			}
+		}
+		return nil, err
+	}
+	return &v1.AgentRouteRes{
+		Decision:   string(result.Decision),
+		Strategy:   string(result.Strategy),
+		Confidence: result.Confidence,
+		Reason:     result.Reason,
+		Degraded:   result.Degraded,
+	}, nil
+}
+
 func mapAgentResult(result *app.AgentResult) *v1.AgentRes {
 	res := &v1.AgentRes{
 		TraceID:           result.TraceID,

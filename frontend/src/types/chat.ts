@@ -36,9 +36,25 @@ export interface ChatSession {
 export type ChatMode = 'quick' | 'stream'
 export type WorkMode = 'react' | 'aiops'
 
-export type WorkbenchMode = 'chat' | 'aiops' | 'settings' | 'topology'
+export type WorkbenchMode = 'chat' | 'aiops' | 'knowledge' | 'settings' | 'topology'
 
 export type AIOpsEngine = 'plan_execute_replan' | 'gos_engine'
+
+export type AgentRouteMode = 'auto' | 'react' | 'diagnosis'
+export type AgentDiagnosisStrategy = 'auto' | AIOpsEngine
+
+export interface AgentRuntimeProfile {
+  routeMode: AgentRouteMode
+  diagnosisStrategy: AgentDiagnosisStrategy
+}
+
+export interface AgentRouteDecision {
+  decision: 'chat' | 'incident' | 'confirm'
+  strategy?: AIOpsEngine
+  confidence?: number
+  reason: string
+  degraded?: boolean
+}
 
 export type IncidentStatus =
   | 'active'

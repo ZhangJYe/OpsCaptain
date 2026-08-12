@@ -162,6 +162,7 @@ harness:
 milvus:
   address: "localhost:19530"
   collection: ""
+  startup_timeout_ms: 5000
 
 chat_model:
   provider: "deepseek"
@@ -227,6 +228,27 @@ chat:
 
 agent_gateway:
   enabled: true
+
+agent_router:
+  enabled: true
+  timeout_ms: 5000
+  confidence_threshold: 0.75
+  route_cache_ttl_seconds: 300
+  route_cache_max_entries: 256
+  default_diagnosis_strategy: "plan_execute_replan"
+  allowed_diagnosis_strategies: ["plan_execute_replan", "gos_engine"]
+  high_confidence_incident_keywords:
+    - "p95 升高"
+    - "延迟升高"
+    - "错误率升高"
+    - "服务不可用"
+    - "服务挂了"
+    - "告警触发"
+    - "连接池耗尽"
+    - "timeout 持续"
+    - "大量超时"
+    - "pod crashloop"
+    - "5xx 激增"
 
 context:
   chat_max_history_messages: 10

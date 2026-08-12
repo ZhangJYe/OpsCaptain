@@ -134,6 +134,23 @@ func (s *IndexingService) SyncBM25Index(ctx context.Context) {
 	g.Log().Infof(ctx, "rebuilt BM25 index from %d files, docs=%d, total=%d", len(paths), totalDocs, idx.Size())
 }
 
+func (s *IndexingService) DeleteSource(ctx context.Context, sourceValue string) (int, error) {
+	if s == nil {
+		return 0, fmt.Errorf("indexing service is nil")
+	}
+	if strings.TrimSpace(sourceValue) == "" {
+		return 0, fmt.Errorf("document source is empty")
+	}
+	if s.vectorStore == nil {
+		return 0, fmt.Errorf("vector store not configured")
+	}
+	deleted, err := s.vectorStore.DeleteBySource(ctx, common.GetMilvusCollectionName(ctx), sourceValue)
+	if err != nil {
+		return 0, err
+	}
+	return deleted, nil
+}
+
 func (s *IndexingService) deleteExistingSourceExcept(ctx context.Context, sourceValue string, keepIDs []string) (int, error) {
 	if s.vectorStore == nil {
 		return 0, fmt.Errorf("vector store not configured")

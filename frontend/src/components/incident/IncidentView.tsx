@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
   Activity,
+  ArrowLeft,
   AlertTriangle,
   ArrowRight,
   BarChart3,
@@ -10,6 +11,7 @@ import {
   CircleDot,
   Clock3,
   Database,
+  Download,
   FileSearch,
   Gauge,
   GitBranch,
@@ -20,6 +22,7 @@ import {
   Wrench,
 } from 'lucide-react'
 import remarkFixHeadings, { normalizeLooseMarkdown } from '../../lib/remarkFixHeadings'
+import { buildIncidentSop, incidentSopFilename } from '../../lib/incidentSop'
 import type { AIOpsEngine, IncidentEvent, IncidentSession, IncidentStatus, IncidentTurn } from '../../types/chat'
 
 interface Props {
@@ -27,7 +30,7 @@ interface Props {
   isLoading: boolean
   error: string | null
   engine: AIOpsEngine
-  onCreate: (query: string) => void
+  onBack: () => void
   onAppend: (query: string) => void
 }
 
@@ -570,7 +573,7 @@ function DemoEvidenceChart({ color = '#ef4444' }: { color?: string }) {
   )
 }
 
-function DemoIncident({ engine, onCreate }: Pick<Props, 'engine' | 'onCreate'>) {
+function DemoIncident({ engine, onCreate }: { engine: AIOpsEngine; onCreate: (query: string) => void }) {
   const [query, setQuery] = useState('')
   const submit = () => query.trim() && onCreate(query.trim())
 
@@ -624,8 +627,9 @@ function DemoIncident({ engine, onCreate }: Pick<Props, 'engine' | 'onCreate'>) 
   )
 }
 
-export function IncidentView({ incident, isLoading, error, engine, onCreate, onAppend }: Props) {
+export function IncidentView({ incident, isLoading, error, engine, onBack, onAppend }: Props) {
   const [query, setQuery] = useState('')
+  const [sopExportError, setSopExportError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const status = statusMeta(incident?.status || 'active')
   const StatusIcon = status.icon
@@ -651,11 +655,7 @@ export function IncidentView({ incident, isLoading, error, engine, onCreate, onA
     if (!trimmed || isLoading) {
       return
     }
-    if (incident) {
-      onAppend(trimmed)
-    } else {
-      onCreate(trimmed)
-    }
+    onAppend(trimmed)
     setQuery('')
   }
 
@@ -666,8 +666,35 @@ export function IncidentView({ incident, isLoading, error, engine, onCreate, onA
     }
   }
 
+  const exportSop = () => {
+    if (!incident) {
+      return
+    }
+    try {
+      const exportedAt = new Date()
+      const blob = new Blob([buildIncidentSop(incident, exportedAt)], { type: 'text/markdown;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = incidentSopFilename(incident, exportedAt)
+      anchor.click()
+      URL.revokeObjectURL(url)
+      setSopExportError(null)
+    } catch {
+      setSopExportError('导出 SOP 失败，请稍后重试。')
+    }
+  }
+
   if (!incident && !isLoading) {
-    return <DemoIncident engine={engine} onCreate={onCreate} />
+    return (
+      <div className="flex h-full items-center justify-center bg-[#f7f8fa] px-6 text-center dark:bg-[#09090b]">
+        <div className="max-w-md">
+          <span className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-600 dark:text-sky-300"><Activity size={22} /></span>
+          <h1 className="mt-4 text-lg font-semibold text-zinc-950 dark:text-white">暂无事故记录</h1>
+          <p className="mt-2 text-sm leading-6 text-zinc-500 dark:text-zinc-400">请从工作台提交问题。只有进入 Plan 或 GoS 的诊断，才会在这里保存过程、证据与结论。</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -676,10 +703,10 @@ export function IncidentView({ incident, isLoading, error, engine, onCreate, onA
         <div className="mx-auto max-w-7xl">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
-            <div className="mb-2 inline-flex items-center gap-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-              <Activity size={14} className="text-accent" />
-              事故诊断 <span className="text-zinc-300 dark:text-zinc-700">/</span> 当前事故
-            </div>
+            <button type="button" onClick={onBack} className="mb-2 inline-flex items-center gap-2 text-xs font-medium text-zinc-500 transition hover:text-sky-600 dark:text-zinc-400 dark:hover:text-sky-300">
+              <ArrowLeft size={14} />
+              事故记录 <span className="text-zinc-300 dark:text-zinc-700">/</span> 当前事故
+            </button>
             <h1 className="truncate text-2xl font-semibold tracking-tight text-zinc-950 dark:text-white">
               {incident?.title || '描述首条现象，创建事故记录'}
             </h1>
@@ -872,13 +899,27 @@ export function IncidentView({ incident, isLoading, error, engine, onCreate, onA
           </section>
 
           <section className="min-w-0 rounded-2xl border border-zinc-200/80 bg-white p-4 shadow-sm shadow-zinc-900/[0.025] dark:border-zinc-800/70 dark:bg-zinc-900/35 sm:p-5">
-            <div className="mb-4 flex items-center gap-2">
-              <FileSearch size={16} className="text-accent" />
-              <div>
-                <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">诊断结论</h2>
-                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-500">先给出判断，再保留每一条依据。</p>
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <FileSearch size={16} className="text-accent" />
+                <div>
+                  <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">诊断结论</h2>
+                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-500">先给出判断，再保留每一条依据。</p>
+                </div>
               </div>
+              {incident && (
+                <button
+                  type="button"
+                  onClick={exportSop}
+                  className="inline-flex shrink-0 items-center gap-1.5 border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-medium text-sky-700 transition hover:bg-sky-100 dark:border-sky-900/60 dark:bg-sky-950/30 dark:text-sky-300 dark:hover:bg-sky-950/60"
+                >
+                  <Download size={14} />
+                  导出 SOP
+                </button>
+              )}
             </div>
+
+            {sopExportError && <p className="mb-4 text-xs text-rose-600 dark:text-rose-300">{sopExportError}</p>}
 
             {error && (
               <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/25 dark:text-amber-200">

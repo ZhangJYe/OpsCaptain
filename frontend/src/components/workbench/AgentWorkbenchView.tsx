@@ -13,7 +13,7 @@ import { EvidenceBlock } from './EvidenceBlock'
 import type { DetailItem } from './DetailPanel'
 import { ResultCard } from './ResultCard'
 import { WorkbenchEmptyState } from './WorkbenchEmptyState'
-import type { ChatMessage, ChatMode, AIOpsEngine, WorkbenchMode } from '../../types/chat'
+import type { AgentRuntimeProfile, ChatMessage, ChatMode, AIOpsEngine, WorkbenchMode } from '../../types/chat'
 import { findSkillsByIds, formatSelectedSkillSummary } from '../../lib/utils'
 import { isGoSEngine } from '../../hooks/useChat'
 import { ENGINE_VIEW_MODEL } from '../../lib/engineViewModel'
@@ -28,11 +28,11 @@ interface Props {
   loadingEngine?: string | null
   mode: ChatMode
   workbenchMode: WorkbenchMode
+  runtimeProfile: AgentRuntimeProfile
   selectedSkillIds: string[]
   petEnabled: boolean
   aiOpsEngine: AIOpsEngine
   onSend: (query: string) => void
-  onStartAIOps: (query: string) => void
   onStop: () => void
   onModeChange: (m: ChatMode) => void
   onTogglePet: () => void
@@ -153,11 +153,11 @@ export function AgentWorkbenchView({
   loadingEngine,
   mode,
   workbenchMode,
+  runtimeProfile,
   selectedSkillIds,
   petEnabled,
   aiOpsEngine,
   onSend,
-  onStartAIOps,
   onStop,
   onModeChange,
   onTogglePet,
@@ -196,6 +196,16 @@ export function AgentWorkbenchView({
   const isGoS = isGoSEngine(loadingEngine)
   const isPlanAIOps = loadingEngine === 'plan_execute_replan'
   const activeEngineView = ENGINE_VIEW_MODEL[aiOpsEngine]
+  const workspaceTitle = runtimeProfile.routeMode === 'auto'
+    ? '智能路由'
+    : runtimeProfile.routeMode === 'react'
+      ? 'ReAct 问答'
+      : '故障诊断'
+  const workspaceTrace = runtimeProfile.routeMode === 'auto'
+    ? '自动判断问答或事故'
+    : runtimeProfile.routeMode === 'react'
+      ? '直接进入问答'
+      : runtimeProfile.diagnosisStrategy === 'gos_engine' ? 'GoS 证据推理' : 'Plan-Execute-Replan'
 
   return (
     <div className="flex h-full">
@@ -204,10 +214,10 @@ export function AgentWorkbenchView({
           <div className="mx-auto flex max-w-4xl items-center gap-3 text-[11px] font-medium text-zinc-500 dark:text-zinc-500">
             <span className="inline-flex items-center gap-1.5">
               <span className={`h-1.5 w-1.5 rounded-full ${isLoading ? 'bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.5)] animate-pulse' : 'bg-zinc-300 dark:bg-zinc-700'}`} />
-              {workbenchMode === 'aiops' ? `${activeEngineView.label} 排障` : 'ReAct 问答'}
+              {workbenchMode === 'aiops' ? `${activeEngineView.label} 排障` : workspaceTitle}
             </span>
             <span className="text-zinc-300 dark:text-zinc-700">·</span>
-            <span>{workbenchMode === 'aiops' ? activeEngineView.trace : mode === 'quick' ? '快速' : '流式'}</span>
+            <span>{workbenchMode === 'aiops' ? activeEngineView.trace : workspaceTrace}</span>
             {selectedSkills.length > 0 ? (
               <>
                 <span className="text-zinc-300 dark:text-zinc-700">·</span>
@@ -251,8 +261,6 @@ export function AgentWorkbenchView({
             {messages.length === 0 && !isLoading && (
               <WorkbenchEmptyState
                 onSend={onSend}
-                onStartAIOps={onStartAIOps}
-                aiOpsEngine={aiOpsEngine}
               />
             )}
 

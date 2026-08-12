@@ -1,12 +1,8 @@
 import { motion } from 'framer-motion'
-import { Database, MessageSquareText, Search, ShieldCheck } from 'lucide-react'
-import { AIOpsPanel } from '../welcome/AIOpsPanel'
-import type { AIOpsEngine } from '../../types/chat'
+import { Database, Route, Search, ShieldCheck } from 'lucide-react'
 
 interface Props {
   onSend: (query: string) => void
-  onStartAIOps: (query: string) => void
-  aiOpsEngine: AIOpsEngine
 }
 
 const quickStarters = [
@@ -40,7 +36,7 @@ const contextSteps = [
   '输出可复核的结论与后续追问建议',
 ]
 
-export function WorkbenchEmptyState({ onSend, onStartAIOps }: Props) {
+export function WorkbenchEmptyState({ onSend }: Props) {
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col px-4 py-5 sm:py-6">
       <motion.div
@@ -51,18 +47,18 @@ export function WorkbenchEmptyState({ onSend, onStartAIOps }: Props) {
       >
         <div>
           <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/50 bg-white/70 px-3 py-1.5 text-[11px] font-medium text-zinc-500 shadow-sm backdrop-blur-sm dark:border-white/10 dark:bg-slate-800/50 dark:text-zinc-400">
-            <MessageSquareText size={13} className="text-sky-500" />
-            ReAct 问答工作台
+            <Route size={13} className="text-sky-500" />
+            智能路由工作台
           </div>
           <h1 className="max-w-3xl text-[2rem] font-semibold tracking-normal text-zinc-950 dark:text-zinc-50 sm:text-[2.45rem]">
-            描述问题，OpsCaption 会先收集上下文再回答。
+            描述问题，OpsCaption 会判断最合适的处理方式。
           </h1>
           <p className="mt-3 max-w-2xl text-sm leading-7 text-zinc-500 dark:text-zinc-400">
-            适合日常问答、知识检索、日志片段分析和文档归纳。事故排障入口保留在左侧模式切换里，问答首页只呈现问答能力。
+            日常问答会进入 ReAct；需要排障时自动创建事故并选择 Plan 或 GoS。你不需要先判断该走哪条链路。
           </p>
         </div>
         <div className="rounded-2xl border border-white/50 bg-white/55 p-4 shadow-sm shadow-zinc-900/[0.03] backdrop-blur-sm dark:border-white/10 dark:bg-slate-800/35">
-          <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-600">Context Loop</div>
+          <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-400 dark:text-zinc-600">Route Loop</div>
           <div className="mt-3 space-y-2.5">
             {contextSteps.map((step, index) => (
               <div key={step} className="flex items-start gap-3">
@@ -75,10 +71,6 @@ export function WorkbenchEmptyState({ onSend, onStartAIOps }: Props) {
           </div>
         </div>
       </motion.div>
-
-      <div className="mt-6">
-        <AIOpsPanel onStartDiagnosis={onStartAIOps} />
-      </div>
 
       <motion.div
         initial={{ opacity: 0, y: 10 }}

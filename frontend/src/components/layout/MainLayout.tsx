@@ -1,10 +1,9 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { TopBar } from './TopBar'
 import { Sidebar } from '../sidebar/Sidebar'
-import { ChangeEventSentinel } from '../change-events/ChangeEventSentinel'
 import { FloatingCompanion } from '../pet/FloatingCompanion'
 import type { ReactNode } from 'react'
-import type { AIOpsEngine, ChatMessage, ChatMode, ChatSession, IncidentSession, WorkbenchMode } from '../../types/chat'
+import type { AIOpsEngine, AgentRuntimeProfile, ChatMessage, ChatMode, ChatSession, IncidentSession, WorkbenchMode } from '../../types/chat'
 import type { PetMood } from '../pet/PetCharacter'
 import { getSiteRecord } from '../../lib/utils'
 
@@ -22,6 +21,7 @@ interface Props {
   workbenchMode: WorkbenchMode
   onWorkbenchModeChange: (mode: WorkbenchMode) => void
   aiOpsEngine: AIOpsEngine
+  runtimeProfile: AgentRuntimeProfile
   onAIOpsEngineChange: (engine: AIOpsEngine) => void
   sessionId: string
   currentIncidentId: string
@@ -50,6 +50,7 @@ export function MainLayout({
   workbenchMode,
   onWorkbenchModeChange,
   aiOpsEngine,
+  runtimeProfile,
   onAIOpsEngineChange,
   sessionId,
   currentIncidentId,
@@ -106,12 +107,8 @@ export function MainLayout({
                 currentIncidentEngine={currentIncidentEngine}
                 incidents={incidents}
                 messages={messages}
-                chatMode={chatMode}
-                onModeChange={onModeChange}
                 workbenchMode={workbenchMode}
                 onWorkbenchModeChange={onWorkbenchModeChange}
-                aiOpsEngine={aiOpsEngine}
-                onAIOpsEngineChange={onAIOpsEngineChange}
                 selectedSkillIds={selectedSkillIds}
                 onSelectedSkillIdsChange={onSelectedSkillIdsChange}
                 isLoading={isLoading}
@@ -127,6 +124,7 @@ export function MainLayout({
               chatMode={chatMode}
               workbenchMode={workbenchMode}
               aiOpsEngine={aiOpsEngine}
+              runtimeProfile={runtimeProfile}
               onNewChat={onNewChat}
               isLoading={isLoading}
             />
@@ -146,7 +144,6 @@ export function MainLayout({
             )}
           </div>
         </div>
-        <ChangeEventSentinel />
         {petEnabled && <FloatingCompanion mood={petMood} />}
       </div>
     </div>

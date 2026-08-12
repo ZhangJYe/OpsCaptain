@@ -1,5 +1,5 @@
 import { Menu, Moon, Plus, Sun } from 'lucide-react'
-import type { AIOpsEngine, ChatMode, WorkbenchMode } from '../../types/chat'
+import type { AIOpsEngine, AgentRuntimeProfile, ChatMode, WorkbenchMode } from '../../types/chat'
 import { getEngineViewModel } from '../../lib/engineViewModel'
 
 interface Props {
@@ -9,6 +9,7 @@ interface Props {
   chatMode: ChatMode
   workbenchMode: WorkbenchMode
   aiOpsEngine: AIOpsEngine
+  runtimeProfile: AgentRuntimeProfile
   onNewChat: () => void
   isLoading: boolean
 }
@@ -20,14 +21,22 @@ export function TopBar({
   chatMode,
   workbenchMode,
   aiOpsEngine,
+  runtimeProfile,
   onNewChat,
   isLoading,
 }: Props) {
   const engineView = getEngineViewModel(aiOpsEngine)
-  const newLabel = workbenchMode === 'aiops' ? '新建事故' : '新建会话'
+  const newLabel = '新建请求'
+  const preference = runtimeProfile.routeMode === 'auto'
+    ? `自动路由 · ${runtimeProfile.diagnosisStrategy === 'auto' ? '自动策略' : runtimeProfile.diagnosisStrategy === 'gos_engine' ? 'GoS' : 'Plan'}`
+    : runtimeProfile.routeMode === 'react'
+      ? 'ReAct 问答'
+      : `故障诊断 · ${runtimeProfile.diagnosisStrategy === 'auto' ? '自动策略' : runtimeProfile.diagnosisStrategy === 'gos_engine' ? 'GoS' : 'Plan'}`
   const statusText = workbenchMode === 'aiops'
     ? `事故排障 · ${engineView.label}`
-    : `问答 · ${chatMode === 'quick' ? '快速' : '流式'}`
+    : workbenchMode === 'knowledge'
+      ? '个人知识库 · 资料维护'
+    : preference
 
   return (
     <header className="flex h-12 shrink-0 items-center justify-between gap-4 border-b border-white/40 bg-white/20 px-4 backdrop-blur-sm dark:border-white/5 dark:bg-slate-900/20 lg:px-6">
@@ -68,7 +77,7 @@ export function TopBar({
           <span className="hidden sm:inline">{newLabel}</span>
         </button>
         <span className="rounded-full bg-sky-400/15 px-2 py-0.5 text-[10px] font-semibold text-sky-600 dark:text-sky-400 md:hidden">
-          {workbenchMode === 'aiops' ? engineView.label : chatMode === 'quick' ? '快速' : '流式'}
+          {workbenchMode === 'aiops' ? engineView.label : workbenchMode === 'knowledge' ? '知识库' : chatMode === 'quick' ? '快速' : '流式'}
         </span>
         <button
           onClick={onToggleTheme}

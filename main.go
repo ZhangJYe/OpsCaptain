@@ -39,6 +39,7 @@ import (
 	traceutil "SuperBizAgent/utility/tracing"
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -53,6 +54,7 @@ import (
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/net/ghttp"
 	"github.com/gogf/gf/v2/os/gctx"
+	cli "github.com/milvus-io/milvus-sdk-go/v2/client"
 )
 
 func main() {
@@ -114,7 +116,9 @@ func main() {
 
 	rag.DefaultIndexingService().SyncBM25Index(ctx)
 	rag.SetDefaultVectorStore(inframv.NewMilvusVectorStore(inframv.NewMilvusClient))
-	milvusClient, milvusErr := inframv.NewMilvusClient(ctx)
+	// Milvus is optional at startup: a local instance may be absent, but HTTP
+	// endpoints must still come up and report retrieval degradation.
+	milvusClient, milvusErr := initMilvusForStartup(ctx, time.Duration(configInt(ctx, "milvus.startup_timeout_ms", 5000))*time.Millisecond)
 	if milvusErr == nil {
 		milvusCfg := inframv.MilvusConfigFromContext(ctx)
 		knowledge_index_pipeline.NewIndexerFunc = indexer.NewMilvusIndexerWithConfig(indexer.MilvusIndexerConfig{
@@ -368,6 +372,29 @@ func resolveCMDBStorePath(configuredPath string) string {
 		return fallback
 	}
 	return path
+}
+
+type milvusStartupResult struct {
+	client cli.Client
+	err    error
+}
+
+func initMilvusForStartup(ctx context.Context, timeout time.Duration) (cli.Client, error) {
+	if timeout <= 0 {
+		timeout = 5 * time.Second
+	}
+	result := make(chan milvusStartupResult, 1)
+	go func() {
+		client, err := inframv.NewMilvusClient(ctx)
+		result <- milvusStartupResult{client: client, err: err}
+	}()
+
+	select {
+	case completed := <-result:
+		return completed.client, completed.err
+	case <-time.After(timeout):
+		return nil, fmt.Errorf("Milvus startup timed out after %s", timeout)
+	}
 }
 
 func configureChangeEvents(ctx context.Context, aiopsApp *app.AIOpsApp) (*app.ChangeEventApp, func()) {

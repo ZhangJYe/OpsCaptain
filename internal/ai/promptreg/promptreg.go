@@ -20,6 +20,9 @@ var ChatEvidence string
 //go:embed chat_runtime_context.txt
 var ChatRuntimeContext string
 
+//go:embed agent_route.txt
+var AgentRoute string
+
 //go:embed rag_rewrite.txt
 var RAGRewrite string
 
@@ -59,6 +62,7 @@ func init() {
 	ChatLanguage = strings.TrimSpace(ChatLanguage)
 	ChatEvidence = strings.TrimSpace(ChatEvidence)
 	ChatRuntimeContext = strings.TrimSpace(ChatRuntimeContext)
+	AgentRoute = strings.TrimSpace(AgentRoute)
 	RAGRewrite = strings.TrimSpace(RAGRewrite)
 	RAGRerank = strings.TrimSpace(RAGRerank)
 	RAGPlannerSystem = strings.TrimSpace(RAGPlannerSystem)

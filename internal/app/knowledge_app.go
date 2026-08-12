@@ -58,9 +58,21 @@ type UploadStatusResult struct {
 	Status string
 }
 
+type KnowledgeDocument struct {
+	FileID     string
+	FileName   string
+	FileSize   int64
+	MIMEType   string
+	Status     string
+	UploadedAt string
+	Version    int
+}
+
 type KnowledgeApp struct {
-	uploadStore filestore.UploadStore
-	indexSource func(context.Context, string) error
+	uploadStore  filestore.UploadStore
+	indexSource  func(context.Context, string) error
+	deleteSource func(context.Context, string) error
+	syncIndex    func(context.Context)
 }
 
 func NewKnowledgeApp(stores ...filestore.UploadStore) *KnowledgeApp {
@@ -69,8 +81,10 @@ func NewKnowledgeApp(stores ...filestore.UploadStore) *KnowledgeApp {
 		store = stores[0]
 	}
 	return &KnowledgeApp{
-		uploadStore: store,
-		indexSource: buildIntoIndex,
+		uploadStore:  store,
+		indexSource:  buildIntoIndex,
+		deleteSource: deleteIndexedSource,
+		syncIndex:    rag.DefaultIndexingService().SyncBM25Index,
 	}
 }
 
@@ -107,24 +121,7 @@ func (k *KnowledgeApp) HandleUpload(ctx context.Context, input *UploadInput) (*U
 		}, nil
 	}
 
-	go func() {
-		indexCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		defer cancel()
-
-		if err := k.indexSource(indexCtx, saved.FilePath); err != nil {
-			g.Log().Warningf(indexCtx, "async indexing failed for %s: %v", saved.FilePath, err)
-			if markErr := k.uploadStore.MarkUploadStatus(indexCtx, saved.FileID, "failed"); markErr != nil {
-				g.Log().Warningf(indexCtx, "mark upload indexing failed status failed for %s: %v", saved.FileID, markErr)
-			}
-			return
-		}
-		if err := k.uploadStore.MarkUploadStatus(indexCtx, saved.FileID, "ready"); err != nil {
-			g.Log().Warningf(indexCtx, "mark upload indexing ready status failed for %s: %v", saved.FileID, err)
-		}
-		if err := k.uploadStore.CleanupReplacedUploads(indexCtx, uploadSourceKind, saved.SourceKey, saved.FileID); err != nil {
-			g.Log().Warningf(indexCtx, "cleanup replaced upload artifacts failed: %v", err)
-		}
-	}()
+	k.startIndexing(saved.FileID, saved.FilePath, saved.SourceKey)
 
 	return &UploadResult{
 		FileName: saved.FileName,
@@ -134,12 +131,97 @@ func (k *KnowledgeApp) HandleUpload(ctx context.Context, input *UploadInput) (*U
 	}, nil
 }
 
+func (k *KnowledgeApp) ListDocuments(ctx context.Context) ([]KnowledgeDocument, error) {
+	records, err := k.uploadStore.ListUploads(ctx, uploadSourceKind, uploadSourcePrefixForContext(ctx))
+	if err != nil {
+		return nil, fmt.Errorf("查询知识资料失败: %w", err)
+	}
+	items := make([]KnowledgeDocument, 0, len(records))
+	for _, record := range records {
+		items = append(items, documentFromRecord(record))
+	}
+	return items, nil
+}
+
+func (k *KnowledgeApp) DeleteDocument(ctx context.Context, fileID string) error {
+	record, err := k.ownedDocument(ctx, fileID)
+	if err != nil {
+		return err
+	}
+	if record.IndexStatus == "indexing" {
+		return fmt.Errorf("资料正在索引，请完成后再删除")
+	}
+	if err := k.deleteSource(ctx, record.SourceKey); err != nil {
+		return fmt.Errorf("清理资料检索内容失败: %w", err)
+	}
+	if err := k.uploadStore.DeleteUpload(ctx, record.FileID); err != nil {
+		return fmt.Errorf("删除资料文件失败: %w", err)
+	}
+	if k.syncIndex != nil {
+		k.syncIndex(ctx)
+	}
+	return nil
+}
+
+func (k *KnowledgeApp) RetryDocumentIndex(ctx context.Context, fileID string) (*KnowledgeDocument, error) {
+	record, err := k.ownedDocument(ctx, fileID)
+	if err != nil {
+		return nil, err
+	}
+	if record.IndexStatus != "failed" {
+		return nil, fmt.Errorf("仅索引失败的资料可以重新索引")
+	}
+	if err := k.uploadStore.MarkUploadStatus(ctx, record.FileID, "indexing"); err != nil {
+		return nil, fmt.Errorf("更新资料索引状态失败: %w", err)
+	}
+	record.IndexStatus = "indexing"
+	k.startIndexing(record.FileID, record.FilePath, record.SourceKey)
+	item := documentFromRecord(*record)
+	return &item, nil
+}
+
 func (k *KnowledgeApp) HandleUploadStatus(ctx context.Context, fileID string) (*UploadStatusResult, error) {
 	status, err := k.uploadStore.UploadStatus(ctx, fileID)
 	if err != nil {
 		return nil, fmt.Errorf("文件记录不存在: %s", fileID)
 	}
 	return &UploadStatusResult{FileID: fileID, Status: status}, nil
+}
+
+func (k *KnowledgeApp) ownedDocument(ctx context.Context, fileID string) (*filestore.UploadRecord, error) {
+	record, err := k.uploadStore.GetUpload(ctx, fileID)
+	if err != nil || record.SourceKind != uploadSourceKind || !strings.HasPrefix(record.SourceKey, uploadSourcePrefixForContext(ctx)) {
+		return nil, fmt.Errorf("资料不存在")
+	}
+	return record, nil
+}
+
+func (k *KnowledgeApp) startIndexing(fileID, path, sourceKey string) {
+	go func() {
+		indexCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+
+		if err := k.indexSource(indexCtx, path); err != nil {
+			g.Log().Warningf(indexCtx, "async indexing failed for %s: %v", path, err)
+			if markErr := k.uploadStore.MarkUploadStatus(indexCtx, fileID, "failed"); markErr != nil {
+				g.Log().Warningf(indexCtx, "mark upload indexing failed status failed for %s: %v", fileID, markErr)
+			}
+			return
+		}
+		if err := k.uploadStore.MarkUploadStatus(indexCtx, fileID, "ready"); err != nil {
+			g.Log().Warningf(indexCtx, "mark upload indexing ready status failed for %s: %v", fileID, err)
+		}
+		if err := k.uploadStore.CleanupReplacedUploads(indexCtx, uploadSourceKind, sourceKey, fileID); err != nil {
+			g.Log().Warningf(indexCtx, "cleanup replaced upload artifacts failed: %v", err)
+		}
+	}()
+}
+
+func documentFromRecord(record filestore.UploadRecord) KnowledgeDocument {
+	return KnowledgeDocument{
+		FileID: record.FileID, FileName: record.FileName, FileSize: record.FileSize,
+		MIMEType: record.MIMEType, Status: record.IndexStatus, UploadedAt: record.UploadedAt, Version: record.Version,
+	}
 }
 
 func IsAllowedExtension(ext string) bool {
@@ -196,4 +278,9 @@ func buildIntoIndex(ctx context.Context, path string) error {
 	}
 	g.Log().Infof(ctx, "indexing file: %s, deleted=%d, len of parts: %d", summary.SourcePath, summary.DeletedExisting, len(summary.ChunkIDs))
 	return nil
+}
+
+func deleteIndexedSource(ctx context.Context, source string) error {
+	_, err := rag.DefaultIndexingService().DeleteSource(ctx, source)
+	return err
 }

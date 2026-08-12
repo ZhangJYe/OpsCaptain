@@ -118,3 +118,36 @@ func TestNextUploadVersion(t *testing.T) {
 		t.Fatalf("expected version 4, got %d", version)
 	}
 }
+
+func TestLocalUploadStoreListsAndDeletesUploads(t *testing.T) {
+	store := NewLocalUploadStore(t.TempDir())
+	ctx := context.Background()
+	first, err := store.SaveUpload(ctx, UploadSaveInput{
+		Filename: "runbook.md", MIMEType: "text/markdown", Size: 3, Content: []byte("SOP"),
+		SourceKind: "chat_upload", SourcePrefix: "upload://users/alice/",
+	})
+	if err != nil {
+		t.Fatalf("save first upload: %v", err)
+	}
+	_, err = store.SaveUpload(ctx, UploadSaveInput{
+		Filename: "other.md", MIMEType: "text/markdown", Size: 3, Content: []byte("SOP"),
+		SourceKind: "chat_upload", SourcePrefix: "upload://users/bob/",
+	})
+	if err != nil {
+		t.Fatalf("save second upload: %v", err)
+	}
+
+	items, err := store.ListUploads(ctx, "chat_upload", "upload://users/alice/")
+	if err != nil {
+		t.Fatalf("list uploads: %v", err)
+	}
+	if len(items) != 1 || items[0].FileID != first.FileID || items[0].FileName != "runbook.md" {
+		t.Fatalf("unexpected listed items: %#v", items)
+	}
+	if err := store.DeleteUpload(ctx, first.FileID); err != nil {
+		t.Fatalf("delete upload: %v", err)
+	}
+	if _, err := store.GetUpload(ctx, first.FileID); err == nil {
+		t.Fatal("deleted upload should not be readable")
+	}
+}
