@@ -279,9 +279,44 @@ rag:
   hybrid_dense_top_k: 50
   hybrid_lexical_top_k: 50
   hybrid_fusion_k: 60
+  hybrid_dense_weight: 1.0
+  hybrid_lexical_weight: 1.0
   hybrid_candidate_top_k: 20
   hybrid_final_top_k: 5
   hybrid_metadata_boost_enabled: true
+  knowledge_field_boost_enabled: false
+  knowledge_doc_id_boost: 8
+  knowledge_title_boost: 6
+  knowledge_tags_boost: 4
+  knowledge_provider_boost: 2
+  knowledge_field_boost_cap: 12
+  coverage_enabled: false
+  coverage_max_position_gain: 2
+  intent_refinement_enabled: false
+  intent_connectors: ["而不是", "不需要", "不执行", "不是", "instead of"]
+  intent_max_terms: 8
+  intent_positive_bonus: 4
+  intent_excluded_penalty: 8
+  eval_gate:
+    primary_metric: "mrr"
+    min_primary_delta: 0.0
+    max_quality_regression: 0.0
+    max_failure_rate: 0.0
+    max_empty_rate_delta: 0.0
+    max_p95_latency_regression_ratio: 0.2
+    max_multi_document_recall_at_5_regression: 0.0
+    max_hard_negative_recall_at_5_regression: 0.0
+  eval_dataset:
+    development_min_cases: 60
+    holdout_min_cases: 100
+    near_duplicate_threshold: 0.8
+    category_tolerance: 0.05
+    category_targets:
+      exact_entity: 0.20
+      semantic_paraphrase: 0.25
+      multi_document: 0.20
+      cross_language: 0.10
+      hard_negative: 0.25
   owner_scope_server_filter_enabled: true
   planner:
     enabled: true

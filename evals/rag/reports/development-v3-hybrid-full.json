@@ -1,0 +1,3698 @@
+{
+  "schema_version": 2,
+  "mode": "hybrid-full",
+  "metadata": {
+    "dataset_role": "development",
+    "dataset_id": "retrieval_development.jsonl",
+    "dataset_fingerprint": "35eec6f8c266156e96ea7ec1f2eed48452da16e7458dad415690b2454bfe0d3d",
+    "corpus_version": "knowledge-seed-v1",
+    "code_revision": "cc73ae805865669d3ad7cde96a0898b1249cd350+dirty",
+    "generated_at": "2026-08-12T17:57:46Z",
+    "evidence_environment": "offline-development",
+    "comparable": true
+  },
+  "effective_config": {
+    "rewrite_enabled": true,
+    "rerank_enabled": true,
+    "hybrid": {
+      "dense_top_k": 50,
+      "lexical_top_k": 50,
+      "fusion_k": 60,
+      "candidate_top_k": 20,
+      "final_top_k": 5,
+      "metadata_boost_enabled": true
+    },
+    "retriever_top_k": 5,
+    "rerank_max_candidates": 10,
+    "rewrite_timeout_ms": 3000,
+    "rerank_timeout_ms": 5000,
+    "ks": [
+      1,
+      3,
+      5
+    ],
+    "per_query_timeout_ms": 15000
+  },
+  "summary": {
+    "cases": 60,
+    "succeeded": 60,
+    "failed": 0,
+    "avg_recall_at_k": {
+      "1": 0.5416666666666665,
+      "3": 0.7583333333333333,
+      "5": 0.7583333333333333
+    },
+    "hit_rate_at_k": {
+      "1": 0.6666666666666666,
+      "3": 0.85,
+      "5": 0.85
+    },
+    "full_recall_at_k": {
+      "1": 27,
+      "3": 39,
+      "5": 39
+    },
+    "mrr": 0.7527777777777778,
+    "avg_init_latency_ms": 0.13333333333333333,
+    "avg_rewrite_latency_ms": 2913.4666666666667,
+    "avg_retrieve_latency_ms": 153,
+    "avg_rerank_latency_ms": 4500.7,
+    "avg_total_latency_ms": 7568.3,
+    "cache_hit_rate": 0.9833333333333333,
+    "empty_rate": 0,
+    "failure_rate": 0,
+    "citation_coverage": 1,
+    "rewrite_attempted": 60,
+    "rewrite_applied": 8,
+    "rewrite_degraded": 52,
+    "rewrite_apply_rate": 0.13333333333333333,
+    "rewrite_degraded_rate": 0.8666666666666667,
+    "rerank_attempted": 60,
+    "rerank_applied": 19,
+    "rerank_degraded": 41,
+    "rerank_apply_rate": 0.31666666666666665,
+    "rerank_degraded_rate": 0.6833333333333333,
+    "latency": {
+      "init": {
+        "avg_ms": 0.13333333333333333,
+        "p50_ms": 0,
+        "p95_ms": 0
+      },
+      "rewrite": {
+        "avg_ms": 2913.4666666666667,
+        "p50_ms": 3001,
+        "p95_ms": 3002
+      },
+      "retrieve": {
+        "avg_ms": 153,
+        "p50_ms": 135,
+        "p95_ms": 231
+      },
+      "dense": {
+        "avg_ms": 149.63333333333333,
+        "p50_ms": 132,
+        "p95_ms": 228
+      },
+      "lexical": {
+        "avg_ms": 2.8333333333333335,
+        "p50_ms": 3,
+        "p95_ms": 4
+      },
+      "fusion": {
+        "avg_ms": 0,
+        "p50_ms": 0,
+        "p95_ms": 0
+      },
+      "rerank": {
+        "avg_ms": 4500.7,
+        "p50_ms": 5001,
+        "p95_ms": 5002
+      },
+      "total": {
+        "avg_ms": 7568.3,
+        "p50_ms": 8115,
+        "p95_ms": 8225
+      }
+    },
+    "avg_plan_latency_ms": 0,
+    "decomposed_count": 0,
+    "avg_agent_rounds": 0,
+    "avg_final_confidence": 0,
+    "avg_agent_latency_ms": 0
+  },
+  "results": [
+    {
+      "case_id": "DEV-001",
+      "query": "Prometheus 告警规则里的 for 字段有什么作用",
+      "relevant_ids": [
+        "03_prometheus_alerting_and_rule_design"
+      ],
+      "ranked_ids": [
+        "03_prometheus_alerting_and_rule_design",
+        "00_ops_knowledge_index",
+        "prometheus-recording-rules",
+        "prometheus-alerting-practices"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "03_prometheus_alerting_and_rule_design"
+        ],
+        "3": [
+          "03_prometheus_alerting_and_rule_design"
+        ],
+        "5": [
+          "03_prometheus_alerting_and_rule_design"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": false,
+        "init_failure_cached": false,
+        "init_latency_ms": 8,
+        "rewrite_latency_ms": 3005,
+        "retrieve_latency_ms": 231,
+        "dense_latency_ms": 228,
+        "lexical_latency_ms": 2,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5002,
+        "dense_count": 50,
+        "lexical_count": 18,
+        "fused_count": 68,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8247,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-002",
+      "query": "Pod 进入 CrashLoopBackOff 后第一步查什么",
+      "relevant_ids": [
+        "01_kubernetes_crashloop_runbook"
+      ],
+      "ranked_ids": [
+        "01_kubernetes_crashloop_runbook",
+        "08_open_source_knowledge_ingestion_strategy",
+        "00_ops_knowledge_index"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "01_kubernetes_crashloop_runbook"
+        ],
+        "3": [
+          "01_kubernetes_crashloop_runbook"
+        ],
+        "5": [
+          "01_kubernetes_crashloop_runbook"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3002,
+        "retrieve_latency_ms": 220,
+        "dense_latency_ms": 216,
+        "lexical_latency_ms": 3,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5002,
+        "dense_count": 50,
+        "lexical_count": 16,
+        "fused_count": 66,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8225,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-003",
+      "query": "kubectl rollout undo 应该怎样指定 revision",
+      "relevant_ids": [
+        "02_kubernetes_deployment_release_and_rollback"
+      ],
+      "ranked_ids": [
+        "kubernetes-deployment",
+        "02_kubernetes_deployment_release_and_rollback",
+        "04_helm_release_history_and_rollback"
+      ],
+      "hit_ids_by_k": {
+        "1": [],
+        "3": [
+          "02_kubernetes_deployment_release_and_rollback"
+        ],
+        "5": [
+          "02_kubernetes_deployment_release_and_rollback"
+        ]
+      },
+      "recall_at_k": {
+        "1": 0,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3002,
+        "retrieve_latency_ms": 99,
+        "dense_latency_ms": 94,
+        "lexical_latency_ms": 2,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5002,
+        "dense_count": 50,
+        "lexical_count": 19,
+        "fused_count": 69,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8103,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-004",
+      "query": "helm history 输出的 revision 如何用于回滚",
+      "relevant_ids": [
+        "04_helm_release_history_and_rollback"
+      ],
+      "ranked_ids": [
+        "04_helm_release_history_and_rollback",
+        "02_kubernetes_deployment_release_and_rollback"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "04_helm_release_history_and_rollback"
+        ],
+        "3": [
+          "04_helm_release_history_and_rollback"
+        ],
+        "5": [
+          "04_helm_release_history_and_rollback"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3001,
+        "retrieve_latency_ms": 102,
+        "dense_latency_ms": 97,
+        "lexical_latency_ms": 3,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5002,
+        "dense_count": 50,
+        "lexical_count": 19,
+        "fused_count": 69,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8105,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-005",
+      "query": "Argo CD 的 prune 和 self-heal 分别做什么",
+      "relevant_ids": [
+        "05_argocd_autosync_prune_selfheal"
+      ],
+      "ranked_ids": [
+        "05_argocd_autosync_prune_selfheal",
+        "argocd-auto-sync"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "05_argocd_autosync_prune_selfheal"
+        ],
+        "3": [
+          "05_argocd_autosync_prune_selfheal"
+        ],
+        "5": [
+          "05_argocd_autosync_prune_selfheal"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 1338,
+        "retrieve_latency_ms": 126,
+        "dense_latency_ms": 124,
+        "lexical_latency_ms": 2,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5001,
+        "dense_count": 50,
+        "lexical_count": 16,
+        "fused_count": 66,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": true,
+        "rewrite_degraded": false,
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 6467,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-006",
+      "query": "TraceID 和 SpanID 如何关联应用日志",
+      "relevant_ids": [
+        "06_opentelemetry_observability_and_log_correlation"
+      ],
+      "ranked_ids": [
+        "06_opentelemetry_observability_and_log_correlation",
+        "opentelemetry-logs"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "06_opentelemetry_observability_and_log_correlation"
+        ],
+        "3": [
+          "06_opentelemetry_observability_and_log_correlation"
+        ],
+        "5": [
+          "06_opentelemetry_observability_and_log_correlation"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3000,
+        "retrieve_latency_ms": 128,
+        "dense_latency_ms": 125,
+        "lexical_latency_ms": 3,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 2659,
+        "dense_count": 50,
+        "lexical_count": 15,
+        "fused_count": 65,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": true,
+        "rerank_degraded": false,
+        "total_latency_ms": 5788,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-007",
+      "query": "错误码 12000000003 通常代表什么问题",
+      "relevant_ids": [
+        "07_guilde"
+      ],
+      "ranked_ids": [
+        "07_guilde",
+        "09_ingress_nginx_troubleshooting_and_gateway_transition"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "07_guilde"
+        ],
+        "3": [
+          "07_guilde"
+        ],
+        "5": [
+          "07_guilde"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3001,
+        "retrieve_latency_ms": 94,
+        "dense_latency_ms": 93,
+        "lexical_latency_ms": 1,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 3159,
+        "dense_count": 50,
+        "lexical_count": 13,
+        "fused_count": 63,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": true,
+        "rerank_degraded": false,
+        "total_latency_ms": 6255,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-008",
+      "query": "Ingress Nginx 返回 502 时优先看哪些信息",
+      "relevant_ids": [
+        "09_ingress_nginx_troubleshooting_and_gateway_transition"
+      ],
+      "ranked_ids": [
+        "09_ingress_nginx_troubleshooting_and_gateway_transition",
+        "06_opentelemetry_observability_and_log_correlation"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "09_ingress_nginx_troubleshooting_and_gateway_transition"
+        ],
+        "3": [
+          "09_ingress_nginx_troubleshooting_and_gateway_transition"
+        ],
+        "5": [
+          "09_ingress_nginx_troubleshooting_and_gateway_transition"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3001,
+        "retrieve_latency_ms": 182,
+        "dense_latency_ms": 179,
+        "lexical_latency_ms": 3,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5002,
+        "dense_count": 50,
+        "lexical_count": 15,
+        "fused_count": 65,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8185,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-009",
+      "query": "etcdctl snapshot restore 的恢复步骤是什么",
+      "relevant_ids": [
+        "10_etcd_snapshot_backup_and_restore"
+      ],
+      "ranked_ids": [
+        "10_etcd_snapshot_backup_and_restore",
+        "03_prometheus_alerting_and_rule_design",
+        "01_kubernetes_crashloop_runbook"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "10_etcd_snapshot_backup_and_restore"
+        ],
+        "3": [
+          "10_etcd_snapshot_backup_and_restore"
+        ],
+        "5": [
+          "10_etcd_snapshot_backup_and_restore"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3001,
+        "retrieve_latency_ms": 188,
+        "dense_latency_ms": 186,
+        "lexical_latency_ms": 2,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5002,
+        "dense_count": 50,
+        "lexical_count": 15,
+        "fused_count": 65,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8192,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-010",
+      "query": "SHOW ENGINE INNODB STATUS 能定位哪些锁问题",
+      "relevant_ids": [
+        "11_mysql_innodb_deadlock_and_lock_wait"
+      ],
+      "ranked_ids": [
+        "11_mysql_innodb_deadlock_and_lock_wait",
+        "06_opentelemetry_observability_and_log_correlation",
+        "12_redis_distributed_lock_boundaries"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "11_mysql_innodb_deadlock_and_lock_wait"
+        ],
+        "3": [
+          "11_mysql_innodb_deadlock_and_lock_wait"
+        ],
+        "5": [
+          "11_mysql_innodb_deadlock_and_lock_wait"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3002,
+        "retrieve_latency_ms": 157,
+        "dense_latency_ms": 152,
+        "lexical_latency_ms": 2,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5002,
+        "dense_count": 50,
+        "lexical_count": 23,
+        "fused_count": 73,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8162,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-011",
+      "query": "Redis 使用 SET NX EX 加锁有哪些边界",
+      "relevant_ids": [
+        "12_redis_distributed_lock_boundaries"
+      ],
+      "ranked_ids": [
+        "12_redis_distributed_lock_boundaries",
+        "03_prometheus_alerting_and_rule_design",
+        "11_mysql_innodb_deadlock_and_lock_wait"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "12_redis_distributed_lock_boundaries"
+        ],
+        "3": [
+          "12_redis_distributed_lock_boundaries"
+        ],
+        "5": [
+          "12_redis_distributed_lock_boundaries"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 2248,
+        "retrieve_latency_ms": 108,
+        "dense_latency_ms": 104,
+        "lexical_latency_ms": 2,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5002,
+        "dense_count": 50,
+        "lexical_count": 24,
+        "fused_count": 74,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": true,
+        "rewrite_degraded": false,
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 7359,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-012",
+      "query": "Error Budget 和 SLO 的关系是什么",
+      "relevant_ids": [
+        "sli_slo"
+      ],
+      "ranked_ids": [
+        "sli_slo",
+        "06_opentelemetry_observability_and_log_correlation",
+        "07_guilde",
+        "prometheus-alerting-practices"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "sli_slo"
+        ],
+        "3": [
+          "sli_slo"
+        ],
+        "5": [
+          "sli_slo"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3002,
+        "retrieve_latency_ms": 135,
+        "dense_latency_ms": 130,
+        "lexical_latency_ms": 2,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5002,
+        "dense_count": 50,
+        "lexical_count": 22,
+        "fused_count": 72,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8140,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-013",
+      "query": "Git 中删掉资源后集群会不会自动清理",
+      "relevant_ids": [
+        "argocd-auto-sync"
+      ],
+      "ranked_ids": [
+        "05_argocd_autosync_prune_selfheal",
+        "argocd-auto-sync"
+      ],
+      "hit_ids_by_k": {
+        "1": [],
+        "3": [
+          "argocd-auto-sync"
+        ],
+        "5": [
+          "argocd-auto-sync"
+        ]
+      },
+      "recall_at_k": {
+        "1": 0,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3002,
+        "retrieve_latency_ms": 133,
+        "dense_latency_ms": 130,
+        "lexical_latency_ms": 3,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 4024,
+        "dense_count": 50,
+        "lexical_count": 16,
+        "fused_count": 66,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": true,
+        "rerank_degraded": false,
+        "total_latency_ms": 7159,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-014",
+      "query": "同步资源时想用 Replace 或 Force 应该怎么配置",
+      "relevant_ids": [
+        "argocd-sync-options"
+      ],
+      "ranked_ids": [
+        "argocd-sync-options",
+        "05_argocd_autosync_prune_selfheal",
+        "03_prometheus_alerting_and_rule_design",
+        "01_kubernetes_crashloop_runbook"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "argocd-sync-options"
+        ],
+        "3": [
+          "argocd-sync-options"
+        ],
+        "5": [
+          "argocd-sync-options"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3001,
+        "retrieve_latency_ms": 184,
+        "dense_latency_ms": 181,
+        "lexical_latency_ms": 2,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5000,
+        "dense_count": 50,
+        "lexical_count": 18,
+        "fused_count": 68,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8186,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-015",
+      "query": "etcd 数据库体积持续增长应该观察哪些指标",
+      "relevant_ids": [
+        "etcd-monitoring"
+      ],
+      "ranked_ids": [
+        "04_helm_release_history_and_rollback",
+        "etcd-monitoring",
+        "02_kubernetes_deployment_release_and_rollback",
+        "10_etcd_snapshot_backup_and_restore",
+        "06_opentelemetry_observability_and_log_correlation"
+      ],
+      "hit_ids_by_k": {
+        "1": [],
+        "3": [
+          "etcd-monitoring"
+        ],
+        "5": [
+          "etcd-monitoring"
+        ]
+      },
+      "recall_at_k": {
+        "1": 0,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3002,
+        "retrieve_latency_ms": 121,
+        "dense_latency_ms": 117,
+        "lexical_latency_ms": 2,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5002,
+        "dense_count": 50,
+        "lexical_count": 18,
+        "fused_count": 68,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8126,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-016",
+      "query": "多数成员损坏后怎样重新建立 etcd 集群",
+      "relevant_ids": [
+        "etcd-recovery"
+      ],
+      "ranked_ids": [
+        "etcd-recovery",
+        "10_etcd_snapshot_backup_and_restore",
+        "05_argocd_autosync_prune_selfheal"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "etcd-recovery"
+        ],
+        "3": [
+          "etcd-recovery"
+        ],
+        "5": [
+          "etcd-recovery"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3000,
+        "retrieve_latency_ms": 122,
+        "dense_latency_ms": 117,
+        "lexical_latency_ms": 1,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5001,
+        "dense_count": 50,
+        "lexical_count": 18,
+        "fused_count": 68,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8124,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-017",
+      "query": "我想查一个 Helm release 以前部署过哪些版本",
+      "relevant_ids": [
+        "helm-history"
+      ],
+      "ranked_ids": [
+        "04_helm_release_history_and_rollback",
+        "helm-history",
+        "08_open_source_knowledge_ingestion_strategy",
+        "06_opentelemetry_observability_and_log_correlation"
+      ],
+      "hit_ids_by_k": {
+        "1": [],
+        "3": [
+          "helm-history"
+        ],
+        "5": [
+          "helm-history"
+        ]
+      },
+      "recall_at_k": {
+        "1": 0,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3002,
+        "retrieve_latency_ms": 220,
+        "dense_latency_ms": 217,
+        "lexical_latency_ms": 2,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5001,
+        "dense_count": 50,
+        "lexical_count": 17,
+        "fused_count": 67,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8224,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-018",
+      "query": "应用升级失败后怎样退回之前的 chart 状态",
+      "relevant_ids": [
+        "helm-rollback"
+      ],
+      "ranked_ids": [
+        "04_helm_release_history_and_rollback",
+        "02_kubernetes_deployment_release_and_rollback",
+        "01_kubernetes_crashloop_runbook"
+      ],
+      "hit_ids_by_k": {
+        "1": [],
+        "3": [],
+        "5": []
+      },
+      "recall_at_k": {
+        "1": 0,
+        "3": 0,
+        "5": 0
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3002,
+        "retrieve_latency_ms": 188,
+        "dense_latency_ms": 187,
+        "lexical_latency_ms": 3,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5002,
+        "dense_count": 50,
+        "lexical_count": 16,
+        "fused_count": 66,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8193,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-019",
+      "query": "不停掉业务容器的情况下怎么进入 Pod 调试",
+      "relevant_ids": [
+        "kubernetes-debug-running-pod"
+      ],
+      "ranked_ids": [
+        "kubernetes-debug-running-pod",
+        "09_ingress_nginx_troubleshooting_and_gateway_transition",
+        "05_argocd_autosync_prune_selfheal"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "kubernetes-debug-running-pod"
+        ],
+        "3": [
+          "kubernetes-debug-running-pod"
+        ],
+        "5": [
+          "kubernetes-debug-running-pod"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3002,
+        "retrieve_latency_ms": 130,
+        "dense_latency_ms": 124,
+        "lexical_latency_ms": 3,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 3103,
+        "dense_count": 50,
+        "lexical_count": 17,
+        "fused_count": 67,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": true,
+        "rerank_degraded": false,
+        "total_latency_ms": 6236,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-020",
+      "query": "滚动更新卡住时如何暂停并继续 Deployment",
+      "relevant_ids": [
+        "kubernetes-deployment"
+      ],
+      "ranked_ids": [
+        "02_kubernetes_deployment_release_and_rollback",
+        "kubernetes-deployment",
+        "00_ops_knowledge_index"
+      ],
+      "hit_ids_by_k": {
+        "1": [],
+        "3": [
+          "kubernetes-deployment"
+        ],
+        "5": [
+          "kubernetes-deployment"
+        ]
+      },
+      "recall_at_k": {
+        "1": 0,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3001,
+        "retrieve_latency_ms": 109,
+        "dense_latency_ms": 105,
+        "lexical_latency_ms": 3,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5002,
+        "dense_count": 50,
+        "lexical_count": 18,
+        "fused_count": 68,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8113,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-021",
+      "query": "kubectl top 没有数据时如何检查资源指标链路",
+      "relevant_ids": [
+        "kubernetes-resource-metrics-pipeline"
+      ],
+      "ranked_ids": [
+        "kubernetes-resource-metrics-pipeline",
+        "06_opentelemetry_observability_and_log_correlation"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "kubernetes-resource-metrics-pipeline"
+        ],
+        "3": [
+          "kubernetes-resource-metrics-pipeline"
+        ],
+        "5": [
+          "kubernetes-resource-metrics-pipeline"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3003,
+        "retrieve_latency_ms": 128,
+        "dense_latency_ms": 122,
+        "lexical_latency_ms": 3,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 1873,
+        "dense_count": 50,
+        "lexical_count": 19,
+        "fused_count": 69,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": true,
+        "rerank_degraded": false,
+        "total_latency_ms": 5004,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-022",
+      "query": "怎样让应用日志带上当前请求的追踪上下文",
+      "relevant_ids": [
+        "opentelemetry-logs"
+      ],
+      "ranked_ids": [
+        "06_opentelemetry_observability_and_log_correlation",
+        "01_kubernetes_crashloop_runbook",
+        "09_ingress_nginx_troubleshooting_and_gateway_transition"
+      ],
+      "hit_ids_by_k": {
+        "1": [],
+        "3": [],
+        "5": []
+      },
+      "recall_at_k": {
+        "1": 0,
+        "3": 0,
+        "5": 0
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3000,
+        "retrieve_latency_ms": 188,
+        "dense_latency_ms": 185,
+        "lexical_latency_ms": 3,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5000,
+        "dense_count": 50,
+        "lexical_count": 14,
+        "fused_count": 64,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8189,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-023",
+      "query": "计数器、直方图等遥测指标应该如何选择",
+      "relevant_ids": [
+        "opentelemetry-metrics"
+      ],
+      "ranked_ids": [
+        "opentelemetry-metrics",
+        "06_opentelemetry_observability_and_log_correlation",
+        "08_open_source_knowledge_ingestion_strategy"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "opentelemetry-metrics"
+        ],
+        "3": [
+          "opentelemetry-metrics"
+        ],
+        "5": [
+          "opentelemetry-metrics"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3002,
+        "retrieve_latency_ms": 146,
+        "dense_latency_ms": 145,
+        "lexical_latency_ms": 4,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5001,
+        "dense_count": 50,
+        "lexical_count": 14,
+        "fused_count": 64,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8151,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-024",
+      "query": "一条分布式请求如何被拆成 span 并跨服务传播",
+      "relevant_ids": [
+        "opentelemetry-traces"
+      ],
+      "ranked_ids": [
+        "06_opentelemetry_observability_and_log_correlation",
+        "opentelemetry-traces",
+        "12_redis_distributed_lock_boundaries",
+        "02_kubernetes_deployment_release_and_rollback"
+      ],
+      "hit_ids_by_k": {
+        "1": [],
+        "3": [
+          "opentelemetry-traces"
+        ],
+        "5": [
+          "opentelemetry-traces"
+        ]
+      },
+      "recall_at_k": {
+        "1": 0,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3000,
+        "retrieve_latency_ms": 122,
+        "dense_latency_ms": 120,
+        "lexical_latency_ms": 3,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5001,
+        "dense_count": 50,
+        "lexical_count": 16,
+        "fused_count": 66,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8124,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-025",
+      "query": "怎样设计告警才能减少抖动和重复通知",
+      "relevant_ids": [
+        "prometheus-alerting-practices"
+      ],
+      "ranked_ids": [
+        "prometheus-alerting-practices",
+        "03_prometheus_alerting_and_rule_design"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "prometheus-alerting-practices"
+        ],
+        "3": [
+          "prometheus-alerting-practices"
+        ],
+        "5": [
+          "prometheus-alerting-practices"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 2364,
+        "retrieve_latency_ms": 133,
+        "dense_latency_ms": 132,
+        "lexical_latency_ms": 4,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 3959,
+        "dense_count": 50,
+        "lexical_count": 14,
+        "fused_count": 64,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": true,
+        "rewrite_degraded": false,
+        "rerank_attempted": true,
+        "rerank_applied": true,
+        "rerank_degraded": false,
+        "total_latency_ms": 6458,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-026",
+      "query": "PromQL 查询变慢后怎么找出是谁发起的",
+      "relevant_ids": [
+        "prometheus-query-log"
+      ],
+      "ranked_ids": [
+        "prometheus-query-log",
+        "prometheus-recording-rules",
+        "03_prometheus_alerting_and_rule_design"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "prometheus-query-log"
+        ],
+        "3": [
+          "prometheus-query-log"
+        ],
+        "5": [
+          "prometheus-query-log"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3002,
+        "retrieve_latency_ms": 86,
+        "dense_latency_ms": 85,
+        "lexical_latency_ms": 3,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 3874,
+        "dense_count": 50,
+        "lexical_count": 14,
+        "fused_count": 64,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": true,
+        "rerank_degraded": false,
+        "total_latency_ms": 6963,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-027",
+      "query": "高成本 PromQL 如何预计算成新的时间序列",
+      "relevant_ids": [
+        "prometheus-recording-rules"
+      ],
+      "ranked_ids": [
+        "03_prometheus_alerting_and_rule_design",
+        "11_mysql_innodb_deadlock_and_lock_wait",
+        "prometheus-recording-rules",
+        "prometheus-alerting-practices"
+      ],
+      "hit_ids_by_k": {
+        "1": [],
+        "3": [
+          "prometheus-recording-rules"
+        ],
+        "5": [
+          "prometheus-recording-rules"
+        ]
+      },
+      "recall_at_k": {
+        "1": 0,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3001,
+        "retrieve_latency_ms": 169,
+        "dense_latency_ms": 168,
+        "lexical_latency_ms": 3,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5002,
+        "dense_count": 50,
+        "lexical_count": 14,
+        "fused_count": 64,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8173,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-028",
+      "query": "Pod 重启和运行中异常分别该怎么调试",
+      "relevant_ids": [
+        "01_kubernetes_crashloop_runbook",
+        "kubernetes-debug-running-pod"
+      ],
+      "ranked_ids": [
+        "01_kubernetes_crashloop_runbook"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "01_kubernetes_crashloop_runbook"
+        ],
+        "3": [
+          "01_kubernetes_crashloop_runbook"
+        ],
+        "5": [
+          "01_kubernetes_crashloop_runbook"
+        ]
+      },
+      "recall_at_k": {
+        "1": 0.5,
+        "3": 0.5,
+        "5": 0.5
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3002,
+        "retrieve_latency_ms": 117,
+        "dense_latency_ms": 111,
+        "lexical_latency_ms": 4,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 2836,
+        "dense_count": 50,
+        "lexical_count": 17,
+        "fused_count": 67,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": true,
+        "rerank_degraded": false,
+        "total_latency_ms": 5956,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-029",
+      "query": "从 Kubernetes 发布到 Helm 回退需要哪些步骤",
+      "relevant_ids": [
+        "02_kubernetes_deployment_release_and_rollback",
+        "04_helm_release_history_and_rollback",
+        "helm-rollback"
+      ],
+      "ranked_ids": [
+        "04_helm_release_history_and_rollback",
+        "helm-rollback"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "04_helm_release_history_and_rollback"
+        ],
+        "3": [
+          "04_helm_release_history_and_rollback",
+          "helm-rollback"
+        ],
+        "5": [
+          "04_helm_release_history_and_rollback",
+          "helm-rollback"
+        ]
+      },
+      "recall_at_k": {
+        "1": 0.3333333333333333,
+        "3": 0.6666666666666666,
+        "5": 0.6666666666666666
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3001,
+        "retrieve_latency_ms": 190,
+        "dense_latency_ms": 185,
+        "lexical_latency_ms": 3,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 2954,
+        "dense_count": 50,
+        "lexical_count": 21,
+        "fused_count": 71,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": true,
+        "rerank_degraded": false,
+        "total_latency_ms": 6145,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-030",
+      "query": "如何同时设计 Prometheus 告警规则和记录规则",
+      "relevant_ids": [
+        "03_prometheus_alerting_and_rule_design",
+        "prometheus-alerting-practices",
+        "prometheus-recording-rules"
+      ],
+      "ranked_ids": [
+        "03_prometheus_alerting_and_rule_design",
+        "00_ops_knowledge_index",
+        "prometheus-recording-rules",
+        "06_opentelemetry_observability_and_log_correlation"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "03_prometheus_alerting_and_rule_design"
+        ],
+        "3": [
+          "03_prometheus_alerting_and_rule_design",
+          "prometheus-recording-rules"
+        ],
+        "5": [
+          "03_prometheus_alerting_and_rule_design",
+          "prometheus-recording-rules"
+        ]
+      },
+      "recall_at_k": {
+        "1": 0.3333333333333333,
+        "3": 0.6666666666666666,
+        "5": 0.6666666666666666
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3002,
+        "retrieve_latency_ms": 265,
+        "dense_latency_ms": 263,
+        "lexical_latency_ms": 3,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5002,
+        "dense_count": 50,
+        "lexical_count": 18,
+        "fused_count": 68,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8269,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-031",
+      "query": "Argo CD 自动同步和单次同步选项怎样配合",
+      "relevant_ids": [
+        "05_argocd_autosync_prune_selfheal",
+        "argocd-auto-sync",
+        "argocd-sync-options"
+      ],
+      "ranked_ids": [
+        "05_argocd_autosync_prune_selfheal",
+        "00_ops_knowledge_index",
+        "argocd-auto-sync",
+        "08_open_source_knowledge_ingestion_strategy"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "05_argocd_autosync_prune_selfheal"
+        ],
+        "3": [
+          "05_argocd_autosync_prune_selfheal",
+          "argocd-auto-sync"
+        ],
+        "5": [
+          "05_argocd_autosync_prune_selfheal",
+          "argocd-auto-sync"
+        ]
+      },
+      "recall_at_k": {
+        "1": 0.3333333333333333,
+        "3": 0.6666666666666666,
+        "5": 0.6666666666666666
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3002,
+        "retrieve_latency_ms": 111,
+        "dense_latency_ms": 109,
+        "lexical_latency_ms": 3,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5001,
+        "dense_count": 50,
+        "lexical_count": 15,
+        "fused_count": 65,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8115,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-032",
+      "query": "如何用日志和 TraceID 还原一次跨服务请求",
+      "relevant_ids": [
+        "06_opentelemetry_observability_and_log_correlation",
+        "opentelemetry-logs",
+        "opentelemetry-traces"
+      ],
+      "ranked_ids": [
+        "06_opentelemetry_observability_and_log_correlation",
+        "01_kubernetes_crashloop_runbook"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "06_opentelemetry_observability_and_log_correlation"
+        ],
+        "3": [
+          "06_opentelemetry_observability_and_log_correlation"
+        ],
+        "5": [
+          "06_opentelemetry_observability_and_log_correlation"
+        ]
+      },
+      "recall_at_k": {
+        "1": 0.3333333333333333,
+        "3": 0.3333333333333333,
+        "5": 0.3333333333333333
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3000,
+        "retrieve_latency_ms": 122,
+        "dense_latency_ms": 120,
+        "lexical_latency_ms": 2,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5002,
+        "dense_count": 50,
+        "lexical_count": 15,
+        "fused_count": 65,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8126,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-033",
+      "query": "etcd 日常备份、指标监控和灾难恢复如何串起来",
+      "relevant_ids": [
+        "10_etcd_snapshot_backup_and_restore",
+        "etcd-monitoring",
+        "etcd-recovery"
+      ],
+      "ranked_ids": [
+        "10_etcd_snapshot_backup_and_restore",
+        "etcd-monitoring"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "10_etcd_snapshot_backup_and_restore"
+        ],
+        "3": [
+          "10_etcd_snapshot_backup_and_restore",
+          "etcd-monitoring"
+        ],
+        "5": [
+          "10_etcd_snapshot_backup_and_restore",
+          "etcd-monitoring"
+        ]
+      },
+      "recall_at_k": {
+        "1": 0.3333333333333333,
+        "3": 0.6666666666666666,
+        "5": 0.6666666666666666
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3001,
+        "retrieve_latency_ms": 251,
+        "dense_latency_ms": 247,
+        "lexical_latency_ms": 3,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 4085,
+        "dense_count": 50,
+        "lexical_count": 18,
+        "fused_count": 68,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": true,
+        "rerank_degraded": false,
+        "total_latency_ms": 7338,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-034",
+      "query": "怎样先查 Helm 历史再执行指定版本回滚",
+      "relevant_ids": [
+        "04_helm_release_history_and_rollback",
+        "helm-history",
+        "helm-rollback"
+      ],
+      "ranked_ids": [
+        "02_kubernetes_deployment_release_and_rollback",
+        "04_helm_release_history_and_rollback",
+        "00_ops_knowledge_index"
+      ],
+      "hit_ids_by_k": {
+        "1": [],
+        "3": [
+          "04_helm_release_history_and_rollback"
+        ],
+        "5": [
+          "04_helm_release_history_and_rollback"
+        ]
+      },
+      "recall_at_k": {
+        "1": 0,
+        "3": 0.3333333333333333,
+        "5": 0.3333333333333333
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3001,
+        "retrieve_latency_ms": 135,
+        "dense_latency_ms": 131,
+        "lexical_latency_ms": 5,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5001,
+        "dense_count": 50,
+        "lexical_count": 17,
+        "fused_count": 67,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8138,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-035",
+      "query": "Ingress 503 且后端 Pod 异常时怎么联合排查",
+      "relevant_ids": [
+        "09_ingress_nginx_troubleshooting_and_gateway_transition",
+        "kubernetes-debug-running-pod"
+      ],
+      "ranked_ids": [
+        "09_ingress_nginx_troubleshooting_and_gateway_transition",
+        "00_ops_knowledge_index",
+        "05_argocd_autosync_prune_selfheal"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "09_ingress_nginx_troubleshooting_and_gateway_transition"
+        ],
+        "3": [
+          "09_ingress_nginx_troubleshooting_and_gateway_transition"
+        ],
+        "5": [
+          "09_ingress_nginx_troubleshooting_and_gateway_transition"
+        ]
+      },
+      "recall_at_k": {
+        "1": 0.5,
+        "3": 0.5,
+        "5": 0.5
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3002,
+        "retrieve_latency_ms": 147,
+        "dense_latency_ms": 143,
+        "lexical_latency_ms": 4,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5000,
+        "dense_count": 50,
+        "lexical_count": 16,
+        "fused_count": 66,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8150,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-036",
+      "query": "数据库更新失败错误码出现时怎样继续定位锁等待",
+      "relevant_ids": [
+        "07_guilde",
+        "11_mysql_innodb_deadlock_and_lock_wait"
+      ],
+      "ranked_ids": [
+        "11_mysql_innodb_deadlock_and_lock_wait"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "11_mysql_innodb_deadlock_and_lock_wait"
+        ],
+        "3": [
+          "11_mysql_innodb_deadlock_and_lock_wait"
+        ],
+        "5": [
+          "11_mysql_innodb_deadlock_and_lock_wait"
+        ]
+      },
+      "recall_at_k": {
+        "1": 0.5,
+        "3": 0.5,
+        "5": 0.5
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 2649,
+        "retrieve_latency_ms": 118,
+        "dense_latency_ms": 116,
+        "lexical_latency_ms": 3,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 3669,
+        "dense_count": 50,
+        "lexical_count": 14,
+        "fused_count": 64,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": true,
+        "rewrite_degraded": false,
+        "rerank_attempted": true,
+        "rerank_applied": true,
+        "rerank_degraded": false,
+        "total_latency_ms": 6437,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-037",
+      "query": "如何用 SLO 决定 Prometheus 告警阈值",
+      "relevant_ids": [
+        "sli_slo",
+        "prometheus-alerting-practices"
+      ],
+      "ranked_ids": [
+        "03_prometheus_alerting_and_rule_design",
+        "07_guilde",
+        "prometheus-alerting-practices",
+        "00_ops_knowledge_index"
+      ],
+      "hit_ids_by_k": {
+        "1": [],
+        "3": [
+          "prometheus-alerting-practices"
+        ],
+        "5": [
+          "prometheus-alerting-practices"
+        ]
+      },
+      "recall_at_k": {
+        "1": 0,
+        "3": 0.5,
+        "5": 0.5
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 2355,
+        "retrieve_latency_ms": 91,
+        "dense_latency_ms": 89,
+        "lexical_latency_ms": 4,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5001,
+        "dense_count": 50,
+        "lexical_count": 19,
+        "fused_count": 69,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": true,
+        "rewrite_degraded": false,
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 7449,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-038",
+      "query": "Kubernetes CPU 指标怎样接入 OpenTelemetry 指标体系",
+      "relevant_ids": [
+        "kubernetes-resource-metrics-pipeline",
+        "opentelemetry-metrics"
+      ],
+      "ranked_ids": [
+        "kubernetes-resource-metrics-pipeline",
+        "opentelemetry-metrics",
+        "03_prometheus_alerting_and_rule_design",
+        "06_opentelemetry_observability_and_log_correlation"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "kubernetes-resource-metrics-pipeline"
+        ],
+        "3": [
+          "kubernetes-resource-metrics-pipeline",
+          "opentelemetry-metrics"
+        ],
+        "5": [
+          "kubernetes-resource-metrics-pipeline",
+          "opentelemetry-metrics"
+        ]
+      },
+      "recall_at_k": {
+        "1": 0.5,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3001,
+        "retrieve_latency_ms": 112,
+        "dense_latency_ms": 106,
+        "lexical_latency_ms": 4,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 3135,
+        "dense_count": 50,
+        "lexical_count": 25,
+        "fused_count": 75,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": true,
+        "rerank_degraded": false,
+        "total_latency_ms": 6249,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-039",
+      "query": "Deployment 变更后如何结合查询日志观察监控压力",
+      "relevant_ids": [
+        "kubernetes-deployment",
+        "prometheus-query-log"
+      ],
+      "ranked_ids": [
+        "02_kubernetes_deployment_release_and_rollback",
+        "00_ops_knowledge_index"
+      ],
+      "hit_ids_by_k": {
+        "1": [],
+        "3": [],
+        "5": []
+      },
+      "recall_at_k": {
+        "1": 0,
+        "3": 0,
+        "5": 0
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3001,
+        "retrieve_latency_ms": 156,
+        "dense_latency_ms": 152,
+        "lexical_latency_ms": 4,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5001,
+        "dense_count": 50,
+        "lexical_count": 18,
+        "fused_count": 68,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8159,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-040",
+      "query": "How do I inspect and rollback a Helm release revision",
+      "relevant_ids": [
+        "helm-history",
+        "helm-rollback"
+      ],
+      "ranked_ids": [
+        "helm-rollback",
+        "04_helm_release_history_and_rollback",
+        "kubernetes-deployment"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "helm-rollback"
+        ],
+        "3": [
+          "helm-rollback"
+        ],
+        "5": [
+          "helm-rollback"
+        ]
+      },
+      "recall_at_k": {
+        "1": 0.5,
+        "3": 0.5,
+        "5": 0.5
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3002,
+        "retrieve_latency_ms": 111,
+        "dense_latency_ms": 106,
+        "lexical_latency_ms": 3,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5000,
+        "dense_count": 50,
+        "lexical_count": 22,
+        "fused_count": 72,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8115,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-041",
+      "query": "K8s Pod 一直 restarting，how should I debug it",
+      "relevant_ids": [
+        "01_kubernetes_crashloop_runbook",
+        "kubernetes-debug-running-pod"
+      ],
+      "ranked_ids": [
+        "01_kubernetes_crashloop_runbook",
+        "kubernetes-debug-running-pod"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "01_kubernetes_crashloop_runbook"
+        ],
+        "3": [
+          "01_kubernetes_crashloop_runbook",
+          "kubernetes-debug-running-pod"
+        ],
+        "5": [
+          "01_kubernetes_crashloop_runbook",
+          "kubernetes-debug-running-pod"
+        ]
+      },
+      "recall_at_k": {
+        "1": 0.5,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3000,
+        "retrieve_latency_ms": 217,
+        "dense_latency_ms": 211,
+        "lexical_latency_ms": 4,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 4517,
+        "dense_count": 50,
+        "lexical_count": 28,
+        "fused_count": 78,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": true,
+        "rerank_degraded": false,
+        "total_latency_ms": 7736,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-042",
+      "query": "What metrics indicate that an etcd cluster is unhealthy",
+      "relevant_ids": [
+        "etcd-monitoring"
+      ],
+      "ranked_ids": [
+        "etcd-monitoring"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "etcd-monitoring"
+        ],
+        "3": [
+          "etcd-monitoring"
+        ],
+        "5": [
+          "etcd-monitoring"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 2124,
+        "retrieve_latency_ms": 140,
+        "dense_latency_ms": 135,
+        "lexical_latency_ms": 3,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 4831,
+        "dense_count": 50,
+        "lexical_count": 18,
+        "fused_count": 68,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": true,
+        "rewrite_degraded": false,
+        "rerank_attempted": true,
+        "rerank_applied": true,
+        "rerank_degraded": false,
+        "total_latency_ms": 7096,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-043",
+      "query": "Argo CD auto-sync 中 prune 与 selfHeal 怎么工作",
+      "relevant_ids": [
+        "argocd-auto-sync",
+        "05_argocd_autosync_prune_selfheal"
+      ],
+      "ranked_ids": [
+        "05_argocd_autosync_prune_selfheal",
+        "argocd-auto-sync",
+        "03_prometheus_alerting_and_rule_design"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "05_argocd_autosync_prune_selfheal"
+        ],
+        "3": [
+          "05_argocd_autosync_prune_selfheal",
+          "argocd-auto-sync"
+        ],
+        "5": [
+          "05_argocd_autosync_prune_selfheal",
+          "argocd-auto-sync"
+        ]
+      },
+      "recall_at_k": {
+        "1": 0.5,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3001,
+        "retrieve_latency_ms": 230,
+        "dense_latency_ms": 227,
+        "lexical_latency_ms": 3,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5000,
+        "dense_count": 50,
+        "lexical_count": 16,
+        "fused_count": 66,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8232,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-044",
+      "query": "How are OTel logs, metrics and traces related",
+      "relevant_ids": [
+        "opentelemetry-logs",
+        "opentelemetry-metrics",
+        "opentelemetry-traces"
+      ],
+      "ranked_ids": [
+        "opentelemetry-logs",
+        "06_opentelemetry_observability_and_log_correlation",
+        "opentelemetry-traces"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "opentelemetry-logs"
+        ],
+        "3": [
+          "opentelemetry-logs",
+          "opentelemetry-traces"
+        ],
+        "5": [
+          "opentelemetry-logs",
+          "opentelemetry-traces"
+        ]
+      },
+      "recall_at_k": {
+        "1": 0.3333333333333333,
+        "3": 0.6666666666666666,
+        "5": 0.6666666666666666
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3002,
+        "retrieve_latency_ms": 133,
+        "dense_latency_ms": 128,
+        "lexical_latency_ms": 4,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5000,
+        "dense_count": 50,
+        "lexical_count": 18,
+        "fused_count": 68,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8136,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-045",
+      "query": "Prometheus recording rule 能否降低 expensive query 成本",
+      "relevant_ids": [
+        "prometheus-recording-rules"
+      ],
+      "ranked_ids": [
+        "prometheus-recording-rules",
+        "03_prometheus_alerting_and_rule_design"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "prometheus-recording-rules"
+        ],
+        "3": [
+          "prometheus-recording-rules"
+        ],
+        "5": [
+          "prometheus-recording-rules"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3000,
+        "retrieve_latency_ms": 147,
+        "dense_latency_ms": 144,
+        "lexical_latency_ms": 3,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5002,
+        "dense_count": 50,
+        "lexical_count": 20,
+        "fused_count": 70,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8150,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-046",
+      "query": "要回退 Kubernetes Deployment，不是 Helm release，应该用什么",
+      "relevant_ids": [
+        "02_kubernetes_deployment_release_and_rollback"
+      ],
+      "ranked_ids": [
+        "02_kubernetes_deployment_release_and_rollback",
+        "04_helm_release_history_and_rollback",
+        "10_etcd_snapshot_backup_and_restore"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "02_kubernetes_deployment_release_and_rollback"
+        ],
+        "3": [
+          "02_kubernetes_deployment_release_and_rollback"
+        ],
+        "5": [
+          "02_kubernetes_deployment_release_and_rollback"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3022,
+        "retrieve_latency_ms": 164,
+        "dense_latency_ms": 161,
+        "lexical_latency_ms": 1,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 4176,
+        "dense_count": 50,
+        "lexical_count": 22,
+        "fused_count": 72,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": true,
+        "rerank_degraded": false,
+        "total_latency_ms": 7364,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-047",
+      "query": "我需要告警持续时间配置，不是在做 PromQL 预计算",
+      "relevant_ids": [
+        "03_prometheus_alerting_and_rule_design"
+      ],
+      "ranked_ids": [
+        "03_prometheus_alerting_and_rule_design",
+        "prometheus-alerting-practices",
+        "06_opentelemetry_observability_and_log_correlation"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "03_prometheus_alerting_and_rule_design"
+        ],
+        "3": [
+          "03_prometheus_alerting_and_rule_design"
+        ],
+        "5": [
+          "03_prometheus_alerting_and_rule_design"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3001,
+        "retrieve_latency_ms": 109,
+        "dense_latency_ms": 107,
+        "lexical_latency_ms": 3,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5000,
+        "dense_count": 50,
+        "lexical_count": 14,
+        "fused_count": 64,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8111,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-048",
+      "query": "只想了解自动同步触发逻辑，不需要单次 sync options",
+      "relevant_ids": [
+        "argocd-auto-sync"
+      ],
+      "ranked_ids": [
+        "05_argocd_autosync_prune_selfheal",
+        "12_redis_distributed_lock_boundaries",
+        "11_mysql_innodb_deadlock_and_lock_wait"
+      ],
+      "hit_ids_by_k": {
+        "1": [],
+        "3": [],
+        "5": []
+      },
+      "recall_at_k": {
+        "1": 0,
+        "3": 0,
+        "5": 0
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3002,
+        "retrieve_latency_ms": 153,
+        "dense_latency_ms": 149,
+        "lexical_latency_ms": 3,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5002,
+        "dense_count": 50,
+        "lexical_count": 19,
+        "fused_count": 69,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8158,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-049",
+      "query": "etcd 集群目前健康，只需要监控指标而不是灾难恢复",
+      "relevant_ids": [
+        "etcd-monitoring"
+      ],
+      "ranked_ids": [
+        "10_etcd_snapshot_backup_and_restore",
+        "etcd-monitoring",
+        "03_prometheus_alerting_and_rule_design",
+        "etcd-recovery"
+      ],
+      "hit_ids_by_k": {
+        "1": [],
+        "3": [
+          "etcd-monitoring"
+        ],
+        "5": [
+          "etcd-monitoring"
+        ]
+      },
+      "recall_at_k": {
+        "1": 0,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 2683,
+        "retrieve_latency_ms": 129,
+        "dense_latency_ms": 125,
+        "lexical_latency_ms": 3,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5001,
+        "dense_count": 50,
+        "lexical_count": 18,
+        "fused_count": 68,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": true,
+        "rewrite_degraded": false,
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 7814,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-050",
+      "query": "我只查 Helm 版本历史，暂时不执行 rollback",
+      "relevant_ids": [
+        "helm-history"
+      ],
+      "ranked_ids": [
+        "04_helm_release_history_and_rollback",
+        "02_kubernetes_deployment_release_and_rollback",
+        "helm-rollback",
+        "00_ops_knowledge_index"
+      ],
+      "hit_ids_by_k": {
+        "1": [],
+        "3": [],
+        "5": []
+      },
+      "recall_at_k": {
+        "1": 0,
+        "3": 0,
+        "5": 0
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 2958,
+        "retrieve_latency_ms": 115,
+        "dense_latency_ms": 112,
+        "lexical_latency_ms": 3,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5001,
+        "dense_count": 50,
+        "lexical_count": 17,
+        "fused_count": 67,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": true,
+        "rewrite_degraded": false,
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8075,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-051",
+      "query": "如何把 trace context 写入日志，而不是解释 span 树",
+      "relevant_ids": [
+        "opentelemetry-logs"
+      ],
+      "ranked_ids": [
+        "06_opentelemetry_observability_and_log_correlation",
+        "07_guilde"
+      ],
+      "hit_ids_by_k": {
+        "1": [],
+        "3": [],
+        "5": []
+      },
+      "recall_at_k": {
+        "1": 0,
+        "3": 0,
+        "5": 0
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3002,
+        "retrieve_latency_ms": 187,
+        "dense_latency_ms": 184,
+        "lexical_latency_ms": 4,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5002,
+        "dense_count": 50,
+        "lexical_count": 19,
+        "fused_count": 69,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8191,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-052",
+      "query": "想看应用业务指标，不是排查 Kubernetes Metrics Server",
+      "relevant_ids": [
+        "opentelemetry-metrics"
+      ],
+      "ranked_ids": [
+        "04_helm_release_history_and_rollback",
+        "kubernetes-resource-metrics-pipeline",
+        "11_mysql_innodb_deadlock_and_lock_wait"
+      ],
+      "hit_ids_by_k": {
+        "1": [],
+        "3": [],
+        "5": []
+      },
+      "recall_at_k": {
+        "1": 0,
+        "3": 0,
+        "5": 0
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3002,
+        "retrieve_latency_ms": 188,
+        "dense_latency_ms": 182,
+        "lexical_latency_ms": 4,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5000,
+        "dense_count": 50,
+        "lexical_count": 28,
+        "fused_count": 78,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8190,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-053",
+      "query": "Ingress upstream 返回 504，但 Pod 没有 CrashLoop",
+      "relevant_ids": [
+        "09_ingress_nginx_troubleshooting_and_gateway_transition"
+      ],
+      "ranked_ids": [
+        "09_ingress_nginx_troubleshooting_and_gateway_transition",
+        "01_kubernetes_crashloop_runbook",
+        "08_open_source_knowledge_ingestion_strategy"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "09_ingress_nginx_troubleshooting_and_gateway_transition"
+        ],
+        "3": [
+          "09_ingress_nginx_troubleshooting_and_gateway_transition"
+        ],
+        "5": [
+          "09_ingress_nginx_troubleshooting_and_gateway_transition"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3001,
+        "retrieve_latency_ms": 192,
+        "dense_latency_ms": 186,
+        "lexical_latency_ms": 1,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5001,
+        "dense_count": 50,
+        "lexical_count": 28,
+        "fused_count": 78,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8195,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-054",
+      "query": "业务需要分布式互斥锁，不是在排查 MySQL 行锁",
+      "relevant_ids": [
+        "12_redis_distributed_lock_boundaries"
+      ],
+      "ranked_ids": [
+        "12_redis_distributed_lock_boundaries",
+        "11_mysql_innodb_deadlock_and_lock_wait"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "12_redis_distributed_lock_boundaries"
+        ],
+        "3": [
+          "12_redis_distributed_lock_boundaries"
+        ],
+        "5": [
+          "12_redis_distributed_lock_boundaries"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3001,
+        "retrieve_latency_ms": 144,
+        "dense_latency_ms": 142,
+        "lexical_latency_ms": 1,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 2693,
+        "dense_count": 50,
+        "lexical_count": 14,
+        "fused_count": 64,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": true,
+        "rerank_degraded": false,
+        "total_latency_ms": 5839,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-055",
+      "query": "我在制定服务可靠性目标，不是配置告警通知",
+      "relevant_ids": [
+        "sli_slo"
+      ],
+      "ranked_ids": [
+        "06_opentelemetry_observability_and_log_correlation",
+        "03_prometheus_alerting_and_rule_design",
+        "prometheus-alerting-practices",
+        "09_ingress_nginx_troubleshooting_and_gateway_transition"
+      ],
+      "hit_ids_by_k": {
+        "1": [],
+        "3": [],
+        "5": []
+      },
+      "recall_at_k": {
+        "1": 0,
+        "3": 0,
+        "5": 0
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3002,
+        "retrieve_latency_ms": 117,
+        "dense_latency_ms": 115,
+        "lexical_latency_ms": 3,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5002,
+        "dense_count": 50,
+        "lexical_count": 14,
+        "fused_count": 64,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8122,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-056",
+      "query": "要审计慢查询来源，不是创建 recording rule",
+      "relevant_ids": [
+        "prometheus-query-log"
+      ],
+      "ranked_ids": [
+        "prometheus-query-log",
+        "prometheus-recording-rules",
+        "03_prometheus_alerting_and_rule_design"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "prometheus-query-log"
+        ],
+        "3": [
+          "prometheus-query-log"
+        ],
+        "5": [
+          "prometheus-query-log"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3000,
+        "retrieve_latency_ms": 251,
+        "dense_latency_ms": 249,
+        "lexical_latency_ms": 2,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 3832,
+        "dense_count": 50,
+        "lexical_count": 17,
+        "fused_count": 67,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": true,
+        "rerank_degraded": false,
+        "total_latency_ms": 7084,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-057",
+      "query": "Pod 正在运行但需要临时调试，不涉及 Deployment 发布",
+      "relevant_ids": [
+        "kubernetes-debug-running-pod"
+      ],
+      "ranked_ids": [
+        "02_kubernetes_deployment_release_and_rollback",
+        "kubernetes-debug-running-pod",
+        "01_kubernetes_crashloop_runbook",
+        "05_argocd_autosync_prune_selfheal"
+      ],
+      "hit_ids_by_k": {
+        "1": [],
+        "3": [
+          "kubernetes-debug-running-pod"
+        ],
+        "5": [
+          "kubernetes-debug-running-pod"
+        ]
+      },
+      "recall_at_k": {
+        "1": 0,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3001,
+        "retrieve_latency_ms": 102,
+        "dense_latency_ms": 98,
+        "lexical_latency_ms": 3,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5001,
+        "dense_count": 50,
+        "lexical_count": 19,
+        "fused_count": 69,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8105,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-058",
+      "query": "需要 etcdctl 快照操作手册，不是监控告警项",
+      "relevant_ids": [
+        "10_etcd_snapshot_backup_and_restore"
+      ],
+      "ranked_ids": [
+        "10_etcd_snapshot_backup_and_restore"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "10_etcd_snapshot_backup_and_restore"
+        ],
+        "3": [
+          "10_etcd_snapshot_backup_and_restore"
+        ],
+        "5": [
+          "10_etcd_snapshot_backup_and_restore"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3000,
+        "retrieve_latency_ms": 217,
+        "dense_latency_ms": 215,
+        "lexical_latency_ms": 3,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 3370,
+        "dense_count": 50,
+        "lexical_count": 15,
+        "fused_count": 65,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": true,
+        "rerank_degraded": false,
+        "total_latency_ms": 6588,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-059",
+      "query": "接口报业务错误码 12000000002，不是网关 502",
+      "relevant_ids": [
+        "07_guilde"
+      ],
+      "ranked_ids": [
+        "07_guilde",
+        "11_mysql_innodb_deadlock_and_lock_wait",
+        "09_ingress_nginx_troubleshooting_and_gateway_transition"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "07_guilde"
+        ],
+        "3": [
+          "07_guilde"
+        ],
+        "5": [
+          "07_guilde"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3000,
+        "retrieve_latency_ms": 183,
+        "dense_latency_ms": 182,
+        "lexical_latency_ms": 3,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 2241,
+        "dense_count": 50,
+        "lexical_count": 14,
+        "fused_count": 64,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": true,
+        "rerank_degraded": false,
+        "total_latency_ms": 5426,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "DEV-060",
+      "query": "只讨论告警分组抑制实践，不是查询 alert rule 字段",
+      "relevant_ids": [
+        "prometheus-alerting-practices"
+      ],
+      "ranked_ids": [
+        "03_prometheus_alerting_and_rule_design",
+        "07_guilde",
+        "06_opentelemetry_observability_and_log_correlation"
+      ],
+      "hit_ids_by_k": {
+        "1": [],
+        "3": [],
+        "5": []
+      },
+      "recall_at_k": {
+        "1": 0,
+        "3": 0,
+        "5": 0
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 3000,
+        "retrieve_latency_ms": 187,
+        "dense_latency_ms": 185,
+        "lexical_latency_ms": 2,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 5001,
+        "dense_count": 50,
+        "lexical_count": 16,
+        "fused_count": 66,
+        "candidate_count": 20,
+        "result_count": 5,
+        "rewrite_attempted": true,
+        "rewrite_applied": false,
+        "rewrite_degraded": true,
+        "rewrite_reason": "timeout",
+        "rerank_attempted": true,
+        "rerank_applied": false,
+        "rerank_degraded": true,
+        "rerank_reason": "timeout",
+        "total_latency_ms": 8189,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    }
+  ],
+  "gate": {
+    "passed": false,
+    "checks": [
+      {
+        "name": "primary_mrr",
+        "baseline": 0.7061111111111111,
+        "candidate": 0.7527777777777778,
+        "delta": 0.046666666666666634,
+        "limit": 0,
+        "passed": true
+      },
+      {
+        "name": "secondary_recall_at_5",
+        "baseline": 0.7944444444444444,
+        "candidate": 0.7583333333333333,
+        "delta": -0.036111111111111094,
+        "limit": -0,
+        "passed": false
+      },
+      {
+        "name": "failure_rate",
+        "baseline": 0,
+        "candidate": 0,
+        "delta": 0,
+        "limit": 0,
+        "passed": true
+      },
+      {
+        "name": "empty_rate",
+        "baseline": 0,
+        "candidate": 0,
+        "delta": 0,
+        "limit": 0,
+        "passed": true
+      },
+      {
+        "name": "total_latency_p95_ms",
+        "baseline": 172,
+        "candidate": 8225,
+        "delta": 8053,
+        "limit": 206.4,
+        "passed": false
+      }
+    ]
+  }
+}

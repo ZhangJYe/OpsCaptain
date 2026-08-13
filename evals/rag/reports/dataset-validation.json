@@ -1,0 +1,125 @@
+{
+  "valid": true,
+  "corpus_version": "knowledge-seed-v1",
+  "config": {
+    "development_min_cases": 60,
+    "holdout_min_cases": 100,
+    "near_duplicate_threshold": 0.8,
+    "category_tolerance": 0.05,
+    "category_targets": {
+      "cross_language": 0.1,
+      "exact_entity": 0.2,
+      "hard_negative": 0.25,
+      "multi_document": 0.2,
+      "semantic_paraphrase": 0.25
+    }
+  },
+  "development": {
+    "role": "development",
+    "cases": 60,
+    "adequate": true,
+    "fingerprint": "35eec6f8c266156e96ea7ec1f2eed48452da16e7458dad415690b2454bfe0d3d",
+    "category_counts": {
+      "cross_language": 6,
+      "exact_entity": 12,
+      "hard_negative": 15,
+      "multi_document": 12,
+      "semantic_paraphrase": 15
+    },
+    "difficulty_counts": {
+      "easy": 10,
+      "hard": 30,
+      "medium": 20
+    },
+    "language_counts": {
+      "en": 3,
+      "mixed": 41,
+      "zh": 16
+    },
+    "covered_document_ids": [
+      "01_kubernetes_crashloop_runbook",
+      "02_kubernetes_deployment_release_and_rollback",
+      "03_prometheus_alerting_and_rule_design",
+      "04_helm_release_history_and_rollback",
+      "05_argocd_autosync_prune_selfheal",
+      "06_opentelemetry_observability_and_log_correlation",
+      "07_guilde",
+      "09_ingress_nginx_troubleshooting_and_gateway_transition",
+      "10_etcd_snapshot_backup_and_restore",
+      "11_mysql_innodb_deadlock_and_lock_wait",
+      "12_redis_distributed_lock_boundaries",
+      "argocd-auto-sync",
+      "argocd-sync-options",
+      "etcd-monitoring",
+      "etcd-recovery",
+      "helm-history",
+      "helm-rollback",
+      "kubernetes-debug-running-pod",
+      "kubernetes-deployment",
+      "kubernetes-resource-metrics-pipeline",
+      "opentelemetry-logs",
+      "opentelemetry-metrics",
+      "opentelemetry-traces",
+      "prometheus-alerting-practices",
+      "prometheus-query-log",
+      "prometheus-recording-rules",
+      "sli_slo"
+    ],
+    "missing_document_ids": null,
+    "coverage_rate": 1
+  },
+  "holdout": {
+    "role": "holdout",
+    "cases": 100,
+    "adequate": true,
+    "fingerprint": "5e8eee0b1d9e4abe1cbbfdf659c63eac5adf396b3ec3114bb199997099849b9a",
+    "category_counts": {
+      "cross_language": 10,
+      "exact_entity": 20,
+      "hard_negative": 25,
+      "multi_document": 20,
+      "semantic_paraphrase": 25
+    },
+    "difficulty_counts": {
+      "easy": 7,
+      "hard": 68,
+      "medium": 25
+    },
+    "language_counts": {
+      "en": 6,
+      "mixed": 71,
+      "zh": 23
+    },
+    "covered_document_ids": [
+      "01_kubernetes_crashloop_runbook",
+      "02_kubernetes_deployment_release_and_rollback",
+      "03_prometheus_alerting_and_rule_design",
+      "04_helm_release_history_and_rollback",
+      "05_argocd_autosync_prune_selfheal",
+      "06_opentelemetry_observability_and_log_correlation",
+      "07_guilde",
+      "09_ingress_nginx_troubleshooting_and_gateway_transition",
+      "10_etcd_snapshot_backup_and_restore",
+      "11_mysql_innodb_deadlock_and_lock_wait",
+      "12_redis_distributed_lock_boundaries",
+      "argocd-auto-sync",
+      "argocd-sync-options",
+      "etcd-monitoring",
+      "etcd-recovery",
+      "helm-history",
+      "helm-rollback",
+      "kubernetes-debug-running-pod",
+      "kubernetes-deployment",
+      "kubernetes-resource-metrics-pipeline",
+      "opentelemetry-logs",
+      "opentelemetry-metrics",
+      "opentelemetry-traces",
+      "prometheus-alerting-practices",
+      "prometheus-query-log",
+      "prometheus-recording-rules",
+      "sli_slo"
+    ],
+    "missing_document_ids": null,
+    "coverage_rate": 1
+  }
+}

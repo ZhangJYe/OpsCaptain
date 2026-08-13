@@ -21,6 +21,12 @@ type retrievalQueryProfile struct {
 
 type retrievalDocProfile struct {
 	contentTokens   map[string]struct{}
+	documentID      string
+	title           string
+	provider        string
+	titleTokens     map[string]struct{}
+	tagTokens       map[string]struct{}
+	providerTokens  map[string]struct{}
 	service         string
 	instanceType    string
 	source          string
@@ -35,27 +41,61 @@ type retrievalDocProfile struct {
 }
 
 type scoredDocument struct {
-	doc   *schema.Document
-	score int
-	idx   int
+	doc          *schema.Document
+	score        int
+	fieldBoost   int
+	fieldMatches []string
+	intent       intentDocumentScore
+	idx          int
 }
 
 func refineRetrievedDocs(query string, docs []*schema.Document) []*schema.Document {
+	return refineRetrievedDocsWithConfig(query, docs, HybridConfig{})
+}
+
+func refineRetrievedDocsWithConfig(query string, docs []*schema.Document, cfg HybridConfig) []*schema.Document {
+	docs, _ = refineRetrievedDocsWithTrace(query, docs, cfg)
+	return docs
+}
+
+func refineRetrievedDocsWithTrace(query string, docs []*schema.Document, cfg HybridConfig) ([]*schema.Document, QueryIntentTrace) {
+	intent := QueryIntent{}
+	trace := QueryIntentTrace{}
+	if cfg.IntentRefinementEnabled {
+		intent = ParseQueryIntent(query, cfg)
+		trace = QueryIntentTrace{
+			Parsed: intent.Rule != "", Rule: intent.Rule,
+			PositiveTerms: append([]string(nil), intent.PositiveTerms...),
+			ExcludedTerms: append([]string(nil), intent.ExcludedTerms...),
+		}
+	}
 	if len(docs) <= 1 {
-		return docs
+		annotateFinalPositions(docs)
+		return docs, trace
 	}
 
 	profile := buildRetrievalQueryProfile(query)
 	if len(profile.tokens) == 0 && strings.TrimSpace(profile.rawLower) == "" {
-		return docs
+		return docs, trace
 	}
 
 	scored := make([]scoredDocument, 0, len(docs))
 	for idx, doc := range docs {
+		fieldBoost, fieldMatches := knowledgeFieldScore(profile, doc, cfg)
+		intentScore := scoreDocumentIntent(intent, doc, cfg)
+		if intentScore.bonus > 0 || intentScore.penalty > 0 {
+			trace.Applied = true
+		}
+		if intentScore.penalty > 0 {
+			trace.PenalizedDocs++
+		}
 		scored = append(scored, scoredDocument{
-			doc:   doc,
-			score: scoreRetrievedDocument(profile, doc, idx, len(docs)),
-			idx:   idx,
+			doc:          doc,
+			score:        scoreRetrievedDocument(profile, doc, idx, len(docs)) + fieldBoost + intentScore.bonus - intentScore.penalty,
+			fieldBoost:   fieldBoost,
+			fieldMatches: fieldMatches,
+			intent:       intentScore,
+			idx:          idx,
 		})
 	}
 
@@ -67,10 +107,24 @@ func refineRetrievedDocs(query string, docs []*schema.Document) []*schema.Docume
 	})
 
 	out := make([]*schema.Document, 0, len(scored))
-	for _, item := range scored {
+	for position, item := range scored {
+		ensureDocMeta(item.doc)
+		item.doc.MetaData[metaKeyRefinePosition] = position + 1
+		if item.fieldBoost > 0 {
+			item.doc.MetaData[metaKeyFieldBoost] = float64(item.fieldBoost)
+			item.doc.MetaData[metaKeyFieldMatches] = append([]string(nil), item.fieldMatches...)
+		}
+		if trace.Parsed {
+			item.doc.MetaData[metaKeyIntentRule] = trace.Rule
+			item.doc.MetaData[metaKeyIntentPositiveHits] = append([]string(nil), item.intent.positiveHits...)
+			item.doc.MetaData[metaKeyIntentExcludedHits] = append([]string(nil), item.intent.excludedHits...)
+			item.doc.MetaData[metaKeyIntentBonus] = float64(item.intent.bonus)
+			item.doc.MetaData[metaKeyIntentPenalty] = float64(item.intent.penalty)
+			item.doc.MetaData[metaKeyIntentNetScore] = float64(item.intent.bonus - item.intent.penalty)
+		}
 		out = append(out, item.doc)
 	}
-	return out
+	return out, trace
 }
 
 func trimRetrievedDocs(docs []*schema.Document, topK int) []*schema.Document {
@@ -120,6 +174,12 @@ func buildRetrievalDocProfile(doc *schema.Document) retrievalDocProfile {
 
 	return retrievalDocProfile{
 		contentTokens:   tokenizeToSet(documentContent(doc)),
+		documentID:      normalizeValue(firstStringMetadata(meta, "knowledge_doc_id", "doc_id", "case_id")),
+		title:           normalizeValue(firstStringMetadata(meta, "title", "file_name", "filename")),
+		provider:        normalizeValue(stringMetadata(meta, "provider")),
+		titleTokens:     tokenizeToSet(firstStringMetadata(meta, "title", "file_name", "filename")),
+		tagTokens:       anySliceToSet(meta["tags"]),
+		providerTokens:  tokenizeToSet(stringMetadata(meta, "provider")),
 		service:         normalizeValue(stringMetadata(meta, "service")),
 		instanceType:    normalizeValue(stringMetadata(meta, "instance_type")),
 		source:          normalizeValue(stringMetadata(meta, "source")),
@@ -132,6 +192,146 @@ func buildRetrievalDocProfile(doc *schema.Document) retrievalDocProfile {
 		traceServices:   anySliceToSet(meta["trace_services"]),
 		traceOperations: anySliceToSet(meta["trace_operations"]),
 	}
+}
+
+func knowledgeFieldScore(query retrievalQueryProfile, doc *schema.Document, cfg HybridConfig) (int, []string) {
+	if !cfg.KnowledgeFieldBoostEnabled || doc == nil {
+		return 0, nil
+	}
+	profile := buildRetrievalDocProfile(doc)
+	score := 0
+	matches := make([]string, 0, 4)
+	if exactFieldBoost(query.rawLower, profile.documentID, cfg.KnowledgeDocIDBoost) > 0 {
+		score += cfg.KnowledgeDocIDBoost
+		matches = append(matches, "document_id")
+	}
+	titleOverlap := overlapCount(query.tokens, profile.titleTokens)
+	titleBoost := minInt(cfg.KnowledgeTitleBoost, titleOverlap*2)
+	if exactFieldBoost(query.rawLower, profile.title, cfg.KnowledgeTitleBoost) > 0 {
+		titleBoost = cfg.KnowledgeTitleBoost
+	}
+	if titleBoost > 0 {
+		score += titleBoost
+		matches = append(matches, "title")
+	}
+	if overlapCount(query.tokens, profile.tagTokens) > 0 {
+		score += minInt(cfg.KnowledgeTagsBoost, overlapCount(query.tokens, profile.tagTokens)*cfg.KnowledgeTagsBoost)
+		matches = append(matches, "tags")
+	}
+	if overlapCount(query.tokens, profile.providerTokens) > 0 || exactFieldBoost(query.rawLower, profile.provider, cfg.KnowledgeProviderBoost) > 0 {
+		score += cfg.KnowledgeProviderBoost
+		matches = append(matches, "provider")
+	}
+	if cfg.KnowledgeFieldBoostCap > 0 && score > cfg.KnowledgeFieldBoostCap {
+		score = cfg.KnowledgeFieldBoostCap
+	}
+	return score, matches
+}
+
+func selectFinalDocs(query string, docs []*schema.Document, cfg HybridConfig) []*schema.Document {
+	topK := cfg.FinalTopK
+	if topK <= 0 {
+		topK = 10
+	}
+	if !cfg.CoverageEnabled || len(docs) <= 1 || len(tokenizeToSet(query)) < 2 {
+		selected := trimRetrievedDocs(docs, topK)
+		annotateFinalPositions(selected)
+		return selected
+	}
+
+	remaining := append([]*schema.Document(nil), docs...)
+	limit := minInt(topK, len(remaining))
+	selected := make([]*schema.Document, 0, limit)
+	covered := make(map[string]struct{})
+	queryTokens := tokenizeToSet(query)
+	for position := 0; position < limit; position++ {
+		if position == 0 {
+			selected = append(selected, remaining[0])
+			addCoveredTokens(remaining[0], queryTokens, covered)
+			remaining = remaining[1:]
+			continue
+		}
+		maxIndex := minInt(cfg.CoverageMaxPositionGain, len(remaining)-1)
+		bestIndex, bestGain := 0, newCoverageCount(remaining[0], queryTokens, covered)
+		for candidateIndex := 1; candidateIndex <= maxIndex; candidateIndex++ {
+			gain := newCoverageCount(remaining[candidateIndex], queryTokens, covered)
+			if gain > bestGain {
+				bestIndex, bestGain = candidateIndex, gain
+			}
+		}
+		chosen := remaining[bestIndex]
+		if bestIndex > 0 {
+			ensureDocMeta(chosen)
+			chosen.MetaData[metaKeyCoverageBoost] = float64(bestIndex)
+		}
+		selected = append(selected, chosen)
+		addCoveredTokens(chosen, queryTokens, covered)
+		remaining = append(remaining[:bestIndex], remaining[bestIndex+1:]...)
+	}
+	annotateFinalPositions(selected)
+	return selected
+}
+
+func documentCoverageTokens(doc *schema.Document) map[string]struct{} {
+	profile := buildRetrievalDocProfile(doc)
+	return mergeTokenSets(profile.contentTokens, profile.titleTokens, profile.tagTokens, profile.providerTokens, tokenizeToSet(profile.documentID))
+}
+
+func newCoverageCount(doc *schema.Document, queryTokens, covered map[string]struct{}) int {
+	count := 0
+	for token := range documentCoverageTokens(doc) {
+		if _, wanted := queryTokens[token]; !wanted {
+			continue
+		}
+		if _, already := covered[token]; !already {
+			count++
+		}
+	}
+	return count
+}
+
+func addCoveredTokens(doc *schema.Document, queryTokens, covered map[string]struct{}) {
+	for token := range documentCoverageTokens(doc) {
+		if _, wanted := queryTokens[token]; wanted {
+			covered[token] = struct{}{}
+		}
+	}
+}
+
+func annotateFinalPositions(docs []*schema.Document) {
+	for position, doc := range docs {
+		if doc == nil {
+			continue
+		}
+		ensureDocMeta(doc)
+		doc.MetaData[metaKeyFinalPosition] = position + 1
+	}
+}
+
+func firstStringMetadata(meta map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if value := stringMetadata(meta, key); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func overlapCount(left, right map[string]struct{}) int {
+	count := 0
+	for token := range left {
+		if _, ok := right[token]; ok {
+			count++
+		}
+	}
+	return count
+}
+
+func minInt(left, right int) int {
+	if left < right {
+		return left
+	}
+	return right
 }
 
 func documentContent(doc *schema.Document) string {

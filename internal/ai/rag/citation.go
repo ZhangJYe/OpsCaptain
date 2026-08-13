@@ -11,19 +11,43 @@ import (
 const maxSnippetLen = 300
 
 const (
-	metaKeyDenseRank     = "_trace_dense_rank"
-	metaKeyLexicalRank   = "_trace_lexical_rank"
-	metaKeyFusionScore   = "_trace_fusion_score"
-	metaKeyMetadataBoost = "_trace_metadata_boost"
-	metaKeyRerankScore   = "_trace_rerank_score"
+	metaKeyDenseRank          = "_trace_dense_rank"
+	metaKeyLexicalRank        = "_trace_lexical_rank"
+	metaKeyFusionScore        = "_trace_fusion_score"
+	metaKeyMetadataBoost      = "_trace_metadata_boost"
+	metaKeyRerankScore        = "_trace_rerank_score"
+	metaKeyFusionPosition     = "_trace_fusion_position"
+	metaKeyRefinePosition     = "_trace_refine_position"
+	metaKeyFinalPosition      = "_trace_final_position"
+	metaKeyFieldBoost         = "_trace_field_boost"
+	metaKeyFieldMatches       = "_trace_field_matches"
+	metaKeyCoverageBoost      = "_trace_coverage_boost"
+	metaKeyIntentRule         = "_trace_intent_rule"
+	metaKeyIntentPositiveHits = "_trace_intent_positive_hits"
+	metaKeyIntentExcludedHits = "_trace_intent_excluded_hits"
+	metaKeyIntentBonus        = "_trace_intent_bonus"
+	metaKeyIntentPenalty      = "_trace_intent_penalty"
+	metaKeyIntentNetScore     = "_trace_intent_net_score"
 )
 
 type CitationTrace struct {
-	DenseRank     int     `json:"dense_rank,omitempty"`
-	LexicalRank   int     `json:"lexical_rank,omitempty"`
-	FusionScore   float64 `json:"fusion_score,omitempty"`
-	MetadataBoost float64 `json:"metadata_boost,omitempty"`
-	RerankScore   float64 `json:"rerank_score,omitempty"`
+	DenseRank          int      `json:"dense_rank,omitempty"`
+	LexicalRank        int      `json:"lexical_rank,omitempty"`
+	FusionScore        float64  `json:"fusion_score,omitempty"`
+	MetadataBoost      float64  `json:"metadata_boost,omitempty"`
+	RerankScore        float64  `json:"rerank_score,omitempty"`
+	FusionPosition     int      `json:"fusion_position,omitempty"`
+	RefinePosition     int      `json:"refine_position,omitempty"`
+	FinalPosition      int      `json:"final_position,omitempty"`
+	FieldBoost         float64  `json:"field_boost,omitempty"`
+	FieldMatches       []string `json:"field_matches,omitempty"`
+	CoverageBoost      float64  `json:"coverage_boost,omitempty"`
+	IntentRule         string   `json:"intent_rule,omitempty"`
+	IntentPositiveHits []string `json:"intent_positive_hits,omitempty"`
+	IntentExcludedHits []string `json:"intent_excluded_hits,omitempty"`
+	IntentBonus        float64  `json:"intent_bonus,omitempty"`
+	IntentPenalty      float64  `json:"intent_penalty,omitempty"`
+	IntentNetScore     float64  `json:"intent_net_score,omitempty"`
 }
 
 type Citation struct {
@@ -156,6 +180,54 @@ func citationTraceFromMeta(meta map[string]any) *CitationTrace {
 	}
 	if v, ok := meta[metaKeyRerankScore].(float64); ok {
 		t.RerankScore = v
+		hasAny = true
+	}
+	if v, ok := meta[metaKeyFusionPosition].(int); ok {
+		t.FusionPosition = v
+		hasAny = true
+	}
+	if v, ok := meta[metaKeyRefinePosition].(int); ok {
+		t.RefinePosition = v
+		hasAny = true
+	}
+	if v, ok := meta[metaKeyFinalPosition].(int); ok {
+		t.FinalPosition = v
+		hasAny = true
+	}
+	if v, ok := meta[metaKeyFieldBoost].(float64); ok {
+		t.FieldBoost = v
+		hasAny = true
+	}
+	if v, ok := meta[metaKeyFieldMatches].([]string); ok {
+		t.FieldMatches = append([]string(nil), v...)
+		hasAny = true
+	}
+	if v, ok := meta[metaKeyCoverageBoost].(float64); ok {
+		t.CoverageBoost = v
+		hasAny = true
+	}
+	if v, ok := meta[metaKeyIntentRule].(string); ok && v != "" {
+		t.IntentRule = v
+		hasAny = true
+	}
+	if v, ok := meta[metaKeyIntentPositiveHits].([]string); ok {
+		t.IntentPositiveHits = append([]string(nil), v...)
+		hasAny = true
+	}
+	if v, ok := meta[metaKeyIntentExcludedHits].([]string); ok {
+		t.IntentExcludedHits = append([]string(nil), v...)
+		hasAny = true
+	}
+	if v, ok := meta[metaKeyIntentBonus].(float64); ok {
+		t.IntentBonus = v
+		hasAny = true
+	}
+	if v, ok := meta[metaKeyIntentPenalty].(float64); ok {
+		t.IntentPenalty = v
+		hasAny = true
+	}
+	if v, ok := meta[metaKeyIntentNetScore].(float64); ok {
+		t.IntentNetScore = v
 		hasAny = true
 	}
 	if !hasAny {

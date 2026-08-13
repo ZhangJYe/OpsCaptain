@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "corpus_version": "knowledge-seed-v1",
+  "documents": [
+    {"id": "01_kubernetes_crashloop_runbook", "path": "docs/knowledge/01_kubernetes_crashloop_runbook.md", "title": "Kubernetes CrashLoop 与服务下线排查手册"},
+    {"id": "02_kubernetes_deployment_release_and_rollback", "path": "docs/knowledge/02_kubernetes_deployment_release_and_rollback.md", "title": "Kubernetes Deployment 发布与回滚"},
+    {"id": "03_prometheus_alerting_and_rule_design", "path": "docs/knowledge/03_prometheus_alerting_and_rule_design.md", "title": "Prometheus 告警链路与规则设计手册"},
+    {"id": "04_helm_release_history_and_rollback", "path": "docs/knowledge/04_helm_release_history_and_rollback.md", "title": "Helm 发布历史与回滚"},
+    {"id": "05_argocd_autosync_prune_selfheal", "path": "docs/knowledge/05_argocd_autosync_prune_selfheal.md", "title": "Argo CD 自动同步、自愈和清理"},
+    {"id": "06_opentelemetry_observability_and_log_correlation", "path": "docs/knowledge/06_opentelemetry_observability_and_log_correlation.md", "title": "OpenTelemetry 可观测性与日志关联"},
+    {"id": "07_guilde", "path": "docs/knowledge/07_guilde.md", "title": "业务告警与错误码排查指南"},
+    {"id": "09_ingress_nginx_troubleshooting_and_gateway_transition", "path": "docs/knowledge/09_ingress_nginx_troubleshooting_and_gateway_transition.md", "title": "Ingress Nginx 排障与网关迁移"},
+    {"id": "10_etcd_snapshot_backup_and_restore", "path": "docs/knowledge/10_etcd_snapshot_backup_and_restore.md", "title": "etcd 快照备份与恢复"},
+    {"id": "11_mysql_innodb_deadlock_and_lock_wait", "path": "docs/knowledge/11_mysql_innodb_deadlock_and_lock_wait.md", "title": "MySQL InnoDB 死锁与锁等待排查"},
+    {"id": "12_redis_distributed_lock_boundaries", "path": "docs/knowledge/12_redis_distributed_lock_boundaries.md", "title": "Redis 分布式锁边界"},
+    {"id": "sli_slo", "path": "docs/knowledge/sli_slo.md", "title": "SLI/SLO 实践指南"},
+    {"id": "argocd-auto-sync", "path": "docs/knowledge/upstream/argocd/argocd-auto-sync.md", "title": "Argo CD Automated Sync"},
+    {"id": "argocd-sync-options", "path": "docs/knowledge/upstream/argocd/argocd-sync-options.md", "title": "Argo CD Sync Options"},
+    {"id": "etcd-monitoring", "path": "docs/knowledge/upstream/etcd/etcd-monitoring.md", "title": "etcd Monitoring"},
+    {"id": "etcd-recovery", "path": "docs/knowledge/upstream/etcd/etcd-recovery.md", "title": "etcd Disaster Recovery"},
+    {"id": "helm-history", "path": "docs/knowledge/upstream/helm/helm-history.md", "title": "Helm History"},
+    {"id": "helm-rollback", "path": "docs/knowledge/upstream/helm/helm-rollback.md", "title": "Helm Rollback"},
+    {"id": "kubernetes-debug-running-pod", "path": "docs/knowledge/upstream/kubernetes/kubernetes-debug-running-pod.md", "title": "Kubernetes Debug Running Pods"},
+    {"id": "kubernetes-deployment", "path": "docs/knowledge/upstream/kubernetes/kubernetes-deployment.md", "title": "Kubernetes Deployments"},
+    {"id": "kubernetes-resource-metrics-pipeline", "path": "docs/knowledge/upstream/kubernetes/kubernetes-resource-metrics-pipeline.md", "title": "Kubernetes Resource Metrics Pipeline"},
+    {"id": "opentelemetry-logs", "path": "docs/knowledge/upstream/opentelemetry/opentelemetry-logs.md", "title": "OpenTelemetry Logs"},
+    {"id": "opentelemetry-metrics", "path": "docs/knowledge/upstream/opentelemetry/opentelemetry-metrics.md", "title": "OpenTelemetry Metrics"},
+    {"id": "opentelemetry-traces", "path": "docs/knowledge/upstream/opentelemetry/opentelemetry-traces.md", "title": "OpenTelemetry Traces"},
+    {"id": "prometheus-alerting-practices", "path": "docs/knowledge/upstream/prometheus/prometheus-alerting-practices.md", "title": "Prometheus Alerting Practices"},
+    {"id": "prometheus-query-log", "path": "docs/knowledge/upstream/prometheus/prometheus-query-log.md", "title": "Prometheus Query Log"},
+    {"id": "prometheus-recording-rules", "path": "docs/knowledge/upstream/prometheus/prometheus-recording-rules.md", "title": "Prometheus Recording Rules"}
+  ],
+  "excluded": [
+    {"path": "docs/knowledge/00_ops_knowledge_index.md", "reason": "目录索引，不作为答案标签"},
+    {"path": "docs/knowledge/08_open_source_knowledge_ingestion_strategy.md", "reason": "知识导入说明，不属于运维问答语料"},
+    {"path": "docs/knowledge/README.md", "reason": "仓库说明，不作为答案标签"}
+  ],
+  "development": {
+    "version": "rag-development-v2",
+    "path": "evals/rag/retrieval_development.jsonl",
+    "fingerprint": "35eec6f8c266156e96ea7ec1f2eed48452da16e7458dad415690b2454bfe0d3d"
+  },
+  "holdout": {
+    "version": "rag-holdout-v2",
+    "path": "evals/rag/retrieval_holdout.jsonl",
+    "fingerprint": "5e8eee0b1d9e4abe1cbbfdf659c63eac5adf396b3ec3114bb199997099849b9a"
+  }
+}

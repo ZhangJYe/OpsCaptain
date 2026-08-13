@@ -13,16 +13,23 @@ type BM25Index struct {
 	b        float64
 	docs     []bm25Doc
 	df       map[string]int
+	fieldDF  map[string]int
 	avgDL    float64
 	totalDoc int
 }
 
 type bm25Doc struct {
-	id       string
-	tokens   []string
-	tokenLen int
-	content  string
-	meta     map[string]string
+	id          string
+	bodyTokens  []string
+	fieldTokens map[string][]string
+	tokenLen    int
+	content     string
+	meta        map[string]string
+}
+
+type BM25SearchOptions struct {
+	MetadataWeight      float64
+	KnowledgeFieldBoost map[string]float64
 }
 
 type BM25Hit struct {
@@ -34,25 +41,28 @@ type BM25Hit struct {
 
 func NewBM25Index() *BM25Index {
 	return &BM25Index{
-		k1: 1.2,
-		b:  0.75,
-		df: make(map[string]int),
+		k1:      1.2,
+		b:       0.75,
+		df:      make(map[string]int),
+		fieldDF: make(map[string]int),
 	}
 }
 
 func (idx *BM25Index) AddDocument(id string, content string, meta map[string]string) {
-	tokens := BM25Tokenize(content)
-	if meta != nil {
-		for _, v := range meta {
-			tokens = append(tokens, BM25Tokenize(v)...)
+	bodyTokens := BM25Tokenize(content)
+	fieldTokens := make(map[string][]string, len(meta))
+	for key, value := range meta {
+		if tokens := BM25Tokenize(value); len(tokens) > 0 {
+			fieldTokens[key] = tokens
 		}
 	}
 	doc := bm25Doc{
-		id:       id,
-		tokens:   tokens,
-		tokenLen: len(tokens),
-		content:  content,
-		meta:     meta,
+		id:          id,
+		bodyTokens:  bodyTokens,
+		fieldTokens: fieldTokens,
+		tokenLen:    len(bodyTokens),
+		content:     content,
+		meta:        meta,
 	}
 
 	idx.mu.Lock()
@@ -74,6 +84,10 @@ func (idx *BM25Index) AddDocument(id string, content string, meta map[string]str
 }
 
 func (idx *BM25Index) Search(query string, topK int) []BM25Hit {
+	return idx.SearchWithOptions(query, topK, BM25SearchOptions{MetadataWeight: 1})
+}
+
+func (idx *BM25Index) SearchWithOptions(query string, topK int, opts BM25SearchOptions) []BM25Hit {
 	queryTokens := BM25Tokenize(query)
 	if len(queryTokens) == 0 || topK <= 0 {
 		return nil
@@ -86,6 +100,7 @@ func (idx *BM25Index) Search(query string, topK int) []BM25Hit {
 	b := idx.b
 	docs := idx.docs
 	df := idx.df
+	fieldDF := idx.fieldDF
 	idx.mu.RUnlock()
 
 	if n == 0 {
@@ -100,7 +115,7 @@ func (idx *BM25Index) Search(query string, topK int) []BM25Hit {
 
 	for i, doc := range docs {
 		tf := make(map[string]int)
-		for _, t := range doc.tokens {
+		for _, t := range doc.bodyTokens {
 			tf[t]++
 		}
 
@@ -108,13 +123,29 @@ func (idx *BM25Index) Search(query string, topK int) []BM25Hit {
 		dl := float64(doc.tokenLen)
 		for _, qt := range queryTokens {
 			docFreq, ok := df[qt]
-			if !ok || docFreq == 0 {
+			if ok && docFreq > 0 && doc.tokenLen > 0 && avgDL > 0 {
+				idf := math.Log(1 + (float64(n)-float64(docFreq)+0.5)/(float64(docFreq)+0.5))
+				termFreq := float64(tf[qt])
+				tfNorm := (termFreq * (k1 + 1)) / (termFreq + k1*(1-b+b*dl/avgDL))
+				score += idf * tfNorm
+			}
+			fieldFreq := fieldDF[qt]
+			if fieldFreq == 0 {
 				continue
 			}
-			idf := math.Log(1 + (float64(n)-float64(docFreq)+0.5)/(float64(docFreq)+0.5))
-			termFreq := float64(tf[qt])
-			tfNorm := (termFreq * (k1 + 1)) / (termFreq + k1*(1-b+b*dl/avgDL))
-			score += idf * tfNorm
+			fieldIDF := math.Log(1 + (float64(n)-float64(fieldFreq)+0.5)/(float64(fieldFreq)+0.5))
+			for field, tokens := range doc.fieldTokens {
+				if !containsToken(tokens, qt) {
+					continue
+				}
+				weight := opts.MetadataWeight
+				if isKnowledgeField(field) {
+					weight = opts.KnowledgeFieldBoost[field]
+				}
+				if weight > 0 {
+					score += fieldIDF * weight
+				}
+			}
 		}
 		if score > 0 {
 			results = append(results, scored{idx: i, score: score})
@@ -142,6 +173,15 @@ func (idx *BM25Index) Search(query string, topK int) []BM25Hit {
 	return hits
 }
 
+func isKnowledgeField(field string) bool {
+	switch field {
+	case "knowledge_doc_id", "title", "tags", "provider":
+		return true
+	default:
+		return false
+	}
+}
+
 func (idx *BM25Index) Size() int {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
@@ -150,6 +190,7 @@ func (idx *BM25Index) Size() int {
 
 func (idx *BM25Index) rebuildStatsLocked() {
 	idx.df = make(map[string]int)
+	idx.fieldDF = make(map[string]int)
 	idx.totalDoc = len(idx.docs)
 	if idx.totalDoc == 0 {
 		idx.avgDL = 0
@@ -160,15 +201,33 @@ func (idx *BM25Index) rebuildStatsLocked() {
 	for _, doc := range idx.docs {
 		totalLen += doc.tokenLen
 		seen := make(map[string]struct{})
-		for _, t := range doc.tokens {
+		for _, t := range doc.bodyTokens {
 			if _, ok := seen[t]; ok {
 				continue
 			}
 			seen[t] = struct{}{}
 			idx.df[t]++
 		}
+		fieldSeen := make(map[string]struct{})
+		for _, tokens := range doc.fieldTokens {
+			for _, token := range tokens {
+				fieldSeen[token] = struct{}{}
+			}
+		}
+		for token := range fieldSeen {
+			idx.fieldDF[token]++
+		}
 	}
 	idx.avgDL = float64(totalLen) / float64(idx.totalDoc)
+}
+
+func containsToken(tokens []string, target string) bool {
+	for _, token := range tokens {
+		if token == target {
+			return true
+		}
+	}
+	return false
 }
 
 func IsCJK(r rune) bool {

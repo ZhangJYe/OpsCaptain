@@ -4,8 +4,10 @@ import (
 	"SuperBizAgent/internal/consts"
 	"SuperBizAgent/utility/common"
 	"context"
+	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	retrieverapi "github.com/cloudwego/eino/components/retriever"
 	"github.com/cloudwego/eino/schema"
@@ -59,6 +61,75 @@ func TestRRFFusion_EmptyInputs(t *testing.T) {
 	fused = rrfFusion([]*schema.Document{{ID: "a", MetaData: map[string]any{"case_id": "x"}}}, nil, 60)
 	if len(fused) != 1 {
 		t.Fatalf("expected 1 from dense-only, got %d", len(fused))
+	}
+}
+
+func TestRRFFusionWeightedChangesChannelContribution(t *testing.T) {
+	t.Parallel()
+	dense := []*schema.Document{{ID: "dense"}, {ID: "both"}}
+	lexical := []BM25Hit{{DocID: "lexical"}, {DocID: "both"}}
+	fused := rrfFusionWeighted(dense, lexical, 60, 1, 2)
+	if got := docFusionKey(fused[0].doc); got != "lexical" && got != "both" {
+		t.Fatalf("lexical weighting was not applied, first=%s", got)
+	}
+	if fused[0].score <= 0 || len(fused) != 3 {
+		t.Fatalf("unexpected weighted fusion: %+v", fused)
+	}
+}
+
+func TestHybridWeightsValidationAndCompatibility(t *testing.T) {
+	t.Parallel()
+	dense, lexical, err := hybridWeights(HybridConfig{})
+	if err != nil || dense != 1 || lexical != 1 {
+		t.Fatalf("zero-value config must preserve equal-weight compatibility: dense=%v lexical=%v err=%v", dense, lexical, err)
+	}
+	if _, _, err := hybridWeights(HybridConfig{DenseWeight: -1, LexicalWeight: 1}); err == nil {
+		t.Fatal("negative weight must be rejected")
+	}
+}
+
+func TestKnowledgeFieldRefinementTraceAndDisabledCompatibility(t *testing.T) {
+	t.Parallel()
+	docs := []*schema.Document{
+		{ID: "generic", Content: "helm operation", MetaData: map[string]any{}},
+		{ID: "history", Content: "release revisions", MetaData: map[string]any{"knowledge_doc_id": "helm-history", "title": "Helm History", "tags": []string{"helm", "history"}, "provider": "helm"}},
+	}
+	disabled := refineRetrievedDocsWithConfig("helm history", docs, HybridConfig{})
+	if disabled[0].ID != "generic" {
+		t.Fatalf("disabled field refinement changed order: %s", disabled[0].ID)
+	}
+	enabled := refineRetrievedDocsWithConfig("helm history", docs, HybridConfig{KnowledgeFieldBoostEnabled: true, KnowledgeDocIDBoost: 8, KnowledgeTitleBoost: 6, KnowledgeTagsBoost: 4, KnowledgeProviderBoost: 2, KnowledgeFieldBoostCap: 12})
+	if enabled[0].ID != "history" {
+		t.Fatalf("field-aware refinement did not promote title/tag match: %s", enabled[0].ID)
+	}
+	if enabled[0].MetaData[metaKeyFieldBoost] == nil || enabled[0].MetaData[metaKeyRefinePosition] != 1 {
+		t.Fatalf("field refinement trace missing: %+v", enabled[0].MetaData)
+	}
+}
+
+func TestCoverageSelectionIsBoundedAndDeterministic(t *testing.T) {
+	t.Parallel()
+	docs := []*schema.Document{
+		{ID: "redis-1", Content: "redis timeout", MetaData: map[string]any{}},
+		{ID: "redis-2", Content: "redis timeout retry", MetaData: map[string]any{}},
+		{ID: "postgres", Content: "postgres checkpoint", MetaData: map[string]any{}},
+	}
+	cfg := HybridConfig{FinalTopK: 2, CoverageEnabled: true, CoverageMaxPositionGain: 2}
+	selected := selectFinalDocs("redis timeout postgres checkpoint", docs, cfg)
+	if len(selected) != 2 || selected[0].ID != "redis-1" || selected[1].ID != "postgres" {
+		t.Fatalf("unexpected bounded coverage order: %v %v", selected[0].ID, selected[1].ID)
+	}
+	if selected[1].MetaData[metaKeyCoverageBoost] != float64(1) || selected[1].MetaData[metaKeyFinalPosition] != 2 {
+		t.Fatalf("coverage trace missing: %+v %+v", selected[0].MetaData, selected[1].MetaData)
+	}
+}
+
+func TestCoverageSelectionPreservesOrderWithoutNewSignal(t *testing.T) {
+	t.Parallel()
+	docs := []*schema.Document{{ID: "a", Content: "redis"}, {ID: "b", Content: "redis"}, {ID: "c", Content: "redis"}}
+	selected := selectFinalDocs("redis", docs, HybridConfig{FinalTopK: 2, CoverageEnabled: true, CoverageMaxPositionGain: 2})
+	if len(selected) != 2 || selected[0].ID != "a" || selected[1].ID != "b" {
+		t.Fatalf("insufficient signal must preserve order: %+v", selected)
 	}
 }
 
@@ -214,6 +285,9 @@ func TestHybridRetrieve_Integration(t *testing.T) {
 	if trace.FusedCount == 0 {
 		t.Fatal("expected non-zero fused count")
 	}
+	if len(trace.DenseIDs) != trace.DenseCount || len(trace.LexicalIDs) != trace.LexicalCount || len(trace.FusionIDs) != trace.FusedCount || len(trace.CandidateIDs) != trace.CandidateCount {
+		t.Fatalf("stage trace IDs must stay within existing result bounds: %+v", trace)
+	}
 
 	firstID := docFusionKey(docs[0])
 	if firstID != "case-020" {
@@ -257,6 +331,65 @@ func TestHybridRetrieve_CandidateTopKReturnsMoreThanFinalTopK(t *testing.T) {
 	}
 	if len(docs) < 2 {
 		t.Fatalf("expected at least 2 docs, got %d", len(docs))
+	}
+}
+
+func TestHybridRetrieveTraceIncludesWallClockAndCandidateCount(t *testing.T) {
+	t.Parallel()
+
+	fr := &fakeHybridRetriever{
+		delay: 15 * time.Millisecond,
+		docs: []*schema.Document{
+			{ID: "d1", Content: "one"},
+			{ID: "d2", Content: "two"},
+			{ID: "d3", Content: "three"},
+		},
+	}
+	pool := NewRetrieverPool(
+		func(context.Context) (retrieverapi.Retriever, error) { return fr, nil },
+		func(context.Context) string { return "test-hybrid-trace" },
+		nil,
+	)
+
+	docs, trace, err := HybridRetrieve(context.Background(), pool, nil, "query", HybridConfig{
+		DenseTopK: 10, LexicalTopK: 10, FusionK: 60, CandidateTopK: 2, FinalTopK: 1,
+	})
+	if err != nil {
+		t.Fatalf("HybridRetrieve returned error: %v", err)
+	}
+	if len(docs) != 2 || trace.CandidateCount != 2 {
+		t.Fatalf("candidate count mismatch: docs=%d trace=%d", len(docs), trace.CandidateCount)
+	}
+	if trace.TotalLatencyMs < trace.DenseLatencyMs || trace.TotalLatencyMs < 10 {
+		t.Fatalf("hybrid wall clock must cover dense retrieval, got total=%d dense=%d", trace.TotalLatencyMs, trace.DenseLatencyMs)
+	}
+}
+
+func TestQueryBoundsFinalResultsAfterCandidateRetrieval(t *testing.T) {
+	ResetSharedBM25Index()
+	defer ResetSharedBM25Index()
+
+	fr := &fakeHybridRetriever{docs: []*schema.Document{
+		{ID: "d1", Content: "one"}, {ID: "d2", Content: "two"}, {ID: "d3", Content: "three"}, {ID: "d4", Content: "four"},
+	}}
+	pool := NewRetrieverPool(
+		func(context.Context) (retrieverapi.Retriever, error) { return fr, nil },
+		func(context.Context) string { return "test-final-bound" },
+		nil,
+	)
+	cfg := HybridConfig{DenseTopK: 10, LexicalTopK: 10, FusionK: 60, CandidateTopK: 4, FinalTopK: 2}
+	ctx := WithHybridConfigOverride(context.Background(), cfg)
+	ctx = WithRewriteOverride(ctx, false)
+	ctx = WithRerankOverride(ctx, false)
+	docs, trace, err := Query(ctx, pool, "query")
+	if err != nil {
+		t.Fatalf("Query returned error: %v", err)
+	}
+	if len(docs) != 2 || trace.ResultCount != 2 {
+		t.Fatalf("final result must be bounded by FinalTopK: docs=%d trace=%d", len(docs), trace.ResultCount)
+	}
+	if trace.Hybrid == nil || trace.Hybrid.CandidateCount != 4 {
+		t.Fatalf("expected four pre-final candidates, got %+v", trace.Hybrid)
 	}
 }
 
@@ -392,9 +525,36 @@ func TestQuery_HybridWithEmptySharedBM25FallsBackToDenseOnly(t *testing.T) {
 }
 
 type fakeHybridRetriever struct {
-	docs []*schema.Document
+	docs  []*schema.Document
+	delay time.Duration
+	err   error
 }
 
 func (f *fakeHybridRetriever) Retrieve(ctx context.Context, query string, opts ...retrieverapi.Option) ([]*schema.Document, error) {
+	if f.delay > 0 {
+		time.Sleep(f.delay)
+	}
+	if f.err != nil {
+		return nil, f.err
+	}
 	return f.docs, nil
+}
+
+func TestHybridRetrieveReturnsBaseRetrieverError(t *testing.T) {
+	t.Parallel()
+
+	pool := NewRetrieverPool(
+		func(context.Context) (retrieverapi.Retriever, error) {
+			return &fakeHybridRetriever{err: errors.New("dense unavailable")}, nil
+		},
+		func(context.Context) string { return "test-retrieval-error" },
+		nil,
+	)
+	_, trace, err := HybridRetrieve(context.Background(), pool, nil, "query", HybridConfig{DenseTopK: 5, CandidateTopK: 5, FinalTopK: 5})
+	if err == nil {
+		t.Fatal("expected base retriever error")
+	}
+	if trace.TotalLatencyMs < trace.DenseLatencyMs {
+		t.Fatalf("error trace total latency must cover dense latency: %+v", trace)
+	}
 }

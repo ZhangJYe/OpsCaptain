@@ -35,15 +35,18 @@ func (l *metadataSidecarLoader) Load(ctx context.Context, src document.Source, o
 	if err != nil {
 		return nil, err
 	}
-	if len(sidecar) == 0 {
-		return docs, nil
-	}
-
 	for _, doc := range docs {
 		if doc == nil {
 			continue
 		}
-		doc.MetaData = mergeMetadata(doc.MetaData, sidecar)
+		if len(sidecar) > 0 {
+			doc.MetaData = mergeMetadata(doc.MetaData, sidecar)
+		}
+	}
+	if raw, readErr := os.ReadFile(src.URI); readErr == nil {
+		for _, doc := range docs {
+			EnrichMarkdownDocument(src.URI, raw, doc)
+		}
 	}
 	return docs, nil
 }

@@ -1,0 +1,738 @@
+{
+  "schema_version": 2,
+  "mode": "hybrid-retrieve",
+  "metadata": {
+    "dataset_role": "development",
+    "dataset_id": "retrieval_development.jsonl",
+    "dataset_fingerprint": "d1843f5afdc7411e27052f19d4587c3a6ec7c7954c12bcd67dfb1a1e9e992f8f",
+    "corpus_version": "knowledge-seed-v1",
+    "code_revision": "cc73ae805865669d3ad7cde96a0898b1249cd350+dirty",
+    "generated_at": "2026-08-12T15:38:12Z",
+    "evidence_environment": "offline-development",
+    "comparable": true
+  },
+  "effective_config": {
+    "rewrite_enabled": false,
+    "rerank_enabled": false,
+    "hybrid": {
+      "dense_top_k": 50,
+      "lexical_top_k": 50,
+      "fusion_k": 60,
+      "candidate_top_k": 20,
+      "final_top_k": 5,
+      "metadata_boost_enabled": true
+    },
+    "retriever_top_k": 5,
+    "rerank_max_candidates": 10,
+    "rewrite_timeout_ms": 3000,
+    "rerank_timeout_ms": 5000,
+    "ks": [
+      1,
+      3,
+      5
+    ],
+    "per_query_timeout_ms": 15000
+  },
+  "summary": {
+    "cases": 12,
+    "succeeded": 12,
+    "failed": 0,
+    "avg_recall_at_k": {
+      "1": 0.875,
+      "3": 1,
+      "5": 1
+    },
+    "hit_rate_at_k": {
+      "1": 0.9166666666666666,
+      "3": 1,
+      "5": 1
+    },
+    "full_recall_at_k": {
+      "1": 10,
+      "3": 12,
+      "5": 12
+    },
+    "mrr": 0.9583333333333334,
+    "avg_init_latency_ms": 0.3333333333333333,
+    "avg_rewrite_latency_ms": 0,
+    "avg_retrieve_latency_ms": 131.25,
+    "avg_rerank_latency_ms": 0,
+    "avg_total_latency_ms": 131.66666666666666,
+    "cache_hit_rate": 0.9166666666666666,
+    "empty_rate": 0,
+    "failure_rate": 0,
+    "citation_coverage": 1,
+    "latency": {
+      "init": {
+        "avg_ms": 0.3333333333333333,
+        "p50_ms": 0,
+        "p95_ms": 4
+      },
+      "rewrite": {
+        "avg_ms": 0,
+        "p50_ms": 0,
+        "p95_ms": 0
+      },
+      "retrieve": {
+        "avg_ms": 131.25,
+        "p50_ms": 113,
+        "p95_ms": 208
+      },
+      "dense": {
+        "avg_ms": 129.58333333333334,
+        "p50_ms": 111,
+        "p95_ms": 207
+      },
+      "lexical": {
+        "avg_ms": 0.25,
+        "p50_ms": 0,
+        "p95_ms": 1
+      },
+      "fusion": {
+        "avg_ms": 0,
+        "p50_ms": 0,
+        "p95_ms": 0
+      },
+      "rerank": {
+        "avg_ms": 0,
+        "p50_ms": 0,
+        "p95_ms": 0
+      },
+      "total": {
+        "avg_ms": 131.66666666666666,
+        "p50_ms": 113,
+        "p95_ms": 213
+      }
+    },
+    "avg_plan_latency_ms": 0,
+    "decomposed_count": 0,
+    "avg_agent_rounds": 0,
+    "avg_final_confidence": 0,
+    "avg_agent_latency_ms": 0
+  },
+  "results": [
+    {
+      "case_id": "RAG-01",
+      "query": "Prometheus 告警先看什么",
+      "relevant_ids": [
+        "03_prometheus_alerting_and_rule_design"
+      ],
+      "ranked_ids": [
+        "03_prometheus_alerting_and_rule_design",
+        "prometheus-alerting-practices",
+        "00_ops_knowledge_index"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "03_prometheus_alerting_and_rule_design"
+        ],
+        "3": [
+          "03_prometheus_alerting_and_rule_design"
+        ],
+        "5": [
+          "03_prometheus_alerting_and_rule_design"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": false,
+        "init_failure_cached": false,
+        "init_latency_ms": 4,
+        "rewrite_latency_ms": 0,
+        "retrieve_latency_ms": 208,
+        "dense_latency_ms": 207,
+        "lexical_latency_ms": 0,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 0,
+        "dense_count": 50,
+        "lexical_count": 14,
+        "fused_count": 64,
+        "candidate_count": 20,
+        "result_count": 5,
+        "total_latency_ms": 213,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "RAG-02",
+      "query": "MySQL 锁等待怎么定位",
+      "relevant_ids": [
+        "11_mysql_innodb_deadlock_and_lock_wait"
+      ],
+      "ranked_ids": [
+        "11_mysql_innodb_deadlock_and_lock_wait",
+        "12_redis_distributed_lock_boundaries"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "11_mysql_innodb_deadlock_and_lock_wait"
+        ],
+        "3": [
+          "11_mysql_innodb_deadlock_and_lock_wait"
+        ],
+        "5": [
+          "11_mysql_innodb_deadlock_and_lock_wait"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 0,
+        "retrieve_latency_ms": 98,
+        "dense_latency_ms": 96,
+        "lexical_latency_ms": 0,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 0,
+        "dense_count": 50,
+        "lexical_count": 14,
+        "fused_count": 64,
+        "candidate_count": 20,
+        "result_count": 5,
+        "total_latency_ms": 98,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "RAG-03",
+      "query": "Pod 一直 CrashLoopBackOff 怎么排查",
+      "relevant_ids": [
+        "01_kubernetes_crashloop_runbook"
+      ],
+      "ranked_ids": [
+        "01_kubernetes_crashloop_runbook",
+        "09_ingress_nginx_troubleshooting_and_gateway_transition"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "01_kubernetes_crashloop_runbook"
+        ],
+        "3": [
+          "01_kubernetes_crashloop_runbook"
+        ],
+        "5": [
+          "01_kubernetes_crashloop_runbook"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 0,
+        "retrieve_latency_ms": 145,
+        "dense_latency_ms": 143,
+        "lexical_latency_ms": 0,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 0,
+        "dense_count": 50,
+        "lexical_count": 13,
+        "fused_count": 63,
+        "candidate_count": 20,
+        "result_count": 5,
+        "total_latency_ms": 145,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "RAG-04",
+      "query": "服务发布后怎么回滚",
+      "relevant_ids": [
+        "02_kubernetes_deployment_release_and_rollback",
+        "04_helm_release_history_and_rollback"
+      ],
+      "ranked_ids": [
+        "02_kubernetes_deployment_release_and_rollback",
+        "04_helm_release_history_and_rollback"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "02_kubernetes_deployment_release_and_rollback"
+        ],
+        "3": [
+          "02_kubernetes_deployment_release_and_rollback",
+          "04_helm_release_history_and_rollback"
+        ],
+        "5": [
+          "02_kubernetes_deployment_release_and_rollback",
+          "04_helm_release_history_and_rollback"
+        ]
+      },
+      "recall_at_k": {
+        "1": 0.5,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 0,
+        "retrieve_latency_ms": 146,
+        "dense_latency_ms": 145,
+        "lexical_latency_ms": 0,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 0,
+        "dense_count": 50,
+        "lexical_count": 13,
+        "fused_count": 63,
+        "candidate_count": 20,
+        "result_count": 5,
+        "total_latency_ms": 146,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "RAG-05",
+      "query": "Argo CD 会自动删除我手动创建的资源吗",
+      "relevant_ids": [
+        "05_argocd_autosync_prune_selfheal"
+      ],
+      "ranked_ids": [
+        "05_argocd_autosync_prune_selfheal",
+        "04_helm_release_history_and_rollback",
+        "argocd-auto-sync",
+        "argocd-sync-options"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "05_argocd_autosync_prune_selfheal"
+        ],
+        "3": [
+          "05_argocd_autosync_prune_selfheal"
+        ],
+        "5": [
+          "05_argocd_autosync_prune_selfheal"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 0,
+        "retrieve_latency_ms": 125,
+        "dense_latency_ms": 123,
+        "lexical_latency_ms": 1,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 0,
+        "dense_count": 50,
+        "lexical_count": 14,
+        "fused_count": 64,
+        "candidate_count": 20,
+        "result_count": 5,
+        "total_latency_ms": 125,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "RAG-06",
+      "query": "怎么用 TraceID 关联日志和链路追踪",
+      "relevant_ids": [
+        "06_opentelemetry_observability_and_log_correlation"
+      ],
+      "ranked_ids": [
+        "06_opentelemetry_observability_and_log_correlation",
+        "00_ops_knowledge_index"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "06_opentelemetry_observability_and_log_correlation"
+        ],
+        "3": [
+          "06_opentelemetry_observability_and_log_correlation"
+        ],
+        "5": [
+          "06_opentelemetry_observability_and_log_correlation"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 0,
+        "retrieve_latency_ms": 92,
+        "dense_latency_ms": 91,
+        "lexical_latency_ms": 0,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 0,
+        "dense_count": 50,
+        "lexical_count": 14,
+        "fused_count": 64,
+        "candidate_count": 20,
+        "result_count": 5,
+        "total_latency_ms": 92,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "RAG-07",
+      "query": "Ingress 返回 502 怎么排查",
+      "relevant_ids": [
+        "09_ingress_nginx_troubleshooting_and_gateway_transition"
+      ],
+      "ranked_ids": [
+        "09_ingress_nginx_troubleshooting_and_gateway_transition",
+        "11_mysql_innodb_deadlock_and_lock_wait",
+        "00_ops_knowledge_index"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "09_ingress_nginx_troubleshooting_and_gateway_transition"
+        ],
+        "3": [
+          "09_ingress_nginx_troubleshooting_and_gateway_transition"
+        ],
+        "5": [
+          "09_ingress_nginx_troubleshooting_and_gateway_transition"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 0,
+        "retrieve_latency_ms": 96,
+        "dense_latency_ms": 94,
+        "lexical_latency_ms": 0,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 0,
+        "dense_count": 50,
+        "lexical_count": 13,
+        "fused_count": 63,
+        "candidate_count": 20,
+        "result_count": 5,
+        "total_latency_ms": 96,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "RAG-08",
+      "query": "etcd 快照怎么做备份和恢复",
+      "relevant_ids": [
+        "10_etcd_snapshot_backup_and_restore"
+      ],
+      "ranked_ids": [
+        "10_etcd_snapshot_backup_and_restore",
+        "03_prometheus_alerting_and_rule_design",
+        "etcd-recovery"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "10_etcd_snapshot_backup_and_restore"
+        ],
+        "3": [
+          "10_etcd_snapshot_backup_and_restore"
+        ],
+        "5": [
+          "10_etcd_snapshot_backup_and_restore"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 0,
+        "retrieve_latency_ms": 181,
+        "dense_latency_ms": 180,
+        "lexical_latency_ms": 1,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 0,
+        "dense_count": 50,
+        "lexical_count": 13,
+        "fused_count": 63,
+        "candidate_count": 20,
+        "result_count": 5,
+        "total_latency_ms": 181,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "RAG-09",
+      "query": "MySQL 死锁和锁等待有什么区别",
+      "relevant_ids": [
+        "11_mysql_innodb_deadlock_and_lock_wait"
+      ],
+      "ranked_ids": [
+        "11_mysql_innodb_deadlock_and_lock_wait",
+        "12_redis_distributed_lock_boundaries",
+        "04_helm_release_history_and_rollback"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "11_mysql_innodb_deadlock_and_lock_wait"
+        ],
+        "3": [
+          "11_mysql_innodb_deadlock_and_lock_wait"
+        ],
+        "5": [
+          "11_mysql_innodb_deadlock_and_lock_wait"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 0,
+        "retrieve_latency_ms": 105,
+        "dense_latency_ms": 103,
+        "lexical_latency_ms": 0,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 0,
+        "dense_count": 50,
+        "lexical_count": 14,
+        "fused_count": 64,
+        "candidate_count": 20,
+        "result_count": 5,
+        "total_latency_ms": 105,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "RAG-10",
+      "query": "Redis 分布式锁主从切换会丢锁吗",
+      "relevant_ids": [
+        "12_redis_distributed_lock_boundaries"
+      ],
+      "ranked_ids": [
+        "12_redis_distributed_lock_boundaries",
+        "11_mysql_innodb_deadlock_and_lock_wait",
+        "10_etcd_snapshot_backup_and_restore"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "12_redis_distributed_lock_boundaries"
+        ],
+        "3": [
+          "12_redis_distributed_lock_boundaries"
+        ],
+        "5": [
+          "12_redis_distributed_lock_boundaries"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 0,
+        "retrieve_latency_ms": 154,
+        "dense_latency_ms": 152,
+        "lexical_latency_ms": 0,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 0,
+        "dense_count": 50,
+        "lexical_count": 14,
+        "fused_count": 64,
+        "candidate_count": 20,
+        "result_count": 5,
+        "total_latency_ms": 154,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "RAG-11",
+      "query": "SLO 怎么设定比较合理",
+      "relevant_ids": [
+        "sli_slo"
+      ],
+      "ranked_ids": [
+        "05_argocd_autosync_prune_selfheal",
+        "sli_slo",
+        "03_prometheus_alerting_and_rule_design",
+        "12_redis_distributed_lock_boundaries"
+      ],
+      "hit_ids_by_k": {
+        "1": [],
+        "3": [
+          "sli_slo"
+        ],
+        "5": [
+          "sli_slo"
+        ]
+      },
+      "recall_at_k": {
+        "1": 0,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 0,
+        "retrieve_latency_ms": 112,
+        "dense_latency_ms": 110,
+        "lexical_latency_ms": 0,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 0,
+        "dense_count": 50,
+        "lexical_count": 15,
+        "fused_count": 65,
+        "candidate_count": 20,
+        "result_count": 5,
+        "total_latency_ms": 112,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    },
+    {
+      "case_id": "RAG-12",
+      "query": "生产环境数据库事务超时怎么办",
+      "relevant_ids": [
+        "11_mysql_innodb_deadlock_and_lock_wait"
+      ],
+      "ranked_ids": [
+        "11_mysql_innodb_deadlock_and_lock_wait",
+        "04_helm_release_history_and_rollback",
+        "02_kubernetes_deployment_release_and_rollback"
+      ],
+      "hit_ids_by_k": {
+        "1": [
+          "11_mysql_innodb_deadlock_and_lock_wait"
+        ],
+        "3": [
+          "11_mysql_innodb_deadlock_and_lock_wait"
+        ],
+        "5": [
+          "11_mysql_innodb_deadlock_and_lock_wait"
+        ]
+      },
+      "recall_at_k": {
+        "1": 1,
+        "3": 1,
+        "5": 1
+      },
+      "metrics": {
+        "cache_hit": true,
+        "init_failure_cached": false,
+        "init_latency_ms": 0,
+        "rewrite_latency_ms": 0,
+        "retrieve_latency_ms": 113,
+        "dense_latency_ms": 111,
+        "lexical_latency_ms": 1,
+        "fusion_latency_ms": 0,
+        "rerank_latency_ms": 0,
+        "dense_count": 50,
+        "lexical_count": 14,
+        "fused_count": 64,
+        "candidate_count": 20,
+        "result_count": 5,
+        "total_latency_ms": 113,
+        "decomposed": false,
+        "sub_query_count": 0,
+        "plan_latency_ms": 0,
+        "merge_latency_ms": 0,
+        "agent_rounds": 0,
+        "final_confidence": 0,
+        "agent_latency_ms": 0
+      }
+    }
+  ]
+}

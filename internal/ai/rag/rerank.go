@@ -18,14 +18,17 @@ import (
 const defaultRerankTimeout = 5 * time.Second
 
 type RerankResult struct {
-	Docs    []*schema.Document
-	Scores  []float64
-	Enabled bool
+	Docs      []*schema.Document
+	Scores    []float64
+	Attempted bool
+	Enabled   bool
+	Degraded  bool
+	Reason    string
 }
 
 func Rerank(ctx context.Context, query string, docs []*schema.Document, topK int) RerankResult {
 	if len(docs) <= 1 {
-		return RerankResult{Docs: docs, Enabled: false}
+		return RerankResult{Docs: docs, Reason: "insufficient_candidates"}
 	}
 
 	rerankCtx, cancel := context.WithTimeout(ctx, rerankTimeout(ctx))
@@ -34,7 +37,7 @@ func Rerank(ctx context.Context, query string, docs []*schema.Document, topK int
 	chatModel, err := models.OpenAIForGLMFast(rerankCtx)
 	if err != nil {
 		g.Log().Debugf(ctx, "rerank skipped: model init failed: %v", err)
-		return RerankResult{Docs: docs, Enabled: false}
+		return RerankResult{Docs: docs, Attempted: true, Degraded: true, Reason: "model_init_failed"}
 	}
 
 	var sb strings.Builder
@@ -56,13 +59,13 @@ func Rerank(ctx context.Context, query string, docs []*schema.Document, topK int
 	})
 	if err != nil {
 		g.Log().Warningf(ctx, "[rag] rerank failed, returning original docs: %v", err)
-		return RerankResult{Docs: docs, Enabled: false}
+		return RerankResult{Docs: docs, Attempted: true, Degraded: true, Reason: modelFailureReason(err)}
 	}
 
 	scores := parseScores(resp.Content, len(docs))
 	if scores == nil {
 		g.Log().Debugf(ctx, "rerank score parsing failed: %q", resp.Content)
-		return RerankResult{Docs: docs, Enabled: false}
+		return RerankResult{Docs: docs, Attempted: true, Degraded: true, Reason: "invalid_scores"}
 	}
 
 	type indexedDoc struct {
@@ -90,7 +93,7 @@ func Rerank(ctx context.Context, query string, docs []*schema.Document, topK int
 	}
 
 	g.Log().Debugf(ctx, "rerank completed: %d -> %d docs", len(docs), len(reranked))
-	return RerankResult{Docs: reranked, Scores: rerankedScores, Enabled: true}
+	return RerankResult{Docs: reranked, Scores: rerankedScores, Attempted: true, Enabled: true}
 }
 
 func parseScores(raw string, expected int) []float64 {

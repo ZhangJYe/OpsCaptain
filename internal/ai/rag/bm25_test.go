@@ -1,6 +1,7 @@
 package rag
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -175,5 +176,33 @@ func TestBM25Hit_PreservesContent(t *testing.T) {
 	}
 	if hits[0].Content != "checkoutservice rrt timeout spike with paymentservice" {
 		t.Fatalf("expected content preserved in hit, got %q", hits[0].Content)
+	}
+}
+
+func TestBM25Index_KeepsFieldTokensOutOfBodyLength(t *testing.T) {
+	t.Parallel()
+	idx := NewBM25Index()
+	idx.AddDocument("short", "redis timeout", map[string]string{"source_uri": strings.Repeat("irrelevant-long-url ", 200)})
+	idx.AddDocument("long", "redis timeout repeated context for troubleshooting", nil)
+
+	hits := idx.SearchWithOptions("redis timeout", 2, BM25SearchOptions{})
+	if len(hits) != 2 || hits[0].DocID != "short" {
+		t.Fatalf("unrelated metadata must not inflate body length normalization: %+v", hits)
+	}
+}
+
+func TestBM25Index_KnowledgeFieldBoostIsExplicit(t *testing.T) {
+	t.Parallel()
+	idx := NewBM25Index()
+	idx.AddDocument("field", "generic rollback guidance", map[string]string{"title": "Helm History", "tags": "helm history release"})
+	idx.AddDocument("body", "helm history", nil)
+
+	withoutBoost := idx.SearchWithOptions("helm history", 2, BM25SearchOptions{})
+	if len(withoutBoost) == 0 || withoutBoost[0].DocID != "body" {
+		t.Fatalf("body result should lead with field boost disabled: %+v", withoutBoost)
+	}
+	withBoost := idx.SearchWithOptions("helm history", 2, BM25SearchOptions{KnowledgeFieldBoost: map[string]float64{"title": 6, "tags": 4}})
+	if len(withBoost) == 0 || withBoost[0].DocID != "field" {
+		t.Fatalf("structured field result should lead when explicitly enabled: %+v", withBoost)
 	}
 }

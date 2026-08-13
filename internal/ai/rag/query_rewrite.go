@@ -2,6 +2,7 @@ package rag
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -15,11 +16,24 @@ import (
 
 const defaultRewriteTimeout = 3 * time.Second
 
+type RewriteResult struct {
+	Query     string
+	Attempted bool
+	Applied   bool
+	Degraded  bool
+	Reason    string
+}
+
 func RewriteQuery(ctx context.Context, query string) string {
+	return RewriteQueryWithResult(ctx, query).Query
+}
+
+func RewriteQueryWithResult(ctx context.Context, query string) RewriteResult {
 	trimmed := strings.TrimSpace(query)
 	if trimmed == "" {
-		return query
+		return RewriteResult{Query: query, Reason: "empty_query"}
 	}
+	result := RewriteResult{Query: query, Attempted: true}
 
 	rewriteCtx, cancel := context.WithTimeout(ctx, rewriteTimeout(ctx))
 	defer cancel()
@@ -27,7 +41,9 @@ func RewriteQuery(ctx context.Context, query string) string {
 	chatModel, err := models.OpenAIForGLMFast(rewriteCtx)
 	if err != nil {
 		g.Log().Debugf(ctx, "query rewrite skipped: model init failed: %v", err)
-		return query
+		result.Degraded = true
+		result.Reason = "model_init_failed"
+		return result
 	}
 
 	resp, err := chatModel.Generate(rewriteCtx, []*schema.Message{
@@ -36,16 +52,33 @@ func RewriteQuery(ctx context.Context, query string) string {
 	})
 	if err != nil {
 		g.Log().Debugf(ctx, "query rewrite failed: %v", err)
-		return query
+		result.Degraded = true
+		result.Reason = modelFailureReason(err)
+		return result
 	}
 
 	rewritten := strings.TrimSpace(resp.Content)
 	if rewritten == "" {
-		return query
+		result.Degraded = true
+		result.Reason = "empty_response"
+		return result
 	}
 
 	g.Log().Debugf(ctx, "query rewrite: %q -> %q", query, rewritten)
-	return rewritten
+	result.Query = rewritten
+	result.Applied = true
+	return result
+}
+
+func modelFailureReason(err error) string {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timeout"
+	case errors.Is(err, context.Canceled):
+		return "canceled"
+	default:
+		return "model_call_failed"
+	}
 }
 
 func rewriteTimeout(ctx context.Context) time.Duration {

@@ -18,6 +18,7 @@ type fakeQueryRetriever struct {
 	queries      []string
 	requestedTop []int
 	docs         []*schema.Document
+	err          error
 }
 
 func (f *fakeQueryRetriever) Retrieve(ctx context.Context, query string, opts ...retrieverapi.Option) ([]*schema.Document, error) {
@@ -28,7 +29,7 @@ func (f *fakeQueryRetriever) Retrieve(ctx context.Context, query string, opts ..
 		requestedTop = *options.TopK
 	}
 	f.requestedTop = append(f.requestedTop, requestedTop)
-	return f.docs, nil
+	return f.docs, f.err
 }
 
 func TestQueryForEval_RetrieveOnlySkipsRewriteAndRerank(t *testing.T) {
@@ -210,6 +211,83 @@ func TestQuery_DefaultConfigDisablesRewriteAndRerank(t *testing.T) {
 	}
 	if trace.ResultCount != len(docs) {
 		t.Fatalf("ResultCount %d != len(docs) %d", trace.ResultCount, len(docs))
+	}
+}
+
+func TestQueryTraceIncludesFinalStageIDs(t *testing.T) {
+	ResetSharedBM25Index()
+	defer ResetSharedBM25Index()
+	retriever := &fakeQueryRetriever{docs: []*schema.Document{
+		{ID: "one", Content: "target", MetaData: map[string]any{"knowledge_doc_id": "doc-one"}},
+		{ID: "two", Content: "other", MetaData: map[string]any{"knowledge_doc_id": "doc-two"}},
+	}}
+	pool := NewRetrieverPool(func(context.Context) (retrieverapi.Retriever, error) { return retriever, nil }, func(context.Context) string { return "final-stage-trace" }, nil)
+	ctx := WithHybridConfigOverride(context.Background(), HybridConfig{DenseTopK: 2, LexicalTopK: 2, FusionK: 60, CandidateTopK: 2, FinalTopK: 1, DenseWeight: 1, LexicalWeight: 1})
+	docs, trace, err := Query(ctx, pool, "target")
+	if err != nil {
+		t.Fatalf("Query returned error: %v", err)
+	}
+	if len(docs) != 1 || trace.Hybrid == nil || len(trace.Hybrid.FinalIDs) != 1 || trace.Hybrid.FinalIDs[0] != "doc-one" {
+		t.Fatalf("unexpected final stage trace: docs=%d trace=%+v", len(docs), trace.Hybrid)
+	}
+}
+
+func TestQueryRewriteAndRerankFallbackStayWithinFinalTopK(t *testing.T) {
+	ResetSharedBM25Index()
+	defer ResetSharedBM25Index()
+
+	retriever := &fakeQueryRetriever{docs: []*schema.Document{
+		{ID: "d1", Content: "one"},
+		{ID: "d2", Content: "two"},
+		{ID: "d3", Content: "three"},
+	}}
+	pool := NewRetrieverPool(
+		func(context.Context) (retrieverapi.Retriever, error) { return retriever, nil },
+		func(context.Context) string { return "test-query-fallback" },
+		nil,
+	)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	ctx = WithRewriteOverride(ctx, true)
+	ctx = WithRerankOverride(ctx, true)
+	ctx = WithHybridConfigOverride(ctx, HybridConfig{
+		DenseTopK: 10, LexicalTopK: 10, FusionK: 60, CandidateTopK: 3, FinalTopK: 2,
+	})
+
+	docs, trace, err := Query(ctx, pool, "original query")
+	if err != nil {
+		t.Fatalf("Query returned error during rewrite/rerank fallback: %v", err)
+	}
+	if len(retriever.queries) != 1 || retriever.queries[0] != "original query" {
+		t.Fatalf("rewrite fallback must use original query, got %#v", retriever.queries)
+	}
+	if trace.RerankEnabled {
+		t.Fatal("rerank should degrade when its context is canceled")
+	}
+	if !trace.RewriteAttempted || !trace.RewriteDegraded || trace.RewriteReason == "" {
+		t.Fatalf("rewrite fallback trace is incomplete: %+v", trace)
+	}
+	if !trace.RerankAttempted || !trace.RerankDegraded || trace.RerankReason == "" {
+		t.Fatalf("rerank fallback trace is incomplete: %+v", trace)
+	}
+	if len(docs) != 2 || trace.ResultCount != 2 {
+		t.Fatalf("fallback results must respect FinalTopK: docs=%d trace=%d", len(docs), trace.ResultCount)
+	}
+}
+
+func TestQueryReturnsBaseRetrieverError(t *testing.T) {
+	ResetSharedBM25Index()
+	defer ResetSharedBM25Index()
+
+	retriever := &fakeQueryRetriever{err: errors.New("retrieve failed")}
+	pool := NewRetrieverPool(
+		func(context.Context) (retrieverapi.Retriever, error) { return retriever, nil },
+		func(context.Context) string { return "test-query-retrieve-error" },
+		nil,
+	)
+	_, _, err := Query(context.Background(), pool, "query")
+	if err == nil {
+		t.Fatal("expected base retrieval error")
 	}
 }
 

@@ -15,6 +15,8 @@ type ctxKey string
 const (
 	ctxOverrideRewrite ctxKey = "rag.override.rewrite"
 	ctxOverrideRerank  ctxKey = "rag.override.rerank"
+	ctxOverrideHybrid  ctxKey = "rag.override.hybrid"
+	ctxIntentQuery     ctxKey = "rag.intent.query"
 )
 
 func WithRerankOverride(ctx context.Context, v bool) context.Context {
@@ -23,6 +25,10 @@ func WithRerankOverride(ctx context.Context, v bool) context.Context {
 
 func WithRewriteOverride(ctx context.Context, v bool) context.Context {
 	return context.WithValue(ctx, ctxOverrideRewrite, v)
+}
+
+func WithHybridConfigOverride(ctx context.Context, cfg HybridConfig) context.Context {
+	return context.WithValue(ctx, ctxOverrideHybrid, cfg)
 }
 
 type QueryTrace struct {
@@ -39,7 +45,14 @@ type QueryTrace struct {
 	RewrittenQuery    string
 	RawResultCount    int
 	ResultCount       int
+	RewriteAttempted  bool
+	RewriteApplied    bool
+	RewriteDegraded   bool
+	RewriteReason     string
+	RerankAttempted   bool
 	RerankEnabled     bool
+	RerankDegraded    bool
+	RerankReason      string
 }
 
 func Query(ctx context.Context, pool *RetrieverPool, query string) ([]*schema.Document, QueryTrace, error) {
@@ -58,10 +71,14 @@ func Query(ctx context.Context, pool *RetrieverPool, query string) ([]*schema.Do
 	searchQuery := query
 	if wantRewrite {
 		rewriteStart := time.Now()
-		rewritten := RewriteQuery(ctx, query)
+		rewriteResult := RewriteQueryWithResult(ctx, query)
 		trace.RewriteLatencyMs = time.Since(rewriteStart).Milliseconds()
-		if rewritten != "" {
-			searchQuery = rewritten
+		trace.RewriteAttempted = rewriteResult.Attempted
+		trace.RewriteApplied = rewriteResult.Applied
+		trace.RewriteDegraded = rewriteResult.Degraded
+		trace.RewriteReason = rewriteResult.Reason
+		if rewriteResult.Query != "" {
+			searchQuery = rewriteResult.Query
 		}
 		trace.RewrittenQuery = searchQuery
 	}
@@ -77,13 +94,11 @@ func Query(ctx context.Context, pool *RetrieverPool, query string) ([]*schema.Do
 
 	lexIdx := SharedBM25Index()
 	cfg := DefaultHybridConfig(ctx)
-	if wantRerank {
-		cfg.CandidateTopK = RetrieverCandidateTopK(ctx)
-	}
 
-	docs, hybridTrace, err := HybridRetrieveWithRetriever(ctx, rr, lexIdx, searchQuery, cfg)
+	hybridCtx := context.WithValue(ctx, ctxIntentQuery, query)
+	docs, hybridTrace, err := HybridRetrieveWithRetriever(hybridCtx, rr, lexIdx, searchQuery, cfg)
 	trace.Hybrid = &hybridTrace
-	trace.RetrieveLatencyMs = hybridTrace.DenseLatencyMs
+	trace.RetrieveLatencyMs = hybridTrace.TotalLatencyMs
 	trace.RawResultCount = hybridTrace.FusedCount
 	if err != nil {
 		return nil, trace, err
@@ -101,7 +116,10 @@ func Query(ctx context.Context, pool *RetrieverPool, query string) ([]*schema.Do
 		rerankStart := time.Now()
 		rerankResult := Rerank(ctx, query, docs, topK)
 		trace.RerankLatencyMs = time.Since(rerankStart).Milliseconds()
+		trace.RerankAttempted = rerankResult.Attempted
 		trace.RerankEnabled = rerankResult.Enabled
+		trace.RerankDegraded = rerankResult.Degraded
+		trace.RerankReason = rerankResult.Reason
 		if rerankResult.Enabled {
 			docs = rerankResult.Docs
 			for i, doc := range docs {
@@ -109,15 +127,11 @@ func Query(ctx context.Context, pool *RetrieverPool, query string) ([]*schema.Do
 					doc.MetaData[metaKeyRerankScore] = rerankResult.Scores[i]
 				}
 			}
-		} else {
-			docs = trimRetrievedDocs(docs, topK)
 		}
-	} else {
-		topK := cfg.FinalTopK
-		if topK <= 0 {
-			topK = 10
-		}
-		docs = trimRetrievedDocs(docs, topK)
+	}
+	docs = selectFinalDocs(query, docs, cfg)
+	if trace.Hybrid != nil {
+		trace.Hybrid.FinalIDs = traceDocumentIDs(docs)
 	}
 
 	trace.ResultCount = len(docs)
@@ -140,8 +154,13 @@ func QueryForEval(ctx context.Context, pool *RetrieverPool, query string, wantRe
 	rewritten := query
 	if wantRewrite {
 		rewriteStart := time.Now()
-		rewritten = RewriteQuery(ctx, query)
+		rewriteResult := RewriteQueryWithResult(ctx, query)
 		trace.RewriteLatencyMs = time.Since(rewriteStart).Milliseconds()
+		trace.RewriteAttempted = rewriteResult.Attempted
+		trace.RewriteApplied = rewriteResult.Applied
+		trace.RewriteDegraded = rewriteResult.Degraded
+		trace.RewriteReason = rewriteResult.Reason
+		rewritten = rewriteResult.Query
 		trace.RewrittenQuery = rewritten
 	}
 
@@ -174,7 +193,10 @@ func QueryForEval(ctx context.Context, pool *RetrieverPool, query string, wantRe
 	rerankStart := time.Now()
 	rerankResult := Rerank(ctx, query, docs, topK)
 	trace.RerankLatencyMs = time.Since(rerankStart).Milliseconds()
+	trace.RerankAttempted = rerankResult.Attempted
 	trace.RerankEnabled = rerankResult.Enabled
+	trace.RerankDegraded = rerankResult.Degraded
+	trace.RerankReason = rerankResult.Reason
 
 	finalDocs := rerankResult.Docs
 	trace.ResultCount = len(finalDocs)
