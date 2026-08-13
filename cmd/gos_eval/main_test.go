@@ -117,6 +117,44 @@ func TestValidateArtifactFingerprintsRejectsLegacyArtifact(t *testing.T) {
 	require.Error(t, validateArtifactFingerprints(BaselineArtifact{}, holdoutPath, configPath))
 }
 
+func TestValidateArtifactFingerprintsEvalIgnoresUnrelatedManifestChanges(t *testing.T) {
+	dir := t.TempDir()
+	datasetPath := filepath.Join(dir, "regression.json")
+	configPath := filepath.Join(dir, "config.yaml")
+	writeTestDataset(t, datasetPath, "regression-v1")
+	require.NoError(t, os.WriteFile(configPath, []byte("agent_router: disabled\n"), 0o600))
+
+	datasetHash, err := fileSHA256(datasetPath)
+	require.NoError(t, err)
+	codeHash, err := gateCodeContentSHA256()
+	require.NoError(t, err)
+	cfg := gos_engine.DefaultConfig()
+	applyDeterministicEvalConfig(cfg)
+	configHash, err := configSummarySHA256(evalConfigSummary(cfg))
+	require.NoError(t, err)
+
+	artifact := BaselineArtifact{
+		Profile:                "eval",
+		DatasetSchemaVersion:   goseval.DatasetSchemaVersion,
+		DatasetRole:            goseval.DatasetRoleHoldout,
+		DatasetSHA256:          datasetHash,
+		ConfigSHA256:           configHash,
+		ConfigFingerprintScope: evalConfigFingerprintScope,
+		CodeSHA256:             codeHash,
+		CodeFingerprintScope:   gateCodeFingerprintScope,
+		EvidenceMetricContract: evidenceMetricContract,
+		PromptVersion:          "test-v1",
+		DependencyState:        map[string]string{"llm": "deterministic"},
+	}
+
+	require.NoError(t, validateArtifactFingerprints(artifact, datasetPath, configPath))
+	require.NoError(t, os.WriteFile(configPath, []byte("agent_router: enabled\n"), 0o600))
+	require.NoError(t, validateArtifactFingerprints(artifact, datasetPath, configPath))
+
+	artifact.ConfigSHA256 = "changed-effective-config"
+	require.ErrorContains(t, validateArtifactFingerprints(artifact, datasetPath, configPath), "eval 有效配置不一致")
+}
+
 func TestValidateArtifactUse(t *testing.T) {
 	qualityFields := func(profile string) BaselineArtifact {
 		llmCalls := 0

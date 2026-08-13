@@ -157,6 +157,10 @@ func Execute[T any](ctx context.Context, opt CallOption, fn func(ctx context.Con
 	var lastErr error
 	for attempt := 0; attempt <= opt.MaxRetries; attempt++ {
 		if attempt > 0 {
+			if err := ctx.Err(); err != nil {
+				var zero T
+				return zero, err
+			}
 			g.Log().Infof(ctx, "[resilience][%s] retry attempt %d/%d", opt.Name, attempt, opt.MaxRetries)
 			if !sleepWithContext(ctx, opt.RetryDelay*time.Duration(attempt)) {
 				var zero T

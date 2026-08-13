@@ -91,6 +91,29 @@ func TestExecute_Timeout(t *testing.T) {
 	}
 }
 
+func TestExecute_DoesNotRetryAfterParentDeadline(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	calls := 0
+
+	_, err := Execute(ctx, CallOption{
+		Timeout:    time.Second,
+		MaxRetries: 2,
+		RetryDelay: time.Second,
+		Name:       "test-parent-deadline",
+	}, func(callCtx context.Context) (string, error) {
+		calls++
+		<-callCtx.Done()
+		return "", callCtx.Err()
+	})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("expected deadline exceeded, got %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("expected one real attempt after parent deadline, got %d", calls)
+	}
+}
+
 func TestCircuitBreaker_OpensAfterThreshold(t *testing.T) {
 	cb := NewCircuitBreaker(3, 100*time.Millisecond)
 

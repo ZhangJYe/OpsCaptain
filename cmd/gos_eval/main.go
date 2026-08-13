@@ -52,6 +52,7 @@ type BaselineArtifact struct {
 	DatasetSHA256           string                 `json:"dataset_sha256"`
 	ConfigPath              string                 `json:"config_path"`
 	ConfigSHA256            string                 `json:"config_sha256"`
+	ConfigFingerprintScope  string                 `json:"config_fingerprint_scope,omitempty"`
 	ConfigSummary           map[string]interface{} `json:"config_summary"`
 	EvidenceCorpusSHA256    string                 `json:"evidence_corpus_sha256,omitempty"`
 	EvidenceProvenance      string                 `json:"evidence_provenance,omitempty"`
@@ -64,6 +65,9 @@ type BaselineArtifact struct {
 const evalConfigPath = "manifest/config/config.yaml"
 const runtimeCodeFingerprintScope = "go-source+modules+prompts-v1"
 const baselineCodeFingerprintScope = "plan-baseline+evaluator+recorded-replay-v1"
+const gateCodeFingerprintScope = "gos-eval-runtime-v1"
+const fullConfigFingerprintScope = "manifest-config-file-v1"
+const evalConfigFingerprintScope = "gos-eval-effective-config-v1"
 const evidenceMetricContract = "source-backed-signal-v2"
 const baselineQualityContract = "complete-trace-profile-activity-v1"
 
@@ -761,6 +765,50 @@ func baselineCodeContentSHA256() (string, error) {
 	)
 }
 
+func gateCodeContentSHA256() (string, error) {
+	return gitContentSHA256(
+		":(glob)cmd/gos_eval/*.go",
+		":(glob)internal/ai/agent/gos_engine/*.go",
+		":(glob)internal/ai/agent/gos_engine/eval/*.go",
+		":(glob)internal/ai/agent/experts/*.go",
+		":(glob)internal/ai/belief/*.go",
+		":(glob)internal/ai/protocol/*.go",
+		"go.mod", "go.sum",
+		":(exclude,glob)**/*_test.go",
+	)
+}
+
+func evalConfigSummary(cfg *gos_engine.Config) map[string]interface{} {
+	return map[string]interface{}{
+		"enabled":              cfg.Enabled,
+		"model_path":           cfg.ModelPath,
+		"temperature":          cfg.Temperature,
+		"max_tokens":           cfg.MaxTokens,
+		"evidence_max_chars":   cfg.EvidenceMaxChars,
+		"session_max_steps":    cfg.SessionMaxSteps,
+		"max_retrieval_steps":  cfg.MaxRetrievalSteps,
+		"call_timeout_ms":      cfg.CallTimeoutMs,
+		"fsm":                  cfg.FSM,
+		"confidence":           cfg.Confidence,
+		"graph":                cfg.Graph,
+		"state_conversion":     cfg.StateConversion,
+		"structured_cognition": cfg.StructuredCognition,
+		"execution":            cfg.Execution,
+		"report":               cfg.Report,
+		"experts":              cfg.Experts,
+		"head_agent":           cfg.HeadAgent,
+	}
+}
+
+func configSummarySHA256(summary map[string]interface{}) (string, error) {
+	data, err := json.Marshal(summary)
+	if err != nil {
+		return "", err
+	}
+	hash := sha256.Sum256(data)
+	return fmt.Sprintf("%x", hash[:]), nil
+}
+
 func gitContentSHA256(pathspecs ...string) (string, error) {
 	rootOutput, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
 	if err != nil {
@@ -848,21 +896,39 @@ func validateArtifactFingerprints(artifact BaselineArtifact, datasetPath, config
 		return fmt.Errorf("baseline artifact 与当前 dataset 内容不一致")
 	}
 
-	currentConfigHash, err := fileSHA256(configPath)
-	if err != nil {
-		return fmt.Errorf("计算当前配置 SHA256: %w", err)
-	}
 	if artifact.ConfigSHA256 == "" {
 		return fmt.Errorf("baseline artifact 缺少 config_sha256，请重新采集 baseline")
 	}
-	if artifact.ConfigSHA256 != currentConfigHash {
-		return fmt.Errorf("baseline artifact 与当前配置内容不一致")
+	if artifact.Profile == "eval" {
+		if artifact.ConfigFingerprintScope != evalConfigFingerprintScope {
+			return fmt.Errorf("baseline artifact 缺少当前版本 eval 配置指纹，请重新采集 baseline")
+		}
+		cfg := gos_engine.DefaultConfig()
+		applyDeterministicEvalConfig(cfg)
+		currentConfigHash, err := configSummarySHA256(evalConfigSummary(cfg))
+		if err != nil {
+			return fmt.Errorf("计算当前 eval 配置指纹: %w", err)
+		}
+		if artifact.ConfigSHA256 != currentConfigHash {
+			return fmt.Errorf("baseline artifact 与当前 eval 有效配置不一致")
+		}
+	} else {
+		if artifact.ConfigFingerprintScope != "" && artifact.ConfigFingerprintScope != fullConfigFingerprintScope {
+			return fmt.Errorf("baseline artifact 配置指纹范围不匹配")
+		}
+		currentConfigHash, err := fileSHA256(configPath)
+		if err != nil {
+			return fmt.Errorf("计算当前配置 SHA256: %w", err)
+		}
+		if artifact.ConfigSHA256 != currentConfigHash {
+			return fmt.Errorf("baseline artifact 与当前配置内容不一致")
+		}
 	}
 	expectedCodeScope := baselineCodeFingerprintScope
 	currentCodeHash, err := baselineCodeContentSHA256()
 	if artifact.Profile == "eval" {
-		expectedCodeScope = runtimeCodeFingerprintScope
-		currentCodeHash, err = codeContentSHA256()
+		expectedCodeScope = gateCodeFingerprintScope
+		currentCodeHash, err = gateCodeContentSHA256()
 	}
 	if artifact.CodeFingerprintScope != expectedCodeScope || artifact.CodeSHA256 == "" {
 		return fmt.Errorf("baseline artifact 缺少当前版本代码内容指纹，请重新采集 baseline")
@@ -1019,18 +1085,11 @@ func buildGoSEngineFromConfig(cfg *gos_engine.Config, evalProfile bool, recorded
 	if cfg == nil {
 		cfg = gos_engine.DefaultConfig()
 	}
-	if evalProfile || recorded != nil {
+	if recorded != nil {
 		applyCompactEvalConfig(cfg)
 	}
 	if evalProfile {
-		cfg.StructuredCognition.PlanBudget.LLMCalls = 2
-		cfg.StructuredCognition.PlanBudget.ToolCalls = 1
-		for index := range cfg.Experts {
-			cfg.Experts[index].Budget.LLMCalls = 2
-			cfg.Experts[index].Budget.ToolCalls = 1
-		}
-		cfg.StructuredCognition.Enabled = true
-		cfg.StateConversion.Enabled = true
+		applyDeterministicEvalConfig(cfg)
 		cfg.StructuredGenerate = func(context.Context, string) (string, error) {
 			return "", fmt.Errorf("eval profile intentionally exercises deterministic rule fallback")
 		}
@@ -1101,6 +1160,18 @@ func applyCompactEvalConfig(cfg *gos_engine.Config) {
 	cfg.FSM.MinConfidence = 0.6
 	cfg.CallTimeoutMs = 10000
 	cfg.ModelPath = "chat_model_fast"
+}
+
+func applyDeterministicEvalConfig(cfg *gos_engine.Config) {
+	applyCompactEvalConfig(cfg)
+	cfg.StructuredCognition.PlanBudget.LLMCalls = 2
+	cfg.StructuredCognition.PlanBudget.ToolCalls = 1
+	for index := range cfg.Experts {
+		cfg.Experts[index].Budget.LLMCalls = 2
+		cfg.Experts[index].Budget.ToolCalls = 1
+	}
+	cfg.StructuredCognition.Enabled = true
+	cfg.StateConversion.Enabled = true
 }
 
 func buildGoSRunner(profile, recordedRoot string, recordedTimeout time.Duration) (*goseval.Runner, *gos_engine.Config, error) {
@@ -1493,6 +1564,7 @@ func runBaseline(holdoutPath, outputFile, profile, recordedRoot string, recorded
 		DatasetSHA256:           datasetHash,
 		ConfigPath:              evalConfigPath,
 		ConfigSHA256:            configHash,
+		ConfigFingerprintScope:  fullConfigFingerprintScope,
 		ConfigSummary: map[string]interface{}{
 			"engine":               "plan_execute_replan",
 			"mode":                 "baseline",
@@ -1704,12 +1776,13 @@ func runRegressionBaseline(datasetPath, outputFile string) {
 		fmt.Printf("ERROR: 计算 dataset SHA256 失败: %v\n", err)
 		os.Exit(1)
 	}
-	configHash, err := fileSHA256(evalConfigPath)
+	configSummary := evalConfigSummary(cfg)
+	configHash, err := configSummarySHA256(configSummary)
 	if err != nil {
-		fmt.Printf("ERROR: 计算配置 SHA256 失败: %v\n", err)
+		fmt.Printf("ERROR: 计算 eval 配置指纹失败: %v\n", err)
 		os.Exit(1)
 	}
-	codeHash, err := codeContentSHA256()
+	codeHash, err := gateCodeContentSHA256()
 	if err != nil {
 		fmt.Printf("ERROR: 计算当前代码内容指纹失败: %v\n", err)
 		os.Exit(1)
@@ -1717,7 +1790,7 @@ func runRegressionBaseline(datasetPath, outputFile string) {
 	artifact := BaselineArtifact{
 		Commit:                  gitCommit(),
 		CodeSHA256:              codeHash,
-		CodeFingerprintScope:    runtimeCodeFingerprintScope,
+		CodeFingerprintScope:    gateCodeFingerprintScope,
 		EvidenceMetricContract:  evidenceMetricContract,
 		BaselineQualityContract: baselineQualityContract,
 		Model:                   "deterministic-eval",
@@ -1730,21 +1803,17 @@ func runRegressionBaseline(datasetPath, outputFile string) {
 			"rag":       "deterministic",
 			"telemetry": "deterministic",
 		},
-		DatasetSchemaVersion: dataset.SchemaVersion,
-		DatasetRole:          dataset.Role,
-		DatasetPath:          datasetPath,
-		DatasetSHA256:        datasetHash,
-		ConfigPath:           evalConfigPath,
-		ConfigSHA256:         configHash,
-		ConfigSummary: map[string]interface{}{
-			"engine":                   "gos",
-			"mode":                     "regression-baseline",
-			"session_max_steps":        cfg.SessionMaxSteps,
-			"state_conversion_enabled": cfg.StateConversion.Enabled,
-		},
-		Timestamp: time.Now().Format(time.RFC3339),
-		Metrics:   metrics,
-		Results:   results,
+		DatasetSchemaVersion:   dataset.SchemaVersion,
+		DatasetRole:            dataset.Role,
+		DatasetPath:            datasetPath,
+		DatasetSHA256:          datasetHash,
+		ConfigPath:             evalConfigPath,
+		ConfigSHA256:           configHash,
+		ConfigFingerprintScope: evalConfigFingerprintScope,
+		ConfigSummary:          configSummary,
+		Timestamp:              time.Now().Format(time.RFC3339),
+		Metrics:                metrics,
+		Results:                results,
 	}
 	if err := validateBaselineRunQuality(artifact); err != nil {
 		fmt.Printf("ERROR: regression baseline 运行质量不满足准入，拒绝生成 artifact: %v\n", err)
