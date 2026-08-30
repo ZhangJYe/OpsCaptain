@@ -34,20 +34,21 @@ type ActResult struct {
 }
 
 type RunStats struct {
-	LLMCalls         int
-	ToolCalls        int
-	RAGCalls         int
-	Steps            int
-	ExpertDegraded   int
-	ExpertFailed     int
-	NoProgressRounds int
-	RemainingBudget  PlanBudgetConfig
-	PhaseLatencyMs   map[string]int64
-	FrontierChanges  int
-	BacktrackCount   int
-	NewEvidenceCount int
-	ConfidenceDelta  float64
-	Graph            belief.GraphResourceStats
+	LLMCalls          int
+	ToolCalls         int
+	RAGCalls          int
+	Steps             int
+	ExpertDegraded    int
+	ExpertFailed      int
+	NoProgressRounds  int
+	RemainingBudget   PlanBudgetConfig
+	PhaseLatencyMs    map[string]int64
+	FrontierChanges   int
+	BacktrackCount    int
+	NewEvidenceCount  int
+	ConfidenceDelta   float64
+	Graph             belief.GraphResourceStats
+	FailureCategories map[string]int
 }
 
 func NewGoSEngine(cfg *Config, logger Logger) *GoSEngine {
@@ -195,6 +196,7 @@ func (e *GoSEngine) Run(ctx context.Context, symptom string) (result *protocol.T
 		if actRes != nil {
 			stats.ExpertDegraded += actRes.DegradedCount
 			stats.ExpertFailed += actRes.FailedCount
+			stats.addFailureCategories(categorizeAnalysisFailureCategories(actRes))
 		}
 
 		alreadyUpdated := false
@@ -650,6 +652,7 @@ func (e *GoSEngine) degradedResult(graph *belief.BeliefGraph, fsm *belief.Belief
 			"expert_degraded_count": stats.ExpertDegraded,
 			"expert_failed_count":   stats.ExpertFailed,
 			"no_progress_rounds":    stats.NoProgressRounds,
+			"failure_categories":    categorizeFailureCategories(reason, stats),
 			"remaining_budget":      stats.RemainingBudget,
 			"evidence_report":       report,
 		},
@@ -657,6 +660,38 @@ func (e *GoSEngine) degradedResult(graph *belief.BeliefGraph, fsm *belief.Belief
 		FinishedAt: time.Now().UnixMilli(),
 	}
 	return e.finalizeResult(result, graph, startedAt, stats)
+}
+
+func categorizeFailureCategories(reason string, stats *RunStats) map[string]int {
+	categories := copyIntMap(stats.FailureCategories)
+	if strings.HasPrefix(reason, "no_progress_loop") {
+		categories["graph_no_progress"]++
+	}
+	return categories
+}
+
+func categorizeAnalysisFailureCategories(actRes *ActResult) map[string]int {
+	categories := make(map[string]int)
+	if actRes == nil {
+		return categories
+	}
+	for _, analysis := range actRes.Analyses {
+		if analysis == nil {
+			continue
+		}
+		for _, toolErr := range analysis.ToolErrors {
+			switch toolErr.Action {
+			case "evidence_assessment":
+				categories["structured_protocol"]++
+			case "content", "decision":
+				errorText := strings.ToLower(toolErr.Error)
+				if strings.Contains(errorText, "timeout") || strings.Contains(errorText, "eof") || strings.Contains(errorText, "circuit breaker") || strings.Contains(errorText, "service temporarily unavailable") {
+					categories["model_service"]++
+				}
+			}
+		}
+	}
+	return categories
 }
 
 func (e *GoSEngine) degradedSummary(reason string, err error, actRes *ActResult) (string, float64) {

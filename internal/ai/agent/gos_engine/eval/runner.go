@@ -162,7 +162,23 @@ func (r *Runner) runCase(ctx context.Context, engine EngineRunner, c EvalCase) E
 		ContractMatched:      contractMatches,
 		Scenario:             c.Scenario,
 		DegradationReason:    taskResult.DegradationReason,
+		FailureCategories:    metadataStringIntMap(taskResult.Metadata, "failure_categories"),
 	}
+}
+
+func metadataStringIntMap(metadata map[string]any, key string) map[string]int {
+	if metadata == nil {
+		return nil
+	}
+	raw, ok := metadata[key].(map[string]int)
+	if !ok || len(raw) == 0 {
+		return nil
+	}
+	out := make(map[string]int, len(raw))
+	for category, count := range raw {
+		out[category] = count
+	}
+	return out
 }
 
 func countDiagnosticEvidence(evidence []protocol.EvidenceItem) int {

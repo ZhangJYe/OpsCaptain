@@ -55,6 +55,7 @@ type EvalResult struct {
 	ContractMatched      bool           `json:"contract_matched"`
 	Scenario             string         `json:"scenario,omitempty"`
 	DegradationReason    string         `json:"degradation_reason,omitempty"`
+	FailureCategories    map[string]int `json:"failure_categories,omitempty"`
 }
 
 type EvalMetrics struct {
@@ -81,6 +82,7 @@ type EvalMetrics struct {
 	ContractCompliance float64        `json:"contract_compliance"`
 	PerStatus          map[string]int `json:"per_status"`
 	FailuresByPhase    map[string]int `json:"failures_by_phase"`
+	FailureCategories  map[string]int `json:"failure_categories"`
 	totalLatency       time.Duration
 	totalLLMCalls      int
 	totalToolCalls     int
@@ -113,8 +115,9 @@ type GateReport struct {
 
 func NewEvalMetrics() *EvalMetrics {
 	return &EvalMetrics{
-		PerStatus:       make(map[string]int),
-		FailuresByPhase: make(map[string]int),
+		PerStatus:         make(map[string]int),
+		FailuresByPhase:   make(map[string]int),
+		FailureCategories: make(map[string]int),
 	}
 }
 
@@ -183,6 +186,9 @@ func (m *EvalMetrics) AddResult(r *EvalResult) {
 	}
 	if r.FailurePhase != "" {
 		m.FailuresByPhase[r.FailurePhase]++
+	}
+	for category, count := range r.FailureCategories {
+		m.FailureCategories[category] += count
 	}
 }
 

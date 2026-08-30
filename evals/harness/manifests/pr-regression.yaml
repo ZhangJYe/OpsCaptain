@@ -1,0 +1,89 @@
+schema_version: evaluation-harness/v1
+run_name: pr-regression
+dataset_role: regression
+label_source: reviewed deterministic regression fixtures
+profile: deterministic
+dependencies: {model: fixture, milvus: not_used, prometheus: not_used, logs: not_used}
+continue_on_error: true
+report_dir: ../reports
+code_scope: evaluation-harness-v1
+code_paths:
+  - ../../../internal/ai/evalharness/types.go
+  - ../../../internal/ai/evalharness/harness.go
+  - ../../../internal/app/evaladapter/route.go
+evidence_corpus_paths:
+  - ../datasets/route/regression.jsonl
+  - ../datasets/rag/regression.jsonl
+  - ../datasets/plan/regression.jsonl
+  - ../datasets/gos/regression.jsonl
+  - ../datasets/tool/regression.jsonl
+  - ../datasets/evidence/regression.jsonl
+model_fingerprint: deterministic-no-model
+prompt_fingerprint: deterministic-no-prompt
+evaluator_fingerprint: evaluation-harness-v1
+budget:
+  max_cases: 160
+  concurrency: 2
+  case_timeout_ms: 5000
+  total_timeout_ms: 60000
+  max_llm_calls: 160
+  max_tool_calls: 160
+  max_rag_calls: 160
+  max_tokens: 1000
+redaction:
+  max_text_chars: 512
+  sensitive_keys: [authorization, token, api_key, password, secret, dsn]
+gates:
+  - {name: no_case_failures, metric: failure_rate, operator: "<=", threshold: 0, severity: blocking}
+  - {name: trace_complete, metric: trace_completeness, operator: ">=", threshold: 1, severity: blocking}
+suites:
+  - name: route
+    enabled: true
+    dataset: ../datasets/route/regression.jsonl
+    payload_schema: route-eval/v1
+    budget: {max_cases: 28, concurrency: 1, case_timeout_ms: 1000}
+    gates:
+      - {name: route_macro_f1, metric: macro_f1, operator: ">=", threshold: 1, severity: blocking}
+  - name: rag
+    enabled: true
+    dataset: ../datasets/rag/regression.jsonl
+    payload_schema: rag-eval/v1
+    budget: {max_cases: 28, concurrency: 2, case_timeout_ms: 1000}
+    gates:
+      - {name: rag_mrr, metric: mrr, operator: ">=", threshold: 0.75, severity: blocking}
+  - name: plan
+    enabled: true
+    dataset: ../datasets/plan/regression.jsonl
+    payload_schema: plan-eval/v1
+    budget: {max_cases: 24, concurrency: 1, case_timeout_ms: 1000}
+    gates:
+      - {name: plan_completion, metric: completion_rate, operator: ">=", threshold: 1, severity: blocking}
+  - name: gos
+    enabled: true
+    dataset: ../datasets/gos/regression.jsonl
+    payload_schema: gos-eval/v1
+    budget: {max_cases: 28, concurrency: 1, case_timeout_ms: 1000}
+    gates:
+      - {name: gos_root_cause, metric: root_cause_accuracy, operator: ">=", threshold: 1, severity: blocking}
+  - name: tool
+    enabled: true
+    dataset: ../datasets/tool/regression.jsonl
+    payload_schema: tool-eval/v1
+    budget: {max_cases: 28, concurrency: 1, case_timeout_ms: 1000}
+    gates:
+      - {name: tool_contract, metric: contract_compliance, operator: ">=", threshold: 1, severity: blocking}
+  - name: evidence
+    enabled: true
+    dataset: ../datasets/evidence/regression.jsonl
+    payload_schema: evidence-eval/v1
+    budget: {max_cases: 24, concurrency: 1, case_timeout_ms: 1000}
+regression_corpus:
+  min_total: 160
+  suite_minimums: {route: 28, rag: 28, plan: 24, gos: 28, tool: 28, evidence: 24}
+  required_tags:
+    route: [chat, incident, confirm, cache, low-confidence, memory-isolation]
+    rag: [exact, semantic, multi-document, hard-negative]
+    plan: [diagnosis, shared, replan]
+    gos: [support_evidence, drilldown_required, backtracking_required, evidence_conflict, wrong_initial_hypothesis, tool_timeout, rag_empty, invalid_llm_json]
+    tool: [success, permission, degraded, budget]
+    evidence: [single-citation, multi-citation, cross-source, trace]

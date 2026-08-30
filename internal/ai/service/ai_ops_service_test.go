@@ -573,6 +573,25 @@ func TestLoadAIOpsGOSConfigLoadsGraphResourcePolicy(t *testing.T) {
 	}
 }
 
+func TestLoadAIOpsGOSConfigLoadsStructuredFlowDefaults(t *testing.T) {
+	oldBool := aiOpsConfigBool
+	defer func() { aiOpsConfigBool = oldBool }()
+	values := map[string]bool{
+		"aiops.gos.structured_cognition.enabled": true,
+		"aiops.gos.state_conversion.enabled":     true,
+	}
+	aiOpsConfigBool = func(_ context.Context, key string) (bool, bool) {
+		value, ok := values[key]
+		return value, ok
+	}
+
+	cfg := loadAIOpsGOSConfig(context.Background())
+
+	if !cfg.StructuredCognition.Enabled || !cfg.StateConversion.Enabled {
+		t.Fatalf("expected structured GoS flow enabled, got structured=%t state_conversion=%t", cfg.StructuredCognition.Enabled, cfg.StateConversion.Enabled)
+	}
+}
+
 func TestRegisterAIOpsGOSToolsIncludesIndependentMetricEvidence(t *testing.T) {
 	registry := experts.NewToolRegistry()
 

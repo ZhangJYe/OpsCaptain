@@ -1,0 +1,41 @@
+schema_version: evaluation-external-corpora/v1
+purpose: >-
+  Registry only. Large development, frozen holdout and replay evidence remain outside
+  the repository and production image; CI or an approved offline runner mounts or
+  downloads them by version and SHA-256.
+sources:
+  - name: aiops2025
+    version: aiops2025-2025-06
+    cases: 400
+    license: CC-BY-NC-4.0
+    use: recorded-gos-and-evidence-only
+    split_policy: group-by-fault-type-instance-target-observation-date
+    generated_roles: {development: 296, holdout: 104}
+    note: >-
+      Current public source only. It does not meet capacity targets and must not be
+      copied into the repository, image, or default CI artifacts.
+corpora:
+  - name: development
+    role: development
+    target_cases: 3000
+    storage: object-storage-or-ci-artifact
+    path: evals/harness/external/development/
+    access: approved-offline-runner
+    retention: versioned
+    required_metadata: [version, sha256, source, label_policy, created_at]
+  - name: frozen-holdout
+    role: holdout
+    target_cases: 700
+    storage: object-storage-or-ci-artifact
+    path: evals/harness/external/holdout/
+    access: release-evaluation-only
+    retention: immutable-per-release
+    required_metadata: [version, sha256, source, split_policy, label_policy, frozen_at]
+  - name: replay-evidence
+    role: holdout
+    target_cases: 2000
+    storage: object-storage-or-ci-artifact
+    path: evals/harness/external/replay/
+    access: approved-offline-runner
+    retention: lifecycle-managed
+    required_metadata: [version, sha256, source, redaction_policy, retention_days]

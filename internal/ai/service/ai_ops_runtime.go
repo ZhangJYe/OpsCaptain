@@ -579,16 +579,17 @@ func registerAIOpsGOSExpert(engine *gos_engine.GoSEngine, cfg *gos_engine.Config
 		ec.Tools = []string{"query_logs", "query_internal_docs"}
 	}
 	runtimeCfg := experts.ExpertRuntimeConfig{
-		Name:              ec.Name,
-		Description:       ec.Description,
-		ToolNames:         ec.Tools,
-		MaxRetrievalSteps: ec.MaxRetrievalSteps,
-		ModelPath:         cfg.ModelPath,
-		Temperature:       cfg.Temperature,
-		MaxTokens:         cfg.MaxTokens,
-		EvidenceMaxChars:  cfg.EvidenceMaxChars,
-		CallTimeout:       time.Duration(cfg.CallTimeoutMs) * time.Millisecond,
-		ChatModelFactory:  models.OpenAIChatModelFactory(cfg.ModelPath),
+		Name:                          ec.Name,
+		Description:                   ec.Description,
+		ToolNames:                     ec.Tools,
+		MaxRetrievalSteps:             ec.MaxRetrievalSteps,
+		ModelPath:                     cfg.ModelPath,
+		Temperature:                   cfg.Temperature,
+		MaxTokens:                     cfg.MaxTokens,
+		EvidenceMaxChars:              cfg.EvidenceMaxChars,
+		CallTimeout:                   time.Duration(cfg.CallTimeoutMs) * time.Millisecond,
+		ChatModelFactory:              models.OpenAIChatModelFactory(cfg.ModelPath),
+		StructuredOutputCompatibility: cfg.StructuredCognition.Enabled,
 		ExecutionBudget: experts.ExecutionBudget{
 			LLMCalls:          ec.Budget.LLMCalls,
 			ToolCalls:         ec.Budget.ToolCalls,

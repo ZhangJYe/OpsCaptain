@@ -16,19 +16,20 @@ type GenerateContentFunc func(ctx context.Context, frontier *belief.Frontier, gr
 type ChatModelFactory func(ctx context.Context) (einomodel.ToolCallingChatModel, error)
 
 type ExpertRuntimeConfig struct {
-	Name                string
-	Description         string
-	ToolNames           []string
-	MaxRetrievalSteps   int
-	ModelPath           string
-	Temperature         float64
-	MaxTokens           int
-	EvidenceMaxChars    int
-	RAGQueryFunc        RAGQueryFunc
-	GenerateContentFunc GenerateContentFunc
-	ChatModelFactory    ChatModelFactory
-	CallTimeout         time.Duration
-	ExecutionBudget     ExecutionBudget
+	Name                          string
+	Description                   string
+	ToolNames                     []string
+	MaxRetrievalSteps             int
+	ModelPath                     string
+	Temperature                   float64
+	MaxTokens                     int
+	EvidenceMaxChars              int
+	RAGQueryFunc                  RAGQueryFunc
+	GenerateContentFunc           GenerateContentFunc
+	ChatModelFactory              ChatModelFactory
+	CallTimeout                   time.Duration
+	ExecutionBudget               ExecutionBudget
+	StructuredOutputCompatibility bool
 }
 
 type RetrievalRecord struct {

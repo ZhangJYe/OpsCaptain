@@ -389,6 +389,15 @@ func TestEvalMetrics_FinalizePhaseZeroMetrics(t *testing.T) {
 	assert.Equal(t, 2.0, metrics.AvgToolCalls)
 	assert.Equal(t, 2.0, metrics.AvgRAGCalls)
 	assert.Equal(t, map[string]int{"act": 1}, metrics.FailuresByPhase)
+	assert.Empty(t, metrics.FailureCategories)
+}
+
+func TestEvalMetricsAccumulatesFailureCategories(t *testing.T) {
+	metrics := NewEvalMetrics()
+	metrics.AddResult(&EvalResult{FailureCategories: map[string]int{"model_service": 2, "graph_no_progress": 1}})
+	metrics.AddResult(&EvalResult{FailureCategories: map[string]int{"structured_protocol": 1, "graph_no_progress": 1}})
+
+	assert.Equal(t, map[string]int{"model_service": 2, "structured_protocol": 1, "graph_no_progress": 2}, metrics.FailureCategories)
 }
 
 func TestIsPrematureStopDoesNotDuplicateRootCauseAccuracy(t *testing.T) {

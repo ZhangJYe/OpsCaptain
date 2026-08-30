@@ -498,6 +498,28 @@ func TestBuildGoSRunnerRealLoadsConfiguredFullChain(t *testing.T) {
 	require.Equal(t, 24000, cfg.CallTimeoutMs)
 }
 
+func TestBuildGoSRunnerRecordedPreservesConfiguredModelTimeout(t *testing.T) {
+	oldLoader := loadRealGoSConfig
+	loadRealGoSConfig = func(context.Context) *gos_engine.Config {
+		cfg := gos_engine.DefaultConfig()
+		cfg.CallTimeoutMs = 30000
+		cfg.StructuredCognition.Enabled = true
+		cfg.StateConversion.Enabled = true
+		return cfg
+	}
+	t.Cleanup(func() { loadRealGoSConfig = oldLoader })
+
+	runner, cfg, err := buildGoSRunner("recorded", t.TempDir(), time.Second)
+
+	require.NoError(t, err)
+	require.NotNil(t, runner)
+	require.Equal(t, 30000, cfg.CallTimeoutMs)
+	require.Equal(t, "chat_model_fast", cfg.ModelPath)
+	require.Equal(t, 3, cfg.SessionMaxSteps)
+	require.True(t, cfg.StructuredCognition.Enabled)
+	require.True(t, cfg.StateConversion.Enabled)
+}
+
 func TestEvalGenerateContentPromotesMappedRootCauseIntoGraphRefinement(t *testing.T) {
 	graph := belief.NewBeliefGraph()
 	graph.StartSignalID = graph.AddSignal("数据库连接超时，连接池已满")

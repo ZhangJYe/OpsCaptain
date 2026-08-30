@@ -26,7 +26,19 @@ type RuntimeVersions struct {
 }
 
 func newRunStats() *RunStats {
-	return &RunStats{PhaseLatencyMs: make(map[string]int64)}
+	return &RunStats{PhaseLatencyMs: make(map[string]int64), FailureCategories: make(map[string]int)}
+}
+
+func (s *RunStats) addFailureCategories(categories map[string]int) {
+	if s == nil {
+		return
+	}
+	if s.FailureCategories == nil {
+		s.FailureCategories = make(map[string]int)
+	}
+	for category, count := range categories {
+		s.FailureCategories[category] += count
+	}
 }
 
 func (s *RunStats) addPhaseLatency(phase string, elapsed time.Duration) {
@@ -235,6 +247,14 @@ func hashVersion(parts ...string) string {
 
 func copyInt64Map(values map[string]int64) map[string]int64 {
 	copy := make(map[string]int64, len(values))
+	for key, value := range values {
+		copy[key] = value
+	}
+	return copy
+}
+
+func copyIntMap(values map[string]int) map[string]int {
+	copy := make(map[string]int, len(values))
 	for key, value := range values {
 		copy[key] = value
 	}

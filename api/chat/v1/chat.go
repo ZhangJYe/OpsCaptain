@@ -60,17 +60,78 @@ type AgentRes struct {
 
 type AgentRouteReq struct {
 	g.Meta            `path:"/agent_route" method:"post" summary:"Agent运行路由决策"`
-	Query             string `json:"query" v:"required|max-length:8000#问题不能为空|问题长度不能超过8000"`
-	RouteMode         string `json:"route_mode,omitempty" v:"in:auto,react,diagnosis#运行方式不合法"`
-	DiagnosisStrategy string `json:"diagnosis_strategy,omitempty" v:"in:auto,plan_execute_replan,gos_engine,gos#诊断策略不合法"`
+	Query             string                         `json:"query" v:"required|max-length:8000#问题不能为空|问题长度不能超过8000"`
+	RouteMode         string                         `json:"route_mode,omitempty" v:"in:auto,react,diagnosis#运行方式不合法"`
+	DiagnosisStrategy string                         `json:"diagnosis_strategy,omitempty" v:"in:auto,plan_execute_replan,gos_engine,gos#诊断策略不合法"`
+	RoutingContext    *AgentRoutingContext           `json:"routing_context,omitempty"`
+	Clarification     *AgentRouteClarificationAnswer `json:"clarification,omitempty"`
+}
+
+type AgentRoutingContext struct {
+	ActiveRoute         string            `json:"active_route,omitempty"`
+	ActiveIncidentID    string            `json:"active_incident_id,omitempty"`
+	LastConfirmedIntent string            `json:"last_confirmed_intent,omitempty"`
+	ConfirmedEntities   map[string]string `json:"confirmed_entities,omitempty"`
+	PendingSlots        []string          `json:"pending_slots,omitempty"`
+	StateVersion        string            `json:"state_version,omitempty"`
+	UpdatedAt           int64             `json:"updated_at,omitempty"`
+}
+
+type AgentRouteClarificationAnswer struct {
+	ID           string `json:"id"`
+	Slot         string `json:"slot,omitempty"`
+	Value        string `json:"value"`
+	StateVersion string `json:"state_version,omitempty"`
+	Round        int    `json:"round,omitempty"`
 }
 
 type AgentRouteRes struct {
-	Decision   string  `json:"decision"`
-	Strategy   string  `json:"strategy,omitempty"`
-	Confidence float64 `json:"confidence,omitempty"`
-	Reason     string  `json:"reason"`
-	Degraded   bool    `json:"degraded,omitempty"`
+	Decision      string                   `json:"decision"`
+	Strategy      string                   `json:"strategy,omitempty"`
+	Confidence    float64                  `json:"confidence,omitempty"`
+	Reason        string                   `json:"reason"`
+	Source        string                   `json:"source,omitempty"`
+	Degraded      bool                     `json:"degraded,omitempty"`
+	Candidates    []AgentRouteCandidate    `json:"candidates,omitempty"`
+	Entities      map[string]string        `json:"entities,omitempty"`
+	MissingSlots  []string                 `json:"missing_slots,omitempty"`
+	RiskHint      string                   `json:"risk_hint,omitempty"`
+	Clarification *AgentRouteClarification `json:"clarification,omitempty"`
+	Trace         *AgentRouteTrace         `json:"trace,omitempty"`
+}
+
+type AgentRouteCandidate struct {
+	Intent      string   `json:"intent"`
+	Confidence  float64  `json:"confidence"`
+	ReasonCodes []string `json:"reason_codes,omitempty"`
+}
+
+type AgentRouteClarification struct {
+	ID           string   `json:"id"`
+	Question     string   `json:"question"`
+	MissingSlots []string `json:"missing_slots,omitempty"`
+	Candidates   []string `json:"candidates,omitempty"`
+	StateVersion string   `json:"state_version,omitempty"`
+	Round        int      `json:"round"`
+	ExpiresAt    int64    `json:"expires_at,omitempty"`
+}
+
+type AgentRouteLayerTrace struct {
+	Layer       string   `json:"layer"`
+	Outcome     string   `json:"outcome"`
+	ReasonCodes []string `json:"reason_codes,omitempty"`
+	LatencyMS   int64    `json:"latency_ms"`
+}
+
+type AgentRouteTrace struct {
+	PolicyVersion      string                 `json:"policy_version"`
+	QueryHash          string                 `json:"query_hash"`
+	ContextFingerprint string                 `json:"context_fingerprint,omitempty"`
+	ContextUsed        bool                   `json:"context_used"`
+	ContextReason      string                 `json:"context_reason,omitempty"`
+	DependencyStatus   string                 `json:"dependency_status"`
+	Layers             []AgentRouteLayerTrace `json:"layers"`
+	TotalLatencyMS     int64                  `json:"total_latency_ms"`
 }
 
 type ChatSubmitReq struct {

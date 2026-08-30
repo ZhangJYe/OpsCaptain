@@ -1,0 +1,36 @@
+name: recorded-evaluation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recorded-development:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Run recorded development evaluation
+        run: >-
+          go run ./cmd/eval_harness gate
+          --manifest=evals/harness/manifests/recorded-development.yaml
+          --output-dir=evals/harness/reports
+
+      - name: Upload recorded evaluation report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: recorded-development-${{ github.sha }}
+          path: evals/harness/reports/
+          if-no-files-found: warn
+          retention-days: 30

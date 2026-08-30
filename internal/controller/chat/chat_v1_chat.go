@@ -86,6 +86,8 @@ func (c *ControllerV1) AgentRoute(ctx context.Context, req *v1.AgentRouteReq) (r
 		Query:             req.Query,
 		RouteMode:         app.AgentRouteMode(req.RouteMode),
 		DiagnosisStrategy: app.AgentDiagnosisStrategy(req.DiagnosisStrategy),
+		RoutingContext:    mapRoutingContext(req.RoutingContext),
+		Clarification:     mapClarificationAnswer(req.Clarification),
 	})
 	if err != nil {
 		if errors.Is(err, app.ErrDiagnosisStrategyUnavailable) {
@@ -96,12 +98,66 @@ func (c *ControllerV1) AgentRoute(ctx context.Context, req *v1.AgentRouteReq) (r
 		return nil, err
 	}
 	return &v1.AgentRouteRes{
-		Decision:   string(result.Decision),
-		Strategy:   string(result.Strategy),
-		Confidence: result.Confidence,
-		Reason:     result.Reason,
-		Degraded:   result.Degraded,
+		Decision: string(result.Decision), Strategy: string(result.Strategy), Confidence: result.Confidence,
+		Reason: result.Reason, Source: result.Source, Degraded: result.Degraded,
+		Candidates: mapRouteCandidates(result.Candidates), Entities: result.Entities,
+		MissingSlots: result.MissingSlots, RiskHint: string(result.RiskHint),
+		Clarification: mapClarification(result.Clarification), Trace: mapRouteTrace(result.Trace),
 	}, nil
+}
+
+func mapRoutingContext(input *v1.AgentRoutingContext) *app.RoutingContextSnapshot {
+	if input == nil {
+		return nil
+	}
+	var updatedAt time.Time
+	if input.UpdatedAt > 0 {
+		updatedAt = time.UnixMilli(input.UpdatedAt)
+	}
+	return &app.RoutingContextSnapshot{ActiveRoute: app.AgentRouteDecision(input.ActiveRoute), ActiveIncidentID: input.ActiveIncidentID, LastConfirmedIntent: app.AgentRouteIntent(input.LastConfirmedIntent), ConfirmedEntities: input.ConfirmedEntities, PendingSlots: input.PendingSlots, StateVersion: input.StateVersion, UpdatedAt: updatedAt}
+}
+
+func mapClarificationAnswer(input *v1.AgentRouteClarificationAnswer) *app.AgentRouteClarificationAnswer {
+	if input == nil {
+		return nil
+	}
+	return &app.AgentRouteClarificationAnswer{ID: input.ID, Slot: input.Slot, Value: input.Value, StateVersion: input.StateVersion, Round: input.Round}
+}
+
+func mapRouteCandidates(input []app.AgentRouteCandidate) []v1.AgentRouteCandidate {
+	if len(input) == 0 {
+		return nil
+	}
+	result := make([]v1.AgentRouteCandidate, len(input))
+	for i, item := range input {
+		result[i] = v1.AgentRouteCandidate{Intent: string(item.Intent), Confidence: item.Confidence, ReasonCodes: item.ReasonCodes}
+	}
+	return result
+}
+
+func mapClarification(input *app.AgentRouteClarification) *v1.AgentRouteClarification {
+	if input == nil {
+		return nil
+	}
+	result := &v1.AgentRouteClarification{ID: input.ID, Question: input.Question, MissingSlots: input.MissingSlots, StateVersion: input.StateVersion, Round: input.Round, Candidates: make([]string, len(input.Candidates))}
+	for i, candidate := range input.Candidates {
+		result.Candidates[i] = string(candidate)
+	}
+	if !input.ExpiresAt.IsZero() {
+		result.ExpiresAt = input.ExpiresAt.UnixMilli()
+	}
+	return result
+}
+
+func mapRouteTrace(input *app.AgentRouteTrace) *v1.AgentRouteTrace {
+	if input == nil {
+		return nil
+	}
+	result := &v1.AgentRouteTrace{PolicyVersion: input.PolicyVersion, QueryHash: input.QueryHash, ContextFingerprint: input.ContextFingerprint, ContextUsed: input.ContextUsed, ContextReason: input.ContextReason, DependencyStatus: input.DependencyStatus, TotalLatencyMS: input.TotalLatencyMS, Layers: make([]v1.AgentRouteLayerTrace, len(input.Layers))}
+	for i, layer := range input.Layers {
+		result.Layers[i] = v1.AgentRouteLayerTrace{Layer: layer.Layer, Outcome: layer.Outcome, ReasonCodes: layer.ReasonCodes, LatencyMS: layer.LatencyMS}
+	}
+	return result
 }
 
 func mapAgentResult(result *app.AgentResult) *v1.AgentRes {

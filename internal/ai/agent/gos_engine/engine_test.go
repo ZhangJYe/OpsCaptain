@@ -19,6 +19,31 @@ type testLogger struct{}
 func (l *testLogger) Info(msg string, keysAndValues ...interface{})  {}
 func (l *testLogger) Error(msg string, keysAndValues ...interface{}) {}
 
+func TestCategorizeFailureCategoriesSeparatesModelAndProtocolFailures(t *testing.T) {
+	stats := newRunStats()
+	stats.addFailureCategories(categorizeAnalysisFailureCategories(&ActResult{Analyses: []*experts.ExpertAnalysis{{
+		ToolErrors: []experts.ToolError{
+			{ToolName: "llm", Action: "content", Error: "unexpected EOF"},
+			{ToolName: "llm", Action: "evidence_assessment", Error: "decode structured analysis proposal"},
+		},
+	}}}))
+	categories := categorizeFailureCategories("no_progress_loop", stats)
+
+	require.Equal(t, map[string]int{"model_service": 1, "structured_protocol": 1, "graph_no_progress": 1}, categories)
+}
+
+func TestCategorizeFailureCategoriesRetainsAllActRounds(t *testing.T) {
+	stats := newRunStats()
+	stats.addFailureCategories(categorizeAnalysisFailureCategories(&ActResult{Analyses: []*experts.ExpertAnalysis{{
+		ToolErrors: []experts.ToolError{{ToolName: "llm", Action: "evidence_assessment", Error: "invalid JSON"}},
+	}}}))
+	stats.addFailureCategories(categorizeAnalysisFailureCategories(&ActResult{Analyses: []*experts.ExpertAnalysis{{
+		ToolErrors: []experts.ToolError{{ToolName: "llm", Action: "content", Error: "unexpected EOF"}},
+	}}}))
+
+	require.Equal(t, map[string]int{"structured_protocol": 1, "model_service": 1, "graph_no_progress": 1}, categorizeFailureCategories("no_progress_loop", stats))
+}
+
 type mockExpert struct {
 	name     string
 	response *experts.ExpertAnalysis

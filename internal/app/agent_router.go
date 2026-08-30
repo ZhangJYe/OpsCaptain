@@ -41,35 +41,60 @@ const (
 var ErrDiagnosisStrategyUnavailable = errors.New("诊断策略不可用")
 
 type AgentRouterConfig struct {
-	Enabled                    bool
-	Timeout                    time.Duration
-	ConfidenceThreshold        float64
-	DefaultDiagnosisStrategy   AgentDiagnosisStrategy
-	AllowedDiagnosisStrategies map[AgentDiagnosisStrategy]struct{}
-	RouteCacheTTL              time.Duration
-	RouteCacheMaxEntries       int
-	HighConfidenceKeywords     []string
+	Enabled                       bool
+	Timeout                       time.Duration
+	ConfidenceThreshold           float64
+	DefaultDiagnosisStrategy      AgentDiagnosisStrategy
+	AllowedDiagnosisStrategies    map[AgentDiagnosisStrategy]struct{}
+	RouteCacheTTL                 time.Duration
+	RouteCacheMaxEntries          int
+	HighConfidenceKeywords        []string
+	IntentFunnelEnabled           bool
+	IntentFunnelTopK              int
+	IntentFunnelAcceptThreshold   float64
+	IntentFunnelMarginThreshold   float64
+	IntentFunnelContextTTL        time.Duration
+	IntentFunnelMaxClarifications int
+	IntentFunnelContextBudget     int
+	IntentFunnelPolicyVersion     string
+	HighRiskActionKeywords        []string
+	InjectionKeywords             []string
+	Experiment                    RouteExperimentConfig
 }
 
 type AgentRouteInput struct {
 	Query             string
 	RouteMode         AgentRouteMode
 	DiagnosisStrategy AgentDiagnosisStrategy
+	RoutingContext    *RoutingContextSnapshot
+	Clarification     *AgentRouteClarificationAnswer
+	AssignmentKey     string
 }
 
 type AgentRouteResult struct {
-	Decision   AgentRouteDecision     `json:"decision"`
-	Strategy   AgentDiagnosisStrategy `json:"strategy,omitempty"`
-	Confidence float64                `json:"confidence,omitempty"`
-	Reason     string                 `json:"reason"`
-	Degraded   bool                   `json:"degraded,omitempty"`
+	Decision      AgentRouteDecision       `json:"decision"`
+	Strategy      AgentDiagnosisStrategy   `json:"strategy,omitempty"`
+	Confidence    float64                  `json:"confidence,omitempty"`
+	Reason        string                   `json:"reason"`
+	Source        string                   `json:"source,omitempty"`
+	Degraded      bool                     `json:"degraded,omitempty"`
+	Candidates    []AgentRouteCandidate    `json:"candidates,omitempty"`
+	Entities      map[string]string        `json:"entities,omitempty"`
+	MissingSlots  []string                 `json:"missing_slots,omitempty"`
+	RiskHint      AgentRouteRisk           `json:"risk_hint,omitempty"`
+	Clarification *AgentRouteClarification `json:"clarification,omitempty"`
+	Trace         *AgentRouteTrace         `json:"trace,omitempty"`
 }
 
 type flashRouteOutput struct {
-	Intent              string  `json:"intent"`
-	RecommendedStrategy string  `json:"recommended_strategy"`
-	Confidence          float64 `json:"confidence"`
-	Reason              string  `json:"reason"`
+	Intent              string                `json:"intent"`
+	RecommendedStrategy string                `json:"recommended_strategy"`
+	Confidence          float64               `json:"confidence"`
+	Reason              string                `json:"reason"`
+	Candidates          []AgentRouteCandidate `json:"candidates,omitempty"`
+	Entities            map[string]string     `json:"entities,omitempty"`
+	RequiredSlots       []string              `json:"required_slots,omitempty"`
+	RiskHint            AgentRouteRisk        `json:"risk_hint,omitempty"`
 }
 
 // AgentRouterApp only classifies a request. It intentionally has no tool, AIOps,
@@ -80,6 +105,7 @@ type AgentRouterApp struct {
 	now        func() time.Time
 	cacheMu    sync.Mutex
 	cache      map[string]agentRouteCacheEntry
+	candidates map[string]agentRouteCandidateCacheEntry
 }
 
 type agentRouteCacheEntry struct {
@@ -87,8 +113,13 @@ type agentRouteCacheEntry struct {
 	expiresAt time.Time
 }
 
+type agentRouteCandidateCacheEntry struct {
+	output    flashRouteOutput
+	expiresAt time.Time
+}
+
 func NewAgentRouterApp() *AgentRouterApp {
-	a := &AgentRouterApp{loadConfig: LoadAgentRouterConfig, now: time.Now, cache: make(map[string]agentRouteCacheEntry)}
+	a := &AgentRouterApp{loadConfig: LoadAgentRouterConfig, now: time.Now, cache: make(map[string]agentRouteCacheEntry), candidates: make(map[string]agentRouteCandidateCacheEntry)}
 	a.generate = a.generateWithFlash
 	return a
 }
@@ -121,18 +152,21 @@ func (a *AgentRouterApp) Decide(ctx context.Context, input *AgentRouteInput) (*A
 
 	switch mode {
 	case AgentRouteModeReact:
-		return &AgentRouteResult{Decision: AgentRouteDecisionChat, Reason: "已按 ReAct 问答方式处理"}, nil
+		return &AgentRouteResult{Decision: AgentRouteDecisionChat, Reason: "已按 ReAct 问答方式处理", Source: "manual"}, nil
 	case AgentRouteModeDiagnosis:
 		if strategy != AgentDiagnosisStrategyAuto {
 			if !cfg.isAllowed(strategy) {
 				return nil, fmt.Errorf("%w：%s", ErrDiagnosisStrategyUnavailable, strategy)
 			}
-			return &AgentRouteResult{Decision: AgentRouteDecisionIncident, Strategy: strategy, Reason: "已按指定诊断策略处理"}, nil
+			return &AgentRouteResult{Decision: AgentRouteDecisionIncident, Strategy: strategy, Reason: "已按指定诊断策略处理", Source: "manual"}, nil
 		}
 	}
 
 	if !cfg.Enabled {
 		return confirmRoute("智能路由暂不可用，请选择继续问答或启动排障"), nil
+	}
+	if cfg.IntentFunnelEnabled {
+		return a.decideIntentFunnel(ctx, input, mode, strategy, cfg), nil
 	}
 	if mode == AgentRouteModeAuto {
 		if cached, ok := a.loadCachedRoute(cfg, input); ok {
@@ -151,6 +185,7 @@ func (a *AgentRouterApp) Decide(ctx context.Context, input *AgentRouteInput) (*A
 				Strategy:   selectedStrategy,
 				Confidence: 1,
 				Reason:     "命中高置信故障规则，已直接启动诊断",
+				Source:     "keyword",
 			}
 			a.cacheRoute(cfg, input, result)
 			return result, nil
@@ -168,7 +203,9 @@ func (a *AgentRouterApp) Decide(ctx context.Context, input *AgentRouteInput) (*A
 		return confirmRoute("路由结果无法确认，请手动选择执行方式"), nil
 	}
 	if output.Confidence < cfg.ConfidenceThreshold {
-		return confirmRoute("路由置信度不足，请确认本次请求的执行方式"), nil
+		result := confirmRoute("路由置信度不足，请确认本次请求的执行方式")
+		result.Confidence = output.Confidence
+		return result, nil
 	}
 
 	if mode == AgentRouteModeDiagnosis {
@@ -176,12 +213,12 @@ func (a *AgentRouterApp) Decide(ctx context.Context, input *AgentRouteInput) (*A
 		if !cfg.isAllowed(strategy) {
 			return confirmRoute("推荐策略当前不可用，请选择 Plan 或 GoS"), nil
 		}
-		return &AgentRouteResult{Decision: AgentRouteDecisionIncident, Strategy: strategy, Confidence: output.Confidence, Reason: output.Reason}, nil
+		return &AgentRouteResult{Decision: AgentRouteDecisionIncident, Strategy: strategy, Confidence: output.Confidence, Reason: output.Reason, Source: "model"}, nil
 	}
 
 	switch output.Intent {
 	case string(AgentRouteDecisionChat):
-		result := &AgentRouteResult{Decision: AgentRouteDecisionChat, Confidence: output.Confidence, Reason: output.Reason}
+		result := &AgentRouteResult{Decision: AgentRouteDecisionChat, Confidence: output.Confidence, Reason: output.Reason, Source: "model"}
 		a.cacheRoute(cfg, input, result)
 		return result, nil
 	case string(AgentRouteDecisionIncident):
@@ -192,7 +229,7 @@ func (a *AgentRouterApp) Decide(ctx context.Context, input *AgentRouteInput) (*A
 		if !cfg.isAllowed(selectedStrategy) {
 			return confirmRoute("推荐策略当前不可用，请选择 Plan 或 GoS"), nil
 		}
-		result := &AgentRouteResult{Decision: AgentRouteDecisionIncident, Strategy: selectedStrategy, Confidence: output.Confidence, Reason: output.Reason}
+		result := &AgentRouteResult{Decision: AgentRouteDecisionIncident, Strategy: selectedStrategy, Confidence: output.Confidence, Reason: output.Reason, Source: "model"}
 		a.cacheRoute(cfg, input, result)
 		return result, nil
 	default:
@@ -225,8 +262,16 @@ func LoadAgentRouterConfig(ctx context.Context) AgentRouterConfig {
 			AgentDiagnosisStrategyPlan: {},
 			AgentDiagnosisStrategyGoS:  {},
 		},
-		RouteCacheTTL:        5 * time.Minute,
-		RouteCacheMaxEntries: 256,
+		RouteCacheTTL:                 5 * time.Minute,
+		RouteCacheMaxEntries:          256,
+		IntentFunnelTopK:              2,
+		IntentFunnelAcceptThreshold:   0.75,
+		IntentFunnelMarginThreshold:   0.15,
+		IntentFunnelContextTTL:        15 * time.Minute,
+		IntentFunnelMaxClarifications: 1,
+		IntentFunnelContextBudget:     512,
+		IntentFunnelPolicyVersion:     "v1",
+		Experiment:                    RouteExperimentConfig{RolloutStage: RouteExperimentOff},
 	}
 	if v, err := g.Cfg().Get(ctx, "agent_router.enabled"); err == nil && !v.IsNil() {
 		cfg.Enabled = v.Bool()
@@ -266,6 +311,85 @@ func LoadAgentRouterConfig(ctx context.Context) AgentRouterConfig {
 			}
 		}
 	}
+	if v, err := g.Cfg().Get(ctx, "agent_router.intent_funnel.enabled"); err == nil && !v.IsNil() {
+		cfg.IntentFunnelEnabled = v.Bool()
+	}
+	if v, err := g.Cfg().Get(ctx, "agent_router.intent_funnel.top_k"); err == nil && v.Int() > 0 {
+		cfg.IntentFunnelTopK = v.Int()
+	}
+	if v, err := g.Cfg().Get(ctx, "agent_router.intent_funnel.accept_threshold"); err == nil && v.Float64() > 0 && v.Float64() <= 1 {
+		cfg.IntentFunnelAcceptThreshold = v.Float64()
+	}
+	if v, err := g.Cfg().Get(ctx, "agent_router.intent_funnel.margin_threshold"); err == nil && v.Float64() >= 0 && v.Float64() <= 1 {
+		cfg.IntentFunnelMarginThreshold = v.Float64()
+	}
+	if v, err := g.Cfg().Get(ctx, "agent_router.intent_funnel.context_ttl_seconds"); err == nil && v.Int() >= 0 {
+		cfg.IntentFunnelContextTTL = time.Duration(v.Int()) * time.Second
+	}
+	if v, err := g.Cfg().Get(ctx, "agent_router.intent_funnel.max_clarifications"); err == nil && v.Int() >= 0 {
+		cfg.IntentFunnelMaxClarifications = v.Int()
+	}
+	if v, err := g.Cfg().Get(ctx, "agent_router.intent_funnel.context_budget_tokens"); err == nil && v.Int() > 0 {
+		cfg.IntentFunnelContextBudget = v.Int()
+	}
+	if v, err := g.Cfg().Get(ctx, "agent_router.intent_funnel.policy_version"); err == nil && strings.TrimSpace(v.String()) != "" {
+		cfg.IntentFunnelPolicyVersion = strings.TrimSpace(v.String())
+	}
+	if v, err := g.Cfg().Get(ctx, "agent_router.intent_funnel.high_risk_action_keywords"); err == nil {
+		cfg.HighRiskActionKeywords = normalizedKeywords(v.Strings())
+	}
+	if v, err := g.Cfg().Get(ctx, "agent_router.intent_funnel.injection_keywords"); err == nil {
+		cfg.InjectionKeywords = normalizedKeywords(v.Strings())
+	}
+	if v, err := g.Cfg().Get(ctx, "agent_router.experimentation.enabled"); err == nil && !v.IsNil() {
+		cfg.Experiment.Enabled = v.Bool()
+	}
+	if v, err := g.Cfg().Get(ctx, "agent_router.experimentation.experiment_id"); err == nil && strings.TrimSpace(v.String()) != "" {
+		cfg.Experiment.ExperimentID = strings.TrimSpace(v.String())
+	}
+	if v, err := g.Cfg().Get(ctx, "agent_router.experimentation.version"); err == nil && strings.TrimSpace(v.String()) != "" {
+		cfg.Experiment.Version = strings.TrimSpace(v.String())
+	}
+	if v, err := g.Cfg().Get(ctx, "agent_router.experimentation.salt"); err == nil {
+		cfg.Experiment.Salt = v.String()
+	}
+	if v, err := g.Cfg().Get(ctx, "agent_router.experimentation.shadow_enabled"); err == nil && !v.IsNil() {
+		cfg.Experiment.ShadowEnabled = v.Bool()
+	}
+	if v, err := g.Cfg().Get(ctx, "agent_router.experimentation.shadow_timeout_ms"); err == nil && v.Int() > 0 {
+		cfg.Experiment.ShadowTimeout = time.Duration(v.Int()) * time.Millisecond
+	}
+	if v, err := g.Cfg().Get(ctx, "agent_router.experimentation.shadow_max_concurrency"); err == nil && v.Int() > 0 {
+		cfg.Experiment.ShadowMaxConcurrency = v.Int()
+	}
+	if v, err := g.Cfg().Get(ctx, "agent_router.experimentation.shadow_token_budget"); err == nil && v.Int() > 0 {
+		cfg.Experiment.ShadowTokenBudget = v.Int()
+	}
+	if v, err := g.Cfg().Get(ctx, "agent_router.experimentation.rollout_stage"); err == nil {
+		cfg.Experiment.RolloutStage = RouteExperimentStage(strings.TrimSpace(v.String()))
+	}
+	if v, err := g.Cfg().Get(ctx, "agent_router.experimentation.rollout_percent"); err == nil {
+		cfg.Experiment.RolloutPercent = v.Int()
+	}
+	if v, err := g.Cfg().Get(ctx, "agent_router.experimentation.high_risk_excluded"); err == nil && !v.IsNil() {
+		cfg.Experiment.HighRiskExcluded = v.Bool()
+	}
+	if v, err := g.Cfg().Get(ctx, "agent_router.experimentation.ood_excluded"); err == nil && !v.IsNil() {
+		cfg.Experiment.OODExcluded = v.Bool()
+	}
+	if v, err := g.Cfg().Get(ctx, "agent_router.experimentation.guardrails.max_error_rate"); err == nil {
+		cfg.Experiment.MaxErrorRate = v.Float64()
+	}
+	if v, err := g.Cfg().Get(ctx, "agent_router.experimentation.guardrails.max_timeout_rate"); err == nil {
+		cfg.Experiment.MaxTimeoutRate = v.Float64()
+	}
+	if v, err := g.Cfg().Get(ctx, "agent_router.experimentation.guardrails.max_p95_latency_ms"); err == nil && v.Int() > 0 {
+		cfg.Experiment.MaxP95Latency = time.Duration(v.Int()) * time.Millisecond
+	}
+	if v, err := g.Cfg().Get(ctx, "agent_router.experimentation.guardrails.max_high_risk_false_route"); err == nil {
+		cfg.Experiment.MaxHighRiskFalseRoute = v.Int()
+	}
+	cfg.Experiment = cfg.Experiment.Normalize()
 	if !cfg.isAllowed(cfg.DefaultDiagnosisStrategy) {
 		for strategy := range cfg.AllowedDiagnosisStrategies {
 			cfg.DefaultDiagnosisStrategy = strategy
@@ -306,11 +430,12 @@ func (a *AgentRouterApp) loadCachedRoute(cfg AgentRouterConfig, input *AgentRout
 		return nil, false
 	}
 	result := entry.result
+	result.Source = "cache"
 	return &result, true
 }
 
 func (a *AgentRouterApp) cacheRoute(cfg AgentRouterConfig, input *AgentRouteInput, result *AgentRouteResult) {
-	if cfg.RouteCacheTTL <= 0 || cfg.RouteCacheMaxEntries <= 0 || result == nil || result.Decision == AgentRouteDecisionConfirm {
+	if cfg.RouteCacheTTL <= 0 || cfg.RouteCacheMaxEntries <= 0 || result == nil || result.Decision == AgentRouteDecisionConfirm || result.Degraded || result.Clarification != nil || result.RiskHint == AgentRouteRiskHigh {
 		return
 	}
 	key := routeCacheKey(input)
@@ -342,7 +467,18 @@ func routeCacheKey(input *AgentRouteInput) string {
 	if strategy == "" {
 		strategy = AgentDiagnosisStrategyAuto
 	}
-	return fmt.Sprintf("%s:%s:%x", mode, strategy, digest[:])
+	contextFingerprint := routingContextFingerprint(input.RoutingContext)
+	return fmt.Sprintf("%s:%s:%s:%s:%x", mode, strategy, contextFingerprint, "v1", digest[:])
+}
+
+func normalizedKeywords(values []string) []string {
+	keywords := make([]string, 0, len(values))
+	for _, value := range values {
+		if value = strings.TrimSpace(strings.ToLower(value)); value != "" {
+			keywords = append(keywords, value)
+		}
+	}
+	return keywords
 }
 
 func parseFlashRouteOutput(raw string) (*flashRouteOutput, error) {
@@ -370,7 +506,7 @@ func parseFlashRouteOutput(raw string) (*flashRouteOutput, error) {
 }
 
 func confirmRoute(reason string) *AgentRouteResult {
-	return &AgentRouteResult{Decision: AgentRouteDecisionConfirm, Reason: reason, Degraded: true}
+	return &AgentRouteResult{Decision: AgentRouteDecisionConfirm, Reason: reason, Source: "fallback", Degraded: true}
 }
 
 func normalizeAgentRouteMode(mode AgentRouteMode) (AgentRouteMode, error) {

@@ -2,7 +2,7 @@ GO ?= go
 GOFLAGS ?= -count=1
 OBSERVABILITY_COMPOSE ?= deploy/observability/docker-compose.yml
 
-.PHONY: all fmt vet test test-race lint build clean observability-up observability-down observability-status observability-check
+.PHONY: all fmt vet test test-race test-cover lint build clean ci observability-up observability-down observability-status observability-check eval-gate eval-harness-gate eval-runs-gos eval-judge eval-compression eval-compression-audit
 
 all: fmt vet lint test build
 
@@ -59,6 +59,12 @@ eval-gate:
 	  --baseline=evals/baselines/gos_baseline.json \
 	  --output=evals/reports/gate_$$(date +%Y%m%d%H%M%S).json
 
+eval-harness-gate:
+	@echo "==> Unified Evaluation Harness Gate (regression + deterministic)"
+	@$(GO) run ./cmd/eval_harness gate \
+	  --manifest=evals/harness/manifests/pr-regression.yaml \
+	  --output-dir=evals/harness/reports
+
 eval-runs-gos:
 	@echo "==> Export GoS/Diag runs"
 	@$(GO) run ./cmd/gos_eval --mode=export-runs --gos-profile=eval \
@@ -83,5 +89,5 @@ eval-compression-audit:
 	  -mode audit \
 	  -out evals/runs/compression_audit.json
 
-ci: fmt vet test-race test-cover build eval-gate
+ci: fmt vet test-race test-cover build eval-harness-gate eval-gate
 	@echo "==> CI pipeline complete"

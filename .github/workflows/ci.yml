@@ -33,8 +33,20 @@ jobs:
       - name: Run Go tests
         run: go test ./...
 
-      - name: Eval Gate
+      - name: Unified evaluation harness gate
+        run: make eval-harness-gate
+
+      - name: Legacy GoS eval gate
         run: make eval-gate
+
+      - name: Upload evaluation harness report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: evaluation-harness-${{ github.sha }}
+          path: evals/harness/reports/
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Build backend image
         run: docker build -t opscaptain-backend:${{ github.sha }} .

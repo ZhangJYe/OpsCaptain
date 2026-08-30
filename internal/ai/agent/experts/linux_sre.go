@@ -284,7 +284,7 @@ func (e *BaseExpert) run(ctx context.Context, task ExpertTask) *ExpertAnalysis {
 			})
 
 		case "analyze":
-			if err := applyAnalysisProposal(result, content); err != nil {
+			if err := applyAnalysisProposal(result, content, e.cfg.StructuredOutputCompatibility); err != nil {
 				result.ToolErrors = append(result.ToolErrors, ToolError{
 					ToolName: "llm",
 					Action:   "evidence_assessment",
@@ -313,7 +313,7 @@ func (e *BaseExpert) run(ctx context.Context, task ExpertTask) *ExpertAnalysis {
 			"confidence": "0.5",
 		}, execution)
 		if err == nil {
-			if proposalErr := applyAnalysisProposal(result, analysis); proposalErr != nil {
+			if proposalErr := applyAnalysisProposal(result, analysis, e.cfg.StructuredOutputCompatibility); proposalErr != nil {
 				result.ToolErrors = append(result.ToolErrors, ToolError{
 					ToolName: "llm",
 					Action:   "evidence_assessment",
@@ -567,9 +567,16 @@ type evidenceAssessment struct {
 	Strength float64          `json:"strength"`
 }
 
-func applyAnalysisProposal(result *ExpertAnalysis, content string) error {
+func applyAnalysisProposal(result *ExpertAnalysis, content string, compatible bool) error {
 	if result == nil {
 		return fmt.Errorf("expert analysis result is required")
+	}
+	if compatible {
+		var err error
+		content, err = extractSingleJSONObject(content)
+		if err != nil {
+			return fmt.Errorf("extract structured analysis proposal: %w", err)
+		}
 	}
 	decoder := json.NewDecoder(bytes.NewBufferString(content))
 	decoder.DisallowUnknownFields()
@@ -651,6 +658,63 @@ func applyAnalysisProposal(result *ExpertAnalysis, content string) error {
 		result.CurrentHypothesisActionable = &actionable
 	}
 	return nil
+}
+
+func extractSingleJSONObject(content string) (string, error) {
+	content = strings.TrimSpace(content)
+	if strings.HasPrefix(content, "```") {
+		newline := strings.IndexByte(content, '\n')
+		if newline < 0 {
+			return "", fmt.Errorf("unterminated markdown fence")
+		}
+		content = strings.TrimSpace(content[newline+1:])
+		end := strings.LastIndex(content, "```")
+		if end < 0 || strings.TrimSpace(content[end+3:]) != "" {
+			return "", fmt.Errorf("invalid markdown fence")
+		}
+		content = strings.TrimSpace(content[:end])
+	}
+	start := strings.IndexByte(content, '{')
+	if start < 0 {
+		return "", fmt.Errorf("JSON object not found")
+	}
+	inString := false
+	escaped := false
+	depth := 0
+	for index := start; index < len(content); index++ {
+		char := content[index]
+		if inString {
+			if escaped {
+				escaped = false
+				continue
+			}
+			if char == '\\' {
+				escaped = true
+			} else if char == '"' {
+				inString = false
+			}
+			continue
+		}
+		switch char {
+		case '"':
+			inString = true
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				candidate := content[start : index+1]
+				if strings.Contains(content[index+1:], "{") {
+					return "", fmt.Errorf("multiple JSON objects")
+				}
+				return candidate, nil
+			}
+			if depth < 0 {
+				return "", fmt.Errorf("unbalanced JSON object")
+			}
+		}
+	}
+	return "", fmt.Errorf("unterminated JSON object")
 }
 
 func (e *BaseExpert) callTimeout() time.Duration {

@@ -1129,15 +1129,16 @@ func buildGoSEngineFromConfig(cfg *gos_engine.Config, evalProfile bool, recorded
 	}
 
 	expertCfg := experts.ExpertRuntimeConfig{
-		Name:                "linux_sre",
-		Description:         "Linux SRE expert",
-		ToolNames:           toolNames,
-		MaxRetrievalSteps:   3,
-		EvidenceMaxChars:    cfg.EvidenceMaxChars,
-		RAGQueryFunc:        ragFunc,
-		GenerateContentFunc: contentFunc,
-		CallTimeout:         time.Duration(cfg.CallTimeoutMs) * time.Millisecond,
-		ChatModelFactory:    models.OpenAIChatModelFactory(cfg.ModelPath),
+		Name:                          "linux_sre",
+		Description:                   "Linux SRE expert",
+		ToolNames:                     toolNames,
+		MaxRetrievalSteps:             3,
+		EvidenceMaxChars:              cfg.EvidenceMaxChars,
+		RAGQueryFunc:                  ragFunc,
+		GenerateContentFunc:           contentFunc,
+		CallTimeout:                   time.Duration(cfg.CallTimeoutMs) * time.Millisecond,
+		ChatModelFactory:              models.OpenAIChatModelFactory(cfg.ModelPath),
+		StructuredOutputCompatibility: recorded != nil,
 	}
 	engine.RegisterExpert("linux_sre", experts.NewLinuxSREExpert(expertCfg, toolReg))
 
@@ -1158,12 +1159,12 @@ func applyCompactEvalConfig(cfg *gos_engine.Config) {
 	cfg.FSM.MinSupport = 1
 	cfg.FSM.MaxSteps = 3
 	cfg.FSM.MinConfidence = 0.6
-	cfg.CallTimeoutMs = 10000
 	cfg.ModelPath = "chat_model_fast"
 }
 
 func applyDeterministicEvalConfig(cfg *gos_engine.Config) {
 	applyCompactEvalConfig(cfg)
+	cfg.CallTimeoutMs = 10000
 	cfg.StructuredCognition.PlanBudget.LLMCalls = 2
 	cfg.StructuredCognition.PlanBudget.ToolCalls = 1
 	for index := range cfg.Experts {
@@ -1176,20 +1177,16 @@ func applyDeterministicEvalConfig(cfg *gos_engine.Config) {
 
 func buildGoSRunner(profile, recordedRoot string, recordedTimeout time.Duration) (*goseval.Runner, *gos_engine.Config, error) {
 	if profile == "recorded" {
-		cfg := gos_engine.DefaultConfig()
-		cfg.SessionMaxSteps = 3
-		cfg.FSM.GapDelta = 0.2
-		cfg.FSM.MinSupport = 1
-		cfg.FSM.MaxSteps = 3
-		cfg.FSM.MinConfidence = 0.6
-		cfg.CallTimeoutMs = 10000
-		cfg.ModelPath = "chat_model_fast"
+		cfg := loadRealGoSConfig(context.Background())
+		applyCompactEvalConfig(cfg)
 		runner := goseval.NewCaseRunner(func(caseID string) (goseval.EngineRunner, error) {
 			source, err := newRecordedEvidenceSource(recordedRoot, caseID, recordedTimeout)
 			if err != nil {
 				return nil, err
 			}
-			engine, _, err := buildGoSEngine(false, source)
+			caseCfg := loadRealGoSConfig(context.Background())
+			applyCompactEvalConfig(caseCfg)
+			engine, _, err := buildGoSEngineFromConfig(caseCfg, false, source)
 			return engine, err
 		})
 		return runner, cfg, nil

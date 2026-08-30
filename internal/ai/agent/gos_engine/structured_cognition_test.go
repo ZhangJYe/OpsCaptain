@@ -74,6 +74,18 @@ func TestStructuredIngestorAppliesValidatedProposalAtomically(t *testing.T) {
 	assert.Equal(t, "actionable_root_cause", decision.ReasonCode)
 }
 
+func TestStructuredIngestorAcceptsMarkdownWrappedProposal(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.StructuredCognition.Enabled = true
+	graph := belief.NewBeliefGraph()
+	_, err := NewStructuredIngestor(graph, cfg, &testLogger{}, func(context.Context, string) (string, error) {
+		return "分析如下：\n```json\n{\"signal\":\"支付超时\",\"observations\":[],\"hypotheses\":[{\"label\":\"下游连接失败\",\"score\":0.8,\"why\":\"日志显示连接被拒绝\",\"actionable\":true}]}\n```", nil
+	}).IngestWithOutcome(context.Background(), "支付超时")
+
+	require.NoError(t, err)
+	require.Equal(t, "structured", graph.Nodes[graph.StartSignalID].Attrs["ingest_mode"])
+}
+
 func TestStructuredIngestorRequiresExplicitActionability(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.StructuredCognition.Enabled = true

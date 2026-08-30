@@ -13,6 +13,8 @@ hack
 todo
 var
 coverage.out
+evals/harness/reports/
+evals/harness/external/
 .env
 .env.*
 !.env.example

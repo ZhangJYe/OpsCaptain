@@ -1,0 +1,21 @@
+schema_version: evaluation-harness/v1
+run_name: live-holdout-template
+dataset_role: holdout
+label_source: configure approved holdout labels before run
+profile: live
+dependencies: {model: requires_authorization, milvus: requires_authorization, prometheus: requires_authorization, logs: requires_authorization}
+continue_on_error: false
+report_dir: ../reports
+code_scope: evaluation-harness-v1
+code_paths:
+  - ../../../internal/ai/evalharness/types.go
+  - ../../../internal/ai/evalharness/harness.go
+  - ../../../internal/app/evaladapter/route.go
+model_fingerprint: configure-before-run
+prompt_fingerprint: configure-before-run
+evaluator_fingerprint: evaluation-harness-v1
+budget: {max_cases: 100, concurrency: 1, case_timeout_ms: 30000, total_timeout_ms: 900000, max_llm_calls: 500, max_tool_calls: 500, max_rag_calls: 500}
+redaction: {max_text_chars: 512, sensitive_keys: [authorization, token, api_key, password, secret, dsn]}
+suites:
+  # Disabled until an approved holdout dataset and live dependencies are configured.
+  - {name: route, enabled: false, payload_schema: route-eval/v1}

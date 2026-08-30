@@ -249,6 +249,32 @@ agent_router:
     - "大量超时"
     - "pod crashloop"
     - "5xx 激增"
+  intent_funnel:
+    enabled: false
+    top_k: 2
+    accept_threshold: 0.75
+    margin_threshold: 0.15
+    context_ttl_seconds: 900
+    max_clarifications: 1
+    context_budget_tokens: 512
+    policy_version: "v1"
+    high_risk_action_keywords: ["删除", "重启", "修改配置", "发布", "扩容", "执行命令", "drop database", "restart"]
+    injection_keywords: ["忽略系统规则", "忽略之前的指令", "绕过审批", "ignore previous instructions", "bypass approval"]
+  experimentation:
+    enabled: false
+    experiment_id: "agent-router-funnel"
+    version: "v1"
+    salt: ""
+    assignment_key_source: "server_session"
+    shadow_enabled: false
+    shadow_timeout_ms: 300
+    shadow_max_concurrency: 2
+    shadow_token_budget: 2048
+    rollout_stage: "off"
+    rollout_percent: 0
+    high_risk_excluded: true
+    ood_excluded: true
+    guardrails: {max_error_rate: 0.05, max_timeout_rate: 0.02, max_p95_latency_ms: 1000, max_high_risk_false_route: 0}
 
 context:
   chat_max_history_messages: 10
@@ -403,7 +429,7 @@ aiops:
       max_snapshots: 32
       max_deltas: 10
     structured_cognition:
-      enabled: false
+      enabled: true
       call_timeout_ms: 30000
       max_hypotheses: 4
       max_observations: 8
@@ -440,7 +466,7 @@ aiops:
         max_retrieval_steps: 3
         budget: {llm_calls: 3, tool_calls: 2, rag_calls: 1, timeout_ms: 30000, max_retrieval_steps: 2, max_output_tokens: 1024}
     state_conversion:
-      enabled: false
+      enabled: true
       max_depth: 2
       tie_epsilon: 0.01
       refinement_rules:
@@ -594,6 +620,27 @@ cmdb:
     lookback_hours: 24
     timeout_ms: 5000
     refresh_seconds: 300
+
+evaluation_harness:
+  enabled: true
+  suites: ["route", "rag", "plan", "gos", "tool", "evidence"]
+  budget:
+    max_cases: 100
+    concurrency: 1
+    case_timeout_ms: 15000
+    total_timeout_ms: 120000
+    max_llm_calls: 200
+    max_tool_calls: 300
+    max_rag_calls: 200
+    max_tokens: 500000
+    max_cost: 0
+  gates:
+    max_failure_rate: 0
+    max_degradation_rate: 0
+    min_trace_completeness: 1
+  redaction:
+    max_text_chars: 512
+    sensitive_keys: ["authorization", "token", "api_key", "password", "secret", "dsn"]
 
 redis:
   default:

@@ -1,0 +1,24 @@
+schema_version: evaluation-harness/v1
+run_name: recorded-development
+dataset_role: development
+label_source: reviewed recorded development fixtures
+profile: recorded
+dependencies: {model: recorded_fixture, evidence: recorded_fixture, live_services: not_used}
+continue_on_error: true
+report_dir: ../reports
+code_scope: evaluation-harness-v1
+code_paths:
+  - ../../../internal/ai/evalharness/types.go
+  - ../../../internal/ai/evalharness/harness.go
+  - ../../../internal/app/evaladapter/route.go
+evidence_corpus_paths:
+  - ../datasets/route/development.jsonl
+  - ../datasets/rag/regression.jsonl
+model_fingerprint: recorded-fixture
+prompt_fingerprint: recorded-fixture
+evaluator_fingerprint: evaluation-harness-v1
+budget: {max_cases: 20, concurrency: 1, case_timeout_ms: 5000, total_timeout_ms: 60000, max_llm_calls: 20, max_tool_calls: 20, max_rag_calls: 20}
+redaction: {max_text_chars: 512, sensitive_keys: [authorization, token, api_key, password, secret, dsn]}
+suites:
+  - {name: route, enabled: true, dataset: ../datasets/route/development.jsonl, payload_schema: route-eval/v1, budget: {max_cases: 10, concurrency: 1, case_timeout_ms: 1000}}
+  - {name: rag, enabled: true, dataset: ../datasets/rag/regression.jsonl, payload_schema: rag-eval/v1, budget: {max_cases: 10, concurrency: 1, case_timeout_ms: 1000}}

@@ -671,7 +671,7 @@ func TestApplyAnalysisProposalRejectsInvalidEvidenceSchemaWithoutPartialMutation
 		{Relation: EvidenceRelationNeutral},
 	}}
 
-	err := applyAnalysisProposal(result, `{"analysis":"invalid","confidence":0.8,"evidence":[{"index":0,"relation":"support","strength":0.9},{"index":0,"relation":"refute","strength":0.7}]}`)
+	err := applyAnalysisProposal(result, `{"analysis":"invalid","confidence":0.8,"evidence":[{"index":0,"relation":"support","strength":0.9},{"index":0,"relation":"refute","strength":0.7}]}`, false)
 
 	require.ErrorContains(t, err, "duplicated")
 	require.Empty(t, result.Analysis)
@@ -680,10 +680,32 @@ func TestApplyAnalysisProposalRejectsInvalidEvidenceSchemaWithoutPartialMutation
 	require.Equal(t, EvidenceRelationNeutral, result.Evidence[1].Relation)
 }
 
+func TestApplyAnalysisProposalCompatibilityAcceptsMarkdownWrappedSingleObject(t *testing.T) {
+	result := &ExpertAnalysis{Evidence: []EvidenceItem{{Relation: EvidenceRelationNeutral}}}
+
+	err := applyAnalysisProposal(result, "模型分析如下：\n```json\n{\"analysis\":\"CPU 指标支持当前假设\",\"confidence\":0.82,\"evidence\":[{\"index\":0,\"relation\":\"support\",\"strength\":0.9}]}\n```", true)
+
+	require.NoError(t, err)
+	assert.Equal(t, "CPU 指标支持当前假设", result.Analysis)
+	assert.Equal(t, EvidenceRelationSupport, result.Evidence[0].Relation)
+}
+
+func TestApplyAnalysisProposalCompatibilityRejectsMultipleObjectsAndUnknownFields(t *testing.T) {
+	result := &ExpertAnalysis{Evidence: []EvidenceItem{{Relation: EvidenceRelationNeutral}}}
+
+	err := applyAnalysisProposal(result, "{\"analysis\":\"first\",\"confidence\":0.8,\"evidence\":[{\"index\":0,\"relation\":\"support\",\"strength\":0.9}]} {\"analysis\":\"second\"}", true)
+
+	require.ErrorContains(t, err, "multiple JSON objects")
+	require.Empty(t, result.Analysis)
+	err = applyAnalysisProposal(result, "前言 {\"analysis\":\"CPU 指标支持当前假设\",\"confidence\":0.82,\"evidence\":[{\"index\":0,\"relation\":\"support\",\"strength\":0.9}],\"unknown\":true} 后记", true)
+	require.ErrorContains(t, err, "unknown field")
+	require.Empty(t, result.Analysis)
+}
+
 func TestApplyAnalysisProposalAcceptsStructuredRefinements(t *testing.T) {
 	result := &ExpertAnalysis{Evidence: []EvidenceItem{{Relation: EvidenceRelationNeutral}}}
 
-	err := applyAnalysisProposal(result, `{"analysis":"CPU 使用率持续高位","confidence":0.86,"evidence":[{"index":0,"relation":"support","strength":0.9}],"refinements":[{"label":"CPU 饱和","score":0.84,"why":"核验负载和节流状态","actionable":true}],"current_hypothesis_actionable":"true"}`)
+	err := applyAnalysisProposal(result, `{"analysis":"CPU 使用率持续高位","confidence":0.86,"evidence":[{"index":0,"relation":"support","strength":0.9}],"refinements":[{"label":"CPU 饱和","score":0.84,"why":"核验负载和节流状态","actionable":true}],"current_hypothesis_actionable":"true"}`, false)
 
 	require.NoError(t, err)
 	require.Len(t, result.Refinements, 1)
@@ -698,7 +720,7 @@ func TestApplyAnalysisProposalAcceptsStructuredRefinements(t *testing.T) {
 func TestApplyAnalysisProposalNormalizesQuotedRefinementActionability(t *testing.T) {
 	result := &ExpertAnalysis{Evidence: []EvidenceItem{{Relation: EvidenceRelationNeutral}}}
 
-	err := applyAnalysisProposal(result, `{"analysis":"CPU 使用率持续高位","confidence":0.86,"evidence":[{"index":0,"relation":"support","strength":0.9}],"refinements":[{"label":"CPU 饱和","score":0.84,"why":"核验负载和节流状态","actionable":"true"}]}`)
+	err := applyAnalysisProposal(result, `{"analysis":"CPU 使用率持续高位","confidence":0.86,"evidence":[{"index":0,"relation":"support","strength":0.9}],"refinements":[{"label":"CPU 饱和","score":0.84,"why":"核验负载和节流状态","actionable":"true"}]}`, false)
 
 	require.NoError(t, err)
 	require.Len(t, result.Refinements, 1)
@@ -709,7 +731,7 @@ func TestApplyAnalysisProposalNormalizesQuotedRefinementActionability(t *testing
 func TestApplyAnalysisProposalRejectsInvalidRefinementSchemaWithoutPartialMutation(t *testing.T) {
 	result := &ExpertAnalysis{Evidence: []EvidenceItem{{Relation: EvidenceRelationNeutral}}}
 
-	err := applyAnalysisProposal(result, `{"analysis":"CPU 使用率持续高位","confidence":0.86,"evidence":[{"index":0,"relation":"support","strength":0.9}],"refinements":[{"label":"CPU 饱和","score":0.84,"why":"核验负载和节流状态","actionable":true,"unknown":"invalid"}]}`)
+	err := applyAnalysisProposal(result, `{"analysis":"CPU 使用率持续高位","confidence":0.86,"evidence":[{"index":0,"relation":"support","strength":0.9}],"refinements":[{"label":"CPU 饱和","score":0.84,"why":"核验负载和节流状态","actionable":true,"unknown":"invalid"}]}`, false)
 
 	require.ErrorContains(t, err, "unknown field")
 	assert.Empty(t, result.Analysis)
@@ -721,7 +743,7 @@ func TestApplyAnalysisProposalRejectsInvalidRefinementSchemaWithoutPartialMutati
 func TestApplyAnalysisProposalRejectsRefinementWithoutDirectionalEvidence(t *testing.T) {
 	result := &ExpertAnalysis{Evidence: []EvidenceItem{{Relation: EvidenceRelationNeutral}}}
 
-	err := applyAnalysisProposal(result, `{"analysis":"告警仅说明服务异常，不能区分根因","confidence":0.5,"evidence":[{"index":0,"relation":"neutral","strength":0.3}],"refinements":[{"label":"CPU 饱和","score":0.7,"why":"需要进一步核验","actionable":true}]}`)
+	err := applyAnalysisProposal(result, `{"analysis":"告警仅说明服务异常，不能区分根因","confidence":0.5,"evidence":[{"index":0,"relation":"neutral","strength":0.3}],"refinements":[{"label":"CPU 饱和","score":0.7,"why":"需要进一步核验","actionable":true}]}`, false)
 
 	require.ErrorContains(t, err, "require at least one support or refute")
 	assert.Empty(t, result.Analysis)
@@ -734,7 +756,7 @@ func TestApplyAnalysisProposalRejectsRefinementWithoutDirectionalEvidence(t *tes
 func TestApplyAnalysisProposalRejectsActionablePromotionWithoutSupport(t *testing.T) {
 	result := &ExpertAnalysis{Evidence: []EvidenceItem{{Relation: EvidenceRelationNeutral}}}
 
-	err := applyAnalysisProposal(result, `{"analysis":"告警不能区分根因","confidence":0.5,"evidence":[{"index":0,"relation":"neutral","strength":0.3}],"current_hypothesis_actionable":true}`)
+	err := applyAnalysisProposal(result, `{"analysis":"告警不能区分根因","confidence":0.5,"evidence":[{"index":0,"relation":"neutral","strength":0.3}],"current_hypothesis_actionable":true}`, false)
 
 	require.ErrorContains(t, err, "requires at least one support")
 	assert.Nil(t, result.CurrentHypothesisActionable)
