@@ -1,6 +1,6 @@
 {
-  "commit": "cc73ae8",
-  "code_sha256": "d2fb145da56aa5c856f5e45eead81c015238d2797390cb929f95ffdbea020f46",
+  "commit": "5e5c8b3",
+  "code_sha256": "2d4edc29885e873c142ce3dd99e880ecdd1d3a0cd3bd21465e47e01b99ad702a",
   "code_fingerprint_scope": "gos-eval-runtime-v1",
   "evidence_metric_contract": "source-backed-signal-v2",
   "baseline_quality_contract": "complete-trace-profile-activity-v1",
@@ -211,7 +211,7 @@
     },
     "temperature": 0.8
   },
-  "timestamp": "2026-08-13T00:34:32+08:00",
+  "timestamp": "2026-08-30T17:10:23+08:00",
   "metrics": {
     "total_cases": 5,
     "succeeded": 5,
@@ -225,9 +225,9 @@
     "backtrack_success": 1,
     "premature_stop_rate": 0,
     "graph_validity": 1,
-    "avg_latency": 942908,
-    "p50_latency": 725875,
-    "p95_latency": 1375958,
+    "avg_latency": 834600,
+    "p50_latency": 348959,
+    "p95_latency": 2546708,
     "avg_llm_calls": 6,
     "avg_tool_calls": 2,
     "avg_rag_calls": 0,
@@ -237,7 +237,8 @@
     "per_status": {
       "succeeded": 5
     },
-    "failures_by_phase": {}
+    "failures_by_phase": {},
+    "failure_categories": {}
   },
   "results": [
     {
@@ -246,7 +247,7 @@
       "prediction": "## 结论\n\n根因候选：CPU 资源耗尽导致服务超时（graph node: `node-10`）\n\n诊断依据：CPU 资源耗尽导致服务超时\n\n## 图聚合置信度\n\n84%\n\n## 支持证据\n\n- `node-12` / `tool:query_logs:c08b7cb08ef677c9` → `node-10`，strength=0.80：query_logs output — {\"success\": true, \"data\": \"CPU usage 95%, memory 80%\"}\n- `node-8` / `tool:query_logs:c08b7cb08ef677c9` → `node-2`，strength=0.80：query_logs output — {\"success\": true, \"data\": \"CPU usage 95%, memory 80%\"}\n\n## 反驳与冲突证据\n\n- 无\n\n## 待判定观测\n\n- 无\n\n## 未解决缺口\n\n- 无关键缺口\n\n## 建议下一步\n\n- 在执行变更前由值班人员核对证据来源与影响范围",
       "ground_truth": "CPU 资源耗尽导致服务超时",
       "matched": true,
-      "latency": 1310542,
+      "latency": 2546708,
       "llm_calls": 6,
       "tool_calls": 2,
       "rag_calls": 0,
@@ -277,7 +278,7 @@
       "prediction": "## 结论\n\n根因候选：数据库连接池耗尽（graph node: `node-10`）\n\n诊断依据：数据库连接池耗尽\n\n## 图聚合置信度\n\n84%\n\n## 支持证据\n\n- `node-12` / `tool:query_logs:bed2bbe81f8b5cab` → `node-10`，strength=0.80：query_logs output — {\"success\": true, \"data\": \"Connection pool exhausted, slow queries increased\"}\n- `node-8` / `tool:query_logs:bed2bbe81f8b5cab` → `node-2`，strength=0.80：query_logs output — {\"success\": true, \"data\": \"Connection pool exhausted, slow queries increased\"}\n\n## 反驳与冲突证据\n\n- 无\n\n## 待判定观测\n\n- 无\n\n## 未解决缺口\n\n- 无关键缺口\n\n## 建议下一步\n\n- 在执行变更前由值班人员核对证据来源与影响范围",
       "ground_truth": "数据库连接池耗尽",
       "matched": true,
-      "latency": 1375958,
+      "latency": 341042,
       "llm_calls": 6,
       "tool_calls": 2,
       "rag_calls": 0,
@@ -308,7 +309,7 @@
       "prediction": "## 结论\n\n根因候选：网络链路问题（graph node: `node-10`）\n\n诊断依据：网络链路问题\n\n## 图聚合置信度\n\n84%\n\n## 支持证据\n\n- `node-12` / `tool:query_logs:763bd7376c4c9083` → `node-10`，strength=0.80：query_logs output — {\"success\": true, \"data\": \"Cross-region latency high, packet loss 5%\"}\n- `node-8` / `tool:query_logs:763bd7376c4c9083` → `node-2`，strength=0.80：query_logs output — {\"success\": true, \"data\": \"Cross-region latency high, packet loss 5%\"}\n\n## 反驳与冲突证据\n\n- 无\n\n## 待判定观测\n\n- 无\n\n## 未解决缺口\n\n- 无关键缺口\n\n## 建议下一步\n\n- 在执行变更前由值班人员核对证据来源与影响范围",
       "ground_truth": "网络链路问题",
       "matched": true,
-      "latency": 725875,
+      "latency": 592791,
       "llm_calls": 6,
       "tool_calls": 2,
       "rag_calls": 0,
@@ -339,7 +340,7 @@
       "prediction": "## 结论\n\n根因候选：缓存失效导致后端压力（graph node: `node-10`）\n\n诊断依据：缓存失效导致后端压力\n\n## 图聚合置信度\n\n84%\n\n## 支持证据\n\n- `node-12` / `tool:query_logs:b1dd83ddffbbcd7d` → `node-10`，strength=0.80：query_logs output — {\"success\": true, \"data\": \"Cache hit rate decreased, keys expired\"}\n- `node-8` / `tool:query_logs:b1dd83ddffbbcd7d` → `node-2`，strength=0.80：query_logs output — {\"success\": true, \"data\": \"Cache hit rate decreased, keys expired\"}\n\n## 反驳与冲突证据\n\n- 无\n\n## 待判定观测\n\n- 无\n\n## 未解决缺口\n\n- 无关键缺口\n\n## 建议下一步\n\n- 在执行变更前由值班人员核对证据来源与影响范围",
       "ground_truth": "缓存失效导致后端压力",
       "matched": true,
-      "latency": 655250,
+      "latency": 348959,
       "llm_calls": 6,
       "tool_calls": 2,
       "rag_calls": 0,
@@ -370,7 +371,7 @@
       "prediction": "## 结论\n\n根因候选：Kafka 消费者处理能力不足（graph node: `node-10`）\n\n诊断依据：Kafka 消费者处理能力不足\n\n## 图聚合置信度\n\n84%\n\n## 支持证据\n\n- `node-12` / `tool:query_logs:d4f4f9ab5c709921` → `node-10`，strength=0.80：query_logs output — {\"success\": true, \"data\": \"Consumer lag increased, messages堆积\"}\n- `node-8` / `tool:query_logs:d4f4f9ab5c709921` → `node-2`，strength=0.80：query_logs output — {\"success\": true, \"data\": \"Consumer lag increased, messages堆积\"}\n\n## 反驳与冲突证据\n\n- 无\n\n## 待判定观测\n\n- 无\n\n## 未解决缺口\n\n- 无关键缺口\n\n## 建议下一步\n\n- 在执行变更前由值班人员核对证据来源与影响范围",
       "ground_truth": "Kafka 消费者处理能力不足",
       "matched": true,
-      "latency": 646917,
+      "latency": 343500,
       "llm_calls": 6,
       "tool_calls": 2,
       "rag_calls": 0,

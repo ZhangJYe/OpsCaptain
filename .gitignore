@@ -91,4 +91,6 @@ evals/deepeval/datasets/
 
 # 外部数据集（太大，不入库）
 datasets/
+!evals/harness/datasets/
+!evals/harness/datasets/**
 integrations/
